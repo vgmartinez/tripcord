@@ -1,7 +1,6 @@
 package codex
 
 import (
-	"bytes"
 	"encoding/json"
 	"strings"
 
@@ -120,22 +119,13 @@ func (f *file) sanitizeRulesLiterals(raw []byte) string {
 			sanitized[i], _ = out[j].(string)
 		}
 	}
-	// Syntax the opaque scanner cannot resolve (an argv concatenation or
-	// a variable standing for a tool) gets the conservative pre-e8a570c
-	// treatment within that expression. Ordinary adjacent lists retain
-	// their independent argv groups above.
-	for _, group := range conservativeRulesGroups(raw, literals) {
-		values := make([]any, 0, len(group.prefix)+len(group.members))
-		for _, value := range group.prefix {
-			values = append(values, value)
-		}
-		for _, i := range group.members {
-			values = append(values, literals[i].text)
-		}
-		out, _ := f.SafeValue("", f.SafeToolArgv(values)).([]any)
-		for j, i := range group.members {
-			sanitized[i], _ = out[len(group.prefix)+j].(string)
-		}
+	// An unresolved argv expression can join any of its literals at
+	// runtime. Fall back to pre-e8a570c's conservative behavior over
+	// the whole opaque block, trying every tool's flags. That may hide
+	// harmless text, but cannot leak a tool credential through a
+	// variable, concatenation, or function definition.
+	if hasUnresolvedRulesExpression(raw) {
+		sanitized = f.sanitizeRulesConservatively(sanitized)
 	}
 	var b strings.Builder
 	pos := 0
@@ -152,55 +142,49 @@ func (f *file) sanitizeRulesLiterals(raw []byte) string {
 	return b.String()
 }
 
-type rulesConservativeGroup struct {
-	members []int
-	prefix  []string
+var opaqueToolNames = []string{
+	"openssl", "vercel", "vc", "codecov", "doctl", "influx", "flyctl", "fly",
+	"sshpass", "redis-cli", "mysql", "docker",
 }
 
-// conservativeRulesGroups recognizes the two opaque constructs where an
-// argv can cross a list boundary: A + B and a variable previously assigned
-// a literal tool name. It deliberately confines fallback to that source
-// line, preserving the per-list isolation for unrelated rules.
-func conservativeRulesGroups(raw []byte, literals []rulesLiteral) []rulesConservativeGroup {
-	var out []rulesConservativeGroup
-	tools := map[string]string{}
-	lineStart := 0
-	for lineStart <= len(raw) {
-		lineEnd := bytes.IndexByte(raw[lineStart:], '\n')
-		if lineEnd < 0 {
-			lineEnd = len(raw)
-		} else {
-			lineEnd += lineStart
+func (f *file) sanitizeRulesConservatively(values []string) []string {
+	for _, tool := range opaqueToolNames {
+		argv := make([]any, 1, len(values)+1)
+		argv[0] = tool
+		for _, value := range values {
+			argv = append(argv, value)
 		}
-		var members []int
-		for i, lit := range literals {
-			if lit.start >= lineStart && lit.end <= lineEnd {
-				members = append(members, i)
-			}
+		out, _ := f.SafeValue("", f.SafeToolArgv(argv)).([]any)
+		for i := range values {
+			values[i], _ = out[i+1].(string)
 		}
-		line := string(raw[lineStart:lineEnd])
-		if len(members) == 1 {
-			prefix := strings.TrimSpace(line[:literals[members[0]].start-lineStart])
-			if name, ok := strings.CutSuffix(strings.TrimSpace(prefix), "="); ok && name != "" {
-				tools[strings.TrimSpace(name)] = literals[members[0]].text
-			}
-		}
-		if len(members) > 0 && strings.Contains(line, "+") {
-			out = append(out, rulesConservativeGroup{members: members})
-		} else if len(members) > 0 {
-			for name, tool := range tools {
-				if strings.Contains(line, "["+name) || strings.Contains(line, ", "+name) {
-					out = append(out, rulesConservativeGroup{members: members, prefix: []string{tool}})
-					break
-				}
-			}
-		}
-		if lineEnd == len(raw) {
-			break
-		}
-		lineStart = lineEnd + 1
 	}
-	return out
+	return values
+}
+
+// hasUnresolvedRulesExpression recognizes source constructs the opaque
+// literal scanner cannot model. An identifier used as a list element,
+// concatenation, or a definition means argv words can cross literal
+// boundaries, so the caller must conservatively scan the whole block.
+func hasUnresolvedRulesExpression(raw []byte) bool {
+	if strings.Contains(string(raw), "+") || strings.Contains(string(raw), "def ") {
+		return true
+	}
+	for i := 0; i < len(raw); {
+		if raw[i] != '[' && raw[i] != ',' {
+			i++
+			continue
+		}
+		i++
+		for i < len(raw) && (raw[i] == ' ' || raw[i] == '\t' || raw[i] == '\n') {
+			i++
+		}
+		if i < len(raw) && raw[i] != '"' && raw[i] != '\'' && raw[i] != '[' && raw[i] != ']' &&
+			(raw[i] == '_' || raw[i] >= 'A' && raw[i] <= 'Z' || raw[i] >= 'a' && raw[i] <= 'z') {
+			return true
+		}
+	}
+	return false
 }
 
 func scanRulesLiterals(raw []byte) []rulesLiteral {

@@ -119,14 +119,20 @@ func TestRulesFileOpaqueConservativelyRedactsNestedAndUnresolvedArgv(t *testing.
 			`prefix_rule(pattern = ["mysql", ("-pQR09X", "-pQR09Y")])`+"\n"+
 			`["redis-cli"] + ["-a", "QR07X"]`+"\n"+
 			`T = "redis-cli"`+"\n"+
-			`[T, "-a", "QR06X"]`+"\n")
+			`prefix_rule(pattern = [T, "-a", "QR06X"]) + unknown`+"\n"+
+			`TOOLS + [`+"\n"+
+			`  "-a", "QR06Y",`+"\n"+
+			`]`+"\n"+
+			`["redis-cli"] + A`+"\n"+
+			`def policy():`+"\n"+
+			`  return ["-a", "QR06Z"]`+"\n")
 	got := kittest.Discover(t, New(Options{}), root)
 	items := got.Find(".codex/rules/default.rules", model.ConfigKindPermissions)
 	if len(items) != 1 {
 		t.Fatalf("items = %+v, want one opaque item", got.Items)
 	}
 	content, _ := kittest.Payload(t, items[0])["content"].(string)
-	for _, secret := range []string{"QR09X", "QR09Y", "QR07X", "QR06X"} {
+	for _, secret := range []string{"QR09X", "QR09Y", "QR07X", "QR06X", "QR06Y", "QR06Z"} {
 		if strings.Contains(content, secret) {
 			t.Errorf("opaque content leaks %q: %s", secret, content)
 		}
