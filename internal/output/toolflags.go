@@ -57,7 +57,7 @@ func compileToolFlags(flags []toolFlag) []toolFlag {
 		if flags[i].glued {
 			separator = `()`
 		}
-		flags[i].pattern = regexp.MustCompile(`(^|\s)(` + regexp.QuoteMeta(flags[i].flag) + `)` + separator + `('[^']*'|"[^"]*"|[^\s'";&|]+)`)
+		flags[i].pattern = regexp.MustCompile(`(^|\s)(` + regexp.QuoteMeta(flags[i].flag) + `)` + separator + `('[^']*'|"[^"]*"|` + unquotedCommandValue + `+)`)
 	}
 	return flags
 }
@@ -94,16 +94,19 @@ func isCommandSpace(b byte) bool {
 
 // normalizeToolWord reduces a raw command word to the form a tool's name
 // would take: strip a surrounding quote, leading shell punctuation such
-// as "$(", "`", "(", or "{" (so a subshell like "$(openssl ...)" or
-// "`vercel ...`" still exposes the tool name), a path, a case difference,
+// as "$(", "`", "(", or "{", and anything before the last "(" or "`" (so
+// a subshell like "$(openssl ...)", "x=$(openssl ...)", or "`vercel ...`"
+// still exposes the tool name), a path, a case difference,
 // a trailing ".exe", and an npm-style "@version" suffix (so "vercel",
 // "/usr/local/bin/vercel", "Vercel.EXE", and "vercel@latest" all
 // normalize to "vercel"). It returns "" for a word that is only
 // punctuation, such as a bare "(" or ")".
 func normalizeToolWord(raw string) string {
-	w := strings.Trim(raw, `"'`)
-	w = strings.TrimLeft(w, "$(){`")
-	w = strings.TrimRight(w, ")}`;")
+	w := strings.TrimRight(strings.Trim(raw, `"'`), ")}`;")
+	if i := strings.LastIndexAny(w, "(`"); i >= 0 {
+		w = w[i+1:]
+	}
+	w = strings.TrimLeft(w, "$(){`\"'")
 	if w == "" {
 		return ""
 	}
