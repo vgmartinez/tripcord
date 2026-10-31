@@ -9,13 +9,15 @@ new golden tests.
 
 ## Input
 
-The digest covers only:
+The digest covers:
 
 - the rule id
-- the normalized location (harness and, when set, session and path)
-- the normalized evidence excerpts
+- the normalized location: harness, and, when set, session and path;
+  scope is always present (an unset scope defaults to `repo`)
+- the normalized evidence: for each item, the excerpt and/or the cited
+  config id
 
-Three things that might look like identity are deliberately **not**
+Two things that might look like identity are deliberately **not**
 hashed, because each one can change without the underlying finding
 changing:
 
@@ -24,19 +26,32 @@ changing:
   reformatting the file, shifts every line number below it; none of
   that is a new finding. `line` still lives on `Finding.Location` for
   display and in the JSON Schema; it is simply excluded from the hash.
-- **`evidence[].event` and `evidence[].config`.** These are record ids,
-  not content. `Event.id` is a ULID minted at ingest time, so the same
-  occurrence re-derived from a reimported transcript, or from a hook
-  event deduped against its transcript copy, mints a different ULID
-  each time; hashing it would fragment one real occurrence into several
-  fingerprints. `ConfigItem.id` (see below) is comparatively stable,
-  but is excluded for the same reason: a finding's identity is the
-  rule, the location, and what the evidence says, not which record
-  happens to cite it. Only `evidence[].excerpt`, normalized, is hashed.
-- **`location.scope`.** Not hashed, but not lost either: scope is
-  already implied by the normalized path's own shape (repo-relative,
-  `~/`-rooted, or a managed absolute path), so hashing it separately
-  would not disambiguate anything further. See "Path scope" below.
+- **`evidence[].event`.** This is a record id, not content. `Event.id`
+  is a ULID minted at ingest time, so the same occurrence re-derived
+  from a reimported transcript, or from a hook event deduped against
+  its transcript copy, mints a different ULID each time; hashing it
+  would fragment one real occurrence into several fingerprints.
+
+Two things that do look like metadata, but **are** hashed:
+
+- **`location.scope`.** Before managed scope required an absolute path
+  (see "Path scope" below), a managed-scope path had no required shape
+  and could collide, as plain text, with a repo- or user-scope path
+  that happened to use the same characters. Hashing scope removes any
+  reliance on path shape alone to tell the three apart, and it keeps
+  the rule simple: scope is always in the preimage, not only when a
+  path happens to be ambiguous.
+- **`evidence[].config`.** Unlike `event`, a config id
+  (`ConfigItem.ID()`) is already content-stable: harness, scope, and
+  normalized path, with no `sha256`, so nothing mints a new one per
+  scan the way a ULID does. Leaving it unhashed let two findings that
+  cite different config files collapse onto the same fingerprint
+  whenever `Location.Path` was unset and the evidence carried no
+  excerpt (the preimage reduced to just rule, harness, and an empty
+  evidence array). Hashing the cited config id closes that collision
+  without reopening the problem excluding `event` solves. See
+  "Repeated occurrences" below for why this does not reintroduce
+  reimport instability.
 
 Credential values, secret values, and network URLs are never inputs.
 Evidence excerpts must already be redacted; this package does not search
@@ -61,16 +76,16 @@ significant. There is no case folding.
 
 ### Location
 
-Keys, in this order, omitted when empty:
+Keys, in this order:
 
 | Key | Rule |
 | --- | --- |
 | `harness` | Required. Trim with `strings.TrimSpace`. No case folding. Must be a known harness or surface. |
-| `session` | `strings.TrimSpace`. Omit when empty. Internal spaces stay. |
-| `path` | `normalizeScopedPath(location.Scope, location.Path)` (see "Path scope" below). Omit when `location.Path` is empty. |
+| `session` | `strings.TrimSpace`. Omitted when empty. Internal spaces stay. |
+| `scope` | Always present. An empty `location.Scope` becomes `"repo"`; any other value must be a known `Scope` (`repo`, `user`, `managed`), or `Fingerprint` errors. |
+| `path` | `normalizeScopedPath(location.Scope, location.Path)` (see "Path scope" below). Omitted when `location.Path` is empty. |
 
-`location.line` and `location.scope` are never part of the hashed
-document; see "Input" above.
+`location.line` is never part of the hashed document; see "Input" above.
 
 ### Path scope
 
@@ -80,31 +95,53 @@ checks its shape against the config scope (`repo`, `user`, or
 path both call it, so a path is validated the same way wherever it
 names a config entry. An empty scope defaults to repo scope.
 
-Normalization, in order: trim space, replace `\` with `/`, collapse
-repeated `/` into one `/`, and strip a trailing `/` unless the result is
-`/` or `~`. Dot segments (`.` or `..`) are not resolved.
+Normalization, in order: trim space; replace `\` with `/`; collapse
+repeated `/` into one `/`; strip a trailing `/` unless the result is `/`
+or `~`; then, if the result is a Windows drive path, case-fold it (see
+below).
 
-Scope rules, checked after normalization:
+Windows paths are case-insensitive. A Windows drive path — one matching
+`^[a-zA-Z]:/` once `\` has become `/` — is lowercased in full and then
+has just its drive letter uppercased, so `C:\ProgramData\x` and
+`c:/programdata/x` both normalize to the same `C:/programdata/x`. This
+project does not fold case anywhere else; a POSIX absolute path such as
+`/etc/Cursor/Hooks.json` is left exactly as given.
+
+Scope rules, checked after that normalization:
 
 | Scope | Rule | Rejected example |
 | --- | --- | --- |
-| `repo` (default) | Must be repo-relative: no leading `/`, no leading `~`, no Windows drive letter (`C:\`, `C:/`). | `/home/runner/work/acme/acme/.vscode/tasks.json`, `C:\Users\runner\acme\.vscode\tasks.json`, `~/.claude/settings.json` |
+| `repo` (default) | Must be repo-relative: no leading `/`, no leading `~`, no Windows drive letter. A leading `./` is stripped (repeatedly); a `..` path segment anywhere is rejected. | `/home/runner/work/acme/acme/.vscode/tasks.json`, `C:\Users\runner\acme\.vscode\tasks.json`, `~/.claude/settings.json`, `../etc/passwd`, `a/../b` |
 | `user` | Must be rooted at the user's home: exactly `~`, or starting with `~/`. | `/home/dev/.claude/settings.json`, `.claude/settings.json` |
-| `managed` | Not restricted. Managed config files (the spec's adapter table lists, for example, `/etc/cursor/hooks.json`) are fixed absolute system paths. | — |
+| `managed` | Must be absolute: a leading `/`, or a Windows drive letter. | `cursor/hooks.json`, `~/cursor/hooks.json` |
+
+Requiring an absolute shape for managed scope, on top of the
+repo-relative and `~/`-rooted shapes for the other two, keeps the three
+scopes' path shapes mutually exclusive: the same literal path text can
+no longer name both a repo-scope and a managed-scope entry.
 
 A path that violates its scope's rule is a `Fingerprint` error (and a
 `ConfigItem.Validate` / `ConfigItem.ID` error): a CI-runner-specific
-absolute path, or a Windows drive path, does not name a stable config
-entry, so it must not reach the hash at all, machine-specific or not.
+absolute path, a Windows drive path under repo scope, a path that
+climbs out of the repo with `..`, or a bare relative path under managed
+scope, does not name a stable config entry, so it must not reach the
+hash at all.
 
 ### Evidence
 
-An array of the normalized, non-empty excerpts, sorted as raw strings
-(byte order); duplicates are kept. Each item is `{"excerpt": "..."}`.
-`strings.Fields` joins the excerpt's words with a single `U+0020`
-(Unicode white space collapsed, ends dropped). An item that normalizes
-to an empty excerpt is dropped. The array is `[]` when nothing remains,
-never null.
+An array of items built from each `Evidence`'s non-empty normalized
+`config` and `excerpt`:
+
+- `excerpt`: `strings.Fields`-joined with a single `U+0020` (Unicode
+  white space collapsed, ends dropped).
+- `config`: `strings.TrimSpace` of `Evidence.Config`.
+
+An item is dropped only when **both** normalize to empty — not when
+just the excerpt does, since `Config` without an `Excerpt` is a valid,
+and common, config-only citation (see "Input" above). `Evidence.Event`
+is never part of an item. Items are sorted by `(config, excerpt)` as
+raw strings (byte order) for a deterministic order; duplicates are
+kept. The array is `[]` when nothing remains, never null.
 
 ## Digest
 
@@ -120,8 +157,27 @@ digest, which is exactly those 16 digits.
 `Evidence.Config`: `"<harness>:<scope>:<path>"`, where `path` is
 `normalizeScopedPath(scope, path)`. It excludes `sha256` on purpose, so
 the same config entry (for example, `.claude/settings.json` in the
-repo) keeps the same id across edits to its content. It is not part of
-the fingerprint preimage (see "Input" above).
+repo) keeps the same id across edits to its content. Unlike
+`Evidence.Event`, it IS part of the fingerprint preimage; see "Input"
+above for why that is safe.
+
+## Repeated occurrences
+
+Because occurrence-identifying fields (the event id) are excluded, a
+command that recurs across a session — the same shell command run
+twice, or a hook that fires on every matching tool call — produces
+evidence with the same normalized excerpt both times, so those
+repeated occurrences hash to the same fingerprint rather than minting a
+new one per repetition. A store can dedup on that fingerprint, both
+within one scan and across a reimport of the same transcript.
+
+This holds for a config citation too, as long as the cited config id
+and excerpt are themselves unchanged: a `ConfigItem.ID()` does not
+depend on `sha256`, so editing the file's body without moving it does
+not mint a new fingerprint for a finding that already pointed at it by
+id. Pointing at a *different* config file does change the fingerprint
+(see the "two different config paths" example below), which is the
+fix this hashes in for.
 
 ## Examples
 
@@ -129,51 +185,77 @@ Rule `TC-SEC-018`, harness `claude`, session `00893aaf-19fa-41d2`, evidence
 excerpt `cat /proc/$PPID/environ` (event id omitted from the hash):
 
 ```json
-{"v":1,"rule":"TC-SEC-018","location":{"harness":"claude","session":"00893aaf-19fa-41d2"},"evidence":[{"excerpt":"cat /proc/$PPID/environ"}]}
+{"v":1,"rule":"TC-SEC-018","location":{"harness":"claude","session":"00893aaf-19fa-41d2","scope":"repo"},"evidence":[{"excerpt":"cat /proc/$PPID/environ"}]}
 ```
 
-Fingerprint: `tcf_bf8994fdb9dc73ed`
+Fingerprint: `tcf_c761c03b24e7b179`
+
+`internal/model/testdata/finding.json` stores this value.
 
 Rule `TC-CFG-002`, harness `vscode`, repo-scope path `.vscode/tasks.json`
 (a `line` of 12, if set on `Finding.Location`, has no effect on this
 digest):
 
 ```json
-{"v":1,"rule":"TC-CFG-002","location":{"harness":"vscode","path":".vscode/tasks.json"},"evidence":[{"excerpt":"a && b < c"},{"excerpt":"runOn: folderOpen"}]}
+{"v":1,"rule":"TC-CFG-002","location":{"harness":"vscode","scope":"repo","path":".vscode/tasks.json"},"evidence":[{"excerpt":"a && b < c"},{"excerpt":"runOn: folderOpen"}]}
 ```
 
-Fingerprint: `tcf_4dbb91737d62173a`
+Fingerprint: `tcf_591bc1431fb15369`
 
 Rule `TC-CFG-001`, harness `generic`, no evidence:
 
 ```json
-{"v":1,"rule":"TC-CFG-001","location":{"harness":"generic"},"evidence":[]}
+{"v":1,"rule":"TC-CFG-001","location":{"harness":"generic","scope":"repo"},"evidence":[]}
 ```
 
-Fingerprint: `tcf_6dcfe79827b07f1b`
+Fingerprint: `tcf_0877dad3c1549226`
 
 Rule `TC-CFG-007`, harness `claude`, user-scope path
 `~/.claude/settings.json`:
 
 ```json
-{"v":1,"rule":"TC-CFG-007","location":{"harness":"claude","path":"~/.claude/settings.json"},"evidence":[{"excerpt":"hooks: SessionStart -> curl | bash"}]}
+{"v":1,"rule":"TC-CFG-007","location":{"harness":"claude","scope":"user","path":"~/.claude/settings.json"},"evidence":[{"excerpt":"hooks: SessionStart -> curl | bash"}]}
 ```
 
-Fingerprint: `tcf_1a124c7ffb40127b`
+Fingerprint: `tcf_be9d29a5dd7a25fd`
 
 Rule `TC-CFG-016`, harness `cursor`, managed-scope path
 `/etc/cursor/hooks.json`, no evidence:
 
 ```json
-{"v":1,"rule":"TC-CFG-016","location":{"harness":"cursor","path":"/etc/cursor/hooks.json"},"evidence":[]}
+{"v":1,"rule":"TC-CFG-016","location":{"harness":"cursor","scope":"managed","path":"/etc/cursor/hooks.json"},"evidence":[]}
 ```
 
-Fingerprint: `tcf_de048560c3426d6c`
+Fingerprint: `tcf_87e0e591cef79388`
+
+Rule `TC-CFG-020`, harness `cursor`, managed-scope path, no evidence.
+`C:\ProgramData\cursor\hooks.json` and `c:/programdata/cursor/hooks.json`
+both normalize to `C:/programdata/cursor/hooks.json` and hash to the
+same value:
+
+```json
+{"v":1,"rule":"TC-CFG-020","location":{"harness":"cursor","scope":"managed","path":"C:/programdata/cursor/hooks.json"},"evidence":[]}
+```
+
+Fingerprint: `tcf_fbae6525ff920e63`
+
+Two findings for rule `TC-CFG-003`, harness `claude`, each citing a
+different config file with no excerpt and no `location.path`. The cited
+config id is now part of the hash, so these do not collide:
+
+```json
+{"v":1,"rule":"TC-CFG-003","location":{"harness":"claude","scope":"repo"},"evidence":[{"config":"claude:repo:.claude/settings.json"}]}
+```
+
+Fingerprint: `tcf_5ea48caca58af7bd`
+
+```json
+{"v":1,"rule":"TC-CFG-003","location":{"harness":"claude","scope":"repo"},"evidence":[{"config":"claude:repo:other/settings.json"}]}
+```
+
+Fingerprint: `tcf_6b381da69de9f6cd`
 
 A repo-scope path such as `/home/runner/work/acme/acme/.vscode/tasks.json`
-(an absolute, CI-runner-specific path) is rejected by `Fingerprint`
-rather than hashed as-is; see "Path scope" above.
-
-`internal/model/testdata/finding.json` stores the digest this algorithm
-computes for that document's rule, location, and evidence:
-`tcf_bf8994fdb9dc73ed`.
+(an absolute, CI-runner-specific path), or one containing a `..`
+segment, is rejected by `Fingerprint` rather than hashed as-is; see
+"Path scope" above.
