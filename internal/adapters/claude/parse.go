@@ -159,12 +159,14 @@ var (
 	// shell quote (as \S+ would) when the whole string is itself quoted,
 	// for example a command embedding "'Authorization: Bearer x'".
 	bearerToken = regexp.MustCompile(`(?i)\b(bearer)\s+([^\s'"]+)`)
-	// bearerWord matches "Bearer" as a whole array element on its own,
-	// used the same way secretFlagName is: to recognize an MCP "args"
-	// element such as ["Bearer", "X"] (two separate array elements,
-	// rather than one "Bearer X" string bearerToken above matches) so
-	// the next element is redacted unconditionally.
-	bearerWord = regexp.MustCompile(`(?i)^bearer$`)
+	// bearerWord matches an array element that is the word "Bearer" or
+	// ends in ": Bearer", used the same way secretFlagName is: to recognize an MCP
+	// "args" element such as ["Bearer", "X"], ["--header",
+	// "Authorization: Bearer", "X"], or ["--header=Authorization:
+	// Bearer", "X"] (the token in a separate element, rather than one
+	// "Bearer X" string bearerToken above matches) so the next element
+	// is redacted unconditionally.
+	bearerWord = regexp.MustCompile(`(?i)(?:^|:)\s*bearer\s*$`)
 	// embeddedURL finds an absolute URL anywhere inside a larger string,
 	// such as the command of "curl 'https://host/x?sig=y' | sh". It stops
 	// at whitespace and quotes so the match does not swallow a trailing

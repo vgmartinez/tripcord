@@ -18,9 +18,12 @@ import (
 const Redacted = "[REDACTED]"
 
 var (
-	secretFlagName   = regexp.MustCompile(`(?i)^(?:` + output.SecretFlagAlternation() + `)$`)
-	bearerToken      = regexp.MustCompile(`(?i)\b(bearer)\s+([^\s'"]+)`)
-	bearerSchemeWord = regexp.MustCompile(`(?i)^bearer$`)
+	secretFlagName = regexp.MustCompile(`(?i)^(?:` + output.SecretFlagAlternation() + `)$`)
+	bearerToken    = regexp.MustCompile(`(?i)\b(bearer)\s+([^\s'"]+)`)
+	// bearerSchemeWord matches an array element ending in the word
+	// "Bearer": "Bearer", "Authorization: Bearer", or
+	// "--header=Authorization: Bearer", whose token is the next element.
+	bearerSchemeWord = regexp.MustCompile(`(?i)(?:^|:)\s*bearer\s*$`)
 	userFlagName     = regexp.MustCompile(`(?i)^(?:` + output.UserFlagAlternation + `)$`)
 	// embeddedURL finds an absolute URL inside a larger string, such as a
 	// curl command. It stops at whitespace and quotes so a trailing shell
