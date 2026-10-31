@@ -19,6 +19,9 @@ func TestGoldenFormats(t *testing.T) {
 		t.Run(string(format), func(t *testing.T) {
 			t.Parallel()
 			got := render(t, format, findings())
+			if strings.Contains(got, "/work/repo") {
+				t.Fatalf("%s leaked the repository root:\n%s", format, got)
+			}
 			if format == FormatJSONL {
 				if got != render(t, FormatJSON, findings()) {
 					t.Fatal("jsonl output differs from json")
@@ -68,35 +71,10 @@ func TestGHAEscaping(t *testing.T) {
 	}
 }
 
-func TestMarkdownEscapesExcerptAndNeverAddsSecret(t *testing.T) {
-	t.Parallel()
-	finding := findings()[0]
-	const redacted = "sk-***REDACTED***abcd `<img src=x onerror=alert(1)>`"
-	const rawSecret = "sk-live-secret-value"
-	finding.Evidence = []model.Evidence{{Config: "cursor:repo:configs/hook.json", Excerpt: redacted}}
-
-	for _, format := range []Format{FormatJSON, FormatJSONL, FormatSARIF, FormatText, FormatGHA, FormatMD} {
-		got := render(t, format, []model.Finding{finding})
-		if strings.Contains(got, rawSecret) {
-			t.Fatalf("%s leaked an unredacted secret: %s", format, got)
-		}
-		if format == FormatMD {
-			for _, unsafe := range []string{"`<img", "<img"} {
-				if strings.Contains(got, unsafe) {
-					t.Fatalf("markdown contains unsafe excerpt content %q: %s", unsafe, got)
-				}
-			}
-			if !strings.Contains(got, "sk-***REDACTED***abcd") {
-				t.Fatalf("markdown omitted redacted excerpt: %s", got)
-			}
-		}
-	}
-}
-
 func TestWriteAfterFlush(t *testing.T) {
 	t.Parallel()
 	var buffer bytes.Buffer
-	sink, err := NewStdoutSink(FormatJSONL, &buffer, Options{})
+	sink, err := NewStdoutSink(FormatJSONL, &buffer, testOptions())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +93,7 @@ func TestSelectSinkJSONL(t *testing.T) {
 		t.Run("stdout "+outputPath, func(t *testing.T) {
 			t.Parallel()
 			var stdout bytes.Buffer
-			handle, err := SelectSink("jsonl", outputPath, &stdout, Options{RepoRoot: "/work/repo"})
+			handle, err := SelectSink("jsonl", outputPath, &stdout, testOptions())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -135,7 +113,7 @@ func TestSelectSinkJSONL(t *testing.T) {
 		t.Parallel()
 		path := filepath.Join(t.TempDir(), "findings.jsonl")
 		var stdout bytes.Buffer
-		handle, err := SelectSink("jsonl", path, &stdout, Options{RepoRoot: "/work/repo"})
+		handle, err := SelectSink("jsonl", path, &stdout, testOptions())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -165,7 +143,7 @@ func TestSelectSinkJSONL(t *testing.T) {
 	t.Run("json alias uses stdout", func(t *testing.T) {
 		t.Parallel()
 		var stdout bytes.Buffer
-		handle, err := SelectSink("json", "", &stdout, Options{RepoRoot: "/work/repo"})
+		handle, err := SelectSink("json", "", &stdout, testOptions())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -190,22 +168,23 @@ func TestNonRepoLocationGoldens(t *testing.T) {
 		options Options
 		logical bool
 	}{
-		{name: "sarif-user", format: FormatSARIF, input: []model.Finding{userFinding()}},
-		{name: "sarif-managed", format: FormatSARIF, input: []model.Finding{managedFinding()}},
+		{name: "sarif-user", format: FormatSARIF, input: []model.Finding{userFinding()}, logical: true},
+		{name: "sarif-managed", format: FormatSARIF, input: []model.Finding{managedFinding()}, logical: true},
 		{name: "gha-user", format: FormatGHA, input: []model.Finding{userFinding()}},
 		{name: "gha-managed", format: FormatGHA, input: []model.Finding{managedFinding()}},
 		{
-			name:    "sarif-logical",
+			name:    "sarif-uribase",
 			format:  FormatSARIF,
 			input:   []model.Finding{userFinding(), managedFinding()},
-			options: Options{NonRepoSARIF: SARIFNonRepoLogical},
-			logical: true,
+			options: Options{NonRepoSARIF: SARIFNonRepoURIBase},
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got := renderWith(t, tc.format, tc.input, tc.options)
+			options := testOptions()
+			options.NonRepoSARIF = tc.options.NonRepoSARIF
+			got := renderWith(t, tc.format, tc.input, options)
 			assertGolden(t, tc.name+".golden", got)
 			if strings.Contains(got, "file://") || strings.Contains(got, "/home/") || strings.Contains(got, "file=") || strings.Contains(got, `claude//`) || strings.Contains(got, `etc//`) {
 				t.Fatalf("location leaked a file annotation or an unnormalized path:\n%s", got)
@@ -219,23 +198,20 @@ func TestNonRepoLocationGoldens(t *testing.T) {
 	}
 }
 
-func TestSARIFURIBaseIsDefault(t *testing.T) {
+func TestSARIFLogicalIsDefault(t *testing.T) {
 	t.Parallel()
-	explicit := renderWith(t, FormatSARIF, []model.Finding{userFinding()}, Options{NonRepoSARIF: SARIFNonRepoURIBase})
-	if explicit != renderWith(t, FormatSARIF, []model.Finding{userFinding()}, Options{}) {
-		t.Fatal("explicit uri-base form differs from the default")
-	}
-	if DefaultSARIFNonRepoLocation != SARIFNonRepoURIBase {
+	if DefaultSARIFNonRepoLocation != SARIFNonRepoLogical {
 		t.Fatalf("default SARIF location = %s", DefaultSARIFNonRepoLocation)
 	}
-	got := renderWith(t, FormatSARIF, []model.Finding{userFinding(), managedFinding()}, Options{})
-	validateSARIF(t, got)
-	for _, want := range []string{`"USERHOME"`, `"MANAGED"`} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("combined SARIF missing %s\n%s", want, got)
-		}
+	explicit := testOptions()
+	explicit.NonRepoSARIF = SARIFNonRepoLogical
+	input := []model.Finding{userFinding(), managedFinding()}
+	got := render(t, FormatSARIF, input)
+	if got != renderWith(t, FormatSARIF, input, explicit) {
+		t.Fatal("explicit logical form differs from the default")
 	}
-	assertSARIFLocations(t, got, false)
+	validateSARIF(t, got)
+	assertSARIFLocations(t, got, true)
 }
 
 func TestGHASeverityCommands(t *testing.T) {
@@ -270,7 +246,7 @@ func TestGHANonRepoEscaping(t *testing.T) {
 	finding := userFinding()
 	finding.Location.Line = nil
 	finding.Location.Path = "~/a%b,\r\n.json"
-	got := renderWith(t, FormatGHA, []model.Finding{finding}, Options{})
+	got := render(t, FormatGHA, []model.Finding{finding})
 	if strings.Contains(got, "file=") || strings.Contains(got, "\r") || strings.Count(got, "\n") != 1 {
 		t.Fatalf("annotation = %q", got)
 	}
@@ -300,7 +276,9 @@ func TestRelativeLocationURIs(t *testing.T) {
 func TestRejectsUnknownSARIFLocationMode(t *testing.T) {
 	t.Parallel()
 	var buffer bytes.Buffer
-	_, err := NewStdoutSink(FormatText, &buffer, Options{NonRepoSARIF: "absolute"})
+	options := testOptions()
+	options.NonRepoSARIF = "absolute"
+	_, err := NewStdoutSink(FormatText, &buffer, options)
 	if err == nil {
 		t.Fatal("unknown SARIF location mode was accepted")
 	}
@@ -308,7 +286,11 @@ func TestRejectsUnknownSARIFLocationMode(t *testing.T) {
 
 func render(t *testing.T, format Format, input []model.Finding) string {
 	t.Helper()
-	return renderWith(t, format, input, Options{RepoRoot: "/work/repo"})
+	return renderWith(t, format, input, testOptions())
+}
+
+func testOptions() Options {
+	return Options{Redactor: DefaultRedactor, RepoRoot: "/work/repo", ToolVersion: "1.2.3"}
 }
 
 func renderWith(t *testing.T, format Format, input []model.Finding, options Options) string {

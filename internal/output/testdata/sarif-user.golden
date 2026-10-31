@@ -6,21 +6,32 @@
       "tool": {
         "driver": {
           "name": "tripcord",
+          "version": "1.2.3",
+          "semanticVersion": "1.2.3",
           "rules": [
             {
               "id": "TC-CFG-001",
               "shortDescription": {
                 "text": "Hook downloads code"
+              },
+              "fullDescription": {
+                "text": "Hook downloads code"
+              },
+              "help": {
+                "text": "Remove the hook."
+              },
+              "helpUri": "https://example.invalid/rules/TC-CFG-001",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "tags": [
+                  "security"
+                ],
+                "security-severity": "9.5"
               }
             }
           ]
-        }
-      },
-      "originalUriBaseIds": {
-        "USERHOME": {
-          "description": {
-            "text": "The user's home directory."
-          }
         }
       },
       "results": [
@@ -28,19 +39,17 @@
           "ruleId": "TC-CFG-001",
           "level": "error",
           "message": {
-            "text": "Hook downloads code: Remove the hook. (~/.claude/settings.json)"
+            "text": "Hook downloads code: Remove the hook. (~/.claude/settings.json:3)"
           },
           "locations": [
             {
-              "physicalLocation": {
-                "artifactLocation": {
-                  "uri": ".claude/settings.json",
-                  "uriBaseId": "USERHOME"
-                },
-                "region": {
-                  "startLine": 3
+              "logicalLocations": [
+                {
+                  "name": "settings.json",
+                  "fullyQualifiedName": "~/.claude/settings.json",
+                  "kind": "user"
                 }
-              }
+              ]
             }
           ],
           "partialFingerprints": {

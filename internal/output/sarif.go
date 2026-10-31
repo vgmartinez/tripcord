@@ -1,16 +1,23 @@
 package output
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"path"
+	"regexp"
 	"sort"
+	"strings"
 
 	"github.com/vgmartinez/tripcord/internal/model"
 )
 
 const sarifSchemaURL = "https://json.schemastore.org/sarif-2.1.0.json"
+
+// semverPattern is SemVer 2.0.0 without a leading "v".
+var semverPattern = regexp.MustCompile(`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$`)
 
 type sarifLog struct {
 	Schema  string     `json:"$schema"`
@@ -29,13 +36,29 @@ type sarifTool struct {
 }
 
 type sarifDriver struct {
-	Name  string      `json:"name"`
-	Rules []sarifRule `json:"rules"`
+	Name            string      `json:"name"`
+	Version         string      `json:"version"`
+	SemanticVersion string      `json:"semanticVersion"`
+	Rules           []sarifRule `json:"rules"`
 }
 
 type sarifRule struct {
-	ID               string       `json:"id"`
-	ShortDescription sarifMessage `json:"shortDescription"`
+	ID                   string              `json:"id"`
+	ShortDescription     sarifMessage        `json:"shortDescription"`
+	FullDescription      sarifMessage        `json:"fullDescription"`
+	Help                 sarifMessage        `json:"help"`
+	HelpURI              string              `json:"helpUri,omitempty"`
+	DefaultConfiguration sarifRuleConfig     `json:"defaultConfiguration"`
+	Properties           sarifRuleProperties `json:"properties"`
+}
+
+type sarifRuleConfig struct {
+	Level string `json:"level"`
+}
+
+type sarifRuleProperties struct {
+	Tags             []string `json:"tags"`
+	SecuritySeverity string   `json:"security-severity"`
 }
 
 type sarifResult struct {
@@ -86,16 +109,40 @@ type sarifRegion struct {
 	StartLine int `json:"startLine"`
 }
 
+// sarifRuleInfo is rule metadata gathered from findings. The first finding
+// of a rule in sort order supplies text; the highest severity seen sets the
+// default level and security-severity.
+type sarifRuleInfo struct {
+	title    string
+	fix      string
+	helpURI  string
+	severity model.Severity
+}
+
 func renderSARIF(writer io.Writer, findings []model.Finding, options Options) error {
 	mode, err := sarifNonRepoMode(options)
 	if err != nil {
 		return err
 	}
-	rules := make(map[string]string, len(findings))
+	rules := map[string]*sarifRuleInfo{}
 	results := make([]sarifResult, 0, len(findings))
 	var bases map[string]sarifArtifactLocation
 	for _, finding := range findings {
-		rules[finding.Rule] = finding.Title
+		if info, ok := rules[finding.Rule]; ok {
+			if compareSeverity(finding.Severity, info.severity) > 0 {
+				info.severity = finding.Severity
+			}
+			if info.helpURI == "" {
+				info.helpURI = helpURI(finding.Refs)
+			}
+		} else {
+			rules[finding.Rule] = &sarifRuleInfo{
+				title:    finding.Title,
+				fix:      finding.Fix,
+				helpURI:  helpURI(finding.Refs),
+				severity: finding.Severity,
+			}
+		}
 		level, err := sarifLevel(finding.Severity)
 		if err != nil {
 			return err
@@ -104,13 +151,13 @@ func renderSARIF(writer io.Writer, findings []model.Finding, options Options) er
 		result := sarifResult{
 			RuleID:  finding.Rule,
 			Level:   level,
-			Message: sarifMessage{Text: resultMessage(finding, ref.path)},
+			Message: sarifMessage{Text: resultMessage(finding, ref.display())},
 			PartialFingerprints: map[string]string{
 				"tripcord/fingerprint": finding.Fingerprint,
 			},
 		}
-		if ref.path != "" {
-			result.Properties = &sarifProperties{Tripcord: sarifTripcord{Scope: ref.scope, Path: ref.path}}
+		if ref.kind != locNone {
+			result.Properties = &sarifProperties{Tripcord: sarifTripcord{Scope: ref.scope, Path: escapeControls(ref.path)}}
 		}
 		switch ref.kind {
 		case locNone:
@@ -132,48 +179,113 @@ func renderSARIF(writer io.Writer, findings []model.Finding, options Options) er
 		results = append(results, result)
 	}
 
+	sarifRules, err := buildSARIFRules(rules)
+	if err != nil {
+		return err
+	}
+	version, semantic := toolVersions(options.ToolVersion)
+	log := sarifLog{
+		Schema:  sarifSchemaURL,
+		Version: "2.1.0",
+		Runs: []sarifRun{{
+			Tool: sarifTool{Driver: sarifDriver{
+				Name:            "tripcord",
+				Version:         version,
+				SemanticVersion: semantic,
+				Rules:           sarifRules,
+			}},
+			OriginalURIBaseIDs: bases,
+			Results:            results,
+		}},
+	}
+	var buffer bytes.Buffer
+	encoder := json.NewEncoder(&buffer)
+	encoder.SetIndent("", "  ")
+	encoder.SetEscapeHTML(true)
+	if err := encoder.Encode(log); err != nil {
+		return err
+	}
+	_, err = writer.Write(escapeJSONUnsafe(buffer.Bytes()))
+	return err
+}
+
+func buildSARIFRules(rules map[string]*sarifRuleInfo) ([]sarifRule, error) {
 	ids := make([]string, 0, len(rules))
 	for id := range rules {
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
-	sarifRules := make([]sarifRule, 0, len(ids))
+	out := make([]sarifRule, 0, len(ids))
 	for _, id := range ids {
-		sarifRules = append(sarifRules, sarifRule{ID: id, ShortDescription: sarifMessage{Text: rules[id]}})
+		info := rules[id]
+		level, err := sarifLevel(info.severity)
+		if err != nil {
+			return nil, err
+		}
+		score, err := securitySeverity(info.severity)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, sarifRule{
+			ID:                   id,
+			ShortDescription:     sarifMessage{Text: escapeControls(info.title)},
+			FullDescription:      sarifMessage{Text: escapeControls(info.title)},
+			Help:                 sarifMessage{Text: escapeControls(info.fix)},
+			HelpURI:              info.helpURI,
+			DefaultConfiguration: sarifRuleConfig{Level: level},
+			Properties:           sarifRuleProperties{Tags: []string{"security"}, SecuritySeverity: score},
+		})
 	}
+	return out, nil
+}
 
-	log := sarifLog{
-		Schema:  sarifSchemaURL,
-		Version: "2.1.0",
-		Runs: []sarifRun{{
-			Tool:               sarifTool{Driver: sarifDriver{Name: "tripcord", Rules: sarifRules}},
-			OriginalURIBaseIDs: bases,
-			Results:            results,
-		}},
+// helpURI returns the first http or https ref with a host. Other schemes
+// and refs carrying control or bidi characters are skipped.
+func helpURI(refs []string) string {
+	for _, ref := range refs {
+		if strings.IndexFunc(ref, isUnsafeRune) >= 0 {
+			continue
+		}
+		u, err := url.Parse(ref)
+		if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+			continue
+		}
+		return u.String()
 	}
-	encoder := json.NewEncoder(writer)
-	encoder.SetIndent("", "  ")
-	encoder.SetEscapeHTML(true)
-	return encoder.Encode(log)
+	return ""
+}
+
+// toolVersions returns the driver version and a SemVer 2.0.0 form of it.
+// A build version that is not SemVer, such as "dev", reports 0.0.0-dev.
+func toolVersions(version string) (string, string) {
+	version = strings.TrimSpace(version)
+	if version == "" {
+		version = "dev"
+	}
+	semantic := strings.TrimPrefix(version, "v")
+	if !semverPattern.MatchString(semantic) {
+		semantic = "0.0.0-dev"
+	}
+	return escapeControls(version), semantic
 }
 
 func sarifNonRepoMode(options Options) (SARIFNonRepoLocation, error) {
 	switch options.NonRepoSARIF {
-	case "", DefaultSARIFNonRepoLocation:
+	case "":
 		return DefaultSARIFNonRepoLocation, nil
-	case SARIFNonRepoLogical:
-		return SARIFNonRepoLogical, nil
+	case SARIFNonRepoLogical, SARIFNonRepoURIBase:
+		return options.NonRepoSARIF, nil
 	default:
-		return "", fmt.Errorf("output SARIF location %q: supported values are %q and %q", options.NonRepoSARIF, SARIFNonRepoURIBase, SARIFNonRepoLogical)
+		return "", fmt.Errorf("output SARIF location %q: supported values are %q and %q", options.NonRepoSARIF, SARIFNonRepoLogical, SARIFNonRepoURIBase)
 	}
 }
 
-func resultMessage(finding model.Finding, path string) string {
-	text := finding.Title + ": " + finding.Fix
-	if path == "" {
+func resultMessage(finding model.Finding, location string) string {
+	text := escapeControls(finding.Title) + ": " + escapeControls(finding.Fix)
+	if location == "" {
 		return text
 	}
-	return text + " (" + path + ")"
+	return text + " (" + escapeControls(location) + ")"
 }
 
 func physicalLocation(ref locationRef, withBase bool) *sarifPhysicalLocation {
@@ -190,8 +302,8 @@ func physicalLocation(ref locationRef, withBase bool) *sarifPhysicalLocation {
 
 func logicalLocation(ref locationRef) sarifLogicalLocation {
 	return sarifLogicalLocation{
-		Name:               path.Base(ref.path),
-		FullyQualifiedName: ref.path,
+		Name:               escapeControls(path.Base(ref.path)),
+		FullyQualifiedName: escapeControls(ref.path),
 		Kind:               ref.scope,
 	}
 }
@@ -207,7 +319,8 @@ func uriBaseDescription(id string) string {
 	}
 }
 
-// SARIF's level enum is none, note, warning, and error. low maps to note.
+// sarifLevel maps severities to SARIF levels. SARIF has no "notice", so low
+// is "note".
 func sarifLevel(severity model.Severity) (string, error) {
 	switch severity {
 	case model.SeverityCritical, model.SeverityHigh:
@@ -216,6 +329,22 @@ func sarifLevel(severity model.Severity) (string, error) {
 		return "warning", nil
 	case model.SeverityLow:
 		return "note", nil
+	default:
+		return "", fmt.Errorf("output: unhandled severity %q", severity)
+	}
+}
+
+// securitySeverity is the GitHub code scanning score for a severity.
+func securitySeverity(severity model.Severity) (string, error) {
+	switch severity {
+	case model.SeverityCritical:
+		return "9.5", nil
+	case model.SeverityHigh:
+		return "8.0", nil
+	case model.SeverityMedium:
+		return "5.5", nil
+	case model.SeverityLow:
+		return "3.0", nil
 	default:
 		return "", fmt.Errorf("output: unhandled severity %q", severity)
 	}

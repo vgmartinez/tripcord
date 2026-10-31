@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "tripcord",
+          "version": "1.2.3",
+          "semanticVersion": "1.2.3",
+          "rules": [
+            {
+              "id": "TC-CFG-001",
+              "shortDescription": {
+                "text": "Hook downloads code"
+              },
+              "fullDescription": {
+                "text": "Hook downloads code"
+              },
+              "help": {
+                "text": "Remove the hook."
+              },
+              "helpUri": "https://example.invalid/rules/TC-CFG-001",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "tags": [
+                  "security"
+                ],
+                "security-severity": "9.5"
+              }
+            },
+            {
+              "id": "TC-CFG-006",
+              "shortDescription": {
+                "text": "Hook points outside the repository"
+              },
+              "fullDescription": {
+                "text": "Hook points outside the repository"
+              },
+              "help": {
+                "text": "Point the hook at a versioned script."
+              },
+              "helpUri": "https://example.invalid/rules/TC-CFG-006",
+              "defaultConfiguration": {
+                "level": "note"
+              },
+              "properties": {
+                "tags": [
+                  "security"
+                ],
+                "security-severity": "3.0"
+              }
+            }
+          ]
+        }
+      },
+      "originalUriBaseIds": {
+        "MANAGED": {
+          "description": {
+            "text": "Managed configuration location."
+          }
+        },
+        "USERHOME": {
+          "description": {
+            "text": "The user's home directory."
+          }
+        }
+      },
+      "results": [
+        {
+          "ruleId": "TC-CFG-001",
+          "level": "error",
+          "message": {
+            "text": "Hook downloads code: Remove the hook. (~/.claude/settings.json:3)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": ".claude/settings.json",
+                  "uriBaseId": "USERHOME"
+                },
+                "region": {
+                  "startLine": 3
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "tripcord/fingerprint": "tcf_1111111111111111"
+          },
+          "properties": {
+            "tripcord": {
+              "scope": "user",
+              "path": "~/.claude/settings.json"
+            }
+          }
+        },
+        {
+          "ruleId": "TC-CFG-006",
+          "level": "note",
+          "message": {
+            "text": "Hook points outside the repository: Point the hook at a versioned script. (/etc/cursor/hooks.json)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "etc/cursor/hooks.json",
+                  "uriBaseId": "MANAGED"
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "tripcord/fingerprint": "tcf_2222222222222222"
+          },
+          "properties": {
+            "tripcord": {
+              "scope": "managed",
+              "path": "/etc/cursor/hooks.json"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

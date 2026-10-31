@@ -6,21 +6,32 @@
       "tool": {
         "driver": {
           "name": "tripcord",
+          "version": "1.2.3",
+          "semanticVersion": "1.2.3",
           "rules": [
             {
               "id": "TC-CFG-006",
               "shortDescription": {
                 "text": "Hook points outside the repository"
+              },
+              "fullDescription": {
+                "text": "Hook points outside the repository"
+              },
+              "help": {
+                "text": "Point the hook at a versioned script."
+              },
+              "helpUri": "https://example.invalid/rules/TC-CFG-006",
+              "defaultConfiguration": {
+                "level": "note"
+              },
+              "properties": {
+                "tags": [
+                  "security"
+                ],
+                "security-severity": "3.0"
               }
             }
           ]
-        }
-      },
-      "originalUriBaseIds": {
-        "MANAGED": {
-          "description": {
-            "text": "Managed configuration location."
-          }
         }
       },
       "results": [
@@ -32,12 +43,13 @@
           },
           "locations": [
             {
-              "physicalLocation": {
-                "artifactLocation": {
-                  "uri": "etc/cursor/hooks.json",
-                  "uriBaseId": "MANAGED"
+              "logicalLocations": [
+                {
+                  "name": "hooks.json",
+                  "fullyQualifiedName": "/etc/cursor/hooks.json",
+                  "kind": "managed"
                 }
-              }
+              ]
             }
           ],
           "partialFingerprints": {

@@ -1,54 +1,71 @@
 package output
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
-	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/vgmartinez/tripcord/internal/model"
 )
 
-func renderJSONL(writer io.Writer, findings []model.Finding) error {
-	encoder := json.NewEncoder(writer)
+func renderJSONL(writer io.Writer, findings []model.Finding, options Options) error {
+	var buffer bytes.Buffer
+	encoder := json.NewEncoder(&buffer)
 	encoder.SetEscapeHTML(true)
 	for _, finding := range findings {
-		if err := encoder.Encode(finding); err != nil {
+		if err := encoder.Encode(publishedFinding(finding, options.RepoRoot)); err != nil {
 			return err
 		}
 	}
-	return nil
+	_, err := writer.Write(escapeJSONUnsafe(buffer.Bytes()))
+	return err
 }
 
-func renderText(writer io.Writer, findings []model.Finding) error {
+// publishedFinding returns a copy whose location path is the one locate
+// allows. A location locate drops loses its path and line.
+func publishedFinding(finding model.Finding, root string) model.Finding {
+	ref := locate(finding.Location, root)
+	finding.Location.Path = ref.path
+	if ref.kind == locNone {
+		finding.Location.Line = nil
+	}
+	return finding
+}
+
+// renderText writes one line per finding and a summary line. Every field
+// goes through escapeControls, so a line always starts with the severity.
+func renderText(writer io.Writer, findings []model.Finding, options Options) error {
+	var b strings.Builder
 	for _, finding := range findings {
-		location := displayLocation(finding.Location)
-		if location == "" {
-			location = "unknown location"
+		location := "-"
+		if ref := locate(finding.Location, options.RepoRoot); ref.kind != locNone {
+			location = ref.display()
 		}
-		if _, err := fmt.Fprintf(writer, "%s %s %s: %s\n", strings.ToUpper(finding.Severity.String()), finding.Rule, location, finding.Title); err != nil {
-			return err
-		}
+		parts := []string{fmt.Sprintf("%s %s %s: %s",
+			strings.ToUpper(finding.Severity.String()),
+			escapeControls(finding.Rule),
+			escapeControls(location),
+			escapeControls(finding.Title))}
 		for _, evidence := range finding.Evidence {
-			if evidence.Excerpt == "" {
-				continue
-			}
-			if _, err := fmt.Fprintf(writer, "  evidence: %s\n", evidence.Excerpt); err != nil {
-				return err
+			if evidence.Excerpt != "" {
+				parts = append(parts, "evidence: "+escapeControls(evidence.Excerpt))
 			}
 		}
-		if _, err := fmt.Fprintf(writer, "  fix: %s\n  fingerprint: %s\n", finding.Fix, finding.Fingerprint); err != nil {
-			return err
-		}
+		parts = append(parts, "fix: "+escapeControls(finding.Fix), "fingerprint: "+escapeControls(finding.Fingerprint))
+		b.WriteString(strings.Join(parts, " | "))
+		b.WriteString("\n")
 	}
 	summary := Summarize(findings)
-	_, err := fmt.Fprintf(writer, "%d finding(s): %d critical, %d high, %d medium, %d low\n", summary.Findings, summary.Critical, summary.High, summary.Medium, summary.Low)
+	fmt.Fprintf(&b, "%d finding(s): %d critical, %d high, %d medium, %d low\n", summary.Findings, summary.Critical, summary.High, summary.Medium, summary.Low)
+	_, err := io.WriteString(writer, b.String())
 	return err
 }
 
 func renderGHA(writer io.Writer, findings []model.Finding, options Options) error {
+	var b strings.Builder
 	for _, finding := range findings {
 		command, err := ghaCommand(finding.Severity)
 		if err != nil {
@@ -60,25 +77,20 @@ func renderGHA(writer io.Writer, findings []model.Finding, options Options) erro
 		switch ref.kind {
 		case locNone:
 		case locRepo:
-			properties = append(properties, "file="+escapeGHAProperty(ref.uri))
+			properties = append(properties, "file="+ghaProperty(ref.path))
 			if ref.line != nil {
 				properties = append(properties, "line="+strconv.Itoa(*ref.line))
 			}
 		case locUser, locManaged:
-			shown := ref.path
-			if ref.line != nil {
-				shown += ":" + strconv.Itoa(*ref.line)
-			}
-			properties = append(properties, "title="+escapeGHAProperty(shown))
-			message += " " + shown
+			properties = append(properties, "title="+ghaProperty(ref.display()))
+			message += " " + ref.display()
 		default:
 			return fmt.Errorf("output: unhandled location kind %d", ref.kind)
 		}
-		if _, err := fmt.Fprintf(writer, "::%s%s::%s\n", command, ghaProperties(properties), escapeGHAData(message)); err != nil {
-			return err
-		}
+		fmt.Fprintf(&b, "::%s%s::%s\n", command, ghaProperties(properties), ghaData(message))
 	}
-	return nil
+	_, err := io.WriteString(writer, b.String())
+	return err
 }
 
 func ghaCommand(severity model.Severity) (string, error) {
@@ -96,79 +108,6 @@ func ghaCommand(severity model.Severity) (string, error) {
 	}
 }
 
-func renderMarkdown(writer io.Writer, findings []model.Finding) error {
-	summary := Summarize(findings)
-	if _, err := fmt.Fprintf(writer, "## Tripcord findings\n\n%d finding(s): %d critical, %d high, %d medium, %d low.\n\n", summary.Findings, summary.Critical, summary.High, summary.Medium, summary.Low); err != nil {
-		return err
-	}
-	if len(findings) == 0 {
-		_, err := io.WriteString(writer, "No findings.\n")
-		return err
-	}
-	if _, err := io.WriteString(writer, "| Severity | Rule | Location | Finding |\n| --- | --- | --- | --- |\n"); err != nil {
-		return err
-	}
-	for index, finding := range findings {
-		location := displayLocation(finding.Location)
-		if location == "" {
-			location = "—"
-		}
-		if _, err := fmt.Fprintf(writer, "| %s | %s | %s | %s |\n", markdownTable(finding.Severity.String()), markdownTable(finding.Rule), markdownTable(location), markdownTable(finding.Title)); err != nil {
-			return err
-		}
-		if _, err := fmt.Fprintf(writer, "\n### %s — %s\n\n%s\n\n", markdownText(finding.Rule), markdownText(finding.Title), markdownText(finding.Fix)); err != nil {
-			return err
-		}
-		for _, evidence := range finding.Evidence {
-			if evidence.Excerpt == "" {
-				continue
-			}
-			if _, err := fmt.Fprintf(writer, "> Evidence: %s\n\n", markdownText(evidence.Excerpt)); err != nil {
-				return err
-			}
-		}
-		suffix := "\n"
-		if index < len(findings)-1 {
-			suffix = "\n\n"
-		}
-		if _, err := fmt.Fprintf(writer, "Fingerprint: `%s`%s", markdownCode(finding.Fingerprint), suffix); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func displayLocation(location model.Location) string {
-	if location.Path == "" {
-		return ""
-	}
-	if location.Line == nil {
-		return location.Path
-	}
-	return location.Path + ":" + strconv.Itoa(*location.Line)
-}
-
-func repoRelativeURI(location model.Location, root string) (string, bool) {
-	if location.Path == "" || location.Scope != model.ScopeRepo {
-		return "", false
-	}
-	path := filepath.Clean(location.Path)
-	if filepath.IsAbs(path) {
-		if root == "" {
-			return "", false
-		}
-		relative, err := filepath.Rel(root, path)
-		if err != nil {
-			return "", false
-		}
-		path = relative
-	}
-	if path == "." || path == ".." || strings.HasPrefix(path, ".."+string(filepath.Separator)) {
-		return "", false
-	}
-	return filepath.ToSlash(path), true
-}
-
 func ghaProperties(properties []string) string {
 	if len(properties) == 0 {
 		return ""
@@ -176,22 +115,14 @@ func ghaProperties(properties []string) string {
 	return " " + strings.Join(properties, ",")
 }
 
-func escapeGHAData(value string) string {
-	return strings.NewReplacer("%", "%25", "\r", "%0D", "\n", "%0A").Replace(value)
+// ghaData applies GitHub's workflow command data escaping, then removes
+// every remaining control and bidi character.
+func ghaData(value string) string {
+	return escapeControls(strings.NewReplacer("%", "%25", "\r", "%0D", "\n", "%0A").Replace(value))
 }
 
-func escapeGHAProperty(value string) string {
-	return strings.NewReplacer("%", "%25", "\r", "%0D", "\n", "%0A", ":", "%3A", ",", "%2C").Replace(value)
-}
-
-func markdownText(value string) string {
-	return strings.NewReplacer("\\", "\\\\", "`", "\\`", "<", "&lt;", ">", "&gt;").Replace(value)
-}
-
-func markdownTable(value string) string {
-	return strings.ReplaceAll(markdownText(value), "|", "\\|")
-}
-
-func markdownCode(value string) string {
-	return strings.ReplaceAll(markdownText(value), "`", "\\`")
+// ghaProperty applies GitHub's property escaping, which adds ":" and ",",
+// then removes every remaining control and bidi character.
+func ghaProperty(value string) string {
+	return escapeControls(strings.NewReplacer("%", "%25", "\r", "%0D", "\n", "%0A", ":", "%3A", ",", "%2C").Replace(value))
 }

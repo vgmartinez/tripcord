@@ -1,7 +1,14 @@
 // Package output renders findings for people and CI integrations.
+//
+// Every string in a finding is treated as attacker-controlled, because
+// titles, fixes, excerpts, and paths come from scanned repositories. Each
+// sink applies Options.Redactor, publishes only paths returned by locate,
+// and escapes control and bidi characters for its format.
 package output
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -28,19 +35,19 @@ const (
 type SARIFNonRepoLocation string
 
 const (
-	// SARIFNonRepoURIBase is the default. User and managed paths use a
-	// relative artifact URI and uriBaseId USERHOME or MANAGED.
-	SARIFNonRepoURIBase SARIFNonRepoLocation = "uri-base"
-	// SARIFNonRepoLogical is the fallback for a code-scanning importer that
-	// rejects or ignores uriBaseId-relative results. It emits logicalLocations
-	// and keeps the normalized path in the result message.
+	// SARIFNonRepoLogical emits logicalLocations and keeps the normalized
+	// path in the result message. It is the default because code scanning
+	// may ignore uriBaseId and attribute a home-directory finding to the
+	// repository file with the same relative path.
 	SARIFNonRepoLogical SARIFNonRepoLocation = "logical"
+	// SARIFNonRepoURIBase emits a relative artifact URI with uriBaseId
+	// USERHOME or MANAGED. It needs a real code scanning upload to verify.
+	SARIFNonRepoURIBase SARIFNonRepoLocation = "uri-base"
 )
 
 // DefaultSARIFNonRepoLocation is the representation used when Options does
-// not select one. A real GitHub code scanning upload still has to confirm
-// that the uriBaseId form is preserved.
-const DefaultSARIFNonRepoLocation = SARIFNonRepoURIBase
+// not select one.
+const DefaultSARIFNonRepoLocation = SARIFNonRepoLogical
 
 // Target identifies the supported output destination.
 type Target string
@@ -52,12 +59,19 @@ const (
 
 // Options controls rendering without changing a finding document.
 type Options struct {
+	// Redactor is required. It runs on every string of every finding before
+	// any sink renders it, as defense in depth on top of upstream
+	// redaction. Pass DefaultRedactor explicitly when no other is needed.
+	Redactor Redactor
 	// RepoRoot makes an absolute repository path repository-relative when the
-	// path is inside it. A repository path outside RepoRoot is omitted.
+	// path is inside it. Any other absolute repository path is omitted.
 	RepoRoot string
 	// NonRepoSARIF selects the SARIF form for user and managed paths.
 	// The zero value uses DefaultSARIFNonRepoLocation.
 	NonRepoSARIF SARIFNonRepoLocation
+	// ToolVersion is the build version reported as the SARIF driver
+	// version. Empty means "dev".
+	ToolVersion string
 }
 
 // Sink receives findings and writes a complete result when flushed.
@@ -104,6 +118,9 @@ func SelectSink(formatName, outputPath string, stdout io.Writer, options Options
 		}
 		return &Handle{Sink: sink}, nil
 	}
+	if err := validateOptions(options); err != nil {
+		return nil, err
+	}
 	file, err := os.OpenFile(outputPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 	if err != nil {
 		return nil, fmt.Errorf("open output file: %w", err)
@@ -137,7 +154,7 @@ func NewSink(format Format, target Target, writer io.Writer, options Options) (S
 	if writer == nil {
 		return nil, errors.New("output writer is nil")
 	}
-	if _, err := sarifNonRepoMode(options); err != nil {
+	if err := validateOptions(options); err != nil {
 		return nil, err
 	}
 	switch format {
@@ -161,6 +178,16 @@ func NewFileSink(format Format, writer io.Writer, options Options) (Sink, error)
 	return NewSink(format, TargetFile, writer, options)
 }
 
+func validateOptions(options Options) error {
+	if options.Redactor == nil {
+		return errors.New("output: Options.Redactor is required; pass output.DefaultRedactor explicitly")
+	}
+	if _, err := sarifNonRepoMode(options); err != nil {
+		return err
+	}
+	return nil
+}
+
 type sink struct {
 	format   Format
 	writer   io.Writer
@@ -176,7 +203,7 @@ func (s *sink) Write(finding model.Finding) error {
 	if err := finding.Validate(); err != nil {
 		return fmt.Errorf("output finding: %w", err)
 	}
-	s.findings = append(s.findings, finding)
+	s.findings = append(s.findings, redactFinding(finding, s.options.Redactor))
 	return nil
 }
 
@@ -191,15 +218,15 @@ func (s *sink) Flush() error {
 	var err error
 	switch s.format {
 	case FormatJSON, FormatJSONL:
-		err = renderJSONL(s.writer, findings)
+		err = renderJSONL(s.writer, findings, s.options)
 	case FormatSARIF:
 		err = renderSARIF(s.writer, findings, s.options)
 	case FormatText:
-		err = renderText(s.writer, findings)
+		err = renderText(s.writer, findings, s.options)
 	case FormatGHA:
 		err = renderGHA(s.writer, findings, s.options)
 	case FormatMD:
-		err = renderMarkdown(s.writer, findings)
+		err = renderMarkdown(s.writer, findings, s.options)
 	default:
 		err = fmt.Errorf("output format %q: unsupported", s.format)
 	}
@@ -209,23 +236,57 @@ func (s *sink) Flush() error {
 	return nil
 }
 
+type sortItem struct {
+	finding model.Finding
+	encoded []byte
+}
+
+// sortFindings is a total order: the final key is the full JSON document,
+// so two findings tie only when they are identical.
 func sortFindings(findings []model.Finding) {
-	sort.SliceStable(findings, func(i, j int) bool {
-		left, right := findings[i], findings[j]
-		for _, compare := range []int{
-			strings.Compare(left.Rule, right.Rule),
-			strings.Compare(string(left.Location.Harness), string(right.Location.Harness)),
-			strings.Compare(left.Location.Path, right.Location.Path),
-			compareLine(left.Location.Line, right.Location.Line),
-			strings.Compare(left.Fingerprint, right.Fingerprint),
-			strings.Compare(left.Title, right.Title),
-		} {
-			if compare != 0 {
-				return compare < 0
-			}
+	items := make([]sortItem, len(findings))
+	for i, finding := range findings {
+		encoded, err := json.Marshal(finding)
+		if err != nil {
+			encoded = nil
 		}
-		return false
+		items[i] = sortItem{finding: finding, encoded: encoded}
+	}
+	sort.SliceStable(items, func(i, j int) bool {
+		return compareFindings(items[i], items[j]) < 0
 	})
+	for i, item := range items {
+		findings[i] = item.finding
+	}
+}
+
+func compareFindings(left, right sortItem) int {
+	a, b := left.finding, right.finding
+	for _, compare := range []int{
+		strings.Compare(a.Rule, b.Rule),
+		strings.Compare(string(a.Location.Harness), string(b.Location.Harness)),
+		strings.Compare(string(a.Location.Scope), string(b.Location.Scope)),
+		strings.Compare(a.Location.Path, b.Location.Path),
+		compareLine(a.Location.Line, b.Location.Line),
+		compareSeverity(b.Severity, a.Severity),
+		strings.Compare(string(a.Decision), string(b.Decision)),
+		strings.Compare(a.Fingerprint, b.Fingerprint),
+		strings.Compare(a.Title, b.Title),
+		bytes.Compare(left.encoded, right.encoded),
+	} {
+		if compare != 0 {
+			return compare
+		}
+	}
+	return 0
+}
+
+func compareSeverity(left, right model.Severity) int {
+	compare, err := left.Compare(right)
+	if err != nil {
+		return strings.Compare(string(left), string(right))
+	}
+	return compare
 }
 
 func compareLine(left, right *int) int {

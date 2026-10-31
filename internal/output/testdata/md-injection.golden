@@ -1,0 +1,21 @@
+## Tripcord findings
+
+Total: 1. Critical: 0, high: 1, medium: 0, low: 0.
+
+| Severity | Rule | Location | Finding |
+| --- | --- | --- | --- |
+| `high` | `TC-CFG-010\n::stop-commands::tok` | `configs/a:b,c.json:7` | `Run \x1b[2K\rforged [x](https://evil) @​org/team` |
+
+### `TC-CFG-010\n::stop-commands::tok` — `Run \x1b[2K\rforged [x](https://evil) @​org/team`
+
+Fix: ``See\n\n## Pwned <img src=x> `tick` a|b \u202eevil``
+
+Location: `configs/a:b,c.json:7`
+
+Evidence:
+
+````
+\n::stop-commands::tok\n``` [x](https://evil) @​org/team \d
+````
+
+Fingerprint: `tcf_0123456789abcdef`
