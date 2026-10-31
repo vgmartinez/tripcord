@@ -141,6 +141,29 @@ func TestScanClaudeFixtureJSON(t *testing.T) {
 	}
 }
 
+func TestScanReportsIncompleteDiscovery(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, ".git"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(root, "evil\x1b[2J", ".claude")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "settings.json"), []byte(`{"hooks":{},"Hooks":{}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"scan", "--format", "json", root}, &stdout, &stderr); code != int(exitcode.Config) {
+		t.Fatalf("exit code = %d, stderr = %q", code, stderr.String())
+	}
+	msg := stderr.String()
+	if !strings.Contains(msg, "case-variant keys") || !strings.Contains(msg, "scan is incomplete") || strings.Contains(msg, "\x1b") || strings.Contains(msg, root) {
+		t.Fatalf("stderr = %q", msg)
+	}
+}
+
 func TestScanSecretsAndAllDoNotScan(t *testing.T) {
 	t.Parallel()
 	const want = "tripcord scan: secret scanning lands in v1; v0 supports --config only\n"

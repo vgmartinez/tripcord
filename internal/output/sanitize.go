@@ -31,6 +31,12 @@ func escapeControls(value string) string {
 	return escapeLine(value, true)
 }
 
+// TerminalLine redacts credentials in value and escapes it so it prints as
+// exactly one inert line, for diagnostics that quote attacker-chosen names.
+func TerminalLine(value string) string {
+	return truncateSanitized(escapeControls(DefaultRedactor(value)), MaxFieldBytes)
+}
+
 // escapeControlsKeepBackslash is escapeControls for contexts that show text
 // literally, such as markdown code, where doubling "\" would misquote it.
 // A literal backslash is still doubled when it would otherwise read as one

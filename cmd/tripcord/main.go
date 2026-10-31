@@ -39,8 +39,8 @@ Usage:
   tripcord version
   tripcord scan [PATH] [flags]
 
-scan performs static configuration scanning only. Harness adapters land in
-this command. By default it reads repository-scoped configuration only.
+scan performs static configuration scanning only. It reads repository-scoped
+configuration; it does not read the home directory or system settings.
 --secrets (v1) and --all (v1) are not available.
 `
 
@@ -140,10 +140,15 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 		return scanConfigError(stderr, err)
 	}
 	var items []model.ConfigItem
+	var diagnostics []adapters.Diagnostic
 	for _, adapter := range selected {
 		discovered, err := adapter.Discover(context.Background(), root)
-		if err != nil {
-			return scanConfigError(stderr, fmt.Errorf("%s config: %w", adapter.Harness(), err))
+		var partial *adapters.DiagnosticError
+		switch {
+		case errors.As(err, &partial):
+			diagnostics = append(diagnostics, partial.Diagnostics...)
+		case err != nil:
+			return scanInternalError(stderr, fmt.Errorf("%s discovery: %w", adapter.Harness(), err))
 		}
 		items = append(items, discovered...)
 	}
@@ -158,6 +163,9 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 		}
 		items = slices.DeleteFunc(items, func(item model.ConfigItem) bool {
 			return item.Scope != model.ScopeRepo || !changed[item.Path]
+		})
+		diagnostics = slices.DeleteFunc(diagnostics, func(d adapters.Diagnostic) bool {
+			return d.Scope == model.ScopeRepo && d.Path != "" && !changed[d.Path]
 		})
 	}
 	engine := rules.NewEngine(env, catalog.Rules(), rules.WithFilter(effective.RuleFilter()))
@@ -201,6 +209,13 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 	}
 	if err := handle.Close(); err != nil {
 		return scanInternalError(stderr, err)
+	}
+	if len(diagnostics) > 0 {
+		for _, d := range diagnostics {
+			writeString(stderr, "tripcord scan: "+output.TerminalLine(d.String())+"\n")
+		}
+		writeString(stderr, "tripcord scan: configuration could not be fully read; the scan is incomplete\n")
+		return int(exitcode.Config)
 	}
 	for _, finding := range findings {
 		fails, err := effective.Fails(finding.Severity)
