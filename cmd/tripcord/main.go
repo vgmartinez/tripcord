@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+
+	"github.com/vgmartinez/tripcord/internal/exitcode"
 )
 
 // version is the build version. Override it at link time:
@@ -40,13 +42,16 @@ func run(args []string, stdout, stderr io.Writer) int {
 	default:
 		msg := fmt.Sprintf("tripcord: unknown command %q\n\n%s", args[0], usage)
 		writeString(stderr, msg)
-		return 1
+		return int(exitcode.Config)
 	}
 }
 
+// writeString writes s and reports the exit status: OK on success, or
+// Internal for a write failure (stdout or stderr closed out from under
+// the process), per the CLI exit code table.
 func writeString(w io.Writer, s string) int {
 	if _, err := io.WriteString(w, s); err != nil {
-		return 1
+		return int(exitcode.Internal)
 	}
-	return 0
+	return int(exitcode.OK)
 }

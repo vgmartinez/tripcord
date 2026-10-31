@@ -5,6 +5,8 @@ import (
 	"io"
 	"strings"
 	"testing"
+
+	"github.com/vgmartinez/tripcord/internal/exitcode"
 )
 
 func TestVersion(t *testing.T) {
@@ -68,8 +70,8 @@ func (failWriter) Write([]byte) (int, error) {
 func TestVersionWriteError(t *testing.T) {
 	t.Parallel()
 	var stderr bytes.Buffer
-	if code := run([]string{"version"}, failWriter{}, &stderr); code != 1 {
-		t.Fatalf("exit code = %d, want 1", code)
+	if code := run([]string{"version"}, failWriter{}, &stderr); code != int(exitcode.Internal) {
+		t.Fatalf("exit code = %d, want %d (internal or I/O error)", code, exitcode.Internal)
 	}
 }
 
@@ -77,8 +79,8 @@ func TestUnknownCommand(t *testing.T) {
 	t.Parallel()
 	var stdout, stderr bytes.Buffer
 	code := run([]string{"scan"}, &stdout, &stderr)
-	if code != 1 {
-		t.Fatalf("exit code = %d, want 1", code)
+	if code != int(exitcode.Config) {
+		t.Fatalf("exit code = %d, want %d (configuration error)", code, exitcode.Config)
 	}
 	if stdout.Len() != 0 {
 		t.Fatalf("stdout = %q", stdout.String())
