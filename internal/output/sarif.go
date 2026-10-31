@@ -27,8 +27,19 @@ type sarifLog struct {
 
 type sarifRun struct {
 	Tool               sarifTool                        `json:"tool"`
+	Invocations        []sarifInvocation                `json:"invocations,omitempty"`
 	OriginalURIBaseIDs map[string]sarifArtifactLocation `json:"originalUriBaseIds,omitempty"`
 	Results            []sarifResult                    `json:"results"`
+}
+
+type sarifInvocation struct {
+	ExecutionSuccessful        bool                `json:"executionSuccessful"`
+	ToolExecutionNotifications []sarifNotification `json:"toolExecutionNotifications,omitempty"`
+}
+
+type sarifNotification struct {
+	Message sarifMessage `json:"message"`
+	Level   string       `json:"level"`
 }
 
 type sarifTool struct {
@@ -119,7 +130,7 @@ type sarifRuleInfo struct {
 	severity model.Severity
 }
 
-func renderSARIF(writer io.Writer, findings []model.Finding, options Options) error {
+func renderSARIF(writer io.Writer, findings []model.Finding, diags []Diagnostic, options Options) error {
 	mode, err := sarifNonRepoMode(options)
 	if err != nil {
 		return err
@@ -184,19 +195,30 @@ func renderSARIF(writer io.Writer, findings []model.Finding, options Options) er
 		return err
 	}
 	version, semantic := toolVersions(options.ToolVersion)
+	run := sarifRun{
+		Tool: sarifTool{Driver: sarifDriver{
+			Name:            "tripcord",
+			Version:         version,
+			SemanticVersion: semantic,
+			Rules:           sarifRules,
+		}},
+		OriginalURIBaseIDs: bases,
+		Results:            results,
+	}
+	if len(diags) > 0 {
+		notes := make([]sarifNotification, len(diags))
+		for i, d := range diags {
+			notes[i] = sarifNotification{Message: sarifMessage{Text: sarifText(d.Text())}, Level: "error"}
+		}
+		run.Invocations = []sarifInvocation{{
+			ExecutionSuccessful:        false,
+			ToolExecutionNotifications: notes,
+		}}
+	}
 	log := sarifLog{
 		Schema:  sarifSchemaURL,
 		Version: "2.1.0",
-		Runs: []sarifRun{{
-			Tool: sarifTool{Driver: sarifDriver{
-				Name:            "tripcord",
-				Version:         version,
-				SemanticVersion: semantic,
-				Rules:           sarifRules,
-			}},
-			OriginalURIBaseIDs: bases,
-			Results:            results,
-		}},
+		Runs:    []sarifRun{run},
 	}
 	var buffer bytes.Buffer
 	encoder := json.NewEncoder(&buffer)

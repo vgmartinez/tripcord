@@ -84,6 +84,31 @@ type RuleText struct {
 	HelpURI         string
 }
 
+// Diagnostic is one discovery problem included in a report. A consumer that
+// reads only the report can tell the scan is incomplete. The sink redacts
+// every field the same way it redacts finding strings, then each format
+// sanitizes the text again. Paths stay in their logical form, including
+// "~/" for user scope.
+type Diagnostic struct {
+	Harness string
+	Scope   string
+	Path    string
+	Message string
+}
+
+// Text is the single display line for a diagnostic.
+func (d Diagnostic) Text() string {
+	var b strings.Builder
+	b.WriteString(d.Harness)
+	if d.Path != "" {
+		b.WriteString(": ")
+		b.WriteString(d.Path)
+	}
+	b.WriteString(": ")
+	b.WriteString(d.Message)
+	return b.String()
+}
+
 // Sink receives findings and writes a complete result when flushed.
 // Implementations buffer findings so every output is sorted deterministically.
 type Sink interface {
@@ -155,6 +180,10 @@ type publishSink struct {
 }
 
 func (p *publishSink) Write(finding model.Finding) error { return p.inner.Write(finding) }
+
+func (p *publishSink) SetDiagnostics(diags []Diagnostic) error {
+	return SetDiagnostics(p.inner, diags)
+}
 
 func (p *publishSink) Flush() error {
 	if err := p.inner.Flush(); err != nil {
@@ -249,6 +278,28 @@ type Handle struct {
 	close func() error
 }
 
+// SetDiagnostics records discovery problems to include in the report.
+// Call it before Flush. An empty slice leaves the report unchanged.
+func (h *Handle) SetDiagnostics(diags []Diagnostic) error {
+	if h == nil {
+		return errors.New("output handle is nil")
+	}
+	return SetDiagnostics(h.Sink, diags)
+}
+
+// SetDiagnostics records diagnostics on a sink created by NewSink,
+// NewStdoutSink, or NewFileSink, including the file sink SelectSink wraps.
+func SetDiagnostics(sink Sink, diags []Diagnostic) error {
+	type setter interface {
+		SetDiagnostics([]Diagnostic) error
+	}
+	target, ok := sink.(setter)
+	if !ok || target == nil {
+		return errors.New("output sink does not accept diagnostics")
+	}
+	return target.SetDiagnostics(diags)
+}
+
 // Close closes a file opened by SelectSink. It is safe on stdout.
 func (h *Handle) Close() error {
 	if h == nil || h.close == nil {
@@ -303,7 +354,24 @@ type sink struct {
 	writer   io.Writer
 	options  Options
 	findings []model.Finding
+	diags    []Diagnostic
 	flushed  bool
+}
+
+func (s *sink) SetDiagnostics(diags []Diagnostic) error {
+	if s.flushed {
+		return errors.New("output sink is already flushed")
+	}
+	s.diags = make([]Diagnostic, len(diags))
+	for i, d := range diags {
+		s.diags[i] = Diagnostic{
+			Harness: s.options.Redactor(d.Harness),
+			Scope:   s.options.Redactor(d.Scope),
+			Path:    s.options.Redactor(d.Path),
+			Message: s.options.Redactor(d.Message),
+		}
+	}
+	return nil
 }
 
 func (s *sink) Write(finding model.Finding) error {
@@ -329,15 +397,15 @@ func (s *sink) Flush() error {
 	var err error
 	switch s.format {
 	case FormatJSON, FormatJSONL:
-		err = renderJSONL(s.writer, findings, s.options)
+		err = renderJSONL(s.writer, findings, s.diags, s.options)
 	case FormatSARIF:
-		err = renderSARIF(s.writer, findings, s.options)
+		err = renderSARIF(s.writer, findings, s.diags, s.options)
 	case FormatText:
-		err = renderText(s.writer, findings, s.options)
+		err = renderText(s.writer, findings, s.diags, s.options)
 	case FormatGHA:
-		err = renderGHA(s.writer, findings, s.options)
+		err = renderGHA(s.writer, findings, s.diags, s.options)
 	case FormatMD:
-		err = renderMarkdown(s.writer, findings, s.options)
+		err = renderMarkdown(s.writer, findings, s.diags, s.options)
 	default:
 		err = fmt.Errorf("output format %q: unsupported", s.format)
 	}

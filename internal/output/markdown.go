@@ -20,10 +20,16 @@ import (
 // The comment stays within MaxMarkdownBytes, under GitHub's 65536-character
 // limit. Findings that do not fit are omitted whole, and the comment ends
 // with "N more findings omitted".
-func renderMarkdown(writer io.Writer, findings []model.Finding, options Options) error {
+func renderMarkdown(writer io.Writer, findings []model.Finding, diags []Diagnostic, options Options) error {
 	summary := Summarize(findings)
 	var head strings.Builder
 	fmt.Fprintf(&head, "## Tripcord findings\n\nTotal: %d. Critical: %d, high: %d, medium: %d, low: %d.\n", summary.Findings, summary.Critical, summary.High, summary.Medium, summary.Low)
+	if len(diags) > 0 {
+		head.WriteString("\n## Diagnostics\n\nThe scan is incomplete.\n\n")
+		for _, d := range diags {
+			fmt.Fprintf(&head, "- %s\n", inlineCode(d.Text()))
+		}
+	}
 	if len(findings) == 0 {
 		head.WriteString("\nNo findings.\n")
 		_, err := io.WriteString(writer, head.String())

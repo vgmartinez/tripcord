@@ -15,12 +15,38 @@ import (
 // round-trip, except that encoding/json replaces each invalid UTF-8 byte
 // with U+FFFD. The location path is the display path from locate; the
 // fingerprint is the one stored on the finding. See docs/output.md.
-func renderJSONL(writer io.Writer, findings []model.Finding, options Options) error {
+// diagnosticSchema identifies a discovery problem in a JSONL report. It is
+// not a tripcord.finding/v1 document.
+const diagnosticSchema = "tripcord.diagnostic/v1"
+
+type diagnosticDocument struct {
+	Schema     string `json:"schema"`
+	Incomplete bool   `json:"incomplete"`
+	Harness    string `json:"harness"`
+	Scope      string `json:"scope,omitempty"`
+	Path       string `json:"path,omitempty"`
+	Message    string `json:"message"`
+}
+
+func renderJSONL(writer io.Writer, findings []model.Finding, diags []Diagnostic, options Options) error {
 	var buffer bytes.Buffer
 	encoder := json.NewEncoder(&buffer)
 	encoder.SetEscapeHTML(true)
 	for _, finding := range findings {
 		if err := encoder.Encode(capFinding(publishedFinding(finding, options.RepoRoot))); err != nil {
+			return err
+		}
+	}
+	for _, d := range diags {
+		doc := diagnosticDocument{
+			Schema:     diagnosticSchema,
+			Incomplete: true,
+			Harness:    truncateSanitized(d.Harness, MaxFieldBytes),
+			Scope:      truncateSanitized(d.Scope, MaxFieldBytes),
+			Path:       truncateSanitized(d.Path, MaxFieldBytes),
+			Message:    truncateSanitized(d.Message, MaxFieldBytes),
+		}
+		if err := encoder.Encode(doc); err != nil {
 			return err
 		}
 	}
@@ -99,8 +125,14 @@ func publishedFinding(finding model.Finding, root string) model.Finding {
 
 // renderText writes one line per finding and a summary line. Every field
 // goes through escapeControls, so a line always starts with the severity.
-func renderText(writer io.Writer, findings []model.Finding, options Options) error {
+func renderText(writer io.Writer, findings []model.Finding, diags []Diagnostic, options Options) error {
 	var b strings.Builder
+	for _, d := range diags {
+		b.WriteString("diagnostic: " + present(d.Text()) + "\n")
+	}
+	if len(diags) > 0 {
+		b.WriteString("scan incomplete\n")
+	}
 	for _, finding := range findings {
 		location := "-"
 		if ref := locate(finding.Location, options.RepoRoot); ref.kind != locNone {
@@ -126,8 +158,11 @@ func renderText(writer io.Writer, findings []model.Finding, options Options) err
 	return err
 }
 
-func renderGHA(writer io.Writer, findings []model.Finding, options Options) error {
+func renderGHA(writer io.Writer, findings []model.Finding, diags []Diagnostic, options Options) error {
 	var b strings.Builder
+	for _, d := range diags {
+		fmt.Fprintf(&b, "::error::%s\n", ghaData(d.Text()))
+	}
 	for _, finding := range findings {
 		command, err := ghaCommand(finding.Severity)
 		if err != nil {
