@@ -172,3 +172,28 @@ func TestParseRulesFileLimitCountsHostExecutables(t *testing.T) {
 		t.Fatalf("%d calls parsed, want opaque past maxRulesPerFile", maxRulesPerFile+1)
 	}
 }
+
+// A raw control byte inside a string (a CR, which a CRLF-aware reader
+// might drop, or a NUL, which truncates the value for a C consumer) has
+// no single meaning, so the file is opaque rather than decoded one way.
+// CRLF line endings outside strings, and the \r escape, still parse.
+func TestParseRulesFileRejectsRawControlBytesInStrings(t *testing.T) {
+	t.Parallel()
+	for name, src := range map[string]string{
+		"raw CR":  "prefix_rule(pattern = [\"git\r\", \"push\"])",
+		"raw NUL": "prefix_rule(pattern = [\"git\x00rm\"])",
+		"raw ESC": "prefix_rule(pattern = ['a\x1bb'])",
+	} {
+		if _, ok := parseRulesFile([]byte(src)); ok {
+			t.Errorf("%s: parseRulesFile(%q) = ok, want opaque fallback", name, src)
+		}
+	}
+	for _, src := range []string{
+		"prefix_rule(pattern = [\"git\", \"push\"])\r\nprefix_rule(pattern = [\"ls\"])\r\n",
+		`prefix_rule(pattern = ["a\rb", "tab	here"])`,
+	} {
+		if _, ok := parseRulesFile([]byte(src)); !ok {
+			t.Errorf("parseRulesFile(%q) = opaque, want parsed", src)
+		}
+	}
+}

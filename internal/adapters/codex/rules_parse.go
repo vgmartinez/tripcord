@@ -355,7 +355,9 @@ func lexRules(raw []byte) ([]rulesToken, bool) {
 // lexRulesString decodes a single- or double-quoted string starting at
 // start, returning its value and the index right after the closing
 // quote. A triple-quoted string, an escape outside \\ \' \" \n \t \r, a
-// newline, or an unterminated string fails instead of being decoded
+// raw control byte other than tab (a newline, a CR that a CRLF-aware
+// reader would drop or keep, a NUL that truncates the value for a C
+// consumer), or an unterminated string fails instead of being decoded
 // approximately.
 func lexRulesString(raw []byte, start int) (string, int, bool) {
 	quote := raw[start]
@@ -367,12 +369,12 @@ func lexRulesString(raw []byte, start int) (string, int, bool) {
 	i := start + 1
 	for i < n {
 		c := raw[i]
-		switch c {
-		case quote:
+		switch {
+		case c == quote:
 			return string(buf), i + 1, true
-		case '\n':
+		case c < 0x20 && c != '\t':
 			return "", 0, false
-		case '\\':
+		case c == '\\':
 			if i+1 >= n {
 				return "", 0, false
 			}
