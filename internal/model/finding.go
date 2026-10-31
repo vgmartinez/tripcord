@@ -81,7 +81,11 @@ func (f Finding) MarshalJSON() ([]byte, error) {
 }
 
 // Validate checks closed vocabularies, location paths, config ids, and
-// the stored fingerprint. Every fingerprint input is on the finding:
+// the stored fingerprint. It is stricter than the frozen
+// tripcord.finding/v1 schema: the schema accepts any non-empty rule
+// string, while Validate also requires the rules/REGISTRY id shape,
+// such as TC-CFG-001. That extra check does not change the schema.
+// Every fingerprint input is on the finding:
 // the rule, the location (harness, session, scope, path), and each
 // evidence excerpt and config id/key. Line and event id are on the
 // document too, and Fingerprint ignores them, so they do not have to be

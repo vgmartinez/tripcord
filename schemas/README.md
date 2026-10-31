@@ -33,6 +33,13 @@ and vice versa. `schemas/compat_test.go`'s `TestSchemaObjectsStayOpen`
 walks every schema file and fails the build if any object node sets
 `additionalProperties: false`, so this stays true going forward.
 
+## Validation beyond the schema
+
+`model.Finding.Validate` accepts a finding only when its `rule` has the
+`rules/REGISTRY` id shape, such as `TC-CFG-001`. The frozen
+`tripcord.finding/v1` schema only requires a non-empty string. Validate
+is intentionally stricter; the schema's semantics are unchanged.
+
 ## Compatibility
 
 `schemas/testdata/baseline/` holds the accepted copy of each v1 schema.

@@ -2,6 +2,7 @@ package policy
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -21,12 +22,23 @@ func checkManagedPolicyFile(path string) error {
 	if err := checkManagedPolicyOwner(path, info); err != nil {
 		return &Error{Source: path, Err: err}
 	}
-	if parent, err := os.Stat(filepath.Dir(path)); err == nil {
-		if err := checkManagedPolicyParent(path, parent); err != nil {
-			return &Error{Source: path, Err: err}
-		}
+	if err := checkManagedPolicyParentPath(path); err != nil {
+		return &Error{Source: path, Err: err, IO: isStatError(err)}
 	}
 	return nil
+}
+
+func checkManagedPolicyParentPath(path string) error {
+	parent, err := os.Stat(filepath.Dir(path))
+	if err != nil {
+		return fmt.Errorf("managed policy parent for %s: %w", path, err)
+	}
+	return checkManagedPolicyParent(path, parent)
+}
+
+func isStatError(err error) bool {
+	var pathErr *os.PathError
+	return errors.As(err, &pathErr)
 }
 
 var errWorldWritable = errors.New("world-writable; an org policy a repository's own user can edit is not an org boundary")

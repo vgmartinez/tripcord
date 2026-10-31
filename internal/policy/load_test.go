@@ -295,6 +295,42 @@ func TestManagedPolicyPermissions(t *testing.T) {
 	wantErr(t, err, "parent for")
 	wantErr(t, err, "world-writable")
 	assertExit(t, err, exitcode.Config)
+
+	if err := os.Chmod(filepath.Dir(managed), 0o770); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(Options{RepoRoot: t.TempDir(), ManagedPolicy: managed, Surface: SurfaceScan, Env: testEnv(t), Catalog: catalog}); err != nil {
+		t.Fatalf("group-writable parent owned by the current user was rejected: %v", err)
+	}
+}
+
+func TestManagedPolicyParentStatIsNotIgnored(t *testing.T) {
+	err := checkManagedPolicyParentPath(filepath.Join(t.TempDir(), "missing", "policy.yaml"))
+	if err == nil {
+		t.Fatal("missing parent directory was ignored")
+	}
+}
+
+func TestApplyFailOnRespectsLockedCeiling(t *testing.T) {
+	root := t.TempDir()
+	org := filepath.Join(root, "org.yaml")
+	write(t, org, "version: 1\nmode: enforce\nfail-on: medium\nlocked:\n  mode: true\n")
+	e, err := Load(Options{RepoRoot: t.TempDir(), ManagedPolicy: noManaged(t), OrgPolicy: []string{org}, Surface: SurfaceScan, Env: testEnv(t), Catalog: catalog})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.ApplyFailOn(model.SeverityCritical); err == nil || !strings.Contains(err.Error(), "ceiling") {
+		t.Fatalf("loosening error = %v", err)
+	}
+	if e.FailOn != model.SeverityMedium {
+		t.Fatalf("fail-on changed to %s", e.FailOn)
+	}
+	if err := e.ApplyFailOn(model.SeverityLow); err != nil {
+		t.Fatal(err)
+	}
+	if e.FailOn != model.SeverityLow {
+		t.Fatalf("fail-on = %s", e.FailOn)
+	}
 }
 
 func assertExit(t *testing.T, err error, want exitcode.Code) {

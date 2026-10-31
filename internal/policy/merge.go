@@ -522,6 +522,20 @@ func (e *Effective) RuleFilter() rules.Filter {
 	}
 }
 
+// ApplyFailOn sets the invocation fail-on, such as the scan --fail-on
+// flag. A locked mode keeps its fail-on ceiling: the flag may lower the
+// threshold and may not raise it. Loosening returns an error.
+func (e *Effective) ApplyFailOn(sev model.Severity) error {
+	if !sev.Valid() {
+		return fmt.Errorf("fail-on %q: unknown", sev)
+	}
+	if lock := e.ModeLock; lock != nil && lock.FailOnCeiling != "" && aboveCeiling(sev, lock.FailOnCeiling) {
+		return fmt.Errorf("fail-on %s: above the %s ceiling locked with the mode by %s", sev, lock.FailOnCeiling, lock.Origin.Source)
+	}
+	e.FailOn = sev
+	return nil
+}
+
 // Fails reports whether a finding of severity sev fails this policy's
 // run: Mode is enforce and sev is at or above FailOn. audit and warn
 // never fail, on any surface, which is why the hook's default mode,
