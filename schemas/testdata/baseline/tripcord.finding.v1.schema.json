@@ -3,7 +3,7 @@
   "$id": "https://schemas.tripcord.invalid/tripcord.finding/v1",
   "$comment": "SPDX-License-Identifier: Apache-2.0",
   "title": "Tripcord finding",
-  "description": "One policy result. fingerprint is tcf_ plus exactly 16 lowercase hex digits. Each evidence item cites exactly one of event (an Event.id) or config (a ConfigItem.id); this schema cannot express that 'exactly one' rule (no oneOf in this project's supported keyword subset), so it is enforced by Finding.Validate in internal/model, not here. Objects are open (additionalProperties: true): a reader must ignore properties it does not recognize, so a v1.x addition never breaks it.",
+  "description": "One policy result. fingerprint is tcf_ plus exactly 16 lowercase hex digits. Each evidence item cites exactly one of event (an Event.id) or config (a ConfigItem.id), via oneOf; Finding.Validate in internal/model enforces the same rule independently. Objects are open (additionalProperties: true): a reader must ignore properties it does not recognize, so a v1.x addition never breaks it.",
   "type": "object",
   "additionalProperties": true,
   "required": [
@@ -49,6 +49,10 @@
       "items": {
         "type": "object",
         "additionalProperties": true,
+        "oneOf": [
+          { "required": ["event"] },
+          { "required": ["config"] }
+        ],
         "properties": {
           "event": {
             "type": "string",

@@ -20,8 +20,11 @@ import (
 // It covers the keyword subset those files use: type, const, enum,
 // properties, required, additionalProperties (boolean only), items,
 // minLength, minimum, maximum, minItems, pattern, format (date-time
-// only), and $ref. It does NOT implement the rest of 2020-12: no
-// oneOf/anyOf/allOf/not, no $dynamicRef or $defs, no
+// only), $ref, and oneOf. oneOf runs the full check against each
+// branch and requires exactly one to succeed; a branch is any schema
+// this validator otherwise supports (for example {"required":[...]}),
+// not a distinct oneOf-only syntax. It does NOT implement the rest of
+// 2020-12: no anyOf/allOf/not, no $dynamicRef or $defs, no
 // patternProperties, dependentRequired, unevaluatedProperties,
 // multipleOf, uniqueItems, contains, or other formats. A schema file
 // that uses an unsupported keyword fails to load (see
@@ -195,6 +198,9 @@ func (idx *schemaIndex) check(schema map[string]any, instance any, path string, 
 			return err
 		}
 	}
+	if err := idx.checkOneOf(schema, instance, path, depth); err != nil {
+		return err
+	}
 	switch value := instance.(type) {
 	case map[string]any:
 		return idx.checkObject(schema, value, path, depth)
@@ -202,6 +208,41 @@ func (idx *schemaIndex) check(schema map[string]any, instance any, path string, 
 		return idx.checkArray(schema, value, path, depth)
 	default:
 		return nil
+	}
+}
+
+// checkOneOf requires exactly one of schema's oneOf branches to match
+// instance. A branch is itself a schema, checked with the same check
+// function, so a branch may use any keyword this validator supports.
+func (idx *schemaIndex) checkOneOf(schema map[string]any, instance any, path string, depth int) error {
+	raw, ok := schema["oneOf"]
+	if !ok {
+		return nil
+	}
+	branches, ok := raw.([]any)
+	if !ok {
+		return fmt.Errorf("%s: schema oneOf is not an array", path)
+	}
+	matched := 0
+	var lastErr error
+	for i, b := range branches {
+		branch, ok := b.(map[string]any)
+		if !ok {
+			return fmt.Errorf("%s: oneOf[%d] is not an object", path, i)
+		}
+		if err := idx.check(branch, instance, path, depth+1); err != nil {
+			lastErr = err
+			continue
+		}
+		matched++
+	}
+	switch matched {
+	case 1:
+		return nil
+	case 0:
+		return fmt.Errorf("%s: value matches no oneOf branch (last: %v)", path, lastErr)
+	default:
+		return fmt.Errorf("%s: value matches more than one oneOf branch", path)
 	}
 }
 
@@ -449,6 +490,7 @@ var schemaKeywords = map[string]struct{}{
 	"minItems":             {},
 	"pattern":              {},
 	"format":               {},
+	"oneOf":                {},
 }
 
 func auditSchemaNode(schema map[string]any, path string) error {
@@ -512,6 +554,21 @@ func walkSchema(schema map[string]any, path string, fn func(map[string]any, stri
 		}
 		if err := walkSchema(child, path+".items", fn); err != nil {
 			return err
+		}
+	}
+	if raw, ok := schema["oneOf"]; ok {
+		branches, ok := raw.([]any)
+		if !ok {
+			return fmt.Errorf("%s: oneOf is not an array", path)
+		}
+		for i, b := range branches {
+			child, ok := b.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%s.oneOf[%d]: not an object", path, i)
+			}
+			if err := walkSchema(child, fmt.Sprintf("%s.oneOf[%d]", path, i), fn); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

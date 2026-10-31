@@ -72,6 +72,12 @@ Dropping a constraint such as `items` or `minLength` is treated as a
 relaxation and is allowed. Replacing `additionalProperties: false` with
 a schema is rejected, because that is not a plain relaxation.
 
+`oneOf` is compared byte-for-byte against the baseline: any change to
+it, including widening it with a new branch, is flagged as breaking.
+The differ does not reason about `oneOf` semantics the way it does for
+`enum` or a numeric bound; this is the conservative default for a
+keyword it does not specifically understand.
+
 ## Minimal required fields
 
 `tripcord.event/v1` requires only `schema`, `id`, `ts`, `source.harness`,
@@ -82,16 +88,16 @@ a schema is rejected, because that is not a plain relaxation.
 one from a session outside a git repository, with no corresponding
 branch or actor to report — still validates.
 
-## What this schema cannot express
+## Evidence cites exactly one of event or config
 
 `tripcord.finding/v1`'s `evidence` items cite exactly one of `event` (an
 `Event.id`) or `config` (a `ConfigItem.id`), per the spec's "findings
-reference events or config by id." This project's hand-written test
-validator (`internal/model/schema_validate_test.go`) supports a
-deliberately small keyword subset and does not implement `oneOf`, so
-this schema cannot express "exactly one of two properties is set." That
-rule is enforced in Go, by `Finding.Validate` in `internal/model`, not
-by this JSON Schema. A general-purpose validator (ajv,
-check-jsonschema) checking only this schema will accept a finding with
-both `event` and `config`, or with neither; Tripcord's own code will
-not.
+reference events or config by id." The schema expresses this with
+`oneOf: [{"required": ["event"]}, {"required": ["config"]}]` on each
+evidence item. `Finding.Validate` in `internal/model` enforces the same
+rule in Go, independently of the schema.
+
+The hand-written test validator
+(`internal/model/schema_validate_test.go`) supports `oneOf`: it runs the
+full check against each branch and requires exactly one to match. It
+does not support `anyOf`, `allOf`, or `not`.

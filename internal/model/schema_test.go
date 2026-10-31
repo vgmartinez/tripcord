@@ -131,6 +131,16 @@ func TestSchemaRejectsInvalidDocuments(t *testing.T) {
 	location["scope"] = "global"
 	expectSchemaError(t, idx, schemaIDFinding, finding, "not in the enum")
 
+	finding = mustObject(t, readTestdata(t, "finding.json"))
+	evidenceBoth := finding["evidence"].([]any)[0].(map[string]any)
+	evidenceBoth["config"] = "claude:repo:.claude/settings.json"
+	expectSchemaError(t, idx, schemaIDFinding, finding, "matches more than one oneOf branch")
+
+	finding = mustObject(t, readTestdata(t, "finding.json"))
+	evidenceNeither := finding["evidence"].([]any)[0].(map[string]any)
+	delete(evidenceNeither, "event")
+	expectSchemaError(t, idx, schemaIDFinding, finding, "matches no oneOf branch")
+
 	session := map[string]any{
 		"schema": SchemaSession,
 		"id":     "s",
@@ -152,9 +162,36 @@ func TestSchemaRejectsInvalidDocuments(t *testing.T) {
 
 func TestAuditRejectsUnsupportedKeyword(t *testing.T) {
 	t.Parallel()
-	err := auditSchemaNode(map[string]any{"oneOf": []any{}}, "$")
-	if err == nil || !strings.Contains(err.Error(), "oneOf") {
+	err := auditSchemaNode(map[string]any{"anyOf": []any{}}, "$")
+	if err == nil || !strings.Contains(err.Error(), "anyOf") {
 		t.Fatalf("audit = %v", err)
+	}
+}
+
+func TestOneOfRequiresExactlyOneMatch(t *testing.T) {
+	t.Parallel()
+	idx := loadSchemaIndex(t)
+	schema := map[string]any{
+		"oneOf": []any{
+			map[string]any{"required": []any{"event"}},
+			map[string]any{"required": []any{"config"}},
+		},
+	}
+	neither := map[string]any{"excerpt": "x"}
+	if err := idx.check(schema, neither, "$", 0); err == nil {
+		t.Fatal("neither branch matched, want an error")
+	}
+	eventOnly := map[string]any{"event": "evt_1"}
+	if err := idx.check(schema, eventOnly, "$", 0); err != nil {
+		t.Fatalf("event-only should match exactly one branch: %v", err)
+	}
+	configOnly := map[string]any{"config": "claude:repo:.claude/settings.json"}
+	if err := idx.check(schema, configOnly, "$", 0); err != nil {
+		t.Fatalf("config-only should match exactly one branch: %v", err)
+	}
+	both := map[string]any{"event": "evt_1", "config": "claude:repo:.claude/settings.json"}
+	if err := idx.check(schema, both, "$", 0); err == nil {
+		t.Fatal("both branches matched, want an error")
 	}
 }
 
