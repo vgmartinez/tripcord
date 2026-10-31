@@ -36,6 +36,12 @@ ceiling. See [policy.md](policy.md).
 | 3 | Invalid flags or format, configuration/policy error, a Git ref `--since` cannot use, an invalid `--output` or `--policy` path, unavailable v0 secret scan, or unknown command. `--help` exits 0. |
 | 4 | Internal error, or a failure to start Git or finish writing the output file. |
 
+When an adapter cannot fully read the configuration (malformed, oversized,
+unsafe, or unreadable files, or walk limits reached), scan still writes the
+findings for everything it could read, prints one sanitized diagnostic per
+problem to stderr, and exits 3 because the scan is incomplete. Exit 3 takes
+precedence over exit 1. See [adapters/claude.md](adapters/claude.md).
+
 ## Examples
 
 ```sh
