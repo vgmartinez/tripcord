@@ -66,7 +66,7 @@ const quotedValue = `"(?:[^"\\\n]|\\.)*"|'[^'\n]*'`
 // stays visible as evidence instead of being swallowed into the
 // redaction: a shell would treat that first space the same way. Only the
 // value is replaced.
-var assignmentPatternEquals = regexp.MustCompile(`(?i)((?:^|[^A-Za-z0-9])(?:[A-Za-z0-9]*[_-])*(?:password|passwd|api[_-]?key|auth[_-]?token|token|secret)\b["']?\s*=\s*)(` + quotedValue + `|[^\s;&|"'\n]*)`)
+var assignmentPatternEquals = regexp.MustCompile(`(?i)((?:^|[^A-Za-z0-9])(?:[A-Za-z0-9]*[_-])*(?:password|passwd|pgpassword|api[_-]?key|auth[_-]?token|token|secret)\b["']?\s*=\s*)(` + quotedValue + `|[^\s;&|"'\n]*)`)
 
 // assignmentPatternColon matches a "key: value" credential line, as
 // opposed to shell-style KEY=value: a line such as "token: abc def" is
@@ -74,7 +74,7 @@ var assignmentPatternEquals = regexp.MustCompile(`(?i)((?:^|[^A-Za-z0-9])(?:[A-Z
 // boundary to preserve and an unquoted value runs to the end of the
 // line (or to one of ;&|"', in case the line is itself embedded in a
 // larger shell command).
-var assignmentPatternColon = regexp.MustCompile(`(?i)((?:^|[^A-Za-z0-9])(?:[A-Za-z0-9]*[_-])*(?:password|passwd|api[_-]?key|auth[_-]?token|token|secret)\b["']?\s*:\s*)(` + quotedValue + `|[^;&|"'\n]*)`)
+var assignmentPatternColon = regexp.MustCompile(`(?i)((?:^|[^A-Za-z0-9])(?:[A-Za-z0-9]*[_-])*(?:password|passwd|pgpassword|api[_-]?key|auth[_-]?token|token|secret)\b["']?\s*:\s*)(` + quotedValue + `|[^;&|"'\n]*)`)
 
 // authorizationPattern matches an Authorization header or JSON field with a
 // Bearer, Basic, or token scheme, in both header ("Authorization: Bearer x")
@@ -191,24 +191,36 @@ func RedactUserFlags(value string) (string, []string) {
 // Already-redacted text, such as "sk-***REDACTED***abcd", is unchanged.
 func DefaultRedactor(value string) string {
 	value = authorizationPattern.ReplaceAllString(value, "${1}"+redactedMarker)
-	value = secretFlagPattern.ReplaceAllStringFunc(value, redactAssignment(secretFlagPattern))
+	value = secretFlagPattern.ReplaceAllStringFunc(value, redactAssignment(secretFlagPattern, new([]string)))
 	value, _ = RedactUserFlags(value)
 	value, _ = RedactToolFlags(value)
 	value = urlUserinfoPattern.ReplaceAllString(value, "${1}"+redactedMarker+"${3}")
 	for _, pattern := range secretPatterns {
 		value = pattern.ReplaceAllString(value, redactedMarker)
 	}
-	value = assignmentPatternEquals.ReplaceAllStringFunc(value, redactAssignment(assignmentPatternEquals))
-	return assignmentPatternColon.ReplaceAllStringFunc(value, redactAssignment(assignmentPatternColon))
+	value, _ = RedactAssignments(value)
+	return value
 }
 
-func redactAssignment(pattern *regexp.Regexp) func(string) string {
+// RedactAssignments redacts a credential-named "key=value" or "key: value"
+// assignment, such as PGPASSWORD=..., npm's :_authToken=..., or a
+// YAML/JSON "token: ..." line, the same way DefaultRedactor's second line
+// does. It returns the redacted text and the raw values it removed.
+func RedactAssignments(value string) (string, []string) {
+	var removed []string
+	value = assignmentPatternEquals.ReplaceAllStringFunc(value, redactAssignment(assignmentPatternEquals, &removed))
+	value = assignmentPatternColon.ReplaceAllStringFunc(value, redactAssignment(assignmentPatternColon, &removed))
+	return value, removed
+}
+
+func redactAssignment(pattern *regexp.Regexp, removed *[]string) func(string) string {
 	return func(match string) string {
 		parts := pattern.FindStringSubmatch(match)
 		if len(parts) != 3 || placeholderSecret(parts[2]) {
 			return match
 		}
 		value := parts[2]
+		*removed = append(*removed, strings.Trim(value, `"'`))
 		if len(value) >= 2 {
 			quote := value[0]
 			if (quote == '"' || quote == '\'') && value[len(value)-1] == quote {

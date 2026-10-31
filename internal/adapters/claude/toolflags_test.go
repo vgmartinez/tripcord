@@ -195,6 +195,51 @@ func TestToolSpecificSecretFlagsAtSource(t *testing.T) {
 	})
 }
 
+// A base64url secret flag value can itself start with "-"; the
+// "must not start with -" restriction on an unquoted value applies only
+// to the space-separated form, which exists to keep "--token --verbose"
+// from eating the next flag. The "=" form has no such ambiguity.
+func TestEqualsSecretFlagKeepsLeadingDashValue(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, ".claude", "settings.json"), string(mustJSON(t, map[string]any{
+		"hooks": map[string]any{"PreToolUse": []any{map[string]any{"hooks": []any{map[string]any{"type": "command", "command": "cli --token=-DASHEQVALUE"}}}}},
+	})))
+	got := discover(t, New(Options{}), root)
+	if len(got.Items) != 1 || strings.Contains(string(got.Items[0].Payload), "DASHEQVALUE") {
+		t.Fatalf("secret leaked: %+v", got.Items)
+	}
+	payloadCommand, _ := payloadField(t, got.Items[0], "command")
+	if payloadCommand != "cli --token=[REDACTED]" {
+		t.Fatalf("command = %q, want the = form preserved", payloadCommand)
+	}
+}
+
+// Credential-named assignments such as PGPASSWORD=X or npm's
+// :_authToken=X are redacted at the source, the same as DefaultRedactor
+// already redacts them for a sink that never ran the adapter's own
+// redaction (see output.RedactAssignments).
+func TestAssignmentSecretsAreRedactedAtSource(t *testing.T) {
+	t.Parallel()
+	cases := map[string]string{
+		"PGPASSWORD=SUPERSECRET psql -h db -c 'select 1'":    "SUPERSECRET",
+		"echo //registry.npmjs.org/:_authToken=NPMTOKEN > f": "NPMTOKEN",
+	}
+	for command, secret := range cases {
+		t.Run(command, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			writeFile(t, filepath.Join(root, ".claude", "settings.json"), string(mustJSON(t, map[string]any{
+				"hooks": map[string]any{"PreToolUse": []any{map[string]any{"hooks": []any{map[string]any{"type": "command", "command": command}}}}},
+			})))
+			got := discover(t, New(Options{}), root)
+			if len(got.Items) != 1 || strings.Contains(string(got.Items[0].Payload), secret) {
+				t.Fatalf("secret %q leaked: %+v", secret, got.Items)
+			}
+		})
+	}
+}
+
 // Two plugin or marketplace entries that differ only in a secret must not
 // share a key once the secret is redacted.
 func TestPluginKeyDiscriminatorSeparatesSecrets(t *testing.T) {
