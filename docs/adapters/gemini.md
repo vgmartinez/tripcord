@@ -96,9 +96,7 @@ with `[REDACTED]` stay distinct too.
 
 ## Hook schema
 
-The spec marks Gemini CLI's hook schema as unverified, so hooks are read
-conservatively and nothing under `hooks` is dropped. The documented shape
-is Claude Code's:
+The documented shape is:
 
 ```json
 {"hooks": {"BeforeTool": [{"matcher": "run_shell_command", "sequential": true,
@@ -109,27 +107,30 @@ is Claude Code's:
   with every handler field sanitized, `event`, `matcher`, and the group's
   `sequential` flag as `group_sequential`. The key is
   `["hook", event, matcher, type, command]`.
-- A handler whose `type` is missing or is not `command` (the only
-  documented type) is still emitted, and reported.
+- `command` is the only documented handler type. A handler whose `type`
+  is missing or is anything else is still emitted, and a blocking
+  diagnostic is reported.
 - An entry or handler of any other shape (a flat handler without a
   `hooks` array, a non-string `matcher`, a non-object entry, a `hooks`
   value that is not an object) is emitted whole as one opaque `hook` item,
   `{"event", "opaque": true, "value"}`, sanitized, keyed
-  `["hook", event, "opaque"]`, and reported, so the scan exits non-zero
-  until the shape is understood.
-- A non-array member of `hooks` (an inline `enabled` or `disabled` flag
-  from an older release) is emitted as a `permissions` setting named
-  `hooks.<member>`. `hooksConfig` is its own setting.
+  `["hook", event, "opaque"]`, and reported, so the scan exits non-zero.
+- A non-array member of `hooks` (an inline flag from an older release) is
+  emitted as a `permissions` setting named `hooks.<member>`.
 
-Whether `hooksConfig.enabled: false` or `hooksConfig.disabled` turns
-hooks off is not verified, so hook items are not marked disabled.
+`hooksConfig` is its own `permissions` setting. `hooksConfig.enabled`
+set to false, or `hooksConfig.disabled` set to true, turns hooks off in
+that file, but the hook items are still reported: a higher-precedence
+settings file can re-enable them. An informational note says so. Hook
+items are not marked disabled and are not dropped.
 
 ## Parsing
 
 Gemini CLI strips comments from `settings.json` before `JSON.parse`, so
-the file is parsed as JSONC. Trailing commas are accepted too, which
-Gemini CLI would reject: a file with one is still normalized rather than
-skipped. Duplicate keys use the last value and are reported; keys that
+the file is parsed as JSONC. A trailing comma, which `JSON.parse`
+rejects, is reported as an informational note and the file is still
+normalized rather than skipped. Duplicate keys use the last value and are
+reported; keys that
 differ only by case are reported. Nesting deeper than 64 levels, and files
 larger than 1 MiB, fail closed with a diagnostic.
 

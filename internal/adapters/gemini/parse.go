@@ -1,6 +1,8 @@
 package gemini
 
 import (
+	"bytes"
+
 	"github.com/vgmartinez/tripcord/internal/adapters/kit"
 	"github.com/vgmartinez/tripcord/internal/model"
 )
@@ -51,8 +53,13 @@ var settingKinds = map[string]model.ConfigKind{
 }
 
 // settings normalizes a settings.json. Gemini CLI strips comments before
-// JSON.parse, so the file is read as JSONC.
+// JSON.parse, which rejects trailing commas, so a trailing comma is
+// reported as a note and the file is still normalized: skipping it would
+// hide the configuration Gemini would refuse to load.
 func (f *file) settings(raw []byte) {
+	if hasTrailingComma(raw) {
+		f.Note("trailing comma; Gemini CLI strips comments and then JSON.parse, which rejects it")
+	}
 	tree, warnings, err := kit.DecodeJSON(raw, kit.JSONC, product)
 	f.WarnAll(warnings)
 	if err != nil {
@@ -66,6 +73,9 @@ func (f *file) settings(raw []byte) {
 	}
 	if servers, ok := obj["mcpServers"]; ok {
 		f.MCPServers(servers, "mcpServers")
+	}
+	if hc, ok := obj["hooksConfig"]; ok && hooksConfigDisables(hc) {
+		f.Note("hooksConfig disables hooks in this file; they are still reported, because a higher-precedence settings file can re-enable them")
 	}
 	if hooks, ok := obj["hooks"]; ok {
 		f.hooks(hooks)
@@ -81,13 +91,14 @@ func (f *file) setting(kind model.ConfigKind, name string, value any) {
 	f.Add(kind, []string{"setting", name}, map[string]any{"setting": name, "value": f.SafeValue(name, value)})
 }
 
-// hooks normalizes the hooks object. The documented shape is Claude
-// Code's: {"Event": [{"matcher", "sequential", "hooks": [{"type":
-// "command", "command", "name", "timeout", ...}]}]}. The schema is not
-// verified against Gemini CLI releases, so it is read conservatively: a
-// non-array member (an older inline enabled or disabled flag, say) is
-// emitted as a setting, and an entry or handler of any other shape is
-// emitted whole as an opaque hook item and reported, never dropped.
+// hooks normalizes the hooks object. The documented shape is
+// {"Event": [{"matcher", "sequential", "hooks": [{"type": "command",
+// "command", "name", "timeout", ...}]}]}. "command" is the only
+// documented handler type, so any other type is a blocking diagnostic;
+// the handler is still emitted. A non-array member (an older inline
+// flag, say) is emitted as a setting, and an entry or handler of any
+// other shape is emitted whole as an opaque hook item and reported,
+// never dropped.
 func (f *file) hooks(value any) {
 	table, ok := value.(map[string]any)
 	if !ok {
@@ -143,12 +154,12 @@ func (f *file) handler(event, matcher string, group map[string]any, h any) {
 		f.opaque(event, h)
 		return
 	}
-	switch t, _ := hook["type"].(string); t {
-	case "command":
-	case "":
-		f.Warn("hooks.%s handler has no type; Gemini CLI documents only \"command\"", event)
-	default:
-		f.Warn("hooks.%s handler type %q is not documented; it is reported as written", event, t)
+	if t, _ := hook["type"].(string); t != "command" {
+		if t == "" {
+			f.Warn("hooks.%s handler has no type; Gemini CLI documents only \"command\"", event)
+		} else {
+			f.Warn("hooks.%s handler type %q is not documented; Gemini CLI documents only \"command\"", event, t)
+		}
 	}
 	if seq, present := group["sequential"]; present {
 		copied := make(map[string]any, len(hook)+1)
@@ -159,6 +170,68 @@ func (f *file) handler(event, matcher string, group map[string]any, h any) {
 		hook = copied
 	}
 	f.Hook(event, matcher, hook, hookActions)
+}
+
+// hooksConfigDisables reports whether hooksConfig turns hooks off in
+// this file. enabled: false and disabled: true are the two documented
+// switches. The hooks are still emitted either way.
+func hooksConfigDisables(value any) bool {
+	obj, ok := value.(map[string]any)
+	if !ok {
+		return false
+	}
+	if enabled, ok := obj["enabled"].(bool); ok && !enabled {
+		return true
+	}
+	disabled, _ := obj["disabled"].(bool)
+	return disabled
+}
+
+// hasTrailingComma reports whether raw, read as JSONC, has a comma
+// immediately before a } or ] outside strings and comments. Gemini CLI
+// strips comments and then JSON.parse, which rejects that comma.
+func hasTrailingComma(raw []byte) bool {
+	raw = bytes.TrimPrefix(raw, []byte{0xEF, 0xBB, 0xBF})
+	inString := false
+	lastComma := false
+	for i := 0; i < len(raw); i++ {
+		c := raw[i]
+		if inString {
+			switch c {
+			case '\\':
+				i++
+			case '"':
+				inString = false
+			}
+			continue
+		}
+		switch {
+		case c == '"':
+			inString = true
+			lastComma = false
+		case c == '/' && i+1 < len(raw) && raw[i+1] == '/':
+			for i < len(raw) && raw[i] != '\n' {
+				i++
+			}
+		case c == '/' && i+1 < len(raw) && raw[i+1] == '*':
+			end := bytes.Index(raw[i+2:], []byte("*/"))
+			if end < 0 {
+				return false
+			}
+			i += 2 + end + 1
+		case c == ',':
+			lastComma = true
+		case c == '}' || c == ']':
+			if lastComma {
+				return true
+			}
+			lastComma = false
+		case c == ' ' || c == '\t' || c == '\n' || c == '\r':
+		default:
+			lastComma = false
+		}
+	}
+	return false
 }
 
 // opaque emits a hooks value whose shape is not the documented one, whole

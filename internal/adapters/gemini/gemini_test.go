@@ -84,7 +84,56 @@ func TestHooksShapes(t *testing.T) {
 			if !got.HasDiag(tc.diag) {
 				t.Fatalf("diagnostics = %v, want %q", got.Diagnostics, tc.diag)
 			}
+			if tc.name == "unknown type" && !kittest.Blocking(t, New(Options{}), root, tc.diag) {
+				t.Fatal("a handler type other than command was not blocking")
+			}
 		})
+	}
+}
+
+func TestHooksConfigDisabledStillReportsHooks(t *testing.T) {
+	t.Parallel()
+	for _, config := range []string{`{"enabled":false}`, `{"disabled":true}`, `{"enabled":false,"disabled":true}`} {
+		t.Run(config, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			kittest.WriteFile(t, filepath.Join(root, ".gemini", "settings.json"), `{"hooksConfig":`+config+`,"hooks":{"BeforeTool":[{"matcher":"x","hooks":[{"type":"command","command":"a"}]}]}}`)
+			got := kittest.Discover(t, New(Options{}), root)
+			if len(got.Find(".gemini/settings.json", model.ConfigKindHook)) != 1 || len(got.Find(".gemini/settings.json", model.ConfigKindPermissions)) != 1 {
+				t.Fatalf("items = %+v", got.Items)
+			}
+			if !got.HasDiag("still reported") {
+				t.Fatalf("diagnostics = %v", got.Diagnostics)
+			}
+			if kittest.Blocking(t, New(Options{}), root, "still reported") {
+				t.Fatal("a disabled hooksConfig was blocking")
+			}
+		})
+	}
+	root := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(root, ".gemini", "settings.json"), `{"hooksConfig":{"enabled":true},"hooks":{"BeforeTool":[{"hooks":[{"type":"command","command":"a"}]}]}}`)
+	got := kittest.Discover(t, New(Options{}), root)
+	if len(got.Find(".gemini/settings.json", model.ConfigKindHook)) != 1 || got.HasDiag("still reported") {
+		t.Fatalf("got %+v", got)
+	}
+}
+
+func TestTrailingCommaIsNotBlocking(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(root, ".gemini", "settings.json"), "{\n  // kept\n  \"mcpServers\": {\"a\": {\"command\": \"x\",},},\n}\n")
+	got := kittest.Discover(t, New(Options{}), root)
+	if len(got.Find(".gemini/settings.json", model.ConfigKindMCPServer)) != 1 || !got.HasDiag("trailing comma") {
+		t.Fatalf("got %+v", got)
+	}
+	if kittest.Blocking(t, New(Options{}), root, "trailing comma") {
+		t.Fatal("a trailing comma was blocking")
+	}
+	root = t.TempDir()
+	kittest.WriteFile(t, filepath.Join(root, ".gemini", "settings.json"), "{\n  \"hooks\": {\"BeforeTool\": [{\"hooks\": [{\"type\": \"command\", \"command\": \"a\"}]}]}\n}\n")
+	got = kittest.Discover(t, New(Options{}), root)
+	if len(got.Find(".gemini/settings.json", model.ConfigKindHook)) != 1 || len(got.Diagnostics) != 0 {
+		t.Fatalf("a file without a trailing comma was reported: %+v", got)
 	}
 }
 
