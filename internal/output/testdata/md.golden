@@ -1,0 +1,25 @@
+## Tripcord findings
+
+2 finding(s): 0 critical, 1 high, 1 medium, 0 low.
+
+| Severity | Rule | Location | Finding |
+| --- | --- | --- | --- |
+| medium | TC-CFG-002 | configs/tasks.json | Task runs on folder open |
+
+### TC-CFG-002 — Task runs on folder open
+
+Remove runOn: folderOpen.
+
+> Evidence: runOn: folderOpen
+
+Fingerprint: `tcf_fedcba9876543210`
+
+| high | TC-CFG-010 | /work/repo/configs/hook.json:7 | Plugin executes arbitrary code |
+
+### TC-CFG-010 — Plugin executes arbitrary code
+
+Remove the plugin or review and pin it.
+
+> Evidence: plugin: ./plugins/unreviewed.js
+
+Fingerprint: `tcf_0123456789abcdef`

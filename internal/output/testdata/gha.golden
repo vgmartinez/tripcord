@@ -1,0 +1,2 @@
+::warning file=configs/tasks.json::Task runs on folder open [TC-CFG-002] Remove runOn: folderOpen. (tcf_fedcba9876543210)
+::error file=configs/hook.json,line=7::Plugin executes arbitrary code [TC-CFG-010] Remove the plugin or review and pin it. (tcf_0123456789abcdef)

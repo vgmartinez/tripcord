@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "tripcord",
+          "rules": [
+            {
+              "id": "TC-CFG-002",
+              "shortDescription": {
+                "text": "Task runs on folder open"
+              }
+            },
+            {
+              "id": "TC-CFG-010",
+              "shortDescription": {
+                "text": "Plugin executes arbitrary code"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "TC-CFG-002",
+          "level": "warning",
+          "message": {
+            "text": "Task runs on folder open: Remove runOn: folderOpen."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "configs/tasks.json"
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "tripcord/fingerprint": "tcf_fedcba9876543210"
+          }
+        },
+        {
+          "ruleId": "TC-CFG-010",
+          "level": "error",
+          "message": {
+            "text": "Plugin executes arbitrary code: Remove the plugin or review and pin it."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "configs/hook.json"
+                },
+                "region": {
+                  "startLine": 7
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "tripcord/fingerprint": "tcf_0123456789abcdef"
+          }
+        }
+      ]
+    }
+  ]
+}
