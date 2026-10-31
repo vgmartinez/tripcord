@@ -232,36 +232,11 @@ func TestSinceErrorKeepsGitStderr(t *testing.T) {
 	}
 }
 
-// TestReplaceHomePrefix checks that a home directory is rewritten to "~"
-// only as a complete path prefix: an empty home and "/" are left alone,
-// and a shorter home does not rewrite a longer name.
-func TestReplaceHomePrefix(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		name string
-		home string
-		in   string
-		want string
-	}{
-		{name: "empty home", home: "", in: "/home/vic/x", want: "/home/vic/x"},
-		{name: "root", home: "/", in: "/home/vic/x", want: "/home/vic/x"},
-		{name: "prefix of another user", home: "/home/vic", in: "/home/victor", want: "/home/victor"},
-		{name: "directory under home", home: "/home/vic", in: "/home/vic/x", want: "~/x"},
-		{name: "bare home", home: "/home/vic", in: "/home/vic", want: "~"},
-		{name: "non-path boundary", home: "/home/vic", in: "/home/vic: denied", want: "~: denied"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			if got := replaceHomePrefix(tc.in, tc.home); got != tc.want {
-				t.Fatalf("replaceHomePrefix(%q, %q) = %q, want %q", tc.in, tc.home, got, tc.want)
-			}
-		})
-	}
-}
-
 // TestSanitizeGitStderrReplacesHome checks that sanitizeGitStderr hides
-// the local home directory while keeping the rest of git's message.
+// the local home directory while keeping the rest of git's message. The
+// rewrite rule itself (empty/root home, path-segment boundaries on both
+// sides) is pathx.TildeHome's and is covered by internal/pathx's own
+// tests; this only checks that sanitizeGitStderr actually applies it.
 func TestSanitizeGitStderrReplacesHome(t *testing.T) {
 	t.Parallel()
 	home, err := os.UserHomeDir()
@@ -275,6 +250,26 @@ func TestSanitizeGitStderrReplacesHome(t *testing.T) {
 	}
 	if !strings.Contains(got, "fatal: not a git repository: ~/repo/.git") || !strings.Contains(got, "some more detail") {
 		t.Fatalf("sanitizeGitStderr(%q) = %q", raw, got)
+	}
+}
+
+// TestSanitizeGitStderrTruncates checks that an overly long git
+// diagnostic (git's own remediation text for dubious ownership can run
+// well past a typical single-line error, and an attacker-controlled ref
+// or path name can pad it further) is capped rather than embedded in
+// full.
+func TestSanitizeGitStderrTruncates(t *testing.T) {
+	t.Parallel()
+	raw := "fatal: " + strings.Repeat("x", maxGitStderrBytes*2)
+	got := sanitizeGitStderr([]byte(raw))
+	if len(got) >= len(raw) {
+		t.Fatalf("sanitizeGitStderr did not truncate: got %d bytes, raw %d bytes", len(got), len(raw))
+	}
+	if !strings.Contains(got, "truncated") {
+		t.Fatalf("sanitizeGitStderr(%q) = %q, want a truncation marker", raw, got)
+	}
+	if !strings.HasPrefix(got, "fatal: "+strings.Repeat("x", 20)) {
+		t.Fatalf("sanitizeGitStderr dropped the start of the message: %q", got)
 	}
 }
 

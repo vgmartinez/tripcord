@@ -13,6 +13,7 @@ import (
 	"github.com/vgmartinez/tripcord/internal/adapters"
 	"github.com/vgmartinez/tripcord/internal/model"
 	"github.com/vgmartinez/tripcord/internal/output"
+	"github.com/vgmartinez/tripcord/internal/pathx"
 )
 
 // redacted replaces env and header values. They commonly hold credentials,
@@ -198,31 +199,17 @@ func (s *src) sanitizeString(value string) sanitizeResult {
 	return sanitizeResult{value: value, removed: append(removedURLs, removedFlags...)}
 }
 
-// tildeHome rewrites a home-directory-rooted value as "~/...". It never
-// touches repo- or managed-scope content: Claude Code's own config can
-// legitimately contain a path that happens to match the scanning
-// machine's home directory, and rewriting it would make a repo-scope
-// fingerprint depend on who ran the scan. Home directories of "" or a
-// single character (for example "/" or "\") are also left alone, since
-// rewriting those would match on every path, not a real home directory.
+// tildeHome rewrites every path-segment-bounded occurrence of the home
+// directory in value as "~", using the same pathx.TildeHome rule the scan
+// CLI's git error messages use. It never touches repo- or managed-scope
+// content: Claude Code's own config can legitimately contain a path that
+// happens to match the scanning machine's home directory, and rewriting
+// it would make a repo-scope fingerprint depend on who ran the scan.
 func (s *src) tildeHome(value string) string {
 	if s.scope != model.ScopeUser {
 		return value
 	}
-	home := s.c.home
-	if len(home) <= 1 {
-		return value
-	}
-	switch {
-	case value == home:
-		return "~"
-	case strings.HasPrefix(value, home+"/"):
-		return "~" + value[len(home):]
-	case strings.HasPrefix(value, home+`\`):
-		return "~" + value[len(home):]
-	default:
-		return value
-	}
+	return pathx.TildeHome(s.c.home, value)
 }
 
 func (s *src) safeString(value string) string {

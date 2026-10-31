@@ -17,6 +17,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/vgmartinez/tripcord/internal/adapters"
 	"github.com/vgmartinez/tripcord/internal/adapters/claude"
@@ -24,6 +25,7 @@ import (
 	"github.com/vgmartinez/tripcord/internal/exitcode"
 	"github.com/vgmartinez/tripcord/internal/model"
 	"github.com/vgmartinez/tripcord/internal/output"
+	"github.com/vgmartinez/tripcord/internal/pathx"
 	"github.com/vgmartinez/tripcord/internal/policy"
 	"github.com/vgmartinez/tripcord/internal/rules"
 )
@@ -490,64 +492,45 @@ func gitCommandEnv(root string) []string {
 	)
 }
 
+// maxGitStderrBytes caps a git diagnostic once it is embedded in our own
+// error message. Git's own remediation text for some failures (for
+// example, dubious ownership) is long enough, and the file or ref names
+// attacker-controlled content can prepend to the usual one-line error, to
+// be worth bounding on its own, well before the sink-level MaxFieldBytes
+// cap a Finding gets.
+const maxGitStderrBytes = 1024
+
 // sanitizeGitStderr trims git's diagnostic output for inclusion in an
-// error message. The user's home directory is rewritten to "~" only where
-// it is a full path prefix, so the message does not leak the local account
-// path and a shorter home does not rewrite a longer one.
+// error message. The user's home directory is rewritten to "~" using the
+// same pathx.TildeHome rule the Claude Code adapter uses, so the message
+// does not leak the local account path and a shorter home does not
+// rewrite a longer one, then the result is capped so one long git
+// diagnostic (git's "dubious ownership" remediation text, for example, or
+// its usage text on an argument git itself rejects) cannot grow this
+// error message without bound.
 func sanitizeGitStderr(stderr []byte) string {
 	msg := strings.TrimSpace(string(stderr))
 	if msg == "" {
 		return ""
 	}
 	if home, err := os.UserHomeDir(); err == nil {
-		msg = replaceHomePrefix(msg, home)
+		msg = pathx.TildeHome(home, msg)
 	}
-	return strings.ReplaceAll(msg, "\n", "; ")
+	msg = strings.ReplaceAll(msg, "\n", "; ")
+	return truncateUTF8(msg, maxGitStderrBytes)
 }
 
-// replaceHomePrefix rewrites home to "~" only where it is a complete path
-// prefix. An empty home and "/" are left alone, because "/" would rewrite
-// every absolute path. home matches only when the next byte is "/", the
-// end of the string, or a character that does not continue a path
-// component, so "/home/vic" does not rewrite "/home/victor".
-func replaceHomePrefix(msg, home string) string {
-	if home == "" || home == "/" || !strings.Contains(msg, home) {
-		return msg
+// truncateUTF8 caps value at limit bytes, cutting on a UTF-8 rune
+// boundary, and appends a marker naming how many bytes were dropped.
+func truncateUTF8(value string, limit int) string {
+	if len(value) <= limit {
+		return value
 	}
-	var b strings.Builder
-	b.Grow(len(msg))
-	for {
-		i := strings.Index(msg, home)
-		if i < 0 {
-			b.WriteString(msg)
-			return b.String()
-		}
-		b.WriteString(msg[:i])
-		rest := msg[i+len(home):]
-		if rest == "" || !continuesPathComponent(rest[0]) {
-			b.WriteByte('~')
-		} else {
-			b.WriteString(home)
-		}
-		msg = rest
+	cut := limit
+	for cut > 0 && !utf8.RuneStart(value[cut]) {
+		cut--
 	}
-}
-
-// continuesPathComponent reports whether c extends the path component
-// before it. A slash ends the component. Letters, digits, and the
-// characters commonly found inside one path segment do too, so a shorter
-// home is not substituted inside a longer name.
-func continuesPathComponent(c byte) bool {
-	switch {
-	case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
-		return true
-	case c == '.' || c == '_' || c == '-' || c == '+' || c == '@' || c == '~':
-		return true
-	case c >= 0x80:
-		return true
-	default:
-		return false
-	}
+	return value[:cut] + fmt.Sprintf("...[truncated %d bytes]", len(value)-cut)
 }
 
 func parseScope(value string) (repo, user, managed bool, err error) {
