@@ -55,11 +55,17 @@ func escapeLine(value string, escapeBackslash bool) string {
 			fmt.Fprintf(&b, `\x%02x`, value[i])
 		case r == '\\' && escapeBackslash:
 			b.WriteString(`\\`)
-		case r == '\\' && isHexEscapeBody(value[i+size:]):
-			// A literal backslash in text that keeps backslashes (paths,
-			// code) would otherwise read exactly like \xNN, \uXXXX, or
-			// \UXXXXXXXX, our own escape for a real control character.
-			// Double it so the two stay visually distinct.
+		case r == '\\' && (isHexEscapeBody(value[i+size:]) || willBeEscaped(value[i+size:])):
+			// A literal backslash must stay visually distinct from one
+			// this function itself emits as part of an escape sequence.
+			// Two cases collide otherwise: literal text that reads like
+			// \xNN, \uXXXX, or \UXXXXXXXX (isHexEscapeBody, checked
+			// above), and a literal backslash immediately followed by a
+			// REAL control byte or unsafe rune that the switch below
+			// will itself turn into an escape (willBeEscaped): without
+			// this, a literal "\x1b" (backslash, x, 1, b) and a literal
+			// backslash followed by an actual ESC byte both render as
+			// the same five bytes, \x1b vs \\x1b.
 			b.WriteString(`\\`)
 		case r == '\n':
 			b.WriteString(`\n`)
@@ -206,6 +212,37 @@ func isHexEscapeBody(s string) bool {
 		return len(s) >= 5 && isHexString(s[1:5])
 	case 'U':
 		return len(s) >= 9 && isHexString(s[1:9])
+	default:
+		return false
+	}
+}
+
+// willBeEscaped reports whether the rune at the start of s, decoded the
+// same way escapeLine's own loop decodes it, would itself be escaped by
+// one of escapeLine's branches below rather than written as a literal
+// rune. It is checked, in keep-backslash mode, alongside
+// isHexEscapeBody: a literal backslash immediately followed by such a
+// rune must be doubled too, or the two would collide byte-for-byte with
+// the already-escaped form of that rune (see escapeLine). It never
+// special-cases escapeBackslash: that branch of escapeLine only doubles
+// a backslash that IS one, and willBeEscaped is only ever consulted
+// when the current rune already is one, so the next rune being another
+// backslash is covered the same way any other to-be-escaped rune is,
+// through the control-byte and isUnsafeRune cases below.
+func willBeEscaped(s string) bool {
+	if s == "" {
+		return false
+	}
+	r, size := utf8.DecodeRuneInString(s)
+	switch {
+	case r == utf8.RuneError && size == 1:
+		return true
+	case r == '\n', r == '\r', r == '\t':
+		return true
+	case r < 0x20 || r == 0x7f:
+		return true
+	case isUnsafeRune(r):
+		return true
 	default:
 		return false
 	}

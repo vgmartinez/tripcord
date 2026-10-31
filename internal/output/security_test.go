@@ -988,3 +988,55 @@ func TestEscapeControlsKeepBackslashDisambiguatesHexEscapes(t *testing.T) {
 		}
 	}
 }
+
+// (a) a literal backslash immediately followed by a REAL control byte
+// (not literal hex-digit text) must also be doubled, or it collides
+// byte-for-byte with the literal-hex-text case
+// TestEscapeControlsKeepBackslashDisambiguatesHexEscapes already checks:
+// a literal "\x1b" (four ASCII characters) and a literal backslash
+// followed by an actual ESC byte both render the escaped ESC byte as
+// "\x1b", so without doubling the backslash in the second case too,
+// both inputs would produce the exact same five bytes. This checks the
+// two pairs the researcher's report names explicitly, comparing raw
+// bytes (not just string equality, so a difference in content that
+// still happened to stringify the same would still be caught) and
+// asserting the two renderings are distinct.
+func TestEscapeControlsKeepBackslashDisambiguatesRealControlBytes(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name          string
+		literalText   string
+		backslashReal string
+	}{
+		{
+			name:          "x1b",
+			literalText:   `\x1b`,
+			backslashReal: "\\" + "\x1b",
+		},
+		{
+			name:          "u202e",
+			literalText:   `\u202e`,
+			backslashReal: "\\" + "\u202e",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			gotLiteral := []byte(escapeControlsKeepBackslash(tc.literalText))
+			gotReal := []byte(escapeControlsKeepBackslash(tc.backslashReal))
+			if bytes.Equal(gotLiteral, gotReal) {
+				t.Fatalf("literal text %q and backslash+real-control %q both render as %x", tc.literalText, tc.backslashReal, gotLiteral)
+			}
+			// The literal-hex-text case was already correctly doubled
+			// before this fix; only check that it did not regress.
+			if !bytes.HasPrefix(gotLiteral, []byte(`\\`)) {
+				t.Fatalf("literal text %q rendered as %x, want a doubled leading backslash", tc.literalText, gotLiteral)
+			}
+			// The fix under test: backslash + a real control byte must
+			// now also double the leading backslash.
+			if !bytes.HasPrefix(gotReal, []byte(`\\`)) {
+				t.Fatalf("backslash+real-control %q rendered as %x, want a doubled leading backslash", tc.backslashReal, gotReal)
+			}
+		})
+	}
+}
