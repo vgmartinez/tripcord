@@ -12,6 +12,9 @@ import (
 // payload. It is empty when the payload does not carry one. The key is
 // content, never a position in the file:
 //
+//   - payload.key, when an adapter sets it, wins for every kind (adapters
+//     use it to add the hook event and other discriminators that
+//     matcher+command alone would collide on)
 //   - a task uses payload.label
 //   - an MCP server uses payload.name
 //   - a hook uses payload.matcher and payload.command joined by "|"
@@ -24,6 +27,9 @@ func configEvidenceKey(item model.ConfigItem) string {
 	var payload map[string]any
 	if err := json.Unmarshal(item.Payload, &payload); err != nil {
 		return ""
+	}
+	if key := jsonString(payload["key"]); key != "" {
+		return key
 	}
 	switch item.Kind {
 	case model.ConfigKindTask:

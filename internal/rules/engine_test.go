@@ -146,6 +146,19 @@ func TestEvidenceKey(t *testing.T) {
 	if err != nil || mf.Evidence[0].Config.Key != "PreToolUse|" {
 		t.Fatalf("matcher-only key %q (%v)", mf.Evidence[0].Config.Key, err)
 	}
+	pre := item(model.HarnessClaude, ".claude/settings.json", model.ConfigKindHook, `{"matcher":"Bash","command":"curl","key":"[\"hook\",\"PreToolUse\",\"Bash\",\"command\",\"curl\"]"}`)
+	post := item(model.HarnessClaude, ".claude/settings.json", model.ConfigKindHook, `{"matcher":"Bash","command":"curl","key":"[\"hook\",\"PostToolUse\",\"Bash\",\"command\",\"curl\"]"}`)
+	pf, err := (Match{Rule: rule, Item: pre}).Finding(model.SeverityHigh, model.DecisionDeny)
+	if err != nil {
+		t.Fatal(err)
+	}
+	qf, err := (Match{Rule: rule, Item: post}).Finding(model.SeverityHigh, model.DecisionDeny)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pf.Evidence[0].Config.Key == qf.Evidence[0].Config.Key || pf.Fingerprint == qf.Fingerprint {
+		t.Fatalf("payload keys collapsed: %q, %q", pf.Evidence[0].Config.Key, qf.Evidence[0].Config.Key)
+	}
 	note := find(`{"label":"setup"}`, model.ConfigKindInstructions)
 	if note.Evidence[0].Config.Key != "" {
 		t.Fatalf("instructions key %q", note.Evidence[0].Config.Key)
