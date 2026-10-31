@@ -1,0 +1,5 @@
+{
+  "tools": {"sandbox": "docker"},
+  "mcp": {"allowed": ["search"]},
+  "hooksConfig": {"enabled": true}
+}
