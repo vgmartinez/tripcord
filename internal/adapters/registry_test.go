@@ -118,7 +118,10 @@ func TestGenericHarnessRegisters(t *testing.T) {
 	if _, err := NewRegistry(fixtureAdapter{harness: model.SurfaceVSCode}); err == nil {
 		t.Fatal("vscode registered as an adapter")
 	}
-	if !AdapterHarness(model.SurfaceGeneric) || !AdapterHarness(model.HarnessClaude) || AdapterHarness(model.SurfaceDevcontainer) {
+	if _, err := NewRegistry(fixtureAdapter{harness: model.SurfaceDevcontainer}); err != nil {
+		t.Fatal(err)
+	}
+	if !AdapterHarness(model.SurfaceGeneric) || !AdapterHarness(model.HarnessClaude) || !AdapterHarness(model.SurfaceDevcontainer) || AdapterHarness(model.SurfaceVSCode) {
 		t.Fatal("AdapterHarness mismatch")
 	}
 }

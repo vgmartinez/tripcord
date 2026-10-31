@@ -36,10 +36,11 @@ type SharedReader interface {
 
 // AdapterHarness reports whether h can name an installed adapter.
 // The seven product harnesses can. generic can: it is the shared adapter
-// for skill files that more than one product reads. vscode and
-// devcontainer are finding surfaces, not adapters.
+// for skill files that more than one product reads. devcontainer can: it
+// owns the Dev Container files that cloud agents and editors run. vscode
+// is a finding surface, not an adapter.
 func AdapterHarness(h model.Harness) bool {
-	return h.IsProduct() || h == model.SurfaceGeneric
+	return h.IsProduct() || h == model.SurfaceGeneric || h == model.SurfaceDevcontainer
 }
 
 // Registry holds adapters in deterministic harness order.
