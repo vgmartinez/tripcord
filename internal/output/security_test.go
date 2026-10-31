@@ -976,11 +976,15 @@ func TestEscapeControlsKeepBackslashDisambiguatesHexEscapes(t *testing.T) {
 		"\u2028":     `\u2028`,
 		`\U0001F600`: `\\U0001F600`,
 		`C:\dir`:     `C:\dir`,
-		`\new`:       `\new`,
-		`\temp\x`:    `\temp\x`,
+		`\new`:       `\\new`,
+		`\temp\x`:    `\\temp\x`,
 		`\xampp`:     `\xampp`,
 		`\\`:         `\\`,
 		`a\\b`:       `a\\b`,
+		`\\x1b`:      `\\\\x1b`,
+		"\\\x1b":     `\\\x1b`,
+		`\n`:         `\\n`,
+		"\n":         `\n`,
 	}
 	for in, want := range cases {
 		if got := escapeControlsKeepBackslash(in); got != want {
@@ -1039,4 +1043,28 @@ func TestEscapeControlsKeepBackslashDisambiguatesRealControlBytes(t *testing.T) 
 			}
 		})
 	}
+}
+
+// Every input must render to distinct bytes in keep-backslash mode: an
+// exhaustive check over short strings mixing literal backslashes, escape
+// body letters, and real control bytes.
+func TestEscapeControlsKeepBackslashIsInjective(t *testing.T) {
+	t.Parallel()
+	alphabet := []string{`\`, "x", "1", "b", "n", "t", "q", "\x1b", "\n", "\t", "\r", "\u202e"}
+	seen := map[string]string{}
+	var walk func(prefix string, depth int)
+	walk = func(prefix string, depth int) {
+		got := escapeControlsKeepBackslash(prefix)
+		if other, ok := seen[got]; ok && other != prefix {
+			t.Fatalf("%q and %q both render as %q", other, prefix, got)
+		}
+		seen[got] = prefix
+		if depth == 0 {
+			return
+		}
+		for _, s := range alphabet {
+			walk(prefix+s, depth-1)
+		}
+	}
+	walk("", 5)
 }

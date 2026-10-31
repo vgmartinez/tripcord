@@ -39,9 +39,9 @@ func TerminalLine(value string) string {
 
 // escapeControlsKeepBackslash is escapeControls for contexts that show text
 // literally, such as markdown code, where doubling "\" would misquote it.
-// A literal backslash is still doubled when it would otherwise read as one
-// of this function's own escapes for a real control character (\xNN,
-// \uXXXX, \UXXXXXXXX); see isHexEscapeBody.
+// A run of literal backslashes is still doubled, every backslash in it,
+// when it precedes text that reads as an escape body (see isEscapeBody) or
+// a rune this function will itself escape (see willBeEscaped).
 func escapeControlsKeepBackslash(value string) string {
 	return escapeLine(value, false)
 }
@@ -55,18 +55,27 @@ func escapeLine(value string, escapeBackslash bool) string {
 			fmt.Fprintf(&b, `\x%02x`, value[i])
 		case r == '\\' && escapeBackslash:
 			b.WriteString(`\\`)
-		case r == '\\' && (isHexEscapeBody(value[i+size:]) || willBeEscaped(value[i+size:])):
-			// A literal backslash must stay visually distinct from one
-			// this function itself emits as part of an escape sequence.
-			// Two cases collide otherwise: literal text that reads like
-			// \xNN, \uXXXX, or \UXXXXXXXX (isHexEscapeBody, checked
-			// above), and a literal backslash immediately followed by a
-			// REAL control byte or unsafe rune that the switch below
-			// will itself turn into an escape (willBeEscaped): without
-			// this, a literal "\x1b" (backslash, x, 1, b) and a literal
-			// backslash followed by an actual ESC byte both render as
-			// the same five bytes, \x1b vs \\x1b.
-			b.WriteString(`\\`)
+		case r == '\\':
+			// Literal backslashes must stay distinct from the escapes
+			// this function emits. A run of n backslashes followed by an
+			// escape body or a rune that will be escaped is written as
+			// 2n backslashes, so the emitted escape's own backslash
+			// makes the count odd: literal "\\x1b" gives four
+			// backslashes, "\" plus a real ESC gives three, and literal
+			// "\n" gives "\\n" while a real LF gives "\n". Doubling only
+			// the last backslash of the run would make the first two
+			// collide.
+			run := i
+			for run < len(value) && value[run] == '\\' {
+				run++
+			}
+			n := run - i
+			if rest := value[run:]; isEscapeBody(rest) || willBeEscaped(rest) {
+				n *= 2
+			}
+			b.WriteString(strings.Repeat(`\`, n))
+			i = run
+			continue
 		case r == '\n':
 			b.WriteString(`\n`)
 		case r == '\r':
@@ -195,17 +204,18 @@ func nextToken(value string, i int) int {
 	return n
 }
 
-// isHexEscapeBody reports whether s, the text right after a backslash, is
-// the body of one of this package's hex-digit control escapes: xXX,
-// uXXXX, or UXXXXXXXX. It deliberately excludes the single-letter bodies
-// n, r, and t: those are common in ordinary Windows path fragments (e.g.
-// "\new", "\temp"), and escaping every one of them would defeat keeping
-// backslashes unescaped in text that shows paths literally.
-func isHexEscapeBody(s string) bool {
+// isEscapeBody reports whether s, the text right after a backslash, is
+// the body of one of this package's control escapes: n, r, t, xXX, uXXXX,
+// or UXXXXXXXX. This includes Windows path fragments such as "\new" or
+// "\temp", which therefore display as "\\new" and "\\temp": otherwise
+// they would be indistinguishable from a real LF or tab.
+func isEscapeBody(s string) bool {
 	if s == "" {
 		return false
 	}
 	switch s[0] {
+	case 'n', 'r', 't':
+		return true
 	case 'x':
 		return len(s) >= 3 && isHex(s[1]) && isHex(s[2])
 	case 'u':
