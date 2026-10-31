@@ -88,6 +88,19 @@ Two things that do look like metadata, but **are** hashed:
   the text itself; it is home-normalized in user scope, so it does not
   depend on the scanning machine.
 
+  The discriminator is the first 32 bits of an unsalted SHA-256. It is
+  not a secret-safe commitment: anyone holding a candidate secret can
+  hash it and compare, and a short or guessable secret (a PIN, a
+  dictionary password) can be confirmed by brute force from a report.
+  32 bits is enough to keep entries apart within one repository, which
+  is all it is for; the chance of two different removals sharing it is
+  about one in four billion per pair. There is deliberately no
+  per-install salt: the same configuration must produce the same
+  fingerprint on every machine and in CI, so a baseline or an
+  acceptance recorded on one machine matches the finding on another. A
+  salt would make every fingerprint machine-specific. Treat a report
+  that carries `sig:` keys as you would the configuration it came from.
+
 Credential values, secret values, and network URLs are never inputs,
 other than through the truncated-hash discriminator described above.
 Evidence excerpts must already be redacted; this package does not search
