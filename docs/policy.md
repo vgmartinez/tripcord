@@ -12,12 +12,16 @@ surfaces are `scan`, `preopen`, `pr-context`, `action`, and `hook`.
 | Surface | Mode | Fail-on |
 | --- | --- | --- |
 | scan, preopen, pr-context, action | `enforce` | `high` |
-| hook | `warn` | none |
+| hook | `warn` | `high` |
 
-Fail-on is inclusive. `high` fails the run (exit 1) for a high or
-critical finding and lets low and medium through. The hook default has
-no fail-on: it shows findings and does not block, including on high and
-critical.
+A finding blocks the run (exit 1, or a hook block) only when mode is
+`enforce` and the finding's severity is at or above fail-on. `audit`
+and `warn` never block, on any surface, whatever fail-on is set to.
+Fail-on is inclusive: `high` blocks on a high or critical finding and
+lets low and medium through. The hook defaults to `warn`, so it shows
+findings, including high and critical, without blocking; an explicit
+policy or an org lock that raises it to `enforce` then blocks on high
+and critical using that same default fail-on.
 
 ## What overrides them
 
@@ -31,12 +35,18 @@ mode: audit
 fail-on: critical    # low | medium | high | critical
 ```
 
-`fail-on` uses the same four severities as a finding. The hook honors
-an explicit `mode: enforce` or `fail-on: high` the same way a scan does.
+`fail-on` uses the same four severities as a finding. Setting `fail-on`
+alone does nothing on the hook unless `mode` is also `enforce`, since
+`warn` never blocks.
 
 `locked.mode` still applies. A lock with no explicit mode locks the
 surface default: `enforce` on a scan, `warn` on the hook. A later layer
-can tighten that floor and cannot weaken it. `fail-on` is not locked.
+can tighten that floor and cannot weaken it.
+
+Locking `mode` also locks `fail-on` to a ceiling: the value in effect
+when the mode was locked. A later layer may lower it, stricter (`high`
+to `medium`), but raising it, weaker (`high` to `critical`), is
+rejected with exit 3, the same as a mode that tries to weaken a lock.
 
 ## Layers
 

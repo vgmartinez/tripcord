@@ -23,11 +23,14 @@ func Surfaces() []Surface {
 	return []Surface{SurfaceScan, SurfacePreopen, SurfacePRContext, SurfaceAction, SurfaceHook}
 }
 
-// No-policy defaults. Non-hook surfaces fail the run on high and
-// critical findings. The hook shows findings and does not block.
+// No-policy defaults. Non-hook surfaces enforce and fail the run on
+// high and critical findings. The hook warns with the same fail-on, so
+// it shows those findings but does not block; only enforce blocks, so
+// an explicit policy or an org lock that raises the hook to enforce
+// then blocks on high and critical, with no further change needed.
 const (
-	nonHookMode   Mode           = ModeEnforce
-	nonHookFailOn model.Severity = model.SeverityHigh
+	defaultMode   Mode           = ModeEnforce
+	defaultFailOn model.Severity = model.SeverityHigh
 	hookMode      Mode           = ModeWarn
 )
 
@@ -45,21 +48,23 @@ type Defaults struct {
 func DefaultsFor(surface Surface) (Defaults, error) {
 	switch surface {
 	case SurfaceScan, SurfacePreopen, SurfacePRContext, SurfaceAction:
-		return Defaults{Mode: nonHookMode, FailOn: nonHookFailOn}, nil
+		return Defaults{Mode: defaultMode, FailOn: defaultFailOn}, nil
 	case SurfaceHook:
-		return Defaults{Mode: hookMode}, nil
+		return Defaults{Mode: hookMode, FailOn: defaultFailOn}, nil
 	default:
 		return Defaults{}, fmt.Errorf("surface %q: want scan, preopen, pr-context, action, or hook", surface)
 	}
 }
 
-// Fails reports whether sev is at or above d.FailOn. high means high and
-// critical. A zero FailOn never fails.
+// Fails reports whether sev blocks the run: d.Mode is enforce and sev is
+// at or above d.FailOn. high means high and critical. audit and warn
+// never block, whatever sev or FailOn is, and a zero FailOn never
+// blocks either.
 func (d Defaults) Fails(sev model.Severity) (bool, error) {
 	if !sev.Valid() {
 		return false, fmt.Errorf("severity %q: unknown", sev)
 	}
-	if d.FailOn == "" {
+	if d.Mode != ModeEnforce || d.FailOn == "" {
 		return false, nil
 	}
 	c, err := sev.Compare(d.FailOn)

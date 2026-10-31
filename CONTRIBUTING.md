@@ -135,16 +135,22 @@ committed. `tripcord init`, when it lands, must add
 `.tripcord/policy.local.yaml` to the `.gitignore` it writes.
 
 With no policy file, `scan`, `preopen`, `pr-context`, and the Action
-run in `enforce` and fail on `high`. The hook runs in `warn` and does
-not block. `DefaultsFor` in `internal/policy` is the only definition of
-that. An explicit `mode` or `fail-on` replaces it. See
+run in `enforce` and fail on `high`. The hook defaults to `warn` with
+the same fail-on, so it shows findings, including high and critical,
+and does not block. A finding only blocks (exit 1, or a hook block)
+when mode is `enforce` and its severity is at or above fail-on: `audit`
+and `warn` never block, whatever fail-on is. `DefaultsFor` in
+`internal/policy` is the only definition of the no-policy defaults. An
+explicit `mode` or `fail-on` replaces it. See
 [docs/policy.md](docs/policy.md).
 
 `locked` can freeze `mode`, `rules`, and `exceptions`. A locked rule
 stays enabled even if a later `rules.include` leaves it out, and a
 later layer cannot add an exception for it, pin its pack below the
 version in effect at the lock, or remove a harness the rule covers
-from `harnesses`.
+from `harnesses`. Locking `mode` also locks `fail-on` to a ceiling, the
+value in effect at the lock: a later layer may lower it but a raise is
+rejected.
 
 ## Dependencies and licenses
 

@@ -90,9 +90,14 @@ type ExemptionLock struct {
 }
 
 // ModeLock is a locked mode: later layers cannot pick a weaker mode.
+// Locking the mode also locks fail-on to a ceiling, the value in effect
+// when the mode was locked: a later layer may lower fail-on (stricter,
+// high to medium) but not raise it (weaker, high to critical), since
+// that would hollow out the mode lock.
 type ModeLock struct {
-	Floor  Mode
-	Origin Origin
+	Floor         Mode
+	FailOnCeiling model.Severity
+	Origin        Origin
 }
 
 // PackFloor is the lowest version a later layer may pin for a pack.
@@ -212,8 +217,12 @@ func (e *Effective) apply(env *rules.Env, catalog RuleCatalog, l Layer, customID
 		}
 	}
 	if f.FailOn != "" {
-		e.FailOn = f.FailOn
-		e.Provenance["fail-on"] = o
+		if lock := e.ModeLock; lock != nil && aboveCeiling(f.FailOn, lock.FailOnCeiling) {
+			errs = append(errs, fmt.Errorf("fail-on %s: above the %s ceiling locked with the mode by %s", f.FailOn, lock.FailOnCeiling, lock.Origin.Source))
+		} else {
+			e.FailOn = f.FailOn
+			e.Provenance["fail-on"] = o
+		}
 	}
 	for _, p := range f.Pack {
 		ref, _ := rules.ParsePackRef(p)
@@ -320,7 +329,7 @@ func (e *Effective) apply(env *rules.Env, catalog RuleCatalog, l Layer, customID
 		if lk.Mode != nil {
 			switch {
 			case *lk.Mode:
-				e.ModeLock = &ModeLock{Floor: e.Mode, Origin: o}
+				e.ModeLock = &ModeLock{Floor: e.Mode, FailOnCeiling: e.FailOn, Origin: o}
 				e.Provenance["locked.mode"] = o
 			case e.ModeLock != nil:
 				errs = append(errs, fmt.Errorf("locked.mode: false cannot unlock the mode locked by %s", e.ModeLock.Origin.Source))
@@ -454,6 +463,15 @@ func matchID(pattern, id string) bool {
 	return ok
 }
 
+// aboveCeiling reports whether failOn is weaker than ceiling, i.e. it
+// would raise the fail-on threshold above the ceiling a mode lock set.
+// Both are always valid severities: File.Validate rejects an unknown
+// fail-on, and a ceiling is only ever copied from a prior e.FailOn.
+func aboveCeiling(failOn, ceiling model.Severity) bool {
+	c, _ := failOn.Compare(ceiling)
+	return c > 0
+}
+
 // RuleLocked reports whether a locked.rules pattern covers id.
 // That freezes the severity floor. It also exempt-locks the rule.
 func (e *Effective) RuleLocked(id string) bool {
@@ -505,10 +523,11 @@ func (e *Effective) RuleFilter() rules.Filter {
 }
 
 // Fails reports whether a finding of severity sev fails this policy's
-// run: sev is at or above FailOn. A zero FailOn never fails, which is
-// the hook default, so the hook shows findings and does not block.
+// run: Mode is enforce and sev is at or above FailOn. audit and warn
+// never fail, on any surface, which is why the hook's default mode,
+// warn, shows findings and does not block.
 func (e *Effective) Fails(sev model.Severity) (bool, error) {
-	return (Defaults{FailOn: e.FailOn}).Fails(sev)
+	return (Defaults{Mode: e.Mode, FailOn: e.FailOn}).Fails(sev)
 }
 
 // Severity returns the override for id, or base.
