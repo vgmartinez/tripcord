@@ -217,7 +217,29 @@ func wordAfter(words []word, offset int, target string) bool {
 	return false
 }
 
-var shellSeparator = regexp.MustCompile(`\|\||&&|[;|\n]`)
+// shellSeparators returns the spans of the shell separators ||, &&, ;,
+// |, and newline in command, left to right; a lone "&" is not one.
+func shellSeparators(command string) [][]int {
+	var out [][]int
+	for i := 0; i < len(command); {
+		j := strings.IndexAny(command[i:], ";|&\n")
+		if j < 0 {
+			break
+		}
+		i += j
+		switch {
+		case strings.HasPrefix(command[i:], "||"), strings.HasPrefix(command[i:], "&&"):
+			out = append(out, []int{i, i + 2})
+			i += 2
+		case command[i] == '&':
+			i++
+		default:
+			out = append(out, []int{i, i + 1})
+			i++
+		}
+	}
+	return out
+}
 
 // RedactToolFlags redacts tool-specific secret flags (see toolSecretFlags)
 // in a shell command string. Within each pipeline segment, any word whose
@@ -230,7 +252,7 @@ func RedactToolFlags(command string) (string, []string) {
 	var b strings.Builder
 	var removed []string
 	start := 0
-	locs := append(shellSeparator.FindAllStringIndex(command, -1), []int{len(command), len(command)})
+	locs := append(shellSeparators(command), []int{len(command), len(command)})
 	for _, loc := range locs {
 		segment := command[start:loc[0]]
 		segment, segRemoved := redactToolFlagsInSegment(segment)
