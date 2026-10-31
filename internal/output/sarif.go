@@ -157,7 +157,7 @@ func renderSARIF(writer io.Writer, findings []model.Finding, options Options) er
 			},
 		}
 		if ref.kind != locNone {
-			result.Properties = &sarifProperties{Tripcord: sarifTripcord{Scope: ref.scope, Path: escapeControls(ref.path)}}
+			result.Properties = &sarifProperties{Tripcord: sarifTripcord{Scope: ref.scope, Path: present(ref.path)}}
 		}
 		switch ref.kind {
 		case locNone:
@@ -337,8 +337,8 @@ func physicalLocation(ref locationRef, withBase bool) *sarifPhysicalLocation {
 
 func logicalLocation(ref locationRef) sarifLogicalLocation {
 	return sarifLogicalLocation{
-		Name:               escapeControls(path.Base(ref.path)),
-		FullyQualifiedName: escapeControls(ref.path),
+		Name:               present(path.Base(ref.path)),
+		FullyQualifiedName: present(ref.path),
 		Kind:               ref.scope,
 	}
 }

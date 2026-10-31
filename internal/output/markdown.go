@@ -100,11 +100,12 @@ func markdownBody(finding model.Finding, ref locationRef) string {
 	return b.String()
 }
 
-// markdownValue sanitizes, caps, then breaks @mentions. The U+200B inserted
+// markdownValue sanitizes, breaks @mentions, then caps. The U+200B inserted
 // by breakMentions is this sink's mention breaker. It is added after
-// sanitization, so the format-character escape does not remove it.
+// sanitization, so the format-character escape does not remove it, and
+// before the cap, so the breaker counts toward MaxFieldBytes.
 func markdownValue(value string) string {
-	return breakMentions(truncateSanitized(escapeControlsKeepBackslash(value), MaxFieldBytes))
+	return truncateSanitized(breakMentions(escapeControlsKeepBackslash(value)), MaxFieldBytes)
 }
 
 func breakMentions(value string) string {
@@ -122,8 +123,8 @@ func inlineCode(value string) string {
 // doubled first; every "|" then follows an odd run of backslashes and stays
 // inside the cell.
 func tableCode(value string) string {
-	sanitized := truncateSanitized(escapeControls(value), MaxFieldBytes)
-	return strings.ReplaceAll(codeSpan(breakMentions(sanitized)), "|", `\|`)
+	sanitized := truncateSanitized(breakMentions(escapeControls(value)), MaxFieldBytes)
+	return strings.ReplaceAll(codeSpan(sanitized), "|", `\|`)
 }
 
 func codeSpan(value string) string {

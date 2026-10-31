@@ -11,7 +11,8 @@ import (
 const (
 	// MaxFieldBytes is the maximum sanitized length of one displayed field,
 	// including the truncation marker. It is applied after redaction and
-	// after the sink's own escaping.
+	// after the sink's own escaping. Markdown's mention breaker counts
+	// toward this limit.
 	MaxFieldBytes = 1024
 	// MaxMarkdownBytes is the maximum length of a Markdown comment. It stays
 	// under GitHub's 65536-character limit, with margin for the omission line.
@@ -158,9 +159,17 @@ func nextToken(value string, i int) int {
 	if n := escapeTokenLen(value[i:]); n > 0 {
 		return n
 	}
-	_, n := utf8.DecodeRuneInString(value[i:])
+	r, n := utf8.DecodeRuneInString(value[i:])
 	if n <= 0 {
 		return 1
+	}
+	// "@" plus the Markdown mention breaker is one token, so a cap cannot
+	// leave a bare "@" by cutting between them.
+	if r == '@' && i+n < len(value) {
+		r2, n2 := utf8.DecodeRuneInString(value[i+n:])
+		if r2 == '\u200b' && n2 > 0 {
+			return n + n2
+		}
 	}
 	return n
 }

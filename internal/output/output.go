@@ -223,6 +223,7 @@ func (s *sink) Flush() error {
 	s.flushed = true
 	findings := append([]model.Finding(nil), s.findings...)
 	sortFindings(findings)
+	presentFindings(findings)
 
 	var err error
 	switch s.format {

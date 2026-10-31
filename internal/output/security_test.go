@@ -531,6 +531,123 @@ func TestManagedHomeDisplayLeavesFingerprint(t *testing.T) {
 	}
 }
 
+func TestConfigIDHomePathIsPresentationOnly(t *testing.T) {
+	t.Parallel()
+	if got := presentConfigID(`cursor:managed:C:\Users\victorg\.cursor\hooks.json`); got != "cursor:managed:~/.cursor/hooks.json" {
+		t.Fatalf("windows spelling = %s", got)
+	}
+	if got := presentConfigID("cursor:managed:/Users/victor/.cursor/hooks.json"); got != "cursor:managed:~/.cursor/hooks.json" {
+		t.Fatalf("mac spelling = %s", got)
+	}
+	for _, id := range []string{
+		"cursor:managed:~/.cursor/hooks.json",
+		"cursor:managed:/etc/cursor/hooks.json",
+		"cursor:repo:configs/hook.json",
+		"claude:user:~/.claude/settings.json",
+	} {
+		if presentConfigID(id) != id {
+			t.Fatalf("rewrote %s", id)
+		}
+	}
+
+	cases := []struct {
+		name string
+		id   string
+	}{
+		{name: "linux", id: "cursor:managed:/home/victor/.cursor/hooks.json"},
+		{name: "windows", id: "cursor:managed:C:/users/victorg/.cursor/hooks.json"},
+	}
+	const want = "cursor:managed:~/.cursor/hooks.json"
+	for _, tc := range cases {
+		finding := managedFinding()
+		finding.Location.Path = "/etc/cursor/hooks.json"
+		finding.Evidence[0].Config = &model.ConfigRef{ID: tc.id}
+		finding = seal(t, finding)
+		storedID := finding.Evidence[0].Config.ID
+		storedFP := finding.Fingerprint
+		for _, format := range allFormats {
+			for _, mode := range []SARIFNonRepoLocation{SARIFNonRepoLogical, SARIFNonRepoURIBase} {
+				options := testOptions()
+				options.NonRepoSARIF = mode
+				got := renderWith(t, format, []model.Finding{finding}, options)
+				if finding.Evidence[0].Config.ID != storedID || finding.Fingerprint != storedFP {
+					t.Fatal("render mutated the finding")
+				}
+				again, err := model.Fingerprint(finding.Rule, finding.Location, finding.Evidence)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if again != storedFP || !strings.Contains(got, storedFP) {
+					t.Fatalf("%s/%s/%s fingerprint changed\n%s", tc.name, format, mode, got)
+				}
+				if strings.Contains(strings.ToLower(got), "victor") {
+					t.Fatalf("%s/%s/%s leaked a username\n%s", tc.name, format, mode, got)
+				}
+				if format == FormatJSON || format == FormatJSONL {
+					if !strings.Contains(got, want) {
+						t.Fatalf("%s/%s missing %s\n%s", tc.name, format, want, got)
+					}
+					validateFindingLines(t, got)
+				}
+			}
+		}
+	}
+}
+
+func TestManagedHomeSARIFUsesUserHomeBase(t *testing.T) {
+	t.Parallel()
+	for _, path := range []string{"/home/victor/.cursor/hooks.json", "C:/users/victorg/.cursor/hooks.json"} {
+		finding := managedFinding()
+		finding.Location.Path = path
+		options := testOptions()
+		options.NonRepoSARIF = SARIFNonRepoURIBase
+		got := renderWith(t, FormatSARIF, sealAll(t, []model.Finding{finding}), options)
+		validateSARIF(t, got)
+		if strings.Contains(strings.ToLower(got), "victor") || strings.Contains(got, `"uriBaseId":"MANAGED"`) || strings.Contains(got, `"MANAGED"`) {
+			t.Fatalf("managed home %s\n%s", path, got)
+		}
+		var log struct {
+			Runs []struct {
+				OriginalURIBaseIDs map[string]map[string]any `json:"originalUriBaseIds"`
+				Results            []struct {
+					Locations []struct {
+						Physical *struct {
+							Artifact struct {
+								URI       string `json:"uri"`
+								URIBaseID string `json:"uriBaseId"`
+							} `json:"artifactLocation"`
+						} `json:"physicalLocation"`
+					} `json:"locations"`
+					Properties struct {
+						Tripcord struct {
+							Scope string `json:"scope"`
+							Path  string `json:"path"`
+						} `json:"tripcord"`
+					} `json:"properties"`
+				} `json:"results"`
+			} `json:"runs"`
+		}
+		if err := json.Unmarshal([]byte(got), &log); err != nil {
+			t.Fatal(err)
+		}
+		run := log.Runs[0]
+		if _, ok := run.OriginalURIBaseIDs[URIBaseUserHome]; !ok {
+			t.Fatalf("bases = %+v", run.OriginalURIBaseIDs)
+		}
+		if _, ok := run.OriginalURIBaseIDs[URIBaseManaged]; ok {
+			t.Fatalf("declared MANAGED for %s", path)
+		}
+		result := run.Results[0]
+		if result.Properties.Tripcord.Scope != string(model.ScopeManaged) || result.Properties.Tripcord.Path != "~/.cursor/hooks.json" {
+			t.Fatalf("properties = %+v", result.Properties.Tripcord)
+		}
+		artifact := result.Locations[0].Physical.Artifact
+		if artifact.URI != ".cursor/hooks.json" || artifact.URIBaseID != URIBaseUserHome {
+			t.Fatalf("artifact = %+v", artifact)
+		}
+	}
+}
+
 func TestSARIFRuleTextFallsBackToFinding(t *testing.T) {
 	t.Parallel()
 	options := testOptions()

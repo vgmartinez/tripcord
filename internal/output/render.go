@@ -28,6 +28,31 @@ func renderJSONL(writer io.Writer, findings []model.Finding, options Options) er
 	return err
 }
 
+// presentFindings rewrites managed home paths inside config ids on a
+// copy of each evidence list. The fingerprint field is not touched.
+// Callers must pass a slice they own: the stored findings keep their ids.
+func presentFindings(findings []model.Finding) {
+	for i := range findings {
+		findings[i].Evidence = presentEvidence(findings[i].Evidence)
+	}
+}
+
+func presentEvidence(in []model.Evidence) []model.Evidence {
+	if in == nil {
+		return nil
+	}
+	out := make([]model.Evidence, len(in))
+	for i, item := range in {
+		if item.Config != nil {
+			cfg := *item.Config
+			cfg.ID = presentConfigID(cfg.ID)
+			item.Config = &cfg
+		}
+		out[i] = item
+	}
+	return out
+}
+
 // capFinding limits every attacker-controlled string. The fingerprint is
 // kept intact. Evidence and refs are copied, so the stored finding is not.
 func capFinding(finding model.Finding) model.Finding {

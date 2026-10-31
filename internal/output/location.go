@@ -77,7 +77,13 @@ func locate(location model.Location, root string) locationRef {
 		ref.kind = locManaged
 		ref.path = display
 		ref.uri = managedURI(display, clean)
-		ref.baseID = URIBaseManaged
+		// A home path is relative to USERHOME. MANAGED is only for a
+		// path that is not under a home directory.
+		if display == "~" || strings.HasPrefix(display, "~/") {
+			ref.baseID = URIBaseUserHome
+		} else {
+			ref.baseID = URIBaseManaged
+		}
 	case model.ScopeRepo:
 		rel, ok := repoRelative(p, root)
 		if !ok {
@@ -155,6 +161,23 @@ func repoRelative(p, root string) (string, bool) {
 		return "", false
 	}
 	return rel, true
+}
+
+// presentConfigID rewrites the path inside a config id the same way
+// managedDisplayPath rewrites a managed location. The id is
+// harness:scope:path; only the first two colons separate, so a Windows
+// drive colon stays in the path. Other scopes are returned unchanged.
+// This is presentation only: the stored id and the fingerprint stay.
+func presentConfigID(id string) string {
+	parts := strings.SplitN(id, ":", 3)
+	if len(parts) != 3 || parts[1] != string(model.ScopeManaged) || parts[2] == "" {
+		return id
+	}
+	display := managedDisplayPath(path.Clean(normalizeDisplayPath(parts[2])))
+	if display == parts[2] {
+		return id
+	}
+	return parts[0] + ":" + parts[1] + ":" + display
 }
 
 // managedDisplayPath rewrites a cleaned managed path for display.

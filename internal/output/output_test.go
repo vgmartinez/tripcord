@@ -272,7 +272,7 @@ func TestRelativeLocationURIs(t *testing.T) {
 	}
 	for _, path := range []string{"/Users/alice/.cursor/hooks.json", "/home/alice/.cursor/hooks.json", `C:\Users\alice\.cursor\hooks.json`} {
 		home := locate(model.Location{Scope: model.ScopeManaged, Path: path}, "")
-		if home.path != "~/.cursor/hooks.json" || home.uri != ".cursor/hooks.json" || home.baseID != URIBaseManaged {
+		if home.path != "~/.cursor/hooks.json" || home.uri != ".cursor/hooks.json" || home.baseID != URIBaseUserHome {
 			t.Fatalf("managed home %q = %+v", path, home)
 		}
 	}

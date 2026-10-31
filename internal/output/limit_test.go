@@ -199,6 +199,93 @@ func TestSARIFTextEscapesBrackets(t *testing.T) {
 	}
 }
 
+func TestMarkdownMentionBreakerStaysWithinFieldCap(t *testing.T) {
+	t.Parallel()
+	raw := strings.Repeat("@", MaxFieldBytes)
+	got := markdownValue(raw)
+	if len(got) > MaxFieldBytes {
+		t.Fatalf("markdown field is %d bytes", len(got))
+	}
+	if !strings.Contains(got, "…[truncated ") {
+		t.Fatal("mention field was not capped")
+	}
+	assertAtMentionsBroken(t, got)
+	cell := tableCode(raw)
+	if len(cell) > MaxFieldBytes+2 {
+		t.Fatalf("table cell is %d bytes", len(cell))
+	}
+	assertAtMentionsBroken(t, cell)
+
+	finding := findings()[0]
+	finding.Title = raw
+	finding.Fix = raw
+	finding.Evidence[0].Excerpt = raw
+	rendered := render(t, FormatMD, []model.Finding{finding})
+	if len(rendered) > MaxMarkdownBytes || utf8.RuneCountInString(rendered) >= GitHubCommentLimit {
+		t.Fatalf("markdown comment is %d bytes, %d chars", len(rendered), utf8.RuneCountInString(rendered))
+	}
+	assertAtMentionsBroken(t, rendered)
+}
+
+func assertAtMentionsBroken(t *testing.T, got string) {
+	t.Helper()
+	for i := 0; i < len(got); {
+		r, n := utf8.DecodeRuneInString(got[i:])
+		if r == '@' {
+			r2, n2 := utf8.DecodeRuneInString(got[i+n:])
+			if r2 != '\u200b' {
+				t.Fatalf("bare @ at byte %d", i)
+			}
+			i += n + n2
+			continue
+		}
+		i += n
+	}
+}
+
+func TestSARIFPathFieldsAreCapped(t *testing.T) {
+	t.Parallel()
+	longName := strings.Repeat("b", MaxFieldBytes+80)
+	finding := userFinding()
+	finding.Location.Path = "~/" + longName
+	for _, mode := range []SARIFNonRepoLocation{SARIFNonRepoLogical, SARIFNonRepoURIBase} {
+		options := testOptions()
+		options.NonRepoSARIF = mode
+		got := renderWith(t, FormatSARIF, sealAll(t, []model.Finding{finding}), options)
+		var log struct {
+			Runs []struct {
+				Results []struct {
+					Locations []struct {
+						Logical []struct {
+							Name               string `json:"name"`
+							FullyQualifiedName string `json:"fullyQualifiedName"`
+						} `json:"logicalLocations"`
+					} `json:"locations"`
+					Properties struct {
+						Tripcord struct {
+							Path string `json:"path"`
+						} `json:"tripcord"`
+					} `json:"properties"`
+				} `json:"results"`
+			} `json:"runs"`
+		}
+		if err := json.Unmarshal([]byte(got), &log); err != nil {
+			t.Fatal(err)
+		}
+		result := log.Runs[0].Results[0]
+		fields := []string{result.Properties.Tripcord.Path}
+		if mode == SARIFNonRepoLogical {
+			loc := result.Locations[0].Logical[0]
+			fields = append(fields, loc.Name, loc.FullyQualifiedName)
+		}
+		for _, field := range fields {
+			if len(field) > MaxFieldBytes || !strings.Contains(field, "…[truncated ") {
+				t.Fatalf("%s field %q", mode, field)
+			}
+		}
+	}
+}
+
 func TestDriveRelativePathsAreAbsolute(t *testing.T) {
 	t.Parallel()
 	for _, path := range []string{"c:x.json", "C:", "C:foo"} {
