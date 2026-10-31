@@ -307,6 +307,69 @@ func TestScanScope(t *testing.T) {
 	}
 }
 
+// (b) --output, --policy, --org-policy, and the scan PATH argument can
+// all surface an error that embeds the exact path a caller supplied;
+// when that path sits under the running user's home directory, the
+// home directory itself must never reach stderr, the same way every
+// other diagnostic in this codebase redacts it (see pathx.TildeHome).
+func TestScanErrorsRedactHomeDirectory(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	repo := outsideGit(t)
+
+	cases := []struct {
+		name string
+		args func() []string
+	}{
+		{
+			name: "output path",
+			args: func() []string {
+				// The parent directory does not exist, so creating the
+				// output file fails with an error that embeds its path.
+				return []string{"scan", "--output", filepath.Join(home, "missing-output-dir", "out.json"), repo}
+			},
+		},
+		{
+			name: "policy path",
+			args: func() []string {
+				return []string{"scan", "--policy", filepath.Join(home, "missing-policy.yaml"), repo}
+			},
+		},
+		{
+			name: "org-policy path",
+			args: func() []string {
+				return []string{"scan", "--org-policy", filepath.Join(home, "missing-org-policy.yaml"), repo}
+			},
+		},
+		{
+			name: "scan path",
+			args: func() []string {
+				return []string{"scan", filepath.Join(home, "missing-repo")}
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			code := run(tc.args(), &stdout, &stderr)
+			if code != int(exitcode.Config) && code != int(exitcode.Internal) {
+				t.Fatalf("exit code = %d, stdout = %q, stderr = %q", code, stdout.String(), stderr.String())
+			}
+			msg := stderr.String()
+			if msg == "" {
+				t.Fatal("want a non-empty error on stderr")
+			}
+			if strings.Contains(msg, home) {
+				t.Fatalf("stderr leaks the home directory: %q", msg)
+			}
+			if !strings.Contains(msg, "~") {
+				t.Fatalf("stderr = %q, want the home directory rewritten to ~", msg)
+			}
+		})
+	}
+}
+
 func TestLegacyNoteDoesNotFailScan(t *testing.T) {
 	legacy := t.TempDir()
 	restore := claude.SetLegacyManagedDirForTest(legacy)

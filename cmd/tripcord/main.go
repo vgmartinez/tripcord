@@ -601,13 +601,30 @@ func sarifRuleText(catalog *rules.Catalog) map[string]output.RuleText {
 func now() time.Time { return time.Now() }
 
 func scanConfigError(stderr io.Writer, err error) int {
-	writeString(stderr, "tripcord scan: "+err.Error()+"\n")
+	writeString(stderr, "tripcord scan: "+redactHomeFromError(err)+"\n")
 	return int(exitcode.Config)
 }
 
 func scanInternalError(stderr io.Writer, err error) int {
-	writeString(stderr, "tripcord scan: "+err.Error()+"\n")
+	writeString(stderr, "tripcord scan: "+redactHomeFromError(err)+"\n")
 	return int(exitcode.Internal)
+}
+
+// redactHomeFromError rewrites the running user's home directory to "~"
+// in err's message, the same way sanitizeGitStderr already does for
+// git's own diagnostics. scanConfigError and scanInternalError are the
+// only two paths every scan error passes through (--output's
+// output.PathError, --policy/--org-policy's policy.Error, and the scan
+// PATH argument's wrapped os.Stat/filepath.Abs failures among them), so
+// redacting here covers all of them without each caller needing to
+// remember to do it itself.
+func redactHomeFromError(err error) string {
+	msg := err.Error()
+	home, homeErr := os.UserHomeDir()
+	if homeErr != nil || home == "" {
+		return msg
+	}
+	return pathx.TildeHome(home, msg)
 }
 
 // writeString writes s and reports the exit status: OK on success, or
