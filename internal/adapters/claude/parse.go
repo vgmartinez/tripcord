@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"path"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -84,6 +85,9 @@ type src struct {
 	scope model.Scope
 	path  string
 	sha   string
+	// sanitized memoizes sanitizeString, which is pure: an entry's key
+	// re-sanitizes strings its payload already did, such as a command.
+	sanitized map[string]sanitizeResult
 }
 
 func newSrc(c *collector, scope model.Scope, path string, raw []byte) *src {
@@ -229,6 +233,18 @@ type sanitizeResult struct {
 // prefix it actually matches is rewritten, so two commands that differ
 // only by `\` vs `/` outside that prefix stay distinct.
 func (s *src) sanitizeString(value string) sanitizeResult {
+	if r, ok := s.sanitized[value]; ok {
+		return sanitizeResult{value: r.value, removed: slices.Clone(r.removed)}
+	}
+	r := s.sanitizeUncached(value)
+	if s.sanitized == nil {
+		s.sanitized = map[string]sanitizeResult{}
+	}
+	s.sanitized[value] = sanitizeResult{value: r.value, removed: slices.Clone(r.removed)}
+	return r
+}
+
+func (s *src) sanitizeUncached(value string) sanitizeResult {
 	value, removed := stripEmbeddedURLSecrets(value)
 	value, removedFlags := redactCommandSecrets(value)
 	removed = append(removed, removedFlags...)
@@ -399,7 +415,12 @@ func (s *src) hook(event, matcher string, hook map[string]any) {
 	payload["event"] = event
 	payload["matcher"] = matcher
 	hookType, _ := hook["type"].(string)
-	_, action := hookAction(payload)
+	field, action := hookAction(payload)
+	// safeKey sanitizes the key: given the raw command it reuses the
+	// payload's memoized result instead of redacting it a second time.
+	if raw, ok := hook[field].(string); ok && raw != "" {
+		action = raw
+	}
 	s.add(model.ConfigKindHook, []string{"hook", event, matcher, hookType, action}, payload, removed)
 }
 
