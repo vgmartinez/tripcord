@@ -31,9 +31,13 @@ const (
 	// oneLongHook is a single hook whose command is hookHeavyPhrase over
 	// and over: one string as long as the file.
 	oneLongHook hookHeavyShape = "long"
+	// pathColonHook and flagPathColonHook exercise colon assignment
+	// scanning through path-like prefixes, which must remain linear.
+	pathColonHook     hookHeavyShape = "path-colon"
+	flagPathColonHook hookHeavyShape = "flag-path-colon"
 )
 
-var hookHeavyShapes = []hookHeavyShape{repeatedHooks, distinctHooks, oneLongHook}
+var hookHeavyShapes = []hookHeavyShape{repeatedHooks, distinctHooks, oneLongHook, pathColonHook, flagPathColonHook}
 
 // hookHeavySettings returns a settings.json of the given shape just
 // under the 1 MiB read cap.
@@ -46,18 +50,15 @@ func hookHeavySettings(tb testing.TB, shape hookHeavyShape) []byte {
 		}
 		return raw
 	}
-	if shape == oneLongHook {
+	if shape == oneLongHook || shape == pathColonHook || shape == flagPathColonHook {
 		budget := int(adapters.MaxConfigFileBytes) - 128 - len(wrap([]any{map[string]any{"type": "command", "command": ""}}))
-		command := strings.Repeat(hookHeavyPhrase+"; ", budget/(len(hookHeavyPhrase)+2))
+		command := strings.Repeat(hookHeavyCommand(shape, 0)+"; ", budget/(len(hookHeavyCommand(shape, 0))+2))
 		return wrap([]any{map[string]any{"type": "command", "command": command}})
 	}
 	var hooks []any
 	size := int64(len(wrap(nil)))
 	for i := 0; ; i++ {
-		command := hookHeavyPhrase
-		if shape == distinctHooks {
-			command = fmt.Sprintf("sshpass -p x%d --token y%d secret: a%d", i, i, i)
-		}
+		command := hookHeavyCommand(shape, i)
 		hook := map[string]any{"type": "command", "command": command}
 		raw, err := json.Marshal(hook)
 		if err != nil {
@@ -67,6 +68,20 @@ func hookHeavySettings(tb testing.TB, shape hookHeavyShape) []byte {
 			return wrap(hooks)
 		}
 		hooks = append(hooks, hook)
+	}
+}
+
+func hookHeavyCommand(shape hookHeavyShape, i int) string {
+	if shape == distinctHooks {
+		return fmt.Sprintf("sshpass -p x%d --token y%d secret: a%d", i, i, i)
+	}
+	switch shape {
+	case pathColonHook:
+		return "a/token:x"
+	case flagPathColonHook:
+		return "--k=a-b/password:z"
+	default:
+		return hookHeavyPhrase
 	}
 }
 
@@ -120,7 +135,10 @@ func BenchmarkDiscoverHookHeavySettings(b *testing.B) {
 // regression to main, on losing kit's Sanitize memo (about 70x
 // distinct), or on signing a long command by re-redacting it (about
 // 85x long).
-var hookHeavyBudget = map[hookHeavyShape]float64{repeatedHooks: 25, distinctHooks: 60, oneLongHook: 80}
+var hookHeavyBudget = map[hookHeavyShape]float64{
+	repeatedHooks: 25, distinctHooks: 60, oneLongHook: 80,
+	pathColonHook: 80, flagPathColonHook: 80,
+}
 
 // TestDiscoverHookHeavyBudget runs only with TRIPCORD_PERF_BUDGET set
 // (the CI perf job): a timing check is too noisy for -race runs.

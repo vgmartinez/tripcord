@@ -94,6 +94,7 @@ func TestLiteralTextExemptionIsToolAndCommandSpecific(t *testing.T) {
 		"rg -F --password QN18Y f":                   "rg -F --password [REDACTED] f",
 		"gh secret set CFG --body 'password: QN06X'": "gh secret set CFG --body 'password: [REDACTED]'",
 		`git commit -m "$(echo token: QN04X)"`:       `git commit -m "$(echo token: [REDACTED])"`,
+		"git commit -m ${A:-token: QN04Y}":           "git commit -m ${A:-token: [REDACTED]}",
 		"echo git -m 'token: QN05X'":                 "echo git -m 'token: [REDACTED]'",
 	} {
 		if got := DefaultRedactor(in); got != want {
@@ -102,5 +103,20 @@ func TestLiteralTextExemptionIsToolAndCommandSpecific(t *testing.T) {
 	}
 	if got := DefaultRedactor("docker run registry/token-svc:1.2"); got != "docker run registry/token-svc:1.2" {
 		t.Errorf("DefaultRedactor image tag = %q, want unchanged", got)
+	}
+	for in, want := range map[string]string{
+		"--proxy-header=X-Api-Key:S":         "--proxy-header=X-Api-Key:[REDACTED]",
+		"kubectl --from-literal=api-token:S": "kubectl --from-literal=api-token:[REDACTED]",
+		"helm --set-string=password:S":       "helm --set-string=password:[REDACTED]",
+		"docker run -e=token:S":              "docker run -e=token:[REDACTED]",
+		"cli --opt=x/secret:S":               "cli --opt=x/secret:[REDACTED]",
+		"echo a/token:S":                     "echo a/token:[REDACTED]",
+		"echo ./config/password:S":           "echo ./config/password:[REDACTED]",
+		"echo /tmp/password:S":               "echo /tmp/password:[REDACTED]",
+		"echo x-y/api-key:S >> .env":         "echo x-y/api-key:[REDACTED] >> .env",
+	} {
+		if got := DefaultRedactor(in); got != want {
+			t.Errorf("DefaultRedactor(%q) = %q, want %q", in, got, want)
+		}
 	}
 }

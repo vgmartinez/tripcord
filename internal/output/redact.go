@@ -310,7 +310,7 @@ const unquotedCommandValue = "[^\\s;&|\"'\\n)`]"
 var assignmentQuotedValue = regexp.MustCompile(`^(?:` + quotedValue + `)`)
 
 // colonValueEnd lists the bytes that end an unquoted "key: value" value.
-const colonValueEnd = ";&|\"'\n)"
+const colonValueEnd = ";&|\"'\n)}"
 
 // authorizationPattern matches an Authorization header or JSON field with a
 // Bearer, Basic, or token scheme, in both header ("Authorization: Bearer x")
@@ -624,6 +624,7 @@ func redactColonAssignments(value string, removed *[]string) string {
 	var b strings.Builder
 	var spans literalSpans
 	spansFound := false
+	imageRefs := findContainerImageSpans(value)
 	pos := 0
 	for {
 		h, found := nextAssignmentHead(value, scan, pos, ':')
@@ -632,7 +633,7 @@ func redactColonAssignments(value string, removed *[]string) string {
 		}
 		body := ""
 		ok := (h.start == 0 || !isAlnum(value[h.start-1])) && CredentialName(h.name) &&
-			!colonPathOrIdentifier(value, h.start, h.openQuote, h.sep)
+			!imageRefs.contains(h.start)
 		if ok && !spansFound {
 			spans, spansFound = findLiteralSpans(value), true
 		}
@@ -652,31 +653,51 @@ func redactColonAssignments(value string, removed *[]string) string {
 	return b.String()
 }
 
-// colonPathOrIdentifier rejects an unquoted, glued credential-looking
-// fragment that is part of an image name, hostname, or path rather than
-// an assignment. httpie's Header:value form is the intentional exception:
-// it has an http command word and is handled as a header.
-func colonPathOrIdentifier(value string, offset int, quote, sep string) bool {
-	if quote != "" || sep != ":" {
+// findContainerImageSpans returns tag-shaped image arguments in the only
+// container command positions that are exempt from colon assignments. It
+// scans each command segment once; calling splitWords from every assignment
+// candidate would turn a long path-heavy command quadratic.
+func findContainerImageSpans(value string) literalSpans {
+	var refs literalSpans
+	for start := 0; start < len(value); {
+		end := start
+		for end < len(value) && !strings.ContainsRune(";&|\n", rune(value[end])) {
+			end++
+		}
+		words := splitWords(value[start:end])
+		if len(words) >= 3 {
+			tool := normalizeToolWord(words[0].text)
+			if tool == "docker" || tool == "podman" || tool == "nerdctl" {
+				subcommand := strings.Trim(words[1].text, `"'`)
+				for i, word := range words {
+					imagePosition := (subcommand == "run" || subcommand == "pull" || subcommand == "push" || subcommand == "create") && i == 2 ||
+						subcommand == "build" && i == 3 && (words[2].text == "-t" || words[2].text == "--tag") ||
+						subcommand == "tag" && (i == 2 || i == 3)
+					if !imagePosition {
+						continue
+					}
+					if colon := strings.LastIndexByte(word.text, ':'); colon > 0 && !strings.Contains(word.text, "=") && imageTag(word.text[colon+1:]) {
+						refs = append(refs, [2]int{start + word.start, start + word.end})
+					}
+				}
+			}
+		}
+		start = end + 1
+	}
+	return refs
+}
+
+func imageTag(value string) bool {
+	if len(value) == 0 || len(value) > 128 || value[0] == '-' {
 		return false
 	}
-	start := offset
-	for start > 0 && !isCommandSpace(value[start-1]) {
-		start--
-	}
-	word := value[start:offset]
-	if strings.HasPrefix(word, "--header=") || strings.HasPrefix(word, "-H=") {
+	for _, c := range value {
+		if c == '_' || c == '.' || c == '-' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' {
+			continue
+		}
 		return false
 	}
-	if !strings.ContainsAny(word, "/-") {
-		return false
-	}
-	segment := value[:start]
-	if i := strings.LastIndexAny(segment, ";&|\n"); i >= 0 {
-		segment = segment[i+1:]
-	}
-	words := splitWords(segment)
-	return len(words) == 0 || normalizeToolWord(words[0].text) != "http"
+	return true
 }
 
 // colonValue returns the "key: value" value at the start of rest: a

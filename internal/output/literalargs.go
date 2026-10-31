@@ -60,7 +60,7 @@ func findLiteralSpans(value string) literalSpans {
 		case pending:
 			// Shell substitutions execute a new command; they are not
 			// literal message or pattern text and must still be scanned.
-			if !strings.ContainsAny(text, "`") && !strings.Contains(text, "$(") {
+			if !strings.ContainsAny(text, "`") && !strings.Contains(text, "$(") && !strings.Contains(text, "${") {
 				spans = append(spans, [2]int{start, i})
 			}
 			pending = false
