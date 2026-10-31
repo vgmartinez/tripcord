@@ -128,6 +128,11 @@ managed file (`/etc/tripcord/policy.yaml` on Linux,
 `/Library/Application Support/Tripcord/policy.yaml` on macOS,
 `%ProgramData%\Tripcord\policy.yaml` on Windows) and any file passed
 explicitly, as the `--org-policy` flag or the GitHub Action input will.
+In CI, the Action input is only as trustworthy as the managed file: it
+comes from the repository's own workflow file, which the repository
+controls, so a repo that wants an org layer it cannot bypass in CI
+needs the runner-managed file or an org-level required workflow the
+repo cannot edit, not the Action input alone.
 `.tripcord/policy.yaml` is the repo policy. Its `extends` adds layers
 after the org layer; it cannot replace or skip it.
 `.tripcord/policy.local.yaml` is the per-checkout layer and is not

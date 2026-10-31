@@ -69,11 +69,17 @@ type Options struct {
 	RepoRoot string
 	// ManagedPolicy is the managed org policy file. Empty means
 	// ManagedPolicyPath(runtime.GOOS). It is optional: when the file
-	// does not exist there is no managed layer.
+	// does not exist there is no managed layer. When it exists, Load
+	// rejects it if it is world-writable or, on Unix, not owned by root
+	// or the current user; see checkManagedPolicyFile. On Windows that
+	// ownership check is best-effort; use the file's ACL instead.
 	ManagedPolicy string
 	// OrgPolicy lists org policy files given explicitly, by the
 	// --org-policy flag or the GitHub Action input. Each must exist.
-	// They merge after the managed policy.
+	// They merge after the managed policy. In CI the Action input comes
+	// from the repository's own workflow file, so it is only as
+	// trustworthy as that workflow: it is not an org boundary the
+	// repository cannot bypass the way the managed file is.
 	OrgPolicy []string
 	// Surface selects the no-policy mode and fail-on. Required.
 	// An explicit policy mode or fail-on overrides that default.
@@ -113,6 +119,9 @@ func LoadLayers(opts Options) ([]Layer, error) {
 	managed := opts.ManagedPolicy
 	if managed == "" {
 		managed = ManagedPolicyPath(runtime.GOOS)
+	}
+	if err := checkManagedPolicyFile(managed); err != nil {
+		return nil, err
 	}
 	if err := l.root(managed, LayerOrg, false); err != nil {
 		return nil, err

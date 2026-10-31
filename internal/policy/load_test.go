@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -254,6 +255,35 @@ func TestLoadErrors(t *testing.T) {
 			assertExit(t, err, c.code)
 		})
 	}
+}
+
+// TestManagedPolicyPermissions covers checkManagedPolicyFile: a
+// world-writable managed policy is rejected regardless of OS, and a
+// file owned by the user running the test (as every file write in this
+// suite is) is accepted. The negative owner case needs a file owned by
+// someone else, which needs root to set up, so it is not covered here.
+func TestManagedPolicyPermissions(t *testing.T) {
+	root := t.TempDir()
+	managed := filepath.Join(root, "managed", "policy.yaml")
+	write(t, managed, "version: 1\nmode: warn\n")
+
+	e, err := Load(Options{RepoRoot: t.TempDir(), ManagedPolicy: managed, Surface: SurfaceScan, Env: testEnv(t), Catalog: catalog})
+	if err != nil {
+		t.Fatalf("policy owned by the current user rejected: %v", err)
+	}
+	if e.Mode != ModeWarn || e.Provenance["mode"].Layer != LayerOrg {
+		t.Fatalf("managed policy was not applied: %+v", e)
+	}
+
+	if runtime.GOOS == "windows" {
+		t.Skip("world-writable is not meaningful on Windows; see checkManagedPolicyOwner")
+	}
+	if err := os.Chmod(managed, 0o666); err != nil {
+		t.Fatal(err)
+	}
+	_, err = Load(Options{RepoRoot: t.TempDir(), ManagedPolicy: managed, Surface: SurfaceScan, Env: testEnv(t), Catalog: catalog})
+	wantErr(t, err, "world-writable")
+	assertExit(t, err, exitcode.Config)
 }
 
 func assertExit(t *testing.T, err error, want exitcode.Code) {
