@@ -892,3 +892,31 @@ func TestEscapeControls(t *testing.T) {
 		}
 	}
 }
+
+// TestEscapeControlsKeepBackslashDisambiguatesHexEscapes checks that a
+// literal backslash in text that keeps backslashes is only doubled when
+// leaving it alone would read exactly like this package's own \xNN,
+// \uXXXX, or \UXXXXXXXX escape for a real control character. The two
+// must stay visually distinct: a literal "\x1b" (backslash, x, 1, b) is
+// not the same as an actual ESC byte (\x1b produced by escaping 0x1b).
+func TestEscapeControlsKeepBackslashDisambiguatesHexEscapes(t *testing.T) {
+	t.Parallel()
+	cases := map[string]string{
+		`\x1b`:       `\\x1b`,
+		"\x1b":       `\x1b`,
+		`\u2028`:     `\\u2028`,
+		"\u2028":     `\u2028`,
+		`\U0001F600`: `\\U0001F600`,
+		`C:\dir`:     `C:\dir`,
+		`\new`:       `\new`,
+		`\temp\x`:    `\temp\x`,
+		`\xampp`:     `\xampp`,
+		`\\`:         `\\`,
+		`a\\b`:       `a\\b`,
+	}
+	for in, want := range cases {
+		if got := escapeControlsKeepBackslash(in); got != want {
+			t.Fatalf("escapeControlsKeepBackslash(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

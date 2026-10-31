@@ -33,6 +33,9 @@ func escapeControls(value string) string {
 
 // escapeControlsKeepBackslash is escapeControls for contexts that show text
 // literally, such as markdown code, where doubling "\" would misquote it.
+// A literal backslash is still doubled when it would otherwise read as one
+// of this function's own escapes for a real control character (\xNN,
+// \uXXXX, \UXXXXXXXX); see isHexEscapeBody.
 func escapeControlsKeepBackslash(value string) string {
 	return escapeLine(value, false)
 }
@@ -45,6 +48,12 @@ func escapeLine(value string, escapeBackslash bool) string {
 		case r == utf8.RuneError && size == 1:
 			fmt.Fprintf(&b, `\x%02x`, value[i])
 		case r == '\\' && escapeBackslash:
+			b.WriteString(`\\`)
+		case r == '\\' && isHexEscapeBody(value[i+size:]):
+			// A literal backslash in text that keeps backslashes (paths,
+			// code) would otherwise read exactly like \xNN, \uXXXX, or
+			// \UXXXXXXXX, our own escape for a real control character.
+			// Double it so the two stay visually distinct.
 			b.WriteString(`\\`)
 		case r == '\n':
 			b.WriteString(`\n`)
@@ -172,6 +181,28 @@ func nextToken(value string, i int) int {
 		}
 	}
 	return n
+}
+
+// isHexEscapeBody reports whether s, the text right after a backslash, is
+// the body of one of this package's hex-digit control escapes: xXX,
+// uXXXX, or UXXXXXXXX. It deliberately excludes the single-letter bodies
+// n, r, and t: those are common in ordinary Windows path fragments (e.g.
+// "\new", "\temp"), and escaping every one of them would defeat keeping
+// backslashes unescaped in text that shows paths literally.
+func isHexEscapeBody(s string) bool {
+	if s == "" {
+		return false
+	}
+	switch s[0] {
+	case 'x':
+		return len(s) >= 3 && isHex(s[1]) && isHex(s[2])
+	case 'u':
+		return len(s) >= 5 && isHexString(s[1:5])
+	case 'U':
+		return len(s) >= 9 && isHexString(s[1:9])
+	default:
+		return false
+	}
 }
 
 func escapeTokenLen(s string) int {
