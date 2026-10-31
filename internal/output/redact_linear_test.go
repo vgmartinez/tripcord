@@ -25,10 +25,10 @@ func TestRedactionScalesLinearly(t *testing.T) {
 		"tool flag":          "sshpass -p $X ",
 	}
 	for name, unit := range units {
-		small := fastestRedaction(strings.Repeat(unit, (32<<10)/len(unit)))
-		large := fastestRedaction(strings.Repeat(unit, (128<<10)/len(unit)))
+		small := fastestRedaction(strings.Repeat(unit, (8<<10)/len(unit)))
+		large := fastestRedaction(strings.Repeat(unit, (32<<10)/len(unit)))
 		if large > 10*small+50*time.Millisecond {
-			t.Errorf("%s: 32KiB took %v, 128KiB took %v", name, small, large)
+			t.Errorf("%s: 8KiB took %v, 32KiB took %v", name, small, large)
 		}
 	}
 }

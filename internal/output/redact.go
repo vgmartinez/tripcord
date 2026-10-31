@@ -133,6 +133,22 @@ func CredentialName(name string) bool {
 	return false
 }
 
+// credentialStems covers every word credentialNameCandidate can match.
+var credentialStems = []string{"secret", "token", "passw", "pwd", "key", "credential"}
+
+// mayNameCredential is a fast prefilter for RedactAssignments: the head
+// patterns cannot use a literal prefix, so text with no credential stem
+// at all skips them.
+func mayNameCredential(value string) bool {
+	lower := strings.ToLower(value)
+	for _, stem := range credentialStems {
+		if strings.Contains(lower, stem) {
+			return true
+		}
+	}
+	return false
+}
+
 func credentialSegment(segment string) bool {
 	for _, word := range credentialWords {
 		if strings.HasSuffix(segment, word) {
@@ -427,6 +443,9 @@ func RedactURLUserinfo(value string) (string, []string) {
 // YAML/JSON "token: ..." line, the same way DefaultRedactor's second line
 // does. It returns the redacted text and the raw values it removed.
 func RedactAssignments(value string) (string, []string) {
+	if !mayNameCredential(value) {
+		return value, nil
+	}
 	var removed []string
 	value = redactEqualsAssignments(value, &removed)
 	value = redactColonAssignments(value, &removed)
@@ -563,7 +582,7 @@ func redactEqualsAssignments(value string, removed *[]string) string {
 		if ok {
 			loc := assignmentEqualsValue.FindStringIndex(value[valStart:])
 			body = value[valStart : valStart+loc[1]]
-			ok = !placeholderSecret(body) && !(strings.HasPrefix(body, "-") && isCommandSpace(value[valStart-1]))
+			ok = !placeholderSecret(body) && (!strings.HasPrefix(body, "-") || !isCommandSpace(value[valStart-1]))
 		}
 		b.WriteString(value[pos:valStart])
 		pos = valStart
