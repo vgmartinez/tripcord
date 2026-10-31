@@ -1,6 +1,7 @@
 package kit
 
 import (
+	"context"
 	"errors"
 	"io/fs"
 	"os"
@@ -22,6 +23,17 @@ type UserDir struct {
 // File names a file below the directory.
 func (d UserDir) File(name string) (abs, logical string) {
 	return filepath.Join(d.Abs, filepath.FromSlash(name)), d.Logical + "/" + name
+}
+
+// Dir names a subdirectory below the directory.
+func (d UserDir) Dir(name string) UserDir {
+	return UserDir{Abs: filepath.Join(d.Abs, filepath.FromSlash(name)), Logical: d.Logical + "/" + name}
+}
+
+// HomeDir is a UserDir rooted at home/rel, for a per-user location with no
+// environment-variable override (ResolveUserDir is for one that has one).
+func HomeDir(home, rel string) UserDir {
+	return UserDir{Abs: filepath.Join(home, filepath.FromSlash(rel)), Logical: "~/" + rel}
 }
 
 // ResolveHome returns override, or os.UserHomeDir when override is empty.
@@ -108,6 +120,35 @@ func (c *Collector) ListLocal(scope model.Scope, dir, logicalDir, suffix string,
 		names = names[:max]
 	}
 	return names
+}
+
+// OpenUserWalk opens dir as a confinement root and recursively lists the
+// files below it that m accepts, with the same safety guarantees as a
+// repository read (SafeReader, depth/entry/byte budgets, cycle and
+// escaping-symlink handling). A missing directory is skipped silently,
+// matching ReadLocal and ListLocal; any other failure to open or list it
+// is recorded and also treated as "nothing to read" rather than fatal. A
+// non-nil error is only a canceled or expired ctx, which the caller
+// should treat as it would a repository walk's ctx error. The caller must
+// close a non-nil returned reader once done reading from files.
+func OpenUserWalk(ctx context.Context, c *Collector, limits Limits, dir UserDir, m Matcher) (reader *adapters.SafeReader, files []string, err error) {
+	reader, openErr := adapters.NewSafeReader(dir.Abs)
+	if openErr != nil {
+		if !errors.Is(openErr, fs.ErrNotExist) {
+			c.Warn(model.ScopeUser, dir.Logical, "cannot open directory: %v", openErr)
+		}
+		return nil, nil, nil
+	}
+	files, walkErr := WalkScoped(ctx, reader, limits, c, model.ScopeUser, dir.Logical, m)
+	if walkErr != nil {
+		_ = reader.Close()
+		if ctx.Err() != nil {
+			return nil, nil, ctx.Err()
+		}
+		c.Warn(model.ScopeUser, dir.Logical, "cannot list directory: %v", walkErr)
+		return nil, nil, nil
+	}
+	return reader, files, nil
 }
 
 // TildePath rewrites an absolute path under home as "~/...", using

@@ -59,7 +59,10 @@ func New(options Options) *Adapter {
 func (*Adapter) Harness() model.Harness { return model.HarnessCodex }
 
 // SharedOwners implements adapters.SharedReader: Codex also loads
-// AGENTS.md and .agents/skills, which the generic adapter reports.
+// AGENTS.md and .agents/skills, both in the repository and, at user
+// scope, ~/.agents/skills; the generic adapter reports all of them.
+// Codex's own, deprecated ~/.codex/skills has no other reader and is
+// reported here, not by generic.
 func (*Adapter) SharedOwners() []model.Harness { return []model.Harness{model.SurfaceGeneric} }
 
 // Detect reports whether the repository holds a file Codex reads, or a
@@ -90,7 +93,7 @@ func (a *Adapter) Discover(ctx context.Context, repoRoot string) ([]model.Config
 	c := kit.NewCollector(model.HarnessCodex, product)
 	trust := trustUnknown
 	if a.options.IncludeUser {
-		trust = a.discoverUser(c, repoRoot)
+		trust = a.discoverUser(ctx, c, repoRoot)
 	}
 	if !a.options.SkipRepo {
 		if err := a.discoverRepo(ctx, repoRoot, c, trust); err != nil {
@@ -180,7 +183,7 @@ func (a *Adapter) discoverRepo(ctx context.Context, repoRoot string, c *kit.Coll
 
 // discoverUser reads $CODEX_HOME (default ~/.codex) and returns the trust
 // status of repoRoot recorded in its config.toml.
-func (a *Adapter) discoverUser(c *kit.Collector, repoRoot string) string {
+func (a *Adapter) discoverUser(ctx context.Context, c *kit.Collector, repoRoot string) string {
 	home, ok := kit.ResolveHome(c, a.options.HomeDir)
 	if !ok {
 		return trustUnknown
@@ -220,7 +223,28 @@ func (a *Adapter) discoverUser(c *kit.Collector, repoRoot string) string {
 			c.Source(model.ScopeUser, logical, raw).Markdown(model.ConfigKindInstructions, role, raw, kit.LooseFrontmatter)
 		}
 	}
+	a.discoverUserSkills(ctx, c, dir.Dir("skills"))
 	return trust
+}
+
+// discoverUserSkills reads $CODEX_HOME/skills: Codex's deprecated,
+// backward-compatible user-skill location, kept alongside the current
+// ~/.agents/skills (shared with other harnesses and read by the generic
+// adapter, not here).
+func (a *Adapter) discoverUserSkills(ctx context.Context, c *kit.Collector, dir kit.UserDir) {
+	reader, files, err := kit.OpenUserWalk(ctx, c, a.limits, dir, kit.SkillFileMatcher)
+	if err != nil || reader == nil {
+		return
+	}
+	defer func() { _ = reader.Close() }()
+	r := kit.NewScopedReader(reader, a.limits, c, model.ScopeUser, dir.Logical)
+	for _, rel := range files {
+		raw, ok := r.Read(rel)
+		if !ok {
+			continue
+		}
+		c.Source(model.ScopeUser, dir.Logical+"/"+rel, raw).Markdown(model.ConfigKindSkill, "skill", raw, kit.StrictFrontmatter)
+	}
 }
 
 func defaultManagedDir() string {

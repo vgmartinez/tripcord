@@ -53,6 +53,96 @@ func TestSharedSkillsUseGenericHarness(t *testing.T) {
 	}
 }
 
+func TestUserSkillsScanned(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	skill := "---\nname: deploy\n---\nbody\n"
+	writeFile(t, filepath.Join(home, ".agents", "skills", "deploy", "SKILL.md"), skill)
+	root := t.TempDir()
+	a := New(Options{IncludeUser: true, HomeDir: home})
+	if !a.Detect(root) {
+		t.Fatal("Detect missed a user-scope skill with no repository files")
+	}
+	items, err := a.Discover(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, item := range items {
+		if item.Scope != model.ScopeUser {
+			continue
+		}
+		found = true
+		if item.Path != "~/.agents/skills/deploy/SKILL.md" {
+			t.Errorf("path = %s", item.Path)
+		}
+		if item.Harness != model.SurfaceGeneric {
+			t.Errorf("harness = %s", item.Harness)
+		}
+		if item.Kind != model.ConfigKindSkill {
+			t.Errorf("kind = %s", item.Kind)
+		}
+	}
+	if !found {
+		t.Fatalf("no user-scope item in %+v", items)
+	}
+}
+
+func TestUserSkillsNotScannedWithoutIncludeUser(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	writeFile(t, filepath.Join(home, ".agents", "skills", "deploy", "SKILL.md"), "---\nname: deploy\n---\n")
+	root := t.TempDir()
+	items, err := New(Options{HomeDir: home}).Discover(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 0 {
+		t.Fatalf("items = %+v, want none without IncludeUser", items)
+	}
+}
+
+func TestUserSkillsMissingDirectoryIsSilent(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	root := t.TempDir()
+	got, err := New(Options{IncludeUser: true, HomeDir: home}).Discover(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("items = %+v, want none for a missing ~/.agents/skills", got)
+	}
+}
+
+func TestEscapingUserSkillSymlink(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	outside := t.TempDir()
+	writeFile(t, filepath.Join(outside, "SKILL.md"), "---\nname: x\n---\n")
+	if err := os.MkdirAll(filepath.Join(home, ".agents", "skills"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(home, ".agents", "skills", "escape")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	root := t.TempDir()
+	_, err := New(Options{IncludeUser: true, HomeDir: home}).Discover(context.Background(), root)
+	var diag *adapters.DiagnosticError
+	if !errors.As(err, &diag) {
+		t.Fatalf("Discover: %v, want a diagnostic for the escaping symlink", err)
+	}
+	var found bool
+	for _, d := range diag.Diagnostics {
+		if strings.Contains(d.String(), "symlink resolves outside") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("diagnostics = %+v, want an escaping-symlink warning", diag.Diagnostics)
+	}
+}
+
 func TestClaudeDoesNotClaimSharedSkills(t *testing.T) {
 	t.Parallel()
 	// Imported behavior is covered by the Claude package. This test only

@@ -6,7 +6,9 @@ an MCP server, expands environment variables, or invokes git. Every
 repository file is treated as attacker-controlled.
 
 `AGENTS.md` is loaded by Codex but reported by the [generic](generic.md)
-adapter; `.agents/skills` likewise. Codex session transcripts
+adapter; `.agents/skills` likewise, both in the repository and, at user
+scope, `~/.agents/skills`. Codex's own, deprecated `~/.codex/skills` has
+no other reader and is reported here. Codex session transcripts
 (`~/.codex/sessions`, `history.jsonl`) are not read.
 
 ## Locations
@@ -33,6 +35,14 @@ matching is case-insensitive.
 | `<profile>.config.toml` (at most 64) | as above |
 | `hooks.json` | `hook` |
 | `AGENTS.md`, `AGENTS.override.md` | `instructions` (roles `agents`, `agents-override`) |
+| `skills/**/SKILL.md` | `skill` |
+
+`skills` (`$CODEX_HOME/skills`, i.e. `~/.codex/skills` by default) is
+Codex's deprecated user-skill location, kept for backward compatibility
+alongside the current `~/.agents/skills` (shared with other harnesses,
+reported by [generic](generic.md)). Requesting the `codex` harness
+explicitly also runs `generic`, so both locations are scanned whenever
+user scope is enabled.
 
 A relative `CODEX_HOME` is reported and not scanned. A `CODEX_HOME` outside
 the home directory is scanned; its paths are shown as `~/CODEX_HOME/...`,

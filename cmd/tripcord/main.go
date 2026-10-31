@@ -148,7 +148,7 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 		codex.New(codex.Options{SkipRepo: !repoScope, IncludeUser: userScope, IncludeManaged: managedScope}),
 		copilot.New(copilot.Options{SkipRepo: !repoScope, IncludeUser: userScope, IncludeManaged: managedScope}),
 		cursor.New(cursor.Options{SkipRepo: !repoScope, IncludeUser: userScope, IncludeManaged: managedScope}),
-		generic.New(generic.Options{SkipRepo: !repoScope}),
+		generic.New(generic.Options{SkipRepo: !repoScope, IncludeUser: userScope}),
 	)
 	if err != nil {
 		return scanInternalError(stderr, err)

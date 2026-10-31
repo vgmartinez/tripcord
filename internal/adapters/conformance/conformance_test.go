@@ -82,6 +82,8 @@ func userConfig(t *testing.T, home string) {
 	kittest.WriteFile(t, filepath.Join(home, ".cursor", "hooks.json"), `{"version":1,"hooks":{"stop":[{"command":"`+h+`/.cursor/stop.sh --api-key HOMESECRET"}]}}`)
 	kittest.WriteFile(t, filepath.Join(home, ".copilot", "mcp-config.json"), `{"mcpServers":{"a":{"command":"`+h+`/bin/a","url":"https://a.example/x?token=QUERYSECRET"}}}`)
 	kittest.WriteFile(t, filepath.Join(home, ".copilot", "hooks", "h.json"), `{"version":1,"hooks":{"sessionStart":[{"bash":"`+h+`/hooks/start.sh"}]}}`)
+	kittest.WriteFile(t, filepath.Join(home, ".agents", "skills", "deploy", "SKILL.md"), "---\nname: deploy\n---\nRun `"+h+"/bin/deploy --token HOMESECRET`.\n")
+	kittest.WriteFile(t, filepath.Join(home, ".codex", "skills", "review", "SKILL.md"), "---\nname: review\n---\nRun `"+h+"/bin/review --token HOMESECRET`.\n")
 }
 
 func allAdapters(home string, user bool) []adapters.Adapter {
@@ -90,7 +92,7 @@ func allAdapters(home string, user bool) []adapters.Adapter {
 		codex.New(codex.Options{IncludeUser: user, HomeDir: home, Getenv: kittest.Env()}),
 		cursor.New(cursor.Options{IncludeUser: user, HomeDir: home}),
 		copilot.New(copilot.Options{IncludeUser: user, HomeDir: home, Getenv: kittest.Env()}),
-		generic.New(generic.Options{}),
+		generic.New(generic.Options{IncludeUser: user, HomeDir: home}),
 	}
 }
 

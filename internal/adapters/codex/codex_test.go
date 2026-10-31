@@ -73,6 +73,45 @@ func TestProjectTrust(t *testing.T) {
 	}
 }
 
+func TestUserSkillsScanned(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(home, ".codex", "skills", "deploy", "SKILL.md"), "---\nname: deploy\n---\nbody\n")
+	root := t.TempDir()
+	got := kittest.Discover(t, New(Options{IncludeUser: true, HomeDir: home, Getenv: kittest.Env()}), root)
+	items := got.Find("~/.codex/skills/deploy/SKILL.md", model.ConfigKindSkill)
+	if len(items) != 1 {
+		t.Fatalf("items = %+v", got.Items)
+	}
+	if items[0].Harness != model.HarnessCodex || items[0].Scope != model.ScopeUser {
+		t.Fatalf("item = %+v", items[0])
+	}
+}
+
+func TestUserSkillsNotScannedWithoutIncludeUser(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(home, ".codex", "skills", "deploy", "SKILL.md"), "---\nname: deploy\n---\n")
+	root := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(root, ".codex", "config.toml"), "sandbox_mode = \"danger-full-access\"\n")
+	got := kittest.Discover(t, New(Options{HomeDir: home, Getenv: kittest.Env()}), root)
+	if len(got.Find("~/.codex/skills/deploy/SKILL.md", model.ConfigKindSkill)) != 0 {
+		t.Fatalf("items = %+v, want no user-scope skill without IncludeUser", got.Items)
+	}
+}
+
+func TestUserSkillsFollowCodexHomeOverride(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	alt := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(alt, "skills", "deploy", "SKILL.md"), "---\nname: deploy\n---\n")
+	root := t.TempDir()
+	got := kittest.Discover(t, New(Options{IncludeUser: true, HomeDir: home, Getenv: kittest.Env("CODEX_HOME", alt)}), root)
+	if len(got.Find("~/CODEX_HOME/skills/deploy/SKILL.md", model.ConfigKindSkill)) != 1 {
+		t.Fatalf("items = %+v", got.Items)
+	}
+}
+
 func TestTrustFollowsSymlinkedRoot(t *testing.T) {
 	t.Parallel()
 	real := t.TempDir()

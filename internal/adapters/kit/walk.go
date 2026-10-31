@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+	"path"
 	"sort"
 	"strings"
 
@@ -45,7 +46,19 @@ type Matcher struct {
 // enforces it); an escaping symlink at a relevant path is reported. .git
 // is skipped and symlink cycles are cut.
 func Walk(ctx context.Context, reader *adapters.SafeReader, limits Limits, c *Collector, m Matcher) ([]string, error) {
-	w := &walker{ctx: ctx, reader: reader, limits: limits, c: c, m: m, truncated: map[string]bool{}}
+	return WalkScoped(ctx, reader, limits, c, model.ScopeRepo, "", m)
+}
+
+// WalkScoped is Walk for a root that need not be a repository: every
+// diagnostic is tagged scope instead of always ScopeRepo, named "the
+// repository" only when scope is ScopeRepo (otherwise "this directory"),
+// and reported under pathPrefix joined to the file's path below root
+// (pathPrefix itself for the root), instead of a bare repo-relative path.
+// A user-scope skill directory (~/.agents/skills) is the first caller
+// that is not a repository root; Walk is WalkScoped with the original
+// repository behavior (scope ScopeRepo, no prefix) unchanged.
+func WalkScoped(ctx context.Context, reader *adapters.SafeReader, limits Limits, c *Collector, scope model.Scope, pathPrefix string, m Matcher) ([]string, error) {
+	w := &walker{ctx: ctx, reader: reader, limits: limits, c: c, m: m, scope: scope, pathPrefix: pathPrefix, truncated: map[string]bool{}}
 	rootInfo, err := reader.Stat(".")
 	if err != nil {
 		return nil, err
@@ -57,14 +70,39 @@ func Walk(ctx context.Context, reader *adapters.SafeReader, limits Limits, c *Co
 }
 
 type walker struct {
-	ctx       context.Context
-	reader    *adapters.SafeReader
-	limits    Limits
-	c         *Collector
-	m         Matcher
-	files     []string
-	entries   int
-	truncated map[string]bool
+	ctx        context.Context
+	reader     *adapters.SafeReader
+	limits     Limits
+	c          *Collector
+	m          Matcher
+	scope      model.Scope
+	pathPrefix string
+	files      []string
+	entries    int
+	truncated  map[string]bool
+}
+
+// path joins rel (relative to the walked root, "" for the root itself) to
+// pathPrefix, for a diagnostic or an item under a non-repository root.
+func (w *walker) path(rel string) string {
+	switch {
+	case w.pathPrefix == "":
+		return rel
+	case rel == "":
+		return w.pathPrefix
+	default:
+		return w.pathPrefix + "/" + rel
+	}
+}
+
+// rootNoun names the walked root in a diagnostic: the existing wording
+// for a repository, a generic one for anything else (a user-scope skill
+// directory, say), since pathPrefix already names that root precisely.
+func (w *walker) rootNoun() string {
+	if w.scope == model.ScopeRepo {
+		return "repository"
+	}
+	return "directory"
 }
 
 func (w *walker) truncate(reason string) {
@@ -72,7 +110,7 @@ func (w *walker) truncate(reason string) {
 		return
 	}
 	w.truncated[reason] = true
-	w.c.Warn(model.ScopeRepo, "", "repository walk truncated: %s; configuration beyond the limit was not scanned", reason)
+	w.c.Warn(w.scope, w.path(""), "%s walk truncated: %s; configuration beyond the limit was not scanned", w.rootNoun(), reason)
 }
 
 func (w *walker) walk(dir string, depth int, ancestors []fs.FileInfo) error {
@@ -90,7 +128,7 @@ func (w *walker) walk(dir string, depth int, ancestors []fs.FileInfo) error {
 		if rel == "." {
 			rel = ""
 		}
-		w.c.Warn(model.ScopeRepo, rel, "cannot list directory: %v", err)
+		w.c.Warn(w.scope, w.path(rel), "cannot list directory: %v", err)
 		return nil
 	}
 	w.entries += len(entries)
@@ -110,9 +148,9 @@ func (w *walker) walk(dir string, depth int, ancestors []fs.FileInfo) error {
 			if err != nil {
 				if w.m.Candidate(rel) || w.m.Relevant(rel) {
 					if errors.Is(err, adapters.ErrUnsafePath) {
-						w.c.Warn(model.ScopeRepo, rel, "symlink resolves outside the repository; %s may load its target, which was not scanned", w.c.product)
+						w.c.Warn(w.scope, w.path(rel), "symlink resolves outside the %s; %s may load its target, which was not scanned", w.rootNoun(), w.c.product)
 					} else if !errors.Is(err, fs.ErrNotExist) {
-						w.c.Warn(model.ScopeRepo, rel, "cannot resolve symlink: %v", err)
+						w.c.Warn(w.scope, w.path(rel), "cannot resolve symlink: %v", err)
 					}
 				}
 				continue
@@ -127,7 +165,7 @@ func (w *walker) walk(dir string, depth int, ancestors []fs.FileInfo) error {
 		} else if entry.IsDir() {
 			info, err := entry.Info()
 			if err != nil {
-				w.c.Warn(model.ScopeRepo, rel, "cannot inspect directory: %v", err)
+				w.c.Warn(w.scope, w.path(rel), "cannot inspect directory: %v", err)
 				continue
 			}
 			if err := w.descend(rel, name, depth, ancestors, info); err != nil {
@@ -139,7 +177,7 @@ func (w *walker) walk(dir string, depth int, ancestors []fs.FileInfo) error {
 			continue
 		}
 		if !mode.IsRegular() {
-			w.c.Warn(model.ScopeRepo, rel, "not a regular file; not read")
+			w.c.Warn(w.scope, w.path(rel), "not a regular file; not read")
 			continue
 		}
 		w.files = append(w.files, rel)
@@ -166,12 +204,14 @@ func (w *walker) descend(rel, name string, depth int, ancestors []fs.FileInfo, i
 // RepoReader reads repository files under the per-file, file-count, and
 // total-byte budgets. Each budget is reported once.
 type RepoReader struct {
-	reader *adapters.SafeReader
-	limits Limits
-	c      *Collector
-	files  int
-	bytes  int64
-	done   map[string]bool
+	reader     *adapters.SafeReader
+	limits     Limits
+	c          *Collector
+	scope      model.Scope
+	pathPrefix string
+	files      int
+	bytes      int64
+	done       map[string]bool
 
 	warnedFiles bool
 	warnedBytes bool
@@ -179,7 +219,31 @@ type RepoReader struct {
 
 // NewRepoReader returns a budgeted reader over reader.
 func NewRepoReader(reader *adapters.SafeReader, limits Limits, c *Collector) *RepoReader {
-	return &RepoReader{reader: reader, limits: limits, c: c, done: map[string]bool{}}
+	return NewScopedReader(reader, limits, c, model.ScopeRepo, "")
+}
+
+// NewScopedReader is NewRepoReader for a root that need not be a
+// repository: see WalkScoped for scope and pathPrefix.
+func NewScopedReader(reader *adapters.SafeReader, limits Limits, c *Collector, scope model.Scope, pathPrefix string) *RepoReader {
+	return &RepoReader{reader: reader, limits: limits, c: c, scope: scope, pathPrefix: pathPrefix, done: map[string]bool{}}
+}
+
+func (r *RepoReader) path(rel string) string {
+	switch {
+	case r.pathPrefix == "":
+		return rel
+	case rel == "":
+		return r.pathPrefix
+	default:
+		return r.pathPrefix + "/" + rel
+	}
+}
+
+func (r *RepoReader) rootNoun() string {
+	if r.scope == model.ScopeRepo {
+		return "repository"
+	}
+	return "directory"
 }
 
 // Read returns rel's content, or false after recording a diagnostic. A
@@ -192,7 +256,7 @@ func (r *RepoReader) Read(rel string) ([]byte, bool) {
 	if r.files >= r.limits.MaxFiles {
 		if !r.warnedFiles {
 			r.warnedFiles = true
-			r.c.Warn(model.ScopeRepo, "", "repository walk truncated: more than %d configuration files; the rest were not scanned", r.limits.MaxFiles)
+			r.c.Warn(r.scope, r.path(""), "%s walk truncated: more than %d configuration files; the rest were not scanned", r.rootNoun(), r.limits.MaxFiles)
 		}
 		return nil, false
 	}
@@ -206,10 +270,10 @@ func (r *RepoReader) Read(rel string) ([]byte, bool) {
 		if errors.Is(err, adapters.ErrFileTooBig) && limit < r.limits.MaxFile {
 			if !r.warnedBytes {
 				r.warnedBytes = true
-				r.c.Warn(model.ScopeRepo, "", "repository walk truncated: total configuration bytes exceed %d; the rest were not scanned", r.limits.MaxBytes)
+				r.c.Warn(r.scope, r.path(""), "%s walk truncated: total configuration bytes exceed %d; the rest were not scanned", r.rootNoun(), r.limits.MaxBytes)
 			}
 		} else {
-			r.c.Warn(model.ScopeRepo, rel, "cannot read: %v", err)
+			r.c.Warn(r.scope, r.path(rel), "cannot read: %v", err)
 		}
 		return nil, false
 	}
@@ -243,6 +307,15 @@ func HasSequence(segments, want []string) bool {
 		}
 	}
 	return false
+}
+
+// SkillFileMatcher is a Matcher for walking a skill directory itself
+// (~/.agents/skills, ~/.codex/skills): every SKILL.md below the root is a
+// skill, and every path below it is worth a symlink diagnostic, since
+// there is no larger, less relevant tree around it to filter out.
+var SkillFileMatcher = Matcher{
+	Candidate: func(rel string) bool { return path.Base(rel) == "SKILL.md" },
+	Relevant:  func(string) bool { return true },
 }
 
 // HasSegment reports whether segments contains want.

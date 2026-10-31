@@ -7,13 +7,15 @@ product owns:
 
 | Location | Harness | Normalized kinds |
 | --- | --- | --- |
-| `.agents/skills/**/SKILL.md`, `.github/skills/**/SKILL.md` | `generic` | `skill`, plus frontmatter `hooks` and `mcpServers` |
+| `.agents/skills/**/SKILL.md`, `.github/skills/**/SKILL.md` (repository) | `generic` | `skill`, plus frontmatter `hooks` and `mcpServers` |
+| `~/.agents/skills/**/SKILL.md` (`--scope user`) | `generic` | `skill`, plus frontmatter `hooks` and `mcpServers` |
 | `AGENTS.md` (any depth, any case) | `generic` | `instructions` (role `agents`) |
 | `.vscode/tasks.json` (any depth) | `vscode` | `task` per task; `env-setup` for file-level `options` and `windows`/`linux`/`osx` |
 | `.vscode/mcp.json` (any depth) | `vscode` | `mcp-server` per entry of `servers` |
 
 Claude Code's own `.claude/skills/` files stay on the Claude adapter. See
-[claude.md](claude.md).
+[claude.md](claude.md). Codex's own, deprecated `~/.codex/skills` stays on
+the [Codex adapter](codex.md), since nothing else reads it.
 
 ## Ownership
 
@@ -21,6 +23,7 @@ Claude Code's own `.claude/skills/` files stay on the Claude adapter. See
 | --- | --- | --- |
 | `AGENTS.md` | generic | Codex, Cursor, Copilot (and Jules, OpenCode, ...) |
 | `.agents/skills`, `.github/skills` | generic | Codex, Copilot, Claude Code |
+| `~/.agents/skills` | generic | Codex |
 | `.vscode/tasks.json`, `.vscode/mcp.json` | generic (harness `vscode`) | VS Code with Copilot, Cursor, Windsurf |
 | `.mcp.json` | claude | Copilot CLI |
 | `.claude/settings.json`, `.claude/settings.local.json` | claude | Copilot CLI and Cursor (third-party hooks) |
@@ -65,8 +68,10 @@ followed, a symlink that leaves the repository is reported, and special
 files are not read. Matching of `AGENTS.md` and `.vscode/` paths is
 case-insensitive, because macOS and Windows resolve case variants to the
 same file. Limits match the Claude adapter. `tripcord scan` selects it by
-autodetection, or with `--harness generic`. `--scope user` and
-`--scope managed` skip it, because these files are repository files.
+autodetection, or with `--harness generic`. `--scope managed` skips it:
+nothing shared is read from a managed location. `--scope user` reads only
+`~/.agents/skills`; a missing directory is skipped silently, like any
+other optional user-scope location.
 
 ## Not read
 

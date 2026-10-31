@@ -665,7 +665,7 @@ func redactToolArgs(payload map[string]any) []string {
 // The raw content is kept for Unicode checks; frontmatter hooks and
 // mcpServers become their own items.
 func (s *src) markdown(kind model.ConfigKind, role string, raw []byte) {
-	payload := map[string]any{"role": role, "content": string(raw)}
+	payload := map[string]any{"role": role, "content": s.tildeHome(string(raw))}
 	front, found, err := splitFrontmatter(raw)
 	if err != nil {
 		s.warn("%v", err)
@@ -795,12 +795,16 @@ func stripURLSecrets(raw string) (stripped, removedRaw string, ok bool) {
 	return u.String(), strings.Join(removed, "\x00"), true
 }
 
-// NormalizeSkill parses a SKILL.md file into items attributed to harness.
-// The generic adapter uses it for .agents/skills and .github/skills, which
-// share this file shape but are not Claude Code configuration.
-func NormalizeSkill(harness model.Harness, path string, raw []byte) ([]model.ConfigItem, []adapters.Diagnostic) {
-	c := &collector{harness: harness}
-	newSrc(c, model.ScopeRepo, path, raw).markdown(model.ConfigKindSkill, "skill", raw)
+// NormalizeSkill parses a SKILL.md file into items attributed to harness
+// and scope, which are not Claude Code configuration: the generic adapter
+// uses it for repo-scope .agents/skills and .github/skills, and for the
+// user-scope ~/.agents/skills every harness that follows the agent
+// skills standard shares. home is the scanning machine's home directory,
+// used to rewrite it as "~" in content when scope is ScopeUser (see
+// src.tildeHome); callers outside user scope may pass "".
+func NormalizeSkill(harness model.Harness, scope model.Scope, path, home string, raw []byte) ([]model.ConfigItem, []adapters.Diagnostic) {
+	c := &collector{harness: harness, home: home}
+	newSrc(c, scope, path, raw).markdown(model.ConfigKindSkill, "skill", raw)
 	return c.items, c.diags
 }
 

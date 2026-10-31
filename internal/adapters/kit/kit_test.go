@@ -1,10 +1,14 @@
 package kit
 
 import (
+	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/vgmartinez/tripcord/internal/adapters"
 	"github.com/vgmartinez/tripcord/internal/model"
 )
 
@@ -130,6 +134,82 @@ func TestSafeValueGatesUserFlagOnUserPassShape(t *testing.T) {
 	}
 	if !strings.Contains(string(raw), `"root"`) {
 		t.Fatalf("redacted a plain username with no password: %s", raw)
+	}
+}
+
+// TestWalkScopedTagsNonRepositoryRoots is the first non-repository
+// caller of the repository walker (a user-scope skill directory):
+// diagnostics must carry its scope and be reported under pathPrefix, not
+// always ScopeRepo and a bare repo-relative path, and the wording must
+// not call a skill directory "the repository".
+func TestWalkScopedTagsNonRepositoryRoots(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	reader, err := adapters.NewSafeReader(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = reader.Close() }()
+
+	limits := Limits{MaxEntries: 0, MaxDepth: 32, MaxFiles: 10, MaxBytes: 1024, MaxFile: 1024}
+	c := NewCollector(model.HarnessCodex, "Codex")
+	m := Matcher{Candidate: func(string) bool { return true }, Relevant: func(string) bool { return true }}
+
+	if _, err := WalkScoped(context.Background(), reader, limits, c, model.ScopeUser, "~/.agents/skills", m); err != nil {
+		t.Fatalf("WalkScoped: %v", err)
+	}
+	diags := c.Diagnostics()
+	if len(diags) != 1 {
+		t.Fatalf("diagnostics = %+v", diags)
+	}
+	d := diags[0]
+	if d.Scope != model.ScopeUser {
+		t.Fatalf("scope = %s, want user", d.Scope)
+	}
+	if d.Path != "~/.agents/skills" {
+		t.Fatalf("path = %q, want the pathPrefix", d.Path)
+	}
+	if strings.Contains(d.Message, "repository") || !strings.Contains(d.Message, "directory walk truncated") {
+		t.Fatalf("message = %q, want directory wording, not repository", d.Message)
+	}
+}
+
+// TestWalkRepoWordingUnchanged pins Walk's existing repository wording
+// and ScopeRepo tagging now that WalkScoped backs it, so a caller that
+// still means a repository sees byte-for-byte the same diagnostic text.
+func TestWalkRepoWordingUnchanged(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	reader, err := adapters.NewSafeReader(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = reader.Close() }()
+
+	limits := Limits{MaxEntries: 0, MaxDepth: 32, MaxFiles: 10, MaxBytes: 1024, MaxFile: 1024}
+	c := NewCollector(model.HarnessCodex, "Codex")
+	m := Matcher{Candidate: func(string) bool { return true }, Relevant: func(string) bool { return true }}
+
+	if _, err := Walk(context.Background(), reader, limits, c, m); err != nil {
+		t.Fatalf("Walk: %v", err)
+	}
+	diags := c.Diagnostics()
+	if len(diags) != 1 {
+		t.Fatalf("diagnostics = %+v", diags)
+	}
+	d := diags[0]
+	if d.Scope != model.ScopeRepo || d.Path != "" {
+		t.Fatalf("scope = %s, path = %q, want repo scope and no path", d.Scope, d.Path)
+	}
+	want := "repository walk truncated: too many directory entries; configuration beyond the limit was not scanned"
+	if d.Message != want {
+		t.Fatalf("message = %q, want %q", d.Message, want)
 	}
 }
 

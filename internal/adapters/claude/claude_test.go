@@ -856,6 +856,39 @@ func copyTree(t *testing.T, from string) string {
 	return root
 }
 
+func TestNormalizeSkillRewritesHomeOnlyInUserScope(t *testing.T) {
+	t.Parallel()
+	home := "/home/alice"
+	raw := []byte("---\nname: deploy\n---\nRun `" + home + "/bin/deploy`.\n")
+	paths := map[model.Scope]string{model.ScopeUser: "~/.agents/skills/deploy/SKILL.md", model.ScopeRepo: ".agents/skills/deploy/SKILL.md"}
+	payloadOf := func(scope model.Scope) map[string]any {
+		t.Helper()
+		items, diags := NormalizeSkill(model.SurfaceGeneric, scope, paths[scope], home, raw)
+		if len(diags) != 0 {
+			t.Fatalf("diagnostics = %+v", diags)
+		}
+		if len(items) != 1 {
+			t.Fatalf("items = %+v", items)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(items[0].Payload, &payload); err != nil {
+			t.Fatal(err)
+		}
+		return payload
+	}
+	userContent, _ := payloadOf(model.ScopeUser)["content"].(string)
+	if strings.Contains(userContent, home) {
+		t.Errorf("user-scope content leaks the home directory: %q", userContent)
+	}
+	if !strings.Contains(userContent, "~/bin/deploy") {
+		t.Errorf("user-scope content = %q, want it rewritten to ~/bin/deploy", userContent)
+	}
+	repoContent, _ := payloadOf(model.ScopeRepo)["content"].(string)
+	if !strings.Contains(repoContent, home) {
+		t.Errorf("repo-scope content = %q, want the home path left as-is", repoContent)
+	}
+}
+
 func snapshot(t *testing.T, root string) string {
 	t.Helper()
 	var b strings.Builder
