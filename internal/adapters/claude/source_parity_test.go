@@ -43,6 +43,11 @@ func TestSourceRedactionMatchesOutputRedactor(t *testing.T) {
 		"docker run -e AWS_SECRET_ACCESS_KEY=ENVAWS img",
 		"PRIVATE_KEY=ENVPK deploy",
 		"docker run -e DB_PASS=ENVPASS img",
+		`echo "token: PXC5" > .env`,
+		"echo 'password: PXC6' >> config.yml",
+		"printf 'api_key: PXC8'",
+		"http example.com X-Api-Key:PXC7",
+		"http example.com 'X-API-Token:PXC7B'",
 	}
 	for _, command := range redacted {
 		t.Run(command, func(t *testing.T) {

@@ -484,7 +484,7 @@ func redactColonAssignments(value string, removed *[]string) string {
 		ok := (start == 0 || !isAlnum(value[start-1])) && CredentialName(value[m[4]:m[5]])
 		if ok {
 			var stop string
-			if ok, stop = colonAssignmentContext(value, start, openQuote, closeQuote); ok {
+			if ok, stop = colonAssignmentContext(value, start, openQuote, closeQuote, value[m[4]:m[5]], value[m[8]:m[9]]); ok {
 				body = colonValue(value[valStart:], stop)
 			}
 		}
@@ -519,14 +519,20 @@ func colonValue(rest, stop string) string {
 // offset is a header or assignment rather than free text: a quoted key
 // ("token": ...), a key at the start of a line (YAML, an env file, or a
 // whole header string, optionally as a "- " list item), a key right
-// after "{" or "," (a flow mapping), or a curl -H/--header argument.
-// stop lists the bytes that end an unquoted value in that context: ","
-// and "}" in a mapping, whitespace in an unquoted header argument, and
-// nothing extra on a line of its own.
+// after "{" or "," (a flow mapping), a curl -H/--header argument, a key
+// opening a quoted word (echo "token: X" > .env, printf 'api_key: X'),
+// or a whole word in httpie's Header:value form with a capitalized
+// header name (X-Api-Key:X). The last two do not apply to the argument
+// of a literalArgFlags flag (git commit -m 'token: ...', grep -e), and
+// the capital keeps a lowercase reference such as the image
+// my-secret:latest intact. stop lists the bytes that end an unquoted
+// value in that context: "," and "}" in a mapping, whitespace in an
+// unquoted header argument, and nothing extra on a line of its own or
+// inside quotes.
 //
 // It looks back only across blanks and the adjacent word, never to the
 // start of the line, so checking every candidate stays linear.
-func colonAssignmentContext(value string, offset int, openQuote, closeQuote string) (ok bool, stop string) {
+func colonAssignmentContext(value string, offset int, openQuote, closeQuote, key, sep string) (ok bool, stop string) {
 	i := skipBlanksBack(value, offset)
 	switch {
 	case openQuote != "" && openQuote == closeQuote,
@@ -543,6 +549,13 @@ func colonAssignmentContext(value string, offset int, openQuote, closeQuote stri
 	if offset == 0 || isCommandSpace(value[offset-1]) {
 		word := previousWord(value, offset)
 		header = word == "-H" || word == "--header"
+		switch {
+		case header, literalArgFlags[word]:
+		case openQuote != "" && closeQuote == "":
+			return true, ""
+		case openQuote == "" && sep == ":" && key[0] >= 'A' && key[0] <= 'Z':
+			return true, " \t"
+		}
 	} else {
 		before := value[:offset]
 		for _, flag := range []string{"-H", "-H=", "--header="} {

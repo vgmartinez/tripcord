@@ -30,6 +30,11 @@ func TestSanitizeMatchesOutputRedactor(t *testing.T) {
 		"docker run -e SECRET_KEY=ENVSK img",
 		"docker run -e AWS_SECRET_ACCESS_KEY=ENVAWS img",
 		"DB_PWD=ENVPWD psql",
+		`echo "token: PXC5" > .env`,
+		"echo 'password: PXC6' >> config.yml",
+		"printf 'api_key: PXC8'",
+		"http example.com X-Api-Key:PXC7",
+		"http example.com 'X-API-Token:PXC7B'",
 	}
 	for _, in := range redacted {
 		got := source(model.ScopeRepo, "a").Sanitize(in)

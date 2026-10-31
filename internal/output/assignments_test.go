@@ -14,6 +14,11 @@ func TestColonAssignmentsOnlyInHeaderOrAssignmentContext(t *testing.T) {
 		"git commit -m 'fix token: handling'",
 		`git commit -m "fix secret: rotation" && git push`,
 		"echo secret: foo && run",
+		`git commit -m "token: rotate weekly"`,
+		"git commit -m 'password: hashing'",
+		"grep -e 'token: x' file",
+		"docker pull my-secret:latest",
+		"ssh token-host:22",
 	} {
 		if got := DefaultRedactor(in); got != in {
 			t.Errorf("DefaultRedactor(%q) = %q, want unchanged", in, got)
@@ -30,6 +35,11 @@ func TestColonAssignmentsOnlyInHeaderOrAssignmentContext(t *testing.T) {
 		"env:\n  - API_KEY: LISTTOK\n":                "env:\n  - API_KEY: [REDACTED]\n",
 		`{"api_key": "JSONTOK"}`:                      `{"api_key": "[REDACTED]"}`,
 		"env: {TOKEN: FLOWTOK, B: 1}":                 "env: {TOKEN: [REDACTED], B: 1}",
+		`echo "token: PXC5" > .env`:                   `echo "token: [REDACTED]" > .env`,
+		"echo 'password: PXC6' >> config.yml":         "echo 'password: [REDACTED]' >> config.yml",
+		"printf 'api_key: PXC8'":                      "printf 'api_key: [REDACTED]'",
+		"http example.com X-Api-Key:PXC7":             "http example.com X-Api-Key:[REDACTED]",
+		"http example.com 'X-API-Token:PXC7B' a=1":    "http example.com 'X-API-Token:[REDACTED]' a=1",
 	}
 	for in, want := range redacted {
 		if got := DefaultRedactor(in); got != want {
