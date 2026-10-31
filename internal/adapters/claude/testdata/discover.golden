@@ -1,176 +1,730 @@
-[
-  {
-    "harness": "claude",
-    "scope": "managed",
-    "path": "/etc/claude-code/managed-settings.json",
-    "sha256": "fa0cbea85c0d6f548df160a8030e1892b2b0279fcca53435d79f87327fcb3b57",
-    "kind": "permissions",
-    "payload": {
-      "deny": [
-        "Bash(rm -rf *)"
-      ],
-      "defaultMode": "plan"
-    }
-  },
-  {
-    "harness": "claude",
-    "scope": "managed",
-    "path": "/etc/claude-code/managed-settings.json",
-    "sha256": "fa0cbea85c0d6f548df160a8030e1892b2b0279fcca53435d79f87327fcb3b57",
-    "kind": "hook",
-    "payload": {
-      "command": "tripcord hook --managed",
-      "event": "PreToolUse",
-      "matcher": "Write"
-    }
-  },
-  {
-    "harness": "claude",
-    "scope": "repo",
-    "path": ".claude/plugins/acme/hooks/hooks.json",
-    "sha256": "04091888b2ff4f0f09fe3dcf14be65cc6631e442f07a5e775da7a795f4a73a43",
-    "kind": "hook",
-    "payload": {
-      "command": "echo plugin-start",
-      "event": "SessionStart",
-      "matcher": ""
-    }
-  },
-  {
-    "harness": "claude",
-    "scope": "repo",
-    "path": ".claude/settings.json",
-    "sha256": "fb82eae25ac8d63cebaf8768ef8eaf776b298b16897a533ff9e1a7a2bd0213fa",
-    "kind": "permissions",
-    "payload": {
-      "allow": [
-        "Bash(go test ./...)"
-      ],
-      "deny": [
-        "Read(.env)"
-      ],
-      "defaultMode": "acceptEdits"
-    }
-  },
-  {
-    "harness": "claude",
-    "scope": "repo",
-    "path": ".claude/settings.json",
-    "sha256": "fb82eae25ac8d63cebaf8768ef8eaf776b298b16897a533ff9e1a7a2bd0213fa",
-    "kind": "env-setup",
-    "payload": {
-      "apiKeyHelper": "security find-generic-password -w"
-    }
-  },
-  {
-    "harness": "claude",
-    "scope": "repo",
-    "path": ".claude/settings.json",
-    "sha256": "fb82eae25ac8d63cebaf8768ef8eaf776b298b16897a533ff9e1a7a2bd0213fa",
-    "kind": "hook",
-    "payload": {
-      "command": "echo audit",
-      "event": "PreToolUse",
-      "matcher": "Bash"
-    }
-  },
-  {
-    "harness": "claude",
-    "scope": "repo",
-    "path": ".claude/settings.json",
-    "sha256": "fb82eae25ac8d63cebaf8768ef8eaf776b298b16897a533ff9e1a7a2bd0213fa",
-    "kind": "hook",
-    "payload": {
-      "command": "tripcord hook",
-      "event": "PreToolUse",
-      "matcher": "Bash"
-    }
-  },
-  {
-    "harness": "claude",
-    "scope": "repo",
-    "path": ".claude/settings.json",
-    "sha256": "fb82eae25ac8d63cebaf8768ef8eaf776b298b16897a533ff9e1a7a2bd0213fa",
-    "kind": "env-setup",
-    "payload": {
-      "env": {
-        "TRIPCORD_MODE": "warn"
+{
+  "items": [
+    {
+      "harness": "claude",
+      "scope": "managed",
+      "path": "/etc/claude-code/managed-mcp.json",
+      "sha256": "10f5458e3661ac7801619221203356e2035b033fa778ee3e693ed1aaf3df51cb",
+      "kind": "mcp-server",
+      "payload": {
+        "key": "[\"mcp\",\"corp\"]",
+        "name": "corp",
+        "type": "http",
+        "url": "https://mcp.corp.example.test/mcp"
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "managed",
+      "path": "/etc/claude-code/managed-settings.d/10-telemetry.json",
+      "sha256": "e16709024f7960bfc94555f63dcce7d981218ddc2b66e1315ae361dc0a58287c",
+      "kind": "env-setup",
+      "payload": {
+        "env_keys": [
+          "OTEL_EXPORTER_OTLP_ENDPOINT"
+        ],
+        "key": "[\"setting\",\"env\"]",
+        "setting": "env",
+        "value": {
+          "OTEL_EXPORTER_OTLP_ENDPOINT": "[REDACTED]"
+        }
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "managed",
+      "path": "/etc/claude-code/managed-settings.json",
+      "sha256": "2408892592a8317c70ad46f9cbd2f415affa0399c9f8cb9ca6a4f689c85bdad2",
+      "kind": "hook",
+      "payload": {
+        "command": "tripcord hook --managed",
+        "event": "PreToolUse",
+        "key": "[\"hook\",\"PreToolUse\",\"Write\",\"command\",\"tripcord hook --managed\"]",
+        "matcher": "Write",
+        "type": "command"
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "managed",
+      "path": "/etc/claude-code/managed-settings.json",
+      "sha256": "2408892592a8317c70ad46f9cbd2f415affa0399c9f8cb9ca6a4f689c85bdad2",
+      "kind": "permissions",
+      "payload": {
+        "key": "[\"setting\",\"allowManagedHooksOnly\"]",
+        "setting": "allowManagedHooksOnly",
+        "value": true
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "managed",
+      "path": "/etc/claude-code/managed-settings.json",
+      "sha256": "2408892592a8317c70ad46f9cbd2f415affa0399c9f8cb9ca6a4f689c85bdad2",
+      "kind": "permissions",
+      "payload": {
+        "key": "[\"setting\",\"permissions\"]",
+        "setting": "permissions",
+        "value": {
+          "deny": [
+            "Bash(rm -rf *)"
+          ],
+          "disableBypassPermissionsMode": "disable"
+        }
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "repo",
+      "path": ".agents/skills/lint/SKILL.md",
+      "sha256": "fbe9d27954855740dcedff3a7a973a6391a56dd1c24591d6f6e6afd3597910b2",
+      "kind": "hook",
+      "payload": {
+        "command": "make lint",
+        "event": "PostToolUse",
+        "key": "[\"hook\",\"PostToolUse\",\"Edit\",\"command\",\"make lint\"]",
+        "matcher": "Edit",
+        "type": "command"
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "repo",
+      "path": ".agents/skills/lint/SKILL.md",
+      "sha256": "fbe9d27954855740dcedff3a7a973a6391a56dd1c24591d6f6e6afd3597910b2",
+      "kind": "skill",
+      "payload": {
+        "content": "---\r\nname: lint\r\nhooks:\r\n  PostToolUse:\r\n    - matcher: Edit\r\n      hooks:\r\n        - type: command\r\n          command: \"make lint\"\r\n---\r\nLint after edits.\r\n",
+        "frontmatter": {
+          "name": "lint"
+        },
+        "key": "[\"skill\"]",
+        "role": "skill"
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "repo",
+      "path": ".claude-plugin/marketplace.json",
+      "sha256": "434658506e054d7c3dd6900421afa51d627badda211890dd95dbc19deea86c50",
+      "kind": "plugin",
+      "payload": {
+        "key": "[\"plugin\",\"acme\"]",
+        "plugin_root": "plugins/acme",
+        "setting": "marketplace",
+        "value": {
+          "description": "Acme helpers",
+          "name": "acme",
+          "source": "./plugins/acme"
+        }
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "repo",
+      "path": ".claude-plugin/marketplace.json",
+      "sha256": "434658506e054d7c3dd6900421afa51d627badda211890dd95dbc19deea86c50",
+      "kind": "plugin",
+      "payload": {
+        "key": "[\"plugin\",\"remote\"]",
+        "setting": "marketplace",
+        "value": {
+          "name": "remote",
+          "source": {
+            "repo": "acme/remote-plugin",
+            "source": "github"
+          }
+        }
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "repo",
+      "path": ".claude/CLAUDE.md",
+      "sha256": "7dcfee5dba3cd1512b0288ff66b39d2e39b7601ec6d34e802c704f670cc965b3",
+      "kind": "instructions",
+      "payload": {
+        "content": "# Claude dir instructions\n",
+        "key": "[\"instructions\"]",
+        "role": "instructions"
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "repo",
+      "path": ".claude/agents/reviewer.md",
+      "sha256": "152fd9783f855e65ef877bdbdbd65ced3d3f5389932a4c5d194c63951b80414b",
+      "kind": "hook",
+      "payload": {
+        "command": "./scripts/agent-guard.sh",
+        "event": "PreToolUse",
+        "key": "[\"hook\",\"PreToolUse\",\"Read\",\"command\",\"./scripts/agent-guard.sh\"]",
+        "matcher": "Read",
+        "type": "command"
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "repo",
+      "path": ".claude/agents/reviewer.md",
+      "sha256": "152fd9783f855e65ef877bdbdbd65ced3d3f5389932a4c5d194c63951b80414b",
+      "kind": "instructions",
+      "payload": {
+        "content": "---\nname: reviewer\ndescription: Reviews diffs.\ntools: Read, Grep\nhooks:\n  PreToolUse:\n    - matcher: Read\n      hooks:\n        - type: command\n          command: \"./scripts/agent-guard.sh\"\nmcpServers:\n  tracker:\n    command: tracker-mcp\n    env:\n      TRACKER_TOKEN: agent-secret-value\n---\nYou review code.\n",
+        "frontmatter": {
+          "description": "Reviews diffs.",
+          "name": "reviewer",
+          "tools": "Read, Grep"
+        },
+        "key": "[\"agent\"]",
+        "role": "agent"
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "repo",
+      "path": ".claude/agents/reviewer.md",
+      "sha256": "152fd9783f855e65ef877bdbdbd65ced3d3f5389932a4c5d194c63951b80414b",
+      "kind": "mcp-server",
+      "payload": {
+        "command": "tracker-mcp",
+        "env": {
+          "TRACKER_TOKEN": "[REDACTED]"
+        },
+        "env_keys": [
+          "TRACKER_TOKEN"
+        ],
+        "key": "[\"mcp\",\"tracker\"]",
+        "name": "tracker"
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "repo",
+      "path": ".claude/commands/deploy.md",
+      "sha256": "b1957ee244aa8edf205b4e096ed7547f06438860e0d2a5fafc807e88ae8313a1",
+      "kind": "instructions",
+      "payload": {
+        "content": "---\ndescription: Deploy the service\nallowed-tools: Bash(make deploy)\n---\nRun make deploy.\n",
+        "frontmatter": {
+          "allowed-tools": "Bash(make deploy)",
+          "description": "Deploy the service"
+        },
+        "key": "[\"command\"]",
+        "role": "command"
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "repo",
+      "path": ".claude/rules/style.md",
+      "sha256": "a1cf96a9eef32846ea0b38558523aa0beb1ae0a8e774f0dabdec877782b39c57",
+      "kind": "instructions",
+      "payload": {
+        "content": "# Style\n\nPrefer small functions.\n",
+        "key": "[\"rule\"]",
+        "role": "rule"
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "repo",
+      "path": ".claude/settings.json",
+      "sha256": "1dde5ca595c39342e24177a08d97d81be4558a6a99a965b1f8a1879b462a333e",
+      "kind": "env-setup",
+      "payload": {
+        "command": "/usr/local/bin/otel-headers",
+        "key": "[\"setting\",\"otelHeadersHelper\"]",
+        "setting": "otelHeadersHelper",
+        "value": "/usr/local/bin/otel-headers"
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "repo",
+      "path": ".claude/settings.json",
+      "sha256": "1dde5ca595c39342e24177a08d97d81be4558a6a99a965b1f8a1879b462a333e",
+      "kind": "env-setup",
+      "payload": {
+        "command": "aws sso login",
+        "key": "[\"setting\",\"awsAuthRefresh\"]",
+        "setting": "awsAuthRefresh",
+        "value": "aws sso login"
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "repo",
+      "path": ".claude/settings.json",
+      "sha256": "1dde5ca595c39342e24177a08d97d81be4558a6a99a965b1f8a1879b462a333e",
+      "kind": "env-setup",
+      "payload": {
+        "command": "security find-generic-password -w",
+        "key": "[\"setting\",\"apiKeyHelper\"]",
+        "setting": "apiKeyHelper",
+        "value": "security find-generic-password -w"
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "repo",
+      "path": ".claude/settings.json",
+      "sha256": "1dde5ca595c39342e24177a08d97d81be4558a6a99a965b1f8a1879b462a333e",
+      "kind": "env-setup",
+      "payload": {
+        "command": "~/.claude/statusline.sh",
+        "key": "[\"setting\",\"statusLine\"]",
+        "setting": "statusLine",
+        "value": {
+          "command": "~/.claude/statusline.sh",
+          "type": "command"
+        }
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "repo",
+      "path": ".claude/settings.json",
+      "sha256": "1dde5ca595c39342e24177a08d97d81be4558a6a99a965b1f8a1879b462a333e",
+      "kind": "env-setup",
+      "payload": {
+        "env_keys": [
+          "ANTHROPIC_BASE_URL",
+          "GITHUB_TOKEN"
+        ],
+        "key": "[\"setting\",\"env\"]",
+        "setting": "env",
+        "value": {
+          "ANTHROPIC_BASE_URL": "[REDACTED]",
+          "GITHUB_TOKEN": "[REDACTED]"
+        }
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "repo",
+      "path": ".claude/settings.json",
+      "sha256": "1dde5ca595c39342e24177a08d97d81be4558a6a99a965b1f8a1879b462a333e",
+      "kind": "hook",
+      "payload": {
+        "command": "./scripts/setup.sh",
+        "event": "SessionStart",
+        "key": "[\"hook\",\"SessionStart\",\"\",\"command\",\"./scripts/setup.sh\"]",
+        "matcher": "",
+        "type": "command"
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "repo",
+      "path": ".claude/settings.json",
+      "sha256": "1dde5ca595c39342e24177a08d97d81be4558a6a99a965b1f8a1879b462a333e",
+      "kind": "hook",
+      "payload": {
+        "command": "tripcord hook",
+        "event": "PostToolUse",
+        "key": "[\"hook\",\"PostToolUse\",\"Bash\",\"command\",\"tripcord hook\"]",
+        "matcher": "Bash",
+        "type": "command"
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "repo",
+      "path": ".claude/settings.json",
+      "sha256": "1dde5ca595c39342e24177a08d97d81be4558a6a99a965b1f8a1879b462a333e",
+      "kind": "hook",
+      "payload": {
+        "command": "tripcord hook",
+        "event": "PreToolUse",
+        "key": "[\"hook\",\"PreToolUse\",\"Bash\",\"command\",\"tripcord hook\"]",
+        "matcher": "Bash",
+        "timeout": 30,
+        "type": "command"
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "repo",
+      "path": ".claude/settings.json",
+      "sha256": "1dde5ca595c39342e24177a08d97d81be4558a6a99a965b1f8a1879b462a333e",
+      "kind": "hook",
+      "payload": {
+        "event": "PostToolUse",
+        "key": "[\"hook\",\"PostToolUse\",\"Bash\",\"prompt\",\"Check the tool output for secrets.\"]",
+        "matcher": "Bash",
+        "prompt": "Check the tool output for secrets.",
+        "type": "prompt"
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "repo",
+      "path": ".claude/settings.json",
+      "sha256": "1dde5ca595c39342e24177a08d97d81be4558a6a99a965b1f8a1879b462a333e",
+      "kind": "hook",
+      "payload": {
+        "event": "PreToolUse",
+        "header_keys": [
+          "Authorization"
+        ],
+        "headers": {
+          "Authorization": "[REDACTED]"
+        },
+        "key": "[\"hook\",\"PreToolUse\",\"Bash\",\"http\",\"https://audit.example.test/hook\"]",
+        "matcher": "Bash",
+        "type": "http",
+        "url": "https://audit.example.test/hook"
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "repo",
+      "path": ".claude/settings.json",
+      "sha256": "1dde5ca595c39342e24177a08d97d81be4558a6a99a965b1f8a1879b462a333e",
+      "kind": "permissions",
+      "payload": {
+        "key": "[\"setting\",\"disableAllHooks\"]",
+        "setting": "disableAllHooks",
+        "value": false
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "repo",
+      "path": ".claude/settings.json",
+      "sha256": "1dde5ca595c39342e24177a08d97d81be4558a6a99a965b1f8a1879b462a333e",
+      "kind": "permissions",
+      "payload": {
+        "key": "[\"setting\",\"enableAllProjectMcpServers\"]",
+        "setting": "enableAllProjectMcpServers",
+        "value": true
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "repo",
+      "path": ".claude/settings.json",
+      "sha256": "1dde5ca595c39342e24177a08d97d81be4558a6a99a965b1f8a1879b462a333e",
+      "kind": "permissions",
+      "payload": {
+        "key": "[\"setting\",\"permissions\"]",
+        "setting": "permissions",
+        "value": {
+          "allow": [
+            "Bash(go test ./...)"
+          ],
+          "defaultMode": "acceptEdits",
+          "deny": [
+            "Read(.env)"
+          ]
+        }
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "repo",
+      "path": ".claude/settings.json",
+      "sha256": "1dde5ca595c39342e24177a08d97d81be4558a6a99a965b1f8a1879b462a333e",
+      "kind": "plugin",
+      "payload": {
+        "key": "[\"setting\",\"enabledPlugins\"]",
+        "setting": "enabledPlugins",
+        "value": {
+          "acme@acme-tools": true
+        }
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "repo",
+      "path": ".claude/settings.json",
+      "sha256": "1dde5ca595c39342e24177a08d97d81be4558a6a99a965b1f8a1879b462a333e",
+      "kind": "plugin",
+      "payload": {
+        "key": "[\"setting\",\"extraKnownMarketplaces\"]",
+        "setting": "extraKnownMarketplaces",
+        "value": {
+          "acme-tools": {
+            "source": {
+              "repo": "acme/tools",
+              "source": "github"
+            }
+          }
+        }
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "repo",
+      "path": ".claude/settings.local.json",
+      "sha256": "fd682cd987ee57379cfa9a98eb1b9d7477e3c89a6d33ddfa7f88a5a19b9248f3",
+      "kind": "permissions",
+      "payload": {
+        "key": "[\"setting\",\"enabledMcpjsonServers\"]",
+        "setting": "enabledMcpjsonServers",
+        "value": [
+          "filesystem"
+        ]
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "repo",
+      "path": ".claude/settings.local.json",
+      "sha256": "fd682cd987ee57379cfa9a98eb1b9d7477e3c89a6d33ddfa7f88a5a19b9248f3",
+      "kind": "permissions",
+      "payload": {
+        "key": "[\"setting\",\"permissions\"]",
+        "setting": "permissions",
+        "value": {
+          "allow": [
+            "Bash(make *)"
+          ]
+        }
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "repo",
+      "path": ".claude/skills/review/SKILL.md",
+      "sha256": "1613bb14f14cfc0468e019efd8746e859a3228a34d36dcc6a1c8fae9c8047be2",
+      "kind": "hook",
+      "payload": {
+        "command": "tripcord hook --event Stop",
+        "event": "Stop",
+        "key": "[\"hook\",\"Stop\",\"\",\"command\",\"tripcord hook --event Stop\"]",
+        "matcher": "",
+        "type": "command"
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "repo",
+      "path": ".claude/skills/review/SKILL.md",
+      "sha256": "1613bb14f14cfc0468e019efd8746e859a3228a34d36dcc6a1c8fae9c8047be2",
+      "kind": "skill",
+      "payload": {
+        "content": "---\nname: review\nhooks:\n  Stop:\n    - hooks:\n        - type: command\n          command: \"tripcord hook --event Stop\"\n---\n# Review\n\nCheck the diff carefully.\n",
+        "frontmatter": {
+          "name": "review"
+        },
+        "key": "[\"skill\"]",
+        "role": "skill"
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "repo",
+      "path": ".github/skills/docs/SKILL.md",
+      "sha256": "15e2fa12862ec6e36e163a6ff3550ac549eb601844c180997687ab104eee7a0e",
+      "kind": "skill",
+      "payload": {
+        "content": "﻿---\nname: docs\n---\nWrite docs.\n",
+        "frontmatter": {
+          "name": "docs"
+        },
+        "key": "[\"skill\"]",
+        "role": "skill"
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "repo",
+      "path": ".mcp.json",
+      "sha256": "687b6a39281c353ab08023ff1061f09620271647e325b58370fb6ca21f6e4fc0",
+      "kind": "mcp-server",
+      "payload": {
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-filesystem",
+          "."
+        ],
+        "command": "npx",
+        "env": {
+          "API_TOKEN": "[REDACTED]",
+          "LOG_LEVEL": "[REDACTED]"
+        },
+        "env_keys": [
+          "API_TOKEN",
+          "LOG_LEVEL"
+        ],
+        "key": "[\"mcp\",\"filesystem\"]",
+        "name": "filesystem"
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "repo",
+      "path": ".mcp.json",
+      "sha256": "687b6a39281c353ab08023ff1061f09620271647e325b58370fb6ca21f6e4fc0",
+      "kind": "mcp-server",
+      "payload": {
+        "header_keys": [
+          "Authorization"
+        ],
+        "headers": {
+          "Authorization": "[REDACTED]"
+        },
+        "key": "[\"mcp\",\"remote\"]",
+        "name": "remote",
+        "type": "http",
+        "url": "https://mcp.example.test/mcp"
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "repo",
+      "path": "CLAUDE.local.md",
+      "sha256": "076b1d9b3769b709ad0eab20ea9177fd94b78344cf701e37b9c764b47ef2d0fc",
+      "kind": "instructions",
+      "payload": {
+        "content": "# Local notes\n",
+        "key": "[\"instructions\"]",
+        "role": "instructions"
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "repo",
+      "path": "CLAUDE.md",
+      "sha256": "af2f096f374c65e519998f2c9a9cb8da09312eaff591e435e5b4618aaf6ab1a4",
+      "kind": "instructions",
+      "payload": {
+        "content": "# Project\n\nUse go test before committing.\n",
+        "key": "[\"instructions\"]",
+        "role": "instructions"
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "repo",
+      "path": "plugins/acme/.claude-plugin/plugin.json",
+      "sha256": "d15fdc8ebeb12e088eea1927acf694beeb8b4779a8b1f027f62932aa9c5de166",
+      "kind": "plugin",
+      "payload": {
+        "key": "[\"plugin\",\"acme\"]",
+        "plugin_root": "plugins/acme",
+        "setting": "plugin",
+        "value": {
+          "name": "acme",
+          "version": "1.0.0"
+        }
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "repo",
+      "path": "plugins/acme/.mcp.json",
+      "sha256": "eadd33276d817039a7c5833e210fea82b46598cb2043a9cd9f2c2212d808d5e6",
+      "kind": "mcp-server",
+      "payload": {
+        "command": "${CLAUDE_PLUGIN_ROOT}/bin/mcp",
+        "key": "[\"mcp\",\"acme\"]",
+        "name": "acme"
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "repo",
+      "path": "plugins/acme/hooks/hooks.json",
+      "sha256": "1460f189383fa12eb2fe3fd971b3239b6acc2f9fdc26d06f8207997a47934e20",
+      "kind": "hook",
+      "payload": {
+        "command": "${CLAUDE_PLUGIN_ROOT}/bin/start",
+        "event": "SessionStart",
+        "key": "[\"hook\",\"SessionStart\",\"\",\"command\",\"${CLAUDE_PLUGIN_ROOT}/bin/start\"]",
+        "matcher": "",
+        "type": "command"
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "repo",
+      "path": "services/api/.claude/settings.json",
+      "sha256": "5d7c6f66d17ebec9b68d41139b8a29a66048cf93294d3fff473fc7c40db08e2b",
+      "kind": "hook",
+      "payload": {
+        "command": "../../scripts/nested.sh",
+        "event": "UserPromptSubmit",
+        "key": "[\"hook\",\"UserPromptSubmit\",\"\",\"command\",\"../../scripts/nested.sh\"]",
+        "matcher": "",
+        "type": "command"
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "repo",
+      "path": "services/api/CLAUDE.md",
+      "sha256": "946f5db8a24b7f0526b8df1d0c1c23bfbe0996f42ae542a594ef7ddeaa4d9357",
+      "kind": "instructions",
+      "payload": {
+        "content": "# API service\n",
+        "key": "[\"instructions\"]",
+        "role": "instructions"
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "user",
+      "path": "~/.claude.json",
+      "sha256": "b24f0cd98ee58a7f6a8d382115a3d0eba7a79ff00676e4d02fab83bfd8ac3ec1",
+      "kind": "mcp-server",
+      "payload": {
+        "command": "local-mcp",
+        "env": {
+          "KEY": "[REDACTED]"
+        },
+        "env_keys": [
+          "KEY"
+        ],
+        "key": "[\"mcp\",\"/srv/app\",\"local\"]",
+        "name": "local",
+        "project": "/srv/app"
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "user",
+      "path": "~/.claude.json",
+      "sha256": "b24f0cd98ee58a7f6a8d382115a3d0eba7a79ff00676e4d02fab83bfd8ac3ec1",
+      "kind": "mcp-server",
+      "payload": {
+        "command": "user-mcp",
+        "key": "[\"mcp\",\"user\"]",
+        "name": "user"
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "user",
+      "path": "~/.claude/settings.json",
+      "sha256": "830eaf36781d2b68356df41fbcff64d0e8c798a323e6b6f052f2faa456eb5e0c",
+      "kind": "hook",
+      "payload": {
+        "command": "notify-send done",
+        "event": "Stop",
+        "key": "[\"hook\",\"Stop\",\"\",\"command\",\"notify-send done\"]",
+        "matcher": "",
+        "type": "command"
+      }
+    },
+    {
+      "harness": "claude",
+      "scope": "user",
+      "path": "~/.claude/settings.json",
+      "sha256": "830eaf36781d2b68356df41fbcff64d0e8c798a323e6b6f052f2faa456eb5e0c",
+      "kind": "permissions",
+      "payload": {
+        "key": "[\"setting\",\"permissions\"]",
+        "setting": "permissions",
+        "value": {
+          "allow": [
+            "Bash(git status)"
+          ]
+        }
       }
     }
-  },
-  {
-    "harness": "claude",
-    "scope": "repo",
-    "path": ".claude/skills/review/SKILL.md",
-    "sha256": "b145a41dd1b4ea2bd626749d05928abb66d9b967cd50b7da0588086030437af7",
-    "kind": "hook",
-    "payload": {
-      "command": "tripcord hook --event Stop",
-      "event": "Stop",
-      "matcher": ""
-    }
-  },
-  {
-    "harness": "claude",
-    "scope": "repo",
-    "path": ".claude/skills/review/SKILL.md",
-    "sha256": "b145a41dd1b4ea2bd626749d05928abb66d9b967cd50b7da0588086030437af7",
-    "kind": "skill",
-    "payload": {
-      "content": "---\nname: review\nhooks:\n  Stop:\n    - matcher: \"\"\n      hooks:\n        - type: command\n          command: \"tripcord hook --event Stop\"\n---\n# Review\n\nCheck the diff carefully.\n"
-    }
-  },
-  {
-    "harness": "claude",
-    "scope": "repo",
-    "path": ".mcp.json",
-    "sha256": "6bdc8ffcde2e46f82c12ceee6b5f8630f48caa9229096ce62a15de544861b602",
-    "kind": "mcp-server",
-    "payload": {
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-filesystem",
-        "/workspace"
-      ],
-      "command": "npx",
-      "env": {
-        "LOG_LEVEL": "info"
-      },
-      "name": "filesystem"
-    }
-  },
-  {
-    "harness": "claude",
-    "scope": "repo",
-    "path": ".mcp.json",
-    "sha256": "6bdc8ffcde2e46f82c12ceee6b5f8630f48caa9229096ce62a15de544861b602",
-    "kind": "mcp-server",
-    "payload": {
-      "name": "remote",
-      "url": "https://mcp.example.test/sse"
-    }
-  },
-  {
-    "harness": "claude",
-    "scope": "user",
-    "path": "~/.claude.json",
-    "sha256": "afaa5dd55bb185624fc45bd6350c19ae754640dd68a471c1b49ce04437b776f6",
-    "kind": "mcp-server",
-    "payload": {
-      "command": "user-mcp",
-      "name": "user"
-    }
-  },
-  {
-    "harness": "claude",
-    "scope": "user",
-    "path": "~/.claude/settings.json",
-    "sha256": "36b6af2b2a492f2cf31965f6b39f911a7064c08598e382c1dd2eaaf7deda549c",
-    "kind": "permissions",
-    "payload": {
-      "allow": [
-        "Bash(git status)"
-      ]
-    }
-  }
-]
+  ],
+  "diagnostics": []
+}

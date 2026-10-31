@@ -4,117 +4,209 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
-	"path/filepath"
+	"path"
 	"strings"
 )
 
-// MaxConfigFileBytes is the largest configuration file an adapter may read.
+// MaxConfigFileBytes is the default per-file cap for configuration reads.
 const MaxConfigFileBytes int64 = 1 << 20
 
 var (
-	ErrUnsafePath = errors.New("adapter reader: unsafe path")
-	ErrFileTooBig = errors.New("adapter reader: file exceeds size limit")
+	// ErrUnsafePath reports a path that is absolute, contains a ".."
+	// segment, or resolves outside the reader's root.
+	ErrUnsafePath = errors.New("unsafe path")
+	// ErrNotRegular reports a FIFO, device, socket, or directory where a
+	// regular file was expected.
+	ErrNotRegular = errors.New("not a regular file")
+	// ErrFileTooBig reports a file larger than the caller's cap.
+	ErrFileTooBig = errors.New("file exceeds size limit")
 )
 
-// SafeReader reads regular files rooted below Root. Paths supplied to ReadFile
-// are repository-relative, must not contain a ".." segment, and must not be
-// absolute. Symlinks are rejected (including parent-directory symlinks), so a
-// hostile repository cannot redirect an adapter to files outside its root.
-// FIFOs, devices, sockets, and directories are rejected without opening them.
+// SafeReader reads files below one root directory. Every repository file is
+// treated as attacker-controlled:
+//
+//   - names must be slash-separated, relative, and free of ".." segments;
+//   - resolution goes through os.Root, so a symlink (in any path component,
+//     including one swapped in concurrently) can only resolve to a location
+//     inside the root; anything else fails;
+//   - files are opened with O_NONBLOCK and their type is checked with fstat
+//     on the opened descriptor, so a FIFO or device swapped in after a check
+//     is rejected instead of blocking or streaming forever;
+//   - reads stop at the caller's byte cap.
+//
+// Hardlinks cannot be distinguished from ordinary files: a hardlink inside
+// the root to a file elsewhere on the same filesystem is read like any other
+// file. Creating one requires write access to the target's filesystem, which
+// a cloned repository does not grant.
 type SafeReader struct {
-	root string
+	root *os.Root
 }
 
-// NewSafeReader creates a reader rooted at root.
-func NewSafeReader(root string) (*SafeReader, error) {
-	info, err := os.Lstat(root)
+// NewSafeReader opens dir as the confinement root.
+func NewSafeReader(dir string) (*SafeReader, error) {
+	root, err := os.OpenRoot(dir)
 	if err != nil {
-		return nil, fmt.Errorf("adapter reader: inspect root: %w", err)
+		return nil, fmt.Errorf("open root: %w", plainError(err))
 	}
-	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
-		return nil, fmt.Errorf("%w: root must be a non-symlink directory", ErrUnsafePath)
-	}
-	absolute, err := filepath.Abs(root)
-	if err != nil {
-		return nil, fmt.Errorf("adapter reader: resolve root: %w", err)
-	}
-	return &SafeReader{root: absolute}, nil
+	return &SafeReader{root: root}, nil
 }
 
-// ReadFile reads one regular file, enforcing MaxConfigFileBytes.
-func (r *SafeReader) ReadFile(name string) ([]byte, error) {
-	path, err := r.resolve(name)
-	if err != nil {
+// Close releases the root.
+func (r *SafeReader) Close() error { return r.root.Close() }
+
+// ReadFile reads the regular file name, at most limit bytes.
+func (r *SafeReader) ReadFile(name string, limit int64) ([]byte, error) {
+	if err := checkName(name); err != nil {
 		return nil, err
 	}
-	info, err := os.Lstat(path)
+	info, err := r.root.Lstat(name)
 	if err != nil {
+		return nil, rootError(err)
+	}
+	if info.Mode()&fs.ModeSymlink == 0 && !info.Mode().IsRegular() {
+		return nil, ErrNotRegular
+	}
+	file, err := r.root.OpenFile(name, os.O_RDONLY|openFlags, 0)
+	if err != nil {
+		return nil, rootError(err)
+	}
+	defer func() { _ = file.Close() }()
+	return readRegular(file, limit)
+}
+
+// Stat follows symlinks inside the root and returns the target's info.
+func (r *SafeReader) Stat(name string) (fs.FileInfo, error) {
+	if err := checkName(name); err != nil {
 		return nil, err
+	}
+	info, err := r.root.Stat(name)
+	if err != nil {
+		return nil, rootError(err)
+	}
+	return info, nil
+}
+
+// ReadDir lists at most limit entries of directory name. "." is the root.
+// It reports truncated when the directory holds more entries.
+func (r *SafeReader) ReadDir(name string, limit int) (entries []fs.DirEntry, truncated bool, err error) {
+	if name != "." {
+		if err := checkName(name); err != nil {
+			return nil, false, err
+		}
+	}
+	dir, err := r.root.OpenFile(name, os.O_RDONLY|openFlags, 0)
+	if err != nil {
+		return nil, false, rootError(err)
+	}
+	defer func() { _ = dir.Close() }()
+	info, err := dir.Stat()
+	if err != nil {
+		return nil, false, plainError(err)
+	}
+	if !info.IsDir() {
+		return nil, false, ErrNotRegular
+	}
+	entries, err = dir.ReadDir(limit + 1)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return nil, false, plainError(err)
+	}
+	if len(entries) > limit {
+		return entries[:limit], true, nil
+	}
+	return entries, false, nil
+}
+
+// OpenLocal opens a file outside any repository (user or managed scope).
+// Symlinks are followed: confinement applies to repositories, not to the
+// user's home or system directories. The file is opened non-blocking and
+// must be a regular file according to fstat on the opened descriptor.
+func OpenLocal(name string) (*os.File, error) {
+	file, err := os.OpenFile(name, os.O_RDONLY|openFlags, 0)
+	if err != nil {
+		return nil, plainError(err)
+	}
+	info, err := file.Stat()
+	if err != nil {
+		_ = file.Close()
+		return nil, plainError(err)
 	}
 	if !info.Mode().IsRegular() {
-		return nil, fmt.Errorf("%w: %s is not a regular file", ErrUnsafePath, name)
+		_ = file.Close()
+		return nil, ErrNotRegular
 	}
-	if info.Size() > MaxConfigFileBytes {
-		return nil, fmt.Errorf("%w: %s", ErrFileTooBig, name)
-	}
-	file, err := os.Open(path)
+	return file, nil
+}
+
+// ReadLocal reads a regular file outside any repository, at most limit bytes.
+func ReadLocal(name string, limit int64) ([]byte, error) {
+	file, err := OpenLocal(name)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = file.Close() }()
-	opened, err := file.Stat()
+	return readRegular(file, limit)
+}
+
+func readRegular(file *os.File, limit int64) ([]byte, error) {
+	info, err := file.Stat()
 	if err != nil {
-		return nil, err
+		return nil, plainError(err)
 	}
-	if !opened.Mode().IsRegular() || !os.SameFile(info, opened) {
-		return nil, fmt.Errorf("%w: %s changed while opening", ErrUnsafePath, name)
+	if !info.Mode().IsRegular() {
+		return nil, ErrNotRegular
 	}
-	data, err := io.ReadAll(io.LimitReader(file, MaxConfigFileBytes+1))
+	if info.Size() > limit {
+		return nil, ErrFileTooBig
+	}
+	data, err := io.ReadAll(io.LimitReader(file, limit+1))
 	if err != nil {
-		return nil, err
+		return nil, plainError(err)
 	}
-	if int64(len(data)) > MaxConfigFileBytes {
-		return nil, fmt.Errorf("%w: %s", ErrFileTooBig, name)
+	if int64(len(data)) > limit {
+		return nil, ErrFileTooBig
 	}
 	return data, nil
 }
 
-// Exists reports whether a safe regular file exists at name.
-func (r *SafeReader) Exists(name string) bool {
-	path, err := r.resolve(name)
-	if err != nil {
-		return false
+func checkName(name string) error {
+	if name == "" || strings.HasPrefix(name, "/") || strings.Contains(name, `\`) || hasDrive(name) {
+		return ErrUnsafePath
 	}
-	info, err := os.Lstat(path)
-	return err == nil && info.Mode().IsRegular()
+	for _, segment := range strings.Split(name, "/") {
+		if segment == ".." {
+			return ErrUnsafePath
+		}
+	}
+	if path.Clean(name) != name {
+		return ErrUnsafePath
+	}
+	return nil
 }
 
-func (r *SafeReader) resolve(name string) (string, error) {
-	if filepath.IsAbs(name) || filepath.VolumeName(name) != "" {
-		return "", fmt.Errorf("%w: absolute path %q", ErrUnsafePath, name)
+func hasDrive(name string) bool {
+	return len(name) >= 2 && name[1] == ':' && (name[0]|0x20) >= 'a' && (name[0]|0x20) <= 'z'
+}
+
+// rootError maps an os.Root escape to ErrUnsafePath and strips the path
+// from other errors, so callers can prefix their own logical path.
+func rootError(err error) error {
+	err = plainError(err)
+	if errors.Is(err, fs.ErrNotExist) || errors.Is(err, fs.ErrPermission) {
+		return err
 	}
-	for _, segment := range strings.FieldsFunc(name, func(r rune) bool { return r == '/' || r == '\\' }) {
-		if segment == ".." {
-			return "", fmt.Errorf("%w: traversal path %q", ErrUnsafePath, name)
-		}
+	if strings.Contains(err.Error(), "escapes from parent") || strings.Contains(err.Error(), "too many levels of symbolic links") {
+		return ErrUnsafePath
 	}
-	name = filepath.Clean(filepath.FromSlash(name))
-	if name == "." || name == ".." || strings.HasPrefix(name, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("%w: traversal path %q", ErrUnsafePath, name)
+	return err
+}
+
+// plainError drops the absolute path an *fs.PathError carries.
+func plainError(err error) error {
+	var pathErr *fs.PathError
+	if errors.As(err, &pathErr) {
+		return pathErr.Err
 	}
-	path := filepath.Join(r.root, name)
-	current := r.root
-	segments := strings.Split(name, string(filepath.Separator))
-	for _, segment := range segments[:len(segments)-1] {
-		current = filepath.Join(current, segment)
-		info, err := os.Lstat(current)
-		if err != nil {
-			return "", err
-		}
-		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
-			return "", fmt.Errorf("%w: parent %q", ErrUnsafePath, current)
-		}
-	}
-	return path, nil
+	return err
 }

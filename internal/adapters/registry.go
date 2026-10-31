@@ -10,9 +10,14 @@ import (
 	"github.com/vgmartinez/tripcord/internal/model"
 )
 
-// Adapter discovers normalized configuration items for one harness. It must
-// only read files below RepoRoot; implementations must never execute config,
-// invoke hooks, or start a harness.
+// Adapter discovers normalized configuration items for one harness.
+// Repository reads must go through SafeReader. Implementations must never
+// execute config, invoke hooks, start a harness, or run git or any other
+// external binary.
+//
+// Discover returns a *DiagnosticError alongside the items it could still
+// produce when some inputs could not be read or parsed. Any other error is
+// fatal and its items are discarded.
 type Adapter interface {
 	Harness() model.Harness
 	Detect(repoRoot string) bool

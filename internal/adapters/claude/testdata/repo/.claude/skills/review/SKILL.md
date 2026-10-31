@@ -2,8 +2,7 @@
 name: review
 hooks:
   Stop:
-    - matcher: ""
-      hooks:
+    - hooks:
         - type: command
           command: "tripcord hook --event Stop"
 ---

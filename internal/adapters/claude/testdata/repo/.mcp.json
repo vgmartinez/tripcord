@@ -2,11 +2,13 @@
   "mcpServers": {
     "filesystem": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/workspace"],
-      "env": {"LOG_LEVEL": "info"}
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "."],
+      "env": {"API_TOKEN": "fixture-secret-value", "LOG_LEVEL": "info"}
     },
     "remote": {
-      "url": "https://mcp.example.test/sse"
+      "type": "http",
+      "url": "https://mcp.example.test/mcp",
+      "headers": {"Authorization": "Bearer remote-secret-value"}
     }
   }
 }

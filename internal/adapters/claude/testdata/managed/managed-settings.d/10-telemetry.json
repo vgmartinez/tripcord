@@ -1,0 +1,1 @@
+{"env": {"OTEL_EXPORTER_OTLP_ENDPOINT": "https://otel.corp.example.test"}}
