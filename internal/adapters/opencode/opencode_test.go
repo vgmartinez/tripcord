@@ -50,9 +50,19 @@ func TestCodeFilesAreReferencesOnly(t *testing.T) {
 	kittest.WriteFile(t, filepath.Join(root, ".opencode", "tools", "c.js"), "x")
 	kittest.WriteFile(t, filepath.Join(root, ".opencode", "plugins", "README.md"), "x")
 	kittest.WriteFile(t, filepath.Join(root, ".opencode", "plugins", "sub", "d.ts"), "x")
+	kittest.WriteFile(t, filepath.Join(root, ".opencode", "plugins", "lib", "helper.ts"), "secret-nested")
+	kittest.WriteFile(t, filepath.Join(root, ".opencode", "plugins", "node_modules", "pkg", "index.js"), "x")
 	got := kittest.Discover(t, New(Options{}), root)
-	if len(got.Items) != 3 || len(got.Diagnostics) != 0 {
+	if len(got.Items) != 3 || !got.HasDiag("nested plugin or tool file") || got.HasDiag("node_modules") {
 		t.Fatalf("got %+v", got)
+	}
+	if kittest.Blocking(t, New(Options{}), root, "nested plugin or tool file") {
+		t.Fatal("a nested plugin file was blocking")
+	}
+	for _, item := range got.Items {
+		if strings.Contains(string(item.Payload), "secret-nested") || strings.Contains(item.Path, "helper") {
+			t.Fatalf("nested file was reported as an item: %+v", item)
+		}
 	}
 	p := kittest.Payload(t, got.Find(".opencode/plugins/a.ts", model.ConfigKindPlugin)[0])
 	if p["executable"] != true || p["language"] != "ts" || p["role"] != "plugin" || strings.Contains(string(got.Items[0].Payload), "secret-in-code") {
@@ -60,6 +70,44 @@ func TestCodeFilesAreReferencesOnly(t *testing.T) {
 	}
 	if kittest.Payload(t, got.Find(".opencode/tools/c.js", model.ConfigKindPlugin)[0])["role"] != "tool" {
 		t.Fatal("tool file not reported as a tool")
+	}
+}
+
+func TestConfigContentIsNotedNotRead(t *testing.T) {
+	t.Parallel()
+	const secret = "oc-inline-secret-should-not-appear"
+	opts := Options{SkipRepo: true, IncludeUser: true, HomeDir: t.TempDir(), Getenv: kittest.Env("OPENCODE_CONFIG_CONTENT", `{"plugin":["`+secret+`"]}`)}
+	got := kittest.Discover(t, New(opts), t.TempDir())
+	if len(got.Items) != 0 || !got.HasDiag("OPENCODE_CONFIG_CONTENT is set") {
+		t.Fatalf("got %+v", got)
+	}
+	for _, diag := range got.Diagnostics {
+		if strings.Contains(diag, secret) {
+			t.Fatalf("diagnostic contains the inline config: %s", diag)
+		}
+	}
+	if kittest.Blocking(t, New(opts), t.TempDir(), "OPENCODE_CONFIG_CONTENT") {
+		t.Fatal("OPENCODE_CONFIG_CONTENT was blocking")
+	}
+}
+
+func TestUserNestedPluginIsNoted(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(home, ".config", "opencode", "plugins", "top.ts"), "x")
+	kittest.WriteFile(t, filepath.Join(home, ".config", "opencode", "plugins", "lib", "helper.ts"), "nested-secret")
+	kittest.WriteFile(t, filepath.Join(home, ".config", "opencode", "plugins", "node_modules", "pkg", "index.js"), "x")
+	got := kittest.Discover(t, New(Options{SkipRepo: true, IncludeUser: true, HomeDir: home, Getenv: kittest.Env()}), t.TempDir())
+	if len(got.Find("~/.config/opencode/plugins/top.ts", model.ConfigKindPlugin)) != 1 || !got.HasDiag("plugins/lib/helper.ts") {
+		t.Fatalf("got %+v", got)
+	}
+	for _, item := range got.Items {
+		if strings.Contains(item.Path, "helper") || strings.Contains(item.Path, "node_modules") {
+			t.Fatalf("nested file was an item: %+v", item)
+		}
+	}
+	if got.HasDiag("node_modules") {
+		t.Fatalf("diagnostics = %v", got.Diagnostics)
 	}
 }
 

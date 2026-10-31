@@ -19,6 +19,7 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 
 	"github.com/vgmartinez/tripcord/internal/adapters"
@@ -134,6 +135,7 @@ const (
 	rolePlugin
 	roleTool
 	roleGlobalAgents
+	roleNested
 )
 
 // codeExtensions are the file types OpenCode loads from plugin and tool
@@ -162,6 +164,9 @@ func classifyDir(segments []string, global bool) role {
 	if base == "agents.md" && !global {
 		return roleNone
 	}
+	if kit.HasSegment(segments, "node_modules") {
+		return roleNone
+	}
 	ext := path.Ext(base)
 	switch segments[0] {
 	case "agents", "agent":
@@ -173,12 +178,18 @@ func classifyDir(segments []string, global bool) role {
 			return roleCommand
 		}
 	case "plugins", "plugin":
-		if n == 2 && codeExtensions[ext] {
-			return rolePlugin
+		if codeExtensions[ext] {
+			if n == 2 {
+				return rolePlugin
+			}
+			return roleNested
 		}
 	case "tools", "tool":
-		if n == 2 && codeExtensions[ext] {
-			return roleTool
+		if codeExtensions[ext] {
+			if n == 2 {
+				return roleTool
+			}
+			return roleNested
 		}
 	}
 	return roleNone
@@ -236,14 +247,26 @@ func (a *Adapter) discoverRepo(ctx context.Context, repoRoot string, c *kit.Coll
 	}
 	r := kit.NewRepoReader(reader, a.limits, c)
 	for _, rel := range files {
+		role := classify(rel)
+		if role == roleNested {
+			// The file is not read: OpenCode does not load it, and its
+			// contents must not count against the byte budget.
+			c.Note(model.ScopeRepo, rel, true, "%s", nestedNote)
+			continue
+		}
 		raw, ok := r.Read(rel)
 		if !ok {
 			continue
 		}
-		normalize(c.Source(model.ScopeRepo, rel, raw), classify(rel), rel, raw)
+		normalize(c.Source(model.ScopeRepo, rel, raw), role, rel, raw)
 	}
 	return nil
 }
+
+// nestedNote is the informational diagnostic for a code file below a
+// plugin or tool directory. OpenCode loads only the directory's own
+// files; nested files are helper modules.
+const nestedNote = "nested plugin or tool file; OpenCode loads only the files directly inside plugins/, plugin/, tools/, and tool/, so this file is not reported as executable configuration"
 
 func normalize(src *kit.Source, r role, rel string, raw []byte) {
 	f := &file{Source: src}
@@ -260,6 +283,8 @@ func normalize(src *kit.Source, r role, rel string, raw []byte) {
 		f.codeFile("plugin", rel)
 	case roleTool:
 		f.codeFile("tool", rel)
+	case roleNested:
+		f.Note("%s", nestedNote)
 	case roleNone:
 	}
 }
@@ -276,6 +301,9 @@ func (a *Adapter) discoverUser(ctx context.Context, c *kit.Collector) error {
 	home, ok := kit.ResolveHome(c, a.options.HomeDir)
 	if !ok {
 		return nil
+	}
+	if strings.TrimSpace(a.getenv("OPENCODE_CONFIG_CONTENT")) != "" {
+		c.Note(model.ScopeUser, "", true, "OPENCODE_CONFIG_CONTENT is set; inline configuration from the environment was not scanned")
 	}
 	base := kit.ResolveXDGDir(c, home, "XDG_CONFIG_HOME", a.getenv("XDG_CONFIG_HOME"), ".config")
 	if err := a.configDir(ctx, c, base.Dir("opencode"), true); err != nil {
@@ -335,8 +363,62 @@ func (a *Adapter) configDir(ctx context.Context, c *kit.Collector, dir kit.UserD
 				normalize(c.Source(model.ScopeUser, logical, raw), r, logical, raw)
 			}
 		}
+		noteNestedCode(c, subDir, sub)
 	}
 	return nil
+}
+
+// maxNestedNotes caps the nested plugin and tool files noted in one
+// user-scope directory, so a dependency tree cannot flood the scan.
+const maxNestedNotes = 32
+
+// noteNestedCode notes code files below a user-scope plugin or tool
+// directory. node_modules and dot directories are skipped, and symlinks
+// are not followed.
+func noteNestedCode(c *kit.Collector, dir kit.UserDir, sub string) {
+	var notes, visits int
+	var walk func(abs, logical string)
+	walk = func(abs, logical string) {
+		visits++
+		if visits > maxDirFiles || notes > maxNestedNotes {
+			return
+		}
+		entries, err := os.ReadDir(abs)
+		if err != nil {
+			return
+		}
+		names := make([]string, 0, len(entries))
+		byName := map[string]fs.DirEntry{}
+		for _, entry := range entries {
+			name := entry.Name()
+			if strings.HasPrefix(name, ".") || strings.EqualFold(name, "node_modules") || entry.Type()&fs.ModeSymlink != 0 {
+				continue
+			}
+			names = append(names, name)
+			byName[name] = entry
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			entry := byName[name]
+			child := filepath.Join(abs, name)
+			logicalChild := logical + "/" + name
+			if entry.IsDir() {
+				walk(child, logicalChild)
+				continue
+			}
+			if abs == dir.Abs || !codeExtensions[strings.ToLower(path.Ext(name))] {
+				continue
+			}
+			if notes == maxNestedNotes {
+				c.Note(model.ScopeUser, dir.Logical, true, "further nested files in %s were not listed", sub)
+				notes++
+				return
+			}
+			c.Note(model.ScopeUser, logicalChild, true, "%s", nestedNote)
+			notes++
+		}
+	}
+	walk(dir.Abs, dir.Logical)
 }
 
 func (a *Adapter) markdownDir(ctx context.Context, c *kit.Collector, dir kit.UserDir, sub string) error {

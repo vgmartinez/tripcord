@@ -367,5 +367,7 @@
       }
     }
   ],
-  "diagnostics": []
+  "diagnostics": [
+    "opencode: .opencode/plugins/lib/helper.ts: nested plugin or tool file; OpenCode loads only the files directly inside plugins/, plugin/, tools/, and tool/, so this file is not reported as executable configuration"
+  ]
 }

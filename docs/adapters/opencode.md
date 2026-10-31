@@ -28,8 +28,10 @@ OpenCode looks for its config from the working directory up to the Git
 root, so config files and `.opencode/` are matched at any depth. Both the
 plural directory names and the older singular ones are read. Plugin and
 tool files are the `.js`, `.ts`, `.mjs`, `.cjs`, `.mts`, `.cts`, `.jsx`,
-and `.tsx` files directly inside the directory; subdirectories hold their
-helper modules and are not reported. `node_modules/` is skipped. Path
+and `.tsx` files directly inside the directory. A code file in a
+subdirectory is a helper module: it is not reported as executable
+configuration, and an informational note names it. `node_modules/` is
+skipped. Path
 matching is case-insensitive. `AGENTS.md`, inside `.opencode/` or
 anywhere else in the repository, belongs to the generic adapter.
 
@@ -129,13 +131,16 @@ this adapter reads is reported once, by this adapter.
 
 ## Not scanned in v0
 
-- `OPENCODE_CONFIG_CONTENT` (inline config in the environment) and remote
-  organization config (`.well-known/opencode`).
+- The contents of `OPENCODE_CONFIG_CONTENT` (inline config in the
+  environment). When the variable is set, an informational note says it
+  was not scanned. Remote organization config (`.well-known/opencode`)
+  is not read either.
 - macOS managed preferences (`.mobileconfig` / `ai.opencode.managed`).
 - Skills under `.opencode/skills/` and `~/.config/opencode/skills/`.
 - Modes (`.opencode/modes/`) and themes.
 - Files referenced from `instructions` or by `{file:...}`, and the
-  helper modules and `package.json` next to plugins.
+  `package.json` next to plugins. Nested helper modules are noted, not
+  parsed.
 - The contents of `auth.json` and `mcp-auth.json` (by design).
 
 ## Sources
