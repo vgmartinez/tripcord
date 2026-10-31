@@ -26,6 +26,11 @@ func TestGuardsAccept(t *testing.T) {
 		`event.net.exists(n, has(n.host) && n.host == "x")`,
 		`has(event.extra) && event.extra == 1`,
 		`size(payload) == 0`,
+		// dyn() is transparent: a guarded field behind it is accepted
+		// the same as without it.
+		`has(payload.tools) && dyn(payload).tools.size() == 0`,
+		`has(payload.a) && dyn(payload).a == 1`,
+		`has(payload.a) && has(payload.a.b) && dyn(dyn(payload).a).b == 1`,
 	} {
 		if _, err := env.Compile(src); err != nil {
 			t.Errorf("%s: %v", src, err)
@@ -53,6 +58,16 @@ func TestGuardsReject(t *testing.T) {
 		`event.source.x == ""`:                                   "has(event.source.x)",
 		`config.content == ""`:                                   "config has only",
 		`[1, 2][0] == 1`:                                         "constant string key",
+		// dyn() does not excuse the has() guard: it is transparent, so
+		// dyn(payload).tools is the same unguarded read as payload.tools.
+		`dyn(payload).tools.size() == 0`:          "has(payload.tools)",
+		`dyn(event).extra == 1`:                   "has(event.extra)",
+		`dyn(dyn(payload)).a == 1`:                "has(payload.a)",
+		`has(payload.a) && dyn(payload.a.b) == 1`: "has(payload.a.b)",
+		// Selecting a field off any other function's result cannot be
+		// traced to a variable, so has() cannot guard it either, even
+		// when each branch alone would be fine.
+		`(has(payload.a) ? payload : task).b == 1`: "another function's result",
 	} {
 		_, err := env.Compile(src)
 		if err == nil || !strings.Contains(err.Error(), want) {

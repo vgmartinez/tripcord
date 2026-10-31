@@ -26,7 +26,11 @@ var configKeys = []string{"id", "harness", "scope", "path", "sha256", "kind"}
 // the left of &&, negated on the left of ||, or in the condition of ?:.
 // Indexing is allowed only with a constant string key on a variable's
 // fields, under the same guard. config reads must name one of the keys
-// ConfigInput binds; eventFields are bound on every input.
+// ConfigInput binds; eventFields are bound on every input. dyn(x) is
+// transparent for this check: dyn(payload).a needs the same guard as
+// payload.a. Selecting a field off any other function's result is
+// rejected outright, since it cannot be traced back to a variable for
+// has() to guard.
 func checkGuards(expr ast.Expr) error {
 	g := &guards{optional: map[string]bool{VarPayload: true, VarTask: true, VarEvent: true}}
 	g.check(expr, nil)
@@ -124,12 +128,19 @@ func (g *guards) check(e ast.Expr, known []string) {
 
 // read checks one field read or index, e.
 func (g *guards) read(e ast.Expr, known []string) {
-	root, fields, ok := fieldPath(e)
+	root, fields, ok, blockedByCall := fieldPath(e)
 	if !ok || root == "" {
-		// A list index or a computed key cannot be guarded with has(),
-		// and out of range it is silently false.
-		if e.Kind() == ast.CallKind {
+		switch {
+		case e.Kind() == ast.CallKind:
+			// A list index or a computed key cannot be guarded with
+			// has(), and out of range it is silently false.
 			g.fail("index a variable's fields only with a constant string key; use exists() or all() for lists")
+		case blockedByCall:
+			// A field selected off the result of a function other than
+			// dyn() cannot be traced back to a variable, so has() cannot
+			// guard it either; dyn(x) is transparent and walks through
+			// to x instead of landing here.
+			g.fail("select a field from a variable or from dyn() of one, not from another function's result; name the variable directly so the guard can be checked")
 		}
 		return
 	}
@@ -148,36 +159,53 @@ func (g *guards) read(e ast.Expr, known []string) {
 }
 
 // fieldPath returns the variable and field names e reads, as in
-// payload.a["b"] -> payload, [a b]. ok is false when e is not a chain
-// of field reads and constant string indexes on a variable; root is
-// still set when the chain starts at a variable.
-func fieldPath(e ast.Expr) (root string, fields []string, ok bool) {
+// payload.a["b"] -> payload, [a b]. dyn(x) is transparent: it is
+// unwrapped to x instead of ending the chain, so dyn(payload).a is the
+// same path as payload.a. ok is false when e is not a chain of field
+// reads, constant string indexes, and dyn() wrappers on a variable;
+// root is still set when the chain starts at a variable. blockedByCall
+// is true when resolution stopped at a function call other than dyn()
+// or a constant-key index: that result cannot be traced back to a
+// variable, so has() cannot guard whatever it holds.
+func fieldPath(e ast.Expr) (root string, fields []string, ok bool, blockedByCall bool) {
 	ok = true
 	for {
 		switch e.Kind() {
 		case ast.IdentKind:
 			slices.Reverse(fields)
-			return e.AsIdent(), fields, ok
+			return e.AsIdent(), fields, ok, false
 		case ast.SelectKind:
 			sel := e.AsSelect()
 			fields = append(fields, sel.FieldName())
 			e = sel.Operand()
 		case ast.CallKind:
 			call := e.AsCall()
-			if call.FunctionName() != operators.Index {
-				return "", nil, false
+			switch {
+			case call.FunctionName() == operators.Index:
+				key := call.Args()[1]
+				s, isStr := constString(key)
+				if !isStr {
+					ok = false
+				}
+				fields = append(fields, s)
+				e = call.Args()[0]
+			case isDyn(call):
+				e = call.Args()[0]
+			default:
+				return "", nil, false, true
 			}
-			key := call.Args()[1]
-			s, isStr := constString(key)
-			if !isStr {
-				ok = false
-			}
-			fields = append(fields, s)
-			e = call.Args()[0]
 		default:
-			return "", nil, false
+			return "", nil, false, false
 		}
 	}
+}
+
+// isDyn reports whether call is the dyn() stdlib function: an identity
+// function that only changes the static type CEL's checker assigns its
+// argument, to let a select or index compile where the declared type
+// would otherwise reject it.
+func isDyn(call ast.CallExpr) bool {
+	return !call.IsMemberFunction() && call.FunctionName() == "dyn" && len(call.Args()) == 1
 }
 
 func constString(e ast.Expr) (string, bool) {
@@ -200,7 +228,7 @@ func facts(e ast.Expr, truth bool) []string {
 			return nil
 		}
 		sel := e.AsSelect()
-		root, fields, ok := fieldPath(sel.Operand())
+		root, fields, ok, _ := fieldPath(sel.Operand())
 		if !ok || root == "" {
 			return nil
 		}
@@ -227,7 +255,7 @@ func facts(e ast.Expr, truth bool) []string {
 		if !truth || !isStr {
 			return nil
 		}
-		root, fields, ok := fieldPath(args[1])
+		root, fields, ok, _ := fieldPath(args[1])
 		if !ok || root == "" {
 			return nil
 		}
