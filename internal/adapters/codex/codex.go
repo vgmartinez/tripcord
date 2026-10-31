@@ -333,8 +333,15 @@ const (
 // "/a/b/.", a symlink to it); among those, a key already in canonical
 // form wins, and if that still ties, untrusted wins, so the result never
 // depends on map order. Only the exact values "trusted" and "untrusted"
-// count; any other spelling is ignored.
+// count; any other spelling is ignored. On Windows, paths compare
+// case-insensitively, as the file system does.
 func projectTrust(tree map[string]any, dir string) string {
+	return projectTrustFold(tree, dir, runtime.GOOS == "windows")
+}
+
+// projectTrustFold is projectTrust with path case folding chosen by the
+// caller, so the Windows rule can be tested on any OS.
+func projectTrustFold(tree map[string]any, dir string, foldCase bool) string {
 	projects, ok := tree["projects"].(map[string]any)
 	if !ok {
 		return trustUnset
@@ -361,7 +368,7 @@ func projectTrust(tree map[string]any, dir string) string {
 	}
 	for _, key := range kit.SortedKeys(projects) {
 		projectPath := canonical(key)
-		if projectPath == "" || !isSelfOrDescendant(want, projectPath) {
+		if projectPath == "" || !isSelfOrDescendant(want, projectPath, foldCase) {
 			continue
 		}
 		entry, ok := projects[key].(map[string]any)
@@ -384,21 +391,31 @@ func projectTrust(tree map[string]any, dir string) string {
 
 // isSelfOrDescendant reports whether path is ancestor itself or a
 // descendant of it, both already canonical (cleaned, symlink-resolved,
-// absolute).
-func isSelfOrDescendant(path, ancestor string) bool {
+// absolute). A root ancestor ("/", `C:\`) already ends in a separator.
+// foldCase compares case-insensitively.
+func isSelfOrDescendant(path, ancestor string, foldCase bool) bool {
+	if foldCase {
+		path, ancestor = strings.ToLower(path), strings.ToLower(ancestor)
+	}
 	if path == ancestor {
 		return true
 	}
-	return strings.HasPrefix(path, ancestor+string(filepath.Separator))
+	if !strings.HasSuffix(ancestor, string(filepath.Separator)) {
+		ancestor += string(filepath.Separator)
+	}
+	return strings.HasPrefix(path, ancestor)
 }
 
+// canonical resolves symlinks before cleaning: "base/link/../other" is
+// "other" next to link's target, as the OS resolves it, not
+// "base/other" as a lexical Clean would make it. A path that does not
+// exist is only cleaned.
 func canonical(p string) string {
 	if p == "" || !filepath.IsAbs(p) {
 		return ""
 	}
-	p = filepath.Clean(p)
 	if resolved, err := filepath.EvalSymlinks(p); err == nil {
-		p = resolved
+		return resolved
 	}
-	return p
+	return filepath.Clean(p)
 }
