@@ -108,14 +108,38 @@ func TestScanTextGolden(t *testing.T) {
 	assertGolden(t, "scan-text.golden", stdout.String())
 }
 
-func TestScanV0SecretsError(t *testing.T) {
+func TestScanSecretsAndAllDoNotScan(t *testing.T) {
+	t.Parallel()
+	const want = "tripcord scan: secret scanning lands in v1; v0 supports --config only\n"
+	for _, flagName := range []string{"--secrets", "--all"} {
+		t.Run(flagName, func(t *testing.T) {
+			t.Parallel()
+			outputPath := filepath.Join(t.TempDir(), "findings.txt")
+			var stdout, stderr bytes.Buffer
+			// A missing repository would fail discovery if scanning started.
+			args := []string{"scan", flagName, "--output", outputPath, filepath.Join(t.TempDir(), "missing-repo")}
+			if code := run(args, &stdout, &stderr); code != int(exitcode.Config) {
+				t.Fatalf("exit code = %d, stderr = %q", code, stderr.String())
+			}
+			if stdout.Len() != 0 || stderr.String() != want {
+				t.Fatalf("stdout = %q, stderr = %q", stdout.String(), stderr.String())
+			}
+			if _, err := os.Stat(outputPath); !os.IsNotExist(err) {
+				t.Fatalf("scan wrote %s: %v", outputPath, err)
+			}
+		})
+	}
+}
+
+func TestScanHelpMarksSecretFlagsAsV1(t *testing.T) {
 	t.Parallel()
 	var stdout, stderr bytes.Buffer
-	if code := run([]string{"scan", "--secrets"}, &stdout, &stderr); code != int(exitcode.Config) {
-		t.Fatalf("exit code = %d, stderr = %q", code, stderr.String())
-	}
-	if stdout.Len() != 0 || !strings.Contains(stderr.String(), "not available in v0") {
-		t.Fatalf("stdout = %q, stderr = %q", stdout.String(), stderr.String())
+	run([]string{"scan", "--help"}, &stdout, &stderr)
+	help := stdout.String() + stderr.String()
+	for _, flagName := range []string{"-secrets", "-all"} {
+		if !strings.Contains(help, flagName) || !strings.Contains(help, "(v1) not available") {
+			t.Fatalf("help = %q", help)
+		}
 	}
 }
 

@@ -10,8 +10,8 @@ and must be inside a Git repository.
 | Flag | Description |
 | --- | --- |
 | `--config` | Scan executable configuration. This is the v0 default. |
-| `--secrets` | Reserved for secret scanning. It returns exit code 3 in v0 because secret detectors are a v1 feature. |
-| `--all` | Reserved for config plus secrets. It returns exit code 3 in v0 for the same reason. |
+| `--secrets` (v1) | Not available. Secret scanning lands in v1; v0 supports `--config` only. |
+| `--all` (v1) | Not available. Secret scanning lands in v1; v0 supports `--config` only. |
 | `--harness claude,cursor,...` | Restrict discovery to comma-separated harnesses. With no value, installed adapters autodetect their files. Harness adapters arrive after the scan orchestration. |
 | `--format text\|json\|sarif\|md\|gha` | Select human text, JSONL finding documents, SARIF 2.1.0, Markdown, or GitHub Actions annotations. Default: `text`. |
 | `--output <path\|->` | Write output to a private (`0600`) local file or `-` for stdout (default). |
@@ -20,7 +20,7 @@ and must be inside a Git repository.
 | `--policy <path>` | Use this repository policy file instead of `.tripcord/policy.yaml`. |
 | `--org-policy <path>` | Add one required organization policy layer before the repository policy. |
 
-`--config`, `--secrets`, and `--all` are mutually exclusive.
+v0 accepts `--config` only. `--secrets` (v1) and `--all` (v1) stop before scanning and exit 3.
 
 Policy defaults are `enforce` and `high` for scan. Policy files control mode
 and the normal threshold; `--fail-on` is the final per-invocation override.

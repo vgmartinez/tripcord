@@ -39,6 +39,7 @@ Usage:
 
 scan performs static configuration scanning only. Harness adapters land in
 later releases; this command already provides the safe orchestration boundary.
+--secrets (v1) and --all (v1) are not available.
 `
 
 func main() {
@@ -83,7 +84,7 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 		return scanConfigError(stderr, err)
 	}
 	if opts.secrets || opts.all {
-		return scanConfigError(stderr, errors.New("--secrets is not available in v0; v0 scans executable config only"))
+		return scanConfigError(stderr, errors.New("secret scanning lands in v1; v0 supports --config only"))
 	}
 	root, err := repoRoot(opts.path)
 	if err != nil {
@@ -200,8 +201,8 @@ func parseScanFlags(args []string, stderr io.Writer) (scanOptions, error) {
 	flags := flag.NewFlagSet("scan", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	flags.BoolVar(&opts.config, "config", false, "scan executable configuration (default)")
-	flags.BoolVar(&opts.secrets, "secrets", false, "scan secrets (not available in v0)")
-	flags.BoolVar(&opts.all, "all", false, "scan config and secrets")
+	flags.BoolVar(&opts.secrets, "secrets", false, "(v1) not available")
+	flags.BoolVar(&opts.all, "all", false, "(v1) not available")
 	flags.StringVar(&opts.harnesses, "harness", "", "comma-separated harnesses; default autodetect")
 	flags.StringVar(&opts.format, "format", "text", "text, json, sarif, md, or gha")
 	flags.StringVar(&opts.output, "output", "-", "output path or - for stdout")
