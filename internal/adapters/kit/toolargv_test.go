@@ -8,7 +8,7 @@ import (
 	"github.com/vgmartinez/tripcord/internal/model"
 )
 
-func TestSafeArgv(t *testing.T) {
+func TestSafeToolArgv(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		name    string
@@ -27,12 +27,12 @@ func TestSafeArgv(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			s := source(model.ScopeRepo, "a")
-			raw, err := json.Marshal(s.SafeArgv(tc.in))
+			raw, err := json.Marshal(s.SafeValue("", s.SafeToolArgv(tc.in)))
 			if err != nil {
 				t.Fatal(err)
 			}
 			if string(raw) != tc.want {
-				t.Fatalf("SafeArgv = %s, want %s", raw, tc.want)
+				t.Fatalf("SafeValue(SafeToolArgv) = %s, want %s", raw, tc.want)
 			}
 			if (len(s.removed) > 0) != tc.removed {
 				t.Fatalf("removed = %q, want removed %v", s.removed, tc.removed)
@@ -41,11 +41,11 @@ func TestSafeArgv(t *testing.T) {
 	}
 }
 
-func TestSafeArgvDiscriminatesToolFlagSecrets(t *testing.T) {
+func TestSafeToolArgvDiscriminatesToolFlagSecrets(t *testing.T) {
 	t.Parallel()
 	key := func(secret string) string {
 		s := source(model.ScopeRepo, "a")
-		s.Add(model.ConfigKindMCPServer, []string{"mcp", "x"}, map[string]any{"command": s.SafeArgv([]any{"docker", "login", "-p", secret})})
+		s.Add(model.ConfigKindMCPServer, []string{"mcp", "x"}, map[string]any{"command": s.SafeValue("", s.SafeToolArgv([]any{"docker", "login", "-p", secret}))})
 		items := s.c.Items()
 		if len(items) != 1 {
 			t.Fatalf("items = %+v", items)

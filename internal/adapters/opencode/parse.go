@@ -96,7 +96,7 @@ func (f *file) mcp(value any) {
 		}
 		switch command := server["command"].(type) {
 		case []any:
-			payload["command"] = f.SafeArgv(command)
+			payload["command"] = f.SafeValue("", f.SafeToolArgv(command))
 		case string, nil:
 		default:
 			f.Warn("MCP server %q command must be an array of strings", name)

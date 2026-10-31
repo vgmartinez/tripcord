@@ -1,8 +1,6 @@
 package devcontainer
 
 import (
-	"strings"
-
 	"github.com/vgmartinez/tripcord/internal/adapters/kit"
 	"github.com/vgmartinez/tripcord/internal/model"
 )
@@ -117,7 +115,7 @@ func (f *file) command(setting, runsOn, parent, name string, value any) {
 			form = "string"
 		}
 	case []any:
-		payload["command"] = f.SafeArgv(v)
+		payload["command"] = f.SafeValue("", f.SafeToolArgv(v))
 		if form == "" {
 			form = "array"
 		}
@@ -154,40 +152,15 @@ func (f *file) features(value any) {
 	}
 }
 
-// runArgs sanitizes the docker run arguments and redacts the value of an
-// environment assignment (-e NAME=VALUE, --env NAME=VALUE, --env=NAME=VALUE)
-// whose name looks like a secret, as containerEnv values are.
+// runArgs sanitizes the docker run arguments as an argv. The shared
+// rules redact a credential-named NAME=VALUE element wherever it
+// appears, which covers -e, --env, and --env= assignments.
 func (f *file) runArgs(value any) any {
 	args, ok := value.([]any)
 	if !ok {
 		return f.SafeValue("runArgs", value)
 	}
-	out := f.SafeArgv(args)
-	envNext := false
-	for i, arg := range args {
-		text, isString := arg.(string)
-		if !isString {
-			envNext = false
-			continue
-		}
-		assignment, flag := "", ""
-		switch {
-		case envNext:
-			assignment = text
-		case strings.HasPrefix(text, "--env="):
-			flag, assignment = "--env=", strings.TrimPrefix(text, "--env=")
-		case strings.HasPrefix(text, "-e") && len(text) > 2 && strings.Contains(text, "="):
-			flag, assignment = "-e", strings.TrimPrefix(text, "-e")
-		}
-		envNext = text == "-e" || text == "--env"
-		name, secret, found := strings.Cut(assignment, "=")
-		if !found || secret == "" || !kit.SecretKey(name) {
-			continue
-		}
-		redacted := f.RedactValues(map[string]any{name: secret})[name]
-		out[i] = flag + name + "=" + redacted.(string)
-	}
-	return out
+	return f.SafeValue("", f.SafeToolArgv(args))
 }
 
 // env emits a containerEnv or remoteEnv map with its values redacted and

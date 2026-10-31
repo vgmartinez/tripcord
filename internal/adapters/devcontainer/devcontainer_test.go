@@ -118,7 +118,7 @@ func TestRunArgsKeepsNonSecretAssignments(t *testing.T) {
 		t.Fatalf("items = %+v", got.Items)
 	}
 	value, _ := kittest.Payload(t, got.Items[0])["value"].([]any)
-	want := []any{"-e", "MODE=dev", "--env", "API_KEY=" + kit.Redacted, "-eX_TOKEN=" + kit.Redacted, "--name", "SECRET_KEY=not-an-env"}
+	want := []any{"-e", "MODE=dev", "--env", "API_KEY=" + kit.Redacted, "-eX_TOKEN=" + kit.Redacted, "--name", "SECRET_KEY=" + kit.Redacted}
 	if len(value) != len(want) {
 		t.Fatalf("value = %v", value)
 	}

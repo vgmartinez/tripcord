@@ -58,10 +58,11 @@ over the removed text; see [fingerprint.md](../fingerprint.md#input).
 - Environment (`containerEnv`, `remoteEnv`): one item per map,
   `{"setting", "value", "env_keys"}`, with values redacted like MCP
   server `env` values.
-- `runArgs` (arguments to `docker run`): sanitized element by element;
-  the value of an environment assignment (`-e NAME=VALUE`,
-  `--env NAME=VALUE`, `--env=NAME=VALUE`) whose name looks like a secret
-  is redacted.
+- `runArgs` (arguments to `docker run`): sanitized as an argv with the
+  shared tool-flag and credential rules. The value of any credential-named
+  `NAME=VALUE` element (`SECRET_KEY`, `DB_PASS`, `API_KEY`, ...) is
+  redacted, whether it follows `-e`, `--env`, `--env=`, or another flag
+  such as `--name`.
 - Settings: one `{"setting", "value"}` item per present key of `image`,
   `build`, `dockerFile`, `context`, `dockerComposeFile`, `service`,
   `runServices`, `mounts`, `workspaceMount`, `workspaceFolder`,
