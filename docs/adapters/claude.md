@@ -10,8 +10,9 @@ binary. Every repository file is treated as attacker-controlled.
 `tripcord scan` autodetects Claude Code when the repository contains any file
 the adapter would read (see below), for example `CLAUDE.md` at any depth,
 `.claude/settings.json`, `.mcp.json`, a file under `.claude/agents/`, a
-`SKILL.md` under `.claude/skills/`, `.agents/skills/` or `.github/skills/`, or
-`.claude-plugin/plugin.json`.
+`SKILL.md` under `.claude/skills/`, or `.claude-plugin/plugin.json`.
+`.agents/skills/` and `.github/skills/` are the [generic](generic.md)
+adapter, not Claude.
 
 ## Scopes and locations
 
@@ -33,7 +34,7 @@ directories are covered the same way as the root:
 | `.claude/rules/**/*.md` | `instructions` (role `rule`) |
 | `.claude/agents/**/*.md` | `instructions` (role `agent`), plus frontmatter `hooks` and `mcpServers` |
 | `.claude/commands/**/*.md` | `instructions` (role `command`), plus frontmatter `hooks` and `mcpServers` |
-| `SKILL.md` under `.claude/skills/`, `.agents/skills/`, `.github/skills/` | `skill`, plus frontmatter `hooks` and `mcpServers` |
+| `SKILL.md` under `.claude/skills/` | `skill`, plus frontmatter `hooks` and `mcpServers` |
 | `.claude-plugin/marketplace.json` | `plugin` per entry; relative `source` paths (with `metadata.pluginRoot`) become plugin roots |
 | `<plugin>/.claude-plugin/plugin.json` | `plugin`; inline or referenced `hooks` and `mcpServers` |
 | `<plugin>/hooks/hooks.json`, `<plugin>/.mcp.json` | `hook`, `mcp-server` |
@@ -41,7 +42,9 @@ directories are covered the same way as the root:
 
 `hooks/hooks.json` is read only inside a plugin root, that is a directory
 with `.claude-plugin/plugin.json` or a relative marketplace source. Plugin
-`hooks.json` must use the `{"hooks": {...}}` wrapper. Plugin path references
+`hooks.json` must use the `{"hooks": {...}}` wrapper. A missing wrapper or
+any other shape is a diagnostic, so the scan exits 3; it is never skipped
+silently. Plugin path references
 that are absolute or contain `..` are reported and not read. Remote
 marketplace sources are recorded but never fetched.
 
@@ -49,9 +52,10 @@ marketplace sources are recorded but never fetched.
 
 - `~/.claude/settings.json` and `~/.claude.json`. `~/.claude` may be a
   symlink (for example a stow-managed dotfiles directory).
-- `CLAUDE_CONFIG_DIR` relocates both files. It must be an absolute path under
-  the home directory, because user-scope paths are reported relative to `~`;
-  any other value is reported as a diagnostic.
+- `CLAUDE_CONFIG_DIR` relocates both files. A relative path is reported and
+  not scanned. An absolute path outside the home directory is still scanned;
+  its paths are shown as `~/CLAUDE_CONFIG_DIR/...` and the diagnostic makes
+  the scan exit non-zero. The absolute path is not displayed.
 - From `~/.claude.json`, only `mcpServers` and `projects.<path>.mcpServers`
   are kept; the rest (history, caches) is skipped while streaming. The file
   may be up to 256 MiB. Project paths under the home directory are rewritten
@@ -68,8 +72,9 @@ marketplace sources are recorded but never fetched.
 
 The adapter reads `managed-settings.json`, `managed-mcp.json`, and
 `managed-settings.d/*.json` (sorted, at most 256 drop-ins). A missing managed
-directory is skipped silently. The legacy Windows location
-`C:\ProgramData\ClaudeCode` is not read.
+directory is skipped silently. The legacy Windows location `C:\ProgramData\ClaudeCode` is not read. When
+that directory exists, scan prints an informational diagnostic to stderr.
+The note does not change the exit code and is not written into the report.
 
 ### Precedence
 
@@ -99,8 +104,13 @@ This list is curated from the Claude Code settings reference; other keys are
 not emitted.
 
 Values of `env` maps and HTTP `headers` (in settings, hooks, and MCP servers)
-are replaced with `[REDACTED]`; the key names are kept in `env_keys` and
-`header_keys`.
+are kept when rules need them: URLs (userinfo, query, and fragment removed),
+hosts, booleans, numbers, and other non-secrets. A value is replaced with
+`[REDACTED]` when its name contains `token`, `key`, `secret`, `password`,
+`authorization`, or `cookie` (any case), or when the value matches the
+output redactor's credential patterns. Key names are kept in `env_keys` and
+`header_keys`. Sinks redact again. The setting list above is curated; a
+test pins it. Unknown settings keys are not emitted.
 
 Markdown items keep the raw content and the frontmatter (minus `hooks` and
 `mcpServers`, which become their own items).
@@ -171,7 +181,8 @@ truncated".
 
 Malformed, oversized, unsafe, or unreadable files are reported per file and
 never abort the scan: the remaining configuration is still normalized. The
-CLI prints each diagnostic to stderr (sanitized and redacted), notes that the
-scan is incomplete, and exits 3 after writing the findings. With `--since`,
-repository diagnostics are limited to changed files. See
+CLI prints each diagnostic to stderr (sanitized and redacted), includes
+blocking diagnostics in the JSON, Markdown, text, and SARIF reports, notes
+that the scan is incomplete, and exits 3 after writing the findings. With
+`--since`, repository diagnostics are limited to changed files. See
 [scan.md](../scan.md).

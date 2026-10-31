@@ -17,6 +17,8 @@ formats, flags, policy interaction, examples, and exit codes.
 
 [adapters/claude.md](adapters/claude.md) documents the Claude Code
 configuration adapter and its scope boundaries.
+[adapters/generic.md](adapters/generic.md) documents the shared skills
+adapter (`generic`).
 
 ## Finding fingerprints
 

@@ -13,7 +13,8 @@ the only mode that requires Git.
 | `--config` | Scan executable configuration. This is the v0 default. |
 | `--secrets` (v1) | Not available. Secret scanning lands in v1; v0 supports `--config` only. |
 | `--all` (v1) | Not available. Secret scanning lands in v1; v0 supports `--config` only. |
-| `--harness claude,cursor,...` | Restrict discovery to comma-separated harnesses. With no value, installed adapters autodetect their files. Harness adapters arrive after the scan orchestration. |
+| `--harness claude,generic,...` | Restrict discovery to comma-separated harnesses. `generic` is the shared skills adapter. With no value, installed adapters autodetect their files. |
+| `--scope repo\|user\|managed\|all` | Choose which configuration to read. `repo` (the default) does not read the home directory or system settings. `user` and `managed` read those locations and skip the repository. `all` reads every scope. |
 | `--format text\|json\|sarif\|md\|gha` | Select human text, JSONL finding documents, SARIF 2.1.0, Markdown, or GitHub Actions annotations. Default: `text`. |
 | `--output <path\|->` | Write output to a new private (`0600`) local file or `-` for stdout (default). A symlink is rejected. The destination is replaced only after the result is complete. |
 | `--since <git-ref>` | Scan repository configuration files that differ between `<git-ref>` and `HEAD`. The ref must not start with `-`. Untracked files and uncommitted worktree edits are not included. Names with non-ASCII characters are included. Git is invoked with repository hooks, fsmonitor, textconv, external diff drivers, and rename detection disabled, with every network transport denied, and with lazy fetches from a partial clone's promisor remote disabled; it does not execute repository content or contact a network service, even when the repository's own configuration tries to allow one. |
@@ -40,7 +41,14 @@ When an adapter cannot fully read the configuration (malformed, oversized,
 unsafe, or unreadable files, or walk limits reached), scan still writes the
 findings for everything it could read, prints one sanitized diagnostic per
 problem to stderr, and exits 3 because the scan is incomplete. Exit 3 takes
-precedence over exit 1. See [adapters/claude.md](adapters/claude.md).
+precedence over exit 1. The same diagnostics are included in the report:
+JSONL gains a `tripcord.diagnostic/v1` line with `"incomplete": true`,
+Markdown gains a Diagnostics section, text says `scan incomplete`, and
+SARIF sets `invocations[0].executionSuccessful` to false and lists them in
+`toolExecutionNotifications`. An informational note, such as the legacy
+Windows managed directory, is printed to stderr and does not change the
+exit code or the report. See [adapters/claude.md](adapters/claude.md) and
+[output.md](output.md).
 
 ## Examples
 

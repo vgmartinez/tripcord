@@ -60,6 +60,21 @@ escape, so `@org/team` still cannot notify.
 and `]` after the control escape, so a finding cannot embed a Markdown
 link.
 
+## Diagnostics
+
+When discovery is incomplete, every format includes the diagnostics after
+the same redaction and field cap as finding text. User paths stay under
+`~`. A raw credential in a diagnostic is replaced with `[REDACTED]`.
+
+JSONL appends one `tripcord.diagnostic/v1` document per diagnostic, with
+`"incomplete": true`. It is not a finding document. Markdown adds a
+Diagnostics section that says the scan is incomplete. Text prints a
+`diagnostic:` line and `scan incomplete`. GitHub Actions output prints
+`::error::`. SARIF sets `runs[0].invocations[0].executionSuccessful` to
+false and describes each diagnostic in `toolExecutionNotifications`.
+A report with no diagnostics is unchanged, including a SARIF run that
+omits `invocations`.
+
 ## JSONL
 
 `json` and `jsonl` write one `tripcord.finding/v1` document per line.
