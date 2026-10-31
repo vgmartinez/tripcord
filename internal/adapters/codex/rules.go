@@ -41,7 +41,7 @@ func (f *file) rulesFile(raw []byte) {
 		})
 	}
 	for _, rule := range parsed.prefixRules {
-		pattern := f.SafeValue("", rule.pattern)
+		pattern := f.SafeValue("", f.SafeToolArgv(rule.pattern))
 		payload := map[string]any{
 			"role":     "rule",
 			"decision": rule.decision,
@@ -51,14 +51,29 @@ func (f *file) rulesFile(raw []byte) {
 			payload["justification"] = f.SafeString(rule.justification)
 		}
 		if rule.match != nil {
-			payload["match"] = f.SafeValue("", rule.match)
+			payload["match"] = f.SafeValue("", f.safeExamples(rule.match))
 		}
 		if rule.notMatch != nil {
-			payload["not_match"] = f.SafeValue("", rule.notMatch)
+			payload["not_match"] = f.SafeValue("", f.safeExamples(rule.notMatch))
 		}
 		patternJSON, _ := json.Marshal(pattern)
 		f.Add(model.ConfigKindPermissions, []string{"rule", rule.decision, string(patternJSON)}, payload)
 	}
+}
+
+// safeExamples applies SafeToolArgv to each argv-list example of a
+// match or not_match list; a string example is a whole command line,
+// which SafeValue's RedactToolFlags pass already covers.
+func (f *file) safeExamples(examples []any) []any {
+	out := make([]any, len(examples))
+	for i, example := range examples {
+		if argv, ok := example.([]any); ok {
+			out[i] = f.SafeToolArgv(argv)
+		} else {
+			out[i] = example
+		}
+	}
+	return out
 }
 
 // rulesLiteral is one string literal found in a rules file the parser
@@ -74,15 +89,19 @@ type rulesLiteral struct {
 // kit.Source.SafeValue. A secret flag and its value are separate
 // literals in a pattern (["aws", "--secret-access-key", "X"]), which a
 // whole-file SafeString cannot pair up; SafeValue's array rule can, and
-// records what it removes for the key discriminator. Literals are found
-// leniently: an escape the parser rejects is kept as written.
+// records what it removes for the key discriminator. SafeToolArgv runs
+// first, so a tool-specific flag (["redis-cli", "--pass", "X"],
+// ["mysql", "-pX"]) is redacted too; a tool word activates its flags for
+// every later literal in the file, the conservative reading of a file
+// whose structure is unknown. Literals are found leniently: an escape the
+// parser rejects is kept as written.
 func (f *file) sanitizeRulesLiterals(raw []byte) string {
 	literals := scanRulesLiterals(raw)
 	values := make([]any, len(literals))
 	for i, lit := range literals {
 		values[i] = lit.text
 	}
-	sanitized, _ := f.SafeValue("", values).([]any)
+	sanitized, _ := f.SafeValue("", f.SafeToolArgv(values)).([]any)
 	var b strings.Builder
 	pos := 0
 	for i, lit := range literals {

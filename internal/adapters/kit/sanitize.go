@@ -157,6 +157,31 @@ func (s *Source) SafeValue(key string, value any) any {
 	}
 }
 
+// SafeToolArgv applies output.RedactToolArgv to list, an argv whose
+// string elements are separate words (a Codex prefix_rule pattern such
+// as ["redis-cli", "--pass", "X"] or ["mysql", "-pX"]), records what it
+// removed for the key discriminator, and returns a redacted copy. A
+// non-string element (a nested list of alternatives) is kept as is and
+// counts as an empty word. Run SafeValue on the result as usual.
+func (s *Source) SafeToolArgv(list []any) []any {
+	argv := make([]string, len(list))
+	for i, item := range list {
+		argv[i], _ = item.(string)
+	}
+	redacted, removed := output.RedactToolArgv(argv)
+	out := append([]any(nil), list...)
+	if len(removed) == 0 {
+		return out
+	}
+	s.recordRemoved(removed...)
+	for i, item := range list {
+		if _, isString := item.(string); isString {
+			out[i] = redacted[i]
+		}
+	}
+	return out
+}
+
 // isArraySecretMarker reports whether name is an array element that
 // marks the next element as a credential: a bare secret CLI flag
 // ("--token") or the bare HTTP auth scheme word "Bearer".
