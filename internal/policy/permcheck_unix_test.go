@@ -149,3 +149,69 @@ func TestCheckManagedPolicyParentPathWalksAncestors(t *testing.T) {
 		t.Fatalf("sticky world-writable grandparent should be safe: %v", err)
 	}
 }
+
+// TestCheckManagedPolicyParentPathFollowsAncestorSymlinks checks that the
+// walk follows a symlinked ancestor to its real target before continuing
+// upward. The policy file's parent is reached only through a symlink
+// ("linkbase/alias" points at "insecure/real"); the real ancestor two
+// levels up ("insecure") is world-writable without a sticky bit, but it
+// is not an ancestor of the symlink's own location ("linkbase") at all.
+// A walk that kept using the literal, pre-symlink path to compute each
+// next ancestor (plain filepath.Dir, as the walk did before resolving
+// path's parent with filepath.EvalSymlinks) would drift onto
+// "linkbase"'s own, unrelated and safe ancestors and never see
+// "insecure" at all, silently accepting a managed policy an attacker who
+// controls "insecure" could substitute.
+func TestCheckManagedPolicyParentPathFollowsAncestorSymlinks(t *testing.T) {
+	base := t.TempDir()
+	insecureAncestor := filepath.Join(base, "insecure")
+	realDir := filepath.Join(insecureAncestor, "real")
+	subDir := filepath.Join(realDir, "sub")
+	if err := os.MkdirAll(subDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(insecureAncestor, 0o777); err != nil {
+		t.Fatal(err)
+	}
+
+	linkBase := filepath.Join(base, "linkbase")
+	if err := os.Mkdir(linkBase, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(linkBase, "alias")
+	if err := os.Symlink(realDir, link); err != nil {
+		t.Fatal(err)
+	}
+
+	policyPath := filepath.Join(link, "sub", "policy.yaml")
+	if err := checkManagedPolicyParentPath(policyPath); err == nil || !strings.Contains(err.Error(), "world-writable") {
+		t.Fatalf("checkManagedPolicyParentPath(%q) = %v, want a world-writable error for the symlink's real ancestor", policyPath, err)
+	}
+}
+
+// TestCheckManagedPolicyParentPathRedactsHomeDirectory checks that an
+// error from checkManagedPolicyParentPath never embeds the running
+// user's home directory, the same way every other diagnostic in this
+// codebase redacts it; see redactPath.
+func TestCheckManagedPolicyParentPathRedactsHomeDirectory(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	parent := filepath.Join(home, "insecure-parent")
+	if err := os.Mkdir(parent, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(parent, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	policyPath := filepath.Join(parent, "policy.yaml")
+	err := checkManagedPolicyParentPath(policyPath)
+	if err == nil {
+		t.Fatal("want an error for a world-writable parent")
+	}
+	if strings.Contains(err.Error(), home) {
+		t.Fatalf("checkManagedPolicyParentPath(%q) = %v, leaks the home directory", policyPath, err)
+	}
+	if !strings.Contains(err.Error(), "~") {
+		t.Fatalf("checkManagedPolicyParentPath(%q) = %v, want the home directory rewritten to ~", policyPath, err)
+	}
+}

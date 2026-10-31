@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/vgmartinez/tripcord/internal/pathx"
 )
 
 // checkManagedPolicyFile rejects a managed policy file an org
@@ -20,12 +22,28 @@ func checkManagedPolicyFile(path string) error {
 		return nil
 	}
 	if err := checkManagedPolicyOwner(path, info); err != nil {
-		return &Error{Source: path, Err: err}
+		return &Error{Source: redactPath(path), Err: err}
 	}
 	if err := checkManagedPolicyParentPath(path); err != nil {
-		return &Error{Source: path, Err: err, IO: isStatError(err)}
+		return &Error{Source: redactPath(path), Err: err, IO: isStatError(err)}
 	}
 	return nil
+}
+
+// redactPath hides the running user's home directory in path before it
+// reaches an error message, the same way every other diagnostic in this
+// codebase avoids printing it (see pathx.TildeHome). The managed policy
+// path is normally a fixed system location (/etc/tripcord/policy.yaml
+// and similar), but Options.ManagedPolicy lets a caller point it, and
+// therefore these error messages, anywhere, including under a home
+// directory. The home directory is looked up lazily, once per error,
+// and path is returned unchanged if it cannot be determined.
+func redactPath(path string) string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return path
+	}
+	return pathx.TildeHome(home, path)
 }
 
 // checkManagedPolicyParentPath rejects a parent or ancestor directory that
@@ -38,11 +56,24 @@ func checkManagedPolicyFile(path string) error {
 // because the sticky bit on a shared directory such as /tmp already stops
 // any other user from renaming or deleting the already-validated child
 // entry beneath it.
+//
+// path's immediate parent directory is resolved with filepath.EvalSymlinks
+// first, so the walk follows the real filesystem hierarchy from there.
+// Without that, if any directory on the way up were a symlink,
+// filepath.Dir would keep walking up the symlink's literal location
+// rather than its target's, checking the permissions of directories the
+// policy file is not actually under. path itself is not required to
+// exist here: checkManagedPolicyFile already confirmed that with its own
+// os.Stat before calling this, and that os.Stat follows a symlinked
+// leaf file to its real target for the ownership check.
 func checkManagedPolicyParentPath(path string) error {
-	dir := filepath.Dir(path)
+	dir, err := filepath.EvalSymlinks(filepath.Dir(path))
+	if err != nil {
+		return fmt.Errorf("managed policy parent for %s: %w", redactPath(path), err)
+	}
 	info, err := os.Stat(dir)
 	if err != nil {
-		return fmt.Errorf("managed policy parent for %s: %w", path, err)
+		return fmt.Errorf("managed policy parent for %s: %w", redactPath(path), err)
 	}
 	if err := checkManagedPolicyParent(path, info); err != nil {
 		return err
@@ -55,7 +86,7 @@ func checkManagedPolicyParentPath(path string) error {
 		dir = next
 		info, err := os.Stat(dir)
 		if err != nil {
-			return fmt.Errorf("managed policy ancestor for %s: %w", path, err)
+			return fmt.Errorf("managed policy ancestor for %s: %w", redactPath(path), err)
 		}
 		if err := checkManagedPolicyAncestor(path, info); err != nil {
 			return err

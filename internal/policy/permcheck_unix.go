@@ -16,7 +16,7 @@ import (
 // enforces world-writable.
 func checkManagedPolicyOwner(path string, info os.FileInfo) error {
 	if info.Mode().Perm()&0o002 != 0 {
-		return fmt.Errorf("managed policy %s: %w", path, errWorldWritable)
+		return fmt.Errorf("managed policy %s: %w", redactPath(path), errWorldWritable)
 	}
 	stat, ok := info.Sys().(*syscall.Stat_t)
 	if !ok {
@@ -24,7 +24,7 @@ func checkManagedPolicyOwner(path string, info os.FileInfo) error {
 	}
 	uid := os.Getuid()
 	if int(stat.Uid) != 0 && int(stat.Uid) != uid {
-		return fmt.Errorf("managed policy %s: owned by uid %d, want root or the current user (uid %d)", path, stat.Uid, uid)
+		return fmt.Errorf("managed policy %s: owned by uid %d, want root or the current user (uid %d)", redactPath(path), stat.Uid, uid)
 	}
 	return nil
 }
@@ -36,23 +36,23 @@ func checkManagedPolicyOwner(path string, info os.FileInfo) error {
 // bit still lets the owner rewrite the directory entry.
 func checkManagedPolicyParent(path string, info os.FileInfo) error {
 	if !info.IsDir() {
-		return fmt.Errorf("managed policy parent for %s: not a directory", path)
+		return fmt.Errorf("managed policy parent for %s: not a directory", redactPath(path))
 	}
 	stat, ok := info.Sys().(*syscall.Stat_t)
 	if !ok {
-		return fmt.Errorf("managed policy parent for %s: owner is unknown", path)
+		return fmt.Errorf("managed policy parent for %s: owner is unknown", redactPath(path))
 	}
 	uid := os.Getuid()
 	owner := int(stat.Uid)
 	if owner != 0 && owner != uid {
-		return fmt.Errorf("managed policy parent for %s: owned by uid %d, want root or the current user (uid %d)", path, owner, uid)
+		return fmt.Errorf("managed policy parent for %s: owned by uid %d, want root or the current user (uid %d)", redactPath(path), owner, uid)
 	}
 	perm := info.Mode().Perm()
 	if perm&0o002 != 0 {
-		return fmt.Errorf("managed policy parent for %s: %w", path, errWorldWritable)
+		return fmt.Errorf("managed policy parent for %s: %w", redactPath(path), errWorldWritable)
 	}
 	if perm&0o020 != 0 && (owner != uid || int(stat.Gid) != os.Getgid()) {
-		return fmt.Errorf("managed policy parent for %s: group-writable and not owned by the current user", path)
+		return fmt.Errorf("managed policy parent for %s: group-writable and not owned by the current user", redactPath(path))
 	}
 	return nil
 }
@@ -68,24 +68,24 @@ func checkManagedPolicyParent(path string, info os.FileInfo) error {
 // parent would.
 func checkManagedPolicyAncestor(path string, info os.FileInfo) error {
 	if !info.IsDir() {
-		return fmt.Errorf("managed policy ancestor for %s: not a directory", path)
+		return fmt.Errorf("managed policy ancestor for %s: not a directory", redactPath(path))
 	}
 	stat, ok := info.Sys().(*syscall.Stat_t)
 	if !ok {
-		return fmt.Errorf("managed policy ancestor for %s: owner is unknown", path)
+		return fmt.Errorf("managed policy ancestor for %s: owner is unknown", redactPath(path))
 	}
 	uid := os.Getuid()
 	owner := int(stat.Uid)
 	if owner != 0 && owner != uid {
-		return fmt.Errorf("managed policy ancestor for %s: owned by uid %d, want root or the current user (uid %d)", path, owner, uid)
+		return fmt.Errorf("managed policy ancestor for %s: owned by uid %d, want root or the current user (uid %d)", redactPath(path), owner, uid)
 	}
 	perm := info.Mode().Perm()
 	sticky := info.Mode()&os.ModeSticky != 0
 	if perm&0o002 != 0 && !sticky {
-		return fmt.Errorf("managed policy ancestor for %s: %w", path, errWorldWritable)
+		return fmt.Errorf("managed policy ancestor for %s: %w", redactPath(path), errWorldWritable)
 	}
 	if perm&0o020 != 0 && !sticky && (owner != uid || int(stat.Gid) != os.Getgid()) {
-		return fmt.Errorf("managed policy ancestor for %s: group-writable and not owned by the current user", path)
+		return fmt.Errorf("managed policy ancestor for %s: group-writable and not owned by the current user", redactPath(path))
 	}
 	return nil
 }
