@@ -93,6 +93,18 @@ jobs:
       - name: Fuzz Copilot config parser
         run: go test ./internal/adapters/copilot -run '^$' -fuzz '^FuzzParseConfig$' -fuzztime 30s
 
+      - name: Fuzz Gemini config parser
+        run: go test ./internal/adapters/gemini -run '^$' -fuzz '^FuzzParseConfig$' -fuzztime 30s
+
+      - name: Fuzz OpenCode config parser
+        run: go test ./internal/adapters/opencode -run '^$' -fuzz '^FuzzParseConfig$' -fuzztime 30s
+
+      - name: Fuzz Windsurf config parser
+        run: go test ./internal/adapters/windsurf -run '^$' -fuzz '^FuzzParseConfig$' -fuzztime 30s
+
+      - name: Fuzz devcontainer parser
+        run: go test ./internal/adapters/devcontainer -run '^$' -fuzz '^FuzzParseConfig$' -fuzztime 30s
+
       - name: Fuzz shared-file parser
         run: go test ./internal/adapters/generic -run '^$' -fuzz '^FuzzParseShared$' -fuzztime 30s
 
