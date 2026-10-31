@@ -16,6 +16,13 @@ import (
 // can hide frontmatter. Either delimiter may carry trailing whitespace. An
 // opening delimiter without a closing one is an error.
 func SplitFrontmatter(raw []byte) (front []byte, found bool, err error) {
+	front, _, found, err = splitFrontmatter(raw)
+	return front, found, err
+}
+
+// splitFrontmatter is SplitFrontmatter that also returns the Markdown body
+// after the closing delimiter, with CRLF normalized to LF.
+func splitFrontmatter(raw []byte) (front, body []byte, found bool, err error) {
 	text := bytes.TrimPrefix(raw, utf8BOM)
 	text = bytes.ReplaceAll(text, []byte("\r\n"), []byte("\n"))
 	firstEnd := bytes.IndexByte(text, '\n')
@@ -24,10 +31,10 @@ func SplitFrontmatter(raw []byte) (front []byte, found bool, err error) {
 		first = text[:firstEnd]
 	}
 	if !bytes.Equal(bytes.TrimRight(first, " \t"), []byte("---")) {
-		return nil, false, nil
+		return nil, nil, false, nil
 	}
 	if firstEnd < 0 {
-		return nil, true, errors.New("frontmatter has no closing --- line")
+		return nil, nil, true, errors.New("frontmatter has no closing --- line")
 	}
 	rest := text[firstEnd+1:]
 	offset := 0
@@ -38,14 +45,17 @@ func SplitFrontmatter(raw []byte) (front []byte, found bool, err error) {
 			line = rest[offset : offset+end]
 		}
 		if bytes.Equal(bytes.TrimRight(line, " \t"), []byte("---")) {
-			return rest[:offset], true, nil
+			if end < 0 {
+				return rest[:offset], nil, true, nil
+			}
+			return rest[:offset], rest[offset+end+1:], true, nil
 		}
 		if end < 0 {
 			break
 		}
 		offset += end + 1
 	}
-	return nil, true, errors.New("frontmatter has no closing --- line")
+	return nil, nil, true, errors.New("frontmatter has no closing --- line")
 }
 
 // DecodeYAML converts one YAML document into the same tree shape as

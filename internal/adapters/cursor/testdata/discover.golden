@@ -183,7 +183,7 @@
       "sha256": "eda83ee2a4d08b14b1c32d0bba2153f76e626424446d8942b9e12026b982f119",
       "kind": "instructions",
       "payload": {
-        "content": "---\ndescription: React conventions\nglobs: src/**/*.tsx\nalwaysApply: false\n---\nUse function components.\n",
+        "content": "Use function components.\n",
         "frontmatter": {
           "alwaysApply": false,
           "description": "React conventions",
@@ -200,7 +200,7 @@
       "sha256": "12c9a8566d882488fa41ac0a3dbc70fc34913341084a27541342d98a57bd7d56",
       "kind": "instructions",
       "payload": {
-        "content": "---\nalwaysApply: true\n---\nNever print environment variables.\n",
+        "content": "Never print environment variables.\n",
         "frontmatter": {
           "alwaysApply": true
         },

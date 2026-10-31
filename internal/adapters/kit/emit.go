@@ -182,11 +182,18 @@ const (
 
 // Markdown emits an instruction, rule, or agent file. The content is kept
 // for Unicode and instruction checks, with URL secrets stripped (and the
-// home directory rewritten in user scope). It returns the parsed
+// home directory rewritten in user scope). When the file has a closed
+// frontmatter block, content is the body only: the frontmatter is emitted
+// sanitized as its own field, and its raw text can hold MCP server env
+// values that content must not carry. It returns the parsed
 // frontmatter, or nil, so the caller can emit hooks or servers it
 // declares. folded is passed to DecodeYAML.
 func (s *Source) Markdown(kind model.ConfigKind, role string, raw []byte, mode Frontmatter, folded ...string) map[string]any {
-	content, _ := stripEmbeddedURLSecrets(string(raw))
+	text := raw
+	if _, body, found, err := splitFrontmatter(raw); found && err == nil {
+		text = body
+	}
+	content, _ := stripEmbeddedURLSecrets(string(text))
 	payload := map[string]any{"role": role, "content": s.tildeHome(content)}
 	meta := s.frontmatter(raw, mode, folded)
 	if meta != nil {
