@@ -26,7 +26,7 @@ func (f *file) rulesFile(raw []byte) {
 		f.Add(model.ConfigKindPermissions, []string{"rules-file"}, map[string]any{
 			"role":    "rules-file",
 			"parsed":  false,
-			"content": f.SafeString(string(raw)),
+			"content": f.SafeString(f.sanitizeRulesLiterals(raw)),
 		})
 		return
 	}
@@ -59,6 +59,116 @@ func (f *file) rulesFile(raw []byte) {
 		patternJSON, _ := json.Marshal(pattern)
 		f.Add(model.ConfigKindPermissions, []string{"rule", rule.decision, string(patternJSON)}, payload)
 	}
+}
+
+// rulesLiteral is one string literal found in a rules file the parser
+// could not model: its byte span, quote, and decoded text.
+type rulesLiteral struct {
+	start, end int
+	quote      string
+	text       string
+}
+
+// sanitizeRulesLiterals returns raw with every string literal sanitized
+// as one element of an argv-like list, in file order, through
+// kit.Source.SafeValue. A secret flag and its value are separate
+// literals in a pattern (["aws", "--secret-access-key", "X"]), which a
+// whole-file SafeString cannot pair up; SafeValue's array rule can, and
+// records what it removes for the key discriminator. Literals are found
+// leniently: an escape the parser rejects is kept as written.
+func (f *file) sanitizeRulesLiterals(raw []byte) string {
+	literals := scanRulesLiterals(raw)
+	values := make([]any, len(literals))
+	for i, lit := range literals {
+		values[i] = lit.text
+	}
+	sanitized, _ := f.SafeValue("", values).([]any)
+	var b strings.Builder
+	pos := 0
+	for i, lit := range literals {
+		text, _ := sanitized[i].(string)
+		if text == lit.text {
+			continue
+		}
+		b.Write(raw[pos:lit.start])
+		b.WriteString(lit.quote + encodeRulesString(text, lit.quote) + lit.quote)
+		pos = lit.end
+	}
+	b.Write(raw[pos:])
+	return b.String()
+}
+
+func scanRulesLiterals(raw []byte) []rulesLiteral {
+	var out []rulesLiteral
+	for i := 0; i < len(raw); {
+		switch c := raw[i]; {
+		case c == '#':
+			for i < len(raw) && raw[i] != '\n' {
+				i++
+			}
+		case c == '\'' || c == '"':
+			lit, ok := scanRulesLiteral(raw, i)
+			if !ok {
+				i++
+				continue
+			}
+			out = append(out, lit)
+			i = lit.end
+		default:
+			i++
+		}
+	}
+	return out
+}
+
+func scanRulesLiteral(raw []byte, start int) (rulesLiteral, bool) {
+	quote := string(raw[start])
+	if triple := strings.Repeat(quote, 3); strings.HasPrefix(string(raw[start:]), triple) {
+		end := strings.Index(string(raw[start+3:]), triple)
+		if end < 0 {
+			return rulesLiteral{}, false
+		}
+		return rulesLiteral{start: start + 3, end: start + 3 + end, quote: "", text: string(raw[start+3 : start+3+end])}, true
+	}
+	var b strings.Builder
+	for i := start + 1; i < len(raw); i++ {
+		switch c := raw[i]; c {
+		case quote[0]:
+			return rulesLiteral{start: start, end: i + 1, quote: quote, text: b.String()}, true
+		case '\n':
+			return rulesLiteral{}, false
+		case '\\':
+			if i+1 >= len(raw) {
+				return rulesLiteral{}, false
+			}
+			i++
+			switch e := raw[i]; e {
+			case 'n':
+				b.WriteByte('\n')
+			case 't':
+				b.WriteByte('\t')
+			case 'r':
+				b.WriteByte('\r')
+			case '\\', '\'', '"':
+				b.WriteByte(e)
+			default:
+				b.WriteByte('\\')
+				b.WriteByte(e)
+			}
+		default:
+			b.WriteByte(c)
+		}
+	}
+	return rulesLiteral{}, false
+}
+
+// encodeRulesString escapes text for a literal quoted with quote ("" for
+// the inside of a triple-quoted string, which is kept as written).
+func encodeRulesString(text, quote string) string {
+	if quote == "" {
+		return text
+	}
+	return strings.NewReplacer(`\`, `\\`, quote, `\`+quote, "\n", `\n`, "\r", `\r`).Replace(text)
 }
 
 // hostExecutableProblems reports why a host_executable entry may not
