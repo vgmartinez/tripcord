@@ -1,16 +1,70 @@
-# Shared skills adapter
+# Shared-files adapter
 
-`.agents/skills/**/SKILL.md` and `.github/skills/**/SKILL.md` are read by
-more than one coding agent. The generic adapter discovers them and emits
-`model.ConfigItem` values with harness `generic`, including frontmatter
-`hooks` and `mcpServers`. The fingerprint uses that harness, so it stays
-the same when the Copilot adapter lands and reads the same files.
+Some files are read by more than one coding agent. Each is reported once,
+by one owner adapter, so its items and fingerprints do not depend on which
+harnesses a scan selected. The generic adapter owns the files no single
+product owns:
 
-Claude Code's own `.claude/skills/` files stay on the Claude adapter.
-See [claude.md](claude.md).
+| Location | Harness | Normalized kinds |
+| --- | --- | --- |
+| `.agents/skills/**/SKILL.md`, `.github/skills/**/SKILL.md` | `generic` | `skill`, plus frontmatter `hooks` and `mcpServers` |
+| `AGENTS.md` (any depth, any case) | `generic` | `instructions` (role `agents`) |
+| `.vscode/tasks.json` (any depth) | `vscode` | `task` per task; `env-setup` for file-level `options` and `windows`/`linux`/`osx` |
+| `.vscode/mcp.json` (any depth) | `vscode` | `mcp-server` per entry of `servers` |
+
+Claude Code's own `.claude/skills/` files stay on the Claude adapter. See
+[claude.md](claude.md).
+
+## Ownership
+
+| File | Owner | Also loaded by |
+| --- | --- | --- |
+| `AGENTS.md` | generic | Codex, Cursor, Copilot (and Jules, OpenCode, ...) |
+| `.agents/skills`, `.github/skills` | generic | Codex, Copilot, Claude Code |
+| `.vscode/tasks.json`, `.vscode/mcp.json` | generic (harness `vscode`) | VS Code with Copilot, Cursor, Windsurf |
+| `.mcp.json` | claude | Copilot CLI |
+| `.claude/settings.json`, `.claude/settings.local.json` | claude | Copilot CLI and Cursor (third-party hooks) |
+| `AGENTS.override.md` | codex | none |
+
+`tripcord scan --harness codex|cursor|copilot` also runs the owners of the
+files that harness loads, and prints an informational note naming them.
+`AGENTS.md` therefore appears once, as `generic:repo:AGENTS.md`, in every
+scan that reads it.
+
+## Normalized payloads
+
+- `AGENTS.md`: the Markdown body as `content` (URL userinfo, query, and
+  fragment removed) and any frontmatter. Frontmatter that is not valid YAML
+  is read as `key: value` lines without a diagnostic, because agents treat
+  `AGENTS.md` as plain Markdown.
+- Tasks: every task field, sanitized; `options.env` values redacted with
+  names kept in `env_keys`; `label` (falling back to `taskName` and then the
+  npm `script`); `run_on`, the `runOptions.runOn` value (`default` when
+  absent); and `folder_open`, true when VS Code starts the task as the
+  folder opens. The key is `["task", label, command]`, plus a discriminator
+  when sanitizing the command removed a secret.
+- MCP servers: every field, sanitized; `env`, `headers` values redacted.
+  `inputs` only declare prompts and are not emitted. A top-level
+  `mcpServers` member is not read: VS Code reads `servers`.
+
+`tasks.json` and `mcp.json` are parsed as JSONC, as VS Code does: a
+byte-order mark, comments, and trailing commas are accepted. Duplicate keys
+and keys that differ only by case are reported, because VS Code reads exact
+key names.
+
+## Reads and limits
 
 The adapter uses the shared safe reader: in-repository symlinks are
 followed, a symlink that leaves the repository is reported, and special
-files are not read. Limits match the Claude adapter. `tripcord scan`
-selects it by autodetection, or with `--harness generic`. `--scope user`
-and `--scope managed` skip it, because these files are repository files.
+files are not read. Matching of `AGENTS.md` and `.vscode/` paths is
+case-insensitive, because macOS and Windows resolve case variants to the
+same file. Limits match the Claude adapter. `tripcord scan` selects it by
+autodetection, or with `--harness generic`. `--scope user` and
+`--scope managed` skip it, because these files are repository files.
+
+## Not read
+
+`.vscode/settings.json` (for example `task.allowAutomaticTasks`, which
+decides whether `folderOpen` tasks start without a prompt, and
+`chat.tools.autoApprove`), `.code-workspace` files, and VS Code user
+settings and profiles.

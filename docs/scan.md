@@ -13,7 +13,7 @@ the only mode that requires Git.
 | `--config` | Scan executable configuration. This is the v0 default. |
 | `--secrets` (v1) | Not available. Secret scanning lands in v1; v0 supports `--config` only. |
 | `--all` (v1) | Not available. Secret scanning lands in v1; v0 supports `--config` only. |
-| `--harness claude,generic,...` | Restrict discovery to comma-separated harnesses. `generic` is the shared skills adapter. With no value, installed adapters autodetect their files. |
+| `--harness claude,codex,cursor,copilot,generic,...` | Restrict discovery to comma-separated harnesses. `generic` is the shared-files adapter (skills, `AGENTS.md`, `.vscode/`). With no value, installed adapters autodetect their files. A harness that also loads files another adapter owns pulls that adapter in, for example `--harness cursor` also runs `claude` and `generic`; an informational note on stderr says so. |
 | `--scope repo\|user\|managed\|all` | Choose which configuration to read. `repo` (the default) does not read the home directory or system settings. `user` and `managed` read those locations and skip the repository. `all` reads every scope. |
 | `--format text\|json\|sarif\|md\|gha` | Select human text, JSONL finding documents, SARIF 2.1.0, Markdown, or GitHub Actions annotations. Default: `text`. |
 | `--output <path\|->` | Write output to a new private (`0600`) local file or `-` for stdout (default). A symlink is rejected. The destination is replaced only after the result is complete. |
@@ -47,7 +47,9 @@ Markdown gains a Diagnostics section, text says `scan incomplete`, and
 SARIF sets `invocations[0].executionSuccessful` to false and lists them in
 `toolExecutionNotifications`. An informational note, such as the legacy
 Windows managed directory, is printed to stderr and does not change the
-exit code or the report. See [adapters/claude.md](adapters/claude.md) and
+exit code or the report. See the adapter docs ([claude](adapters/claude.md),
+[codex](adapters/codex.md), [cursor](adapters/cursor.md),
+[copilot](adapters/copilot.md), [generic](adapters/generic.md)) and
 [output.md](output.md).
 
 ## Examples

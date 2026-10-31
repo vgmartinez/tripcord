@@ -17,8 +17,11 @@ formats, flags, policy interaction, examples, and exit codes.
 
 [adapters/claude.md](adapters/claude.md) documents the Claude Code
 configuration adapter and its scope boundaries.
-[adapters/generic.md](adapters/generic.md) documents the shared skills
-adapter (`generic`).
+[adapters/codex.md](adapters/codex.md), [adapters/cursor.md](adapters/cursor.md),
+and [adapters/copilot.md](adapters/copilot.md) document the Codex, Cursor,
+and GitHub Copilot adapters.
+[adapters/generic.md](adapters/generic.md) documents the shared-files
+adapter (`generic`) and which adapter owns a file several harnesses read.
 
 ## Finding fingerprints
 
