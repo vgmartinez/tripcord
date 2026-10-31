@@ -1,0 +1,47 @@
+package rules
+
+import (
+	"fmt"
+	"regexp"
+	"strings"
+)
+
+// idPattern accepts TC-CFG-001, TC-SEC-017, and policy ids such as
+// ACME-001: upper-case dash-separated words ending in at least three digits.
+var idPattern = regexp.MustCompile(`^[A-Z][A-Z0-9]*(-[A-Z][A-Z0-9]*)*-[0-9]{3,}$`)
+
+// ValidID reports whether id has the rule id shape.
+func ValidID(id string) bool {
+	return len(id) <= 64 && idPattern.MatchString(id)
+}
+
+// packNamePattern is <namespace>/<name>, lower case.
+var packNamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*/[a-z0-9][a-z0-9-]*$`)
+
+// packVersionPattern is calendar versioning: YYYY.MM with an optional
+// .N patch, as in tripcord/core@2026.11.
+var packVersionPattern = regexp.MustCompile(`^[0-9]{4}\.(0[1-9]|1[0-2])(\.(0|[1-9][0-9]*))?$`)
+
+// PackRef names a versioned rule pack, such as tripcord/core@2026.11.
+type PackRef struct {
+	Name    string
+	Version string
+}
+
+// ParsePackRef parses <namespace>/<name>@<YYYY.MM[.N]>.
+func ParsePackRef(s string) (PackRef, error) {
+	name, version, ok := strings.Cut(s, "@")
+	if !ok {
+		return PackRef{}, fmt.Errorf("pack %q: want <namespace>/<name>@<YYYY.MM>", s)
+	}
+	if !packNamePattern.MatchString(name) {
+		return PackRef{}, fmt.Errorf("pack %q: name must be <namespace>/<name> in lower case", s)
+	}
+	if !packVersionPattern.MatchString(version) {
+		return PackRef{}, fmt.Errorf("pack %q: version must be YYYY.MM or YYYY.MM.N", s)
+	}
+	return PackRef{Name: name, Version: version}, nil
+}
+
+// String returns name@version.
+func (p PackRef) String() string { return p.Name + "@" + p.Version }

@@ -1,0 +1,7 @@
+# Every rule id this pack has ever allocated. Append-only.
+#
+# Format: <id> <active|retired> <pack@version that introduced it>
+#
+# Add a line when you add rules/<ID>.yaml. To withdraw a rule, delete
+# its file and change its status to retired. Never remove or reuse a
+# line: CI compares this file with the pull request base.

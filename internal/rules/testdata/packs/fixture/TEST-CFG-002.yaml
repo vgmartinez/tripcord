@@ -1,0 +1,13 @@
+# Dummy rule: an MCP stdio server whose command is a shell.
+id: TEST-CFG-002
+pack: fixture/demo@2026.11
+title: "MCP server launched through a shell"
+severity: critical
+harness: [claude, cursor, copilot]
+files: [".mcp.json", ".cursor/mcp.json", ".vscode/mcp.json"]
+when: >-
+  config.kind == "mcp-server" &&
+  payload.command.matches("^(.*/)?(ba|z|da)?sh$")
+fix: "Run the server binary directly instead of through a shell"
+refs:
+  - https://modelcontextprotocol.io/specification
