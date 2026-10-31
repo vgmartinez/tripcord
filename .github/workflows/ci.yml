@@ -84,6 +84,18 @@ jobs:
       - name: Fuzz Claude config parser
         run: go test ./internal/adapters/claude -run '^$' -fuzz '^FuzzParseConfig$' -fuzztime 30s
 
+      - name: Fuzz Codex config parser
+        run: go test ./internal/adapters/codex -run '^$' -fuzz '^FuzzParseConfig$' -fuzztime 30s
+
+      - name: Fuzz Cursor config parser
+        run: go test ./internal/adapters/cursor -run '^$' -fuzz '^FuzzParseConfig$' -fuzztime 30s
+
+      - name: Fuzz Copilot config parser
+        run: go test ./internal/adapters/copilot -run '^$' -fuzz '^FuzzParseConfig$' -fuzztime 30s
+
+      - name: Fuzz shared-file parser
+        run: go test ./internal/adapters/generic -run '^$' -fuzz '^FuzzParseShared$' -fuzztime 30s
+
   licenses:
     name: dependency licenses (${{ matrix.goos }})
     runs-on: ubuntu-latest
