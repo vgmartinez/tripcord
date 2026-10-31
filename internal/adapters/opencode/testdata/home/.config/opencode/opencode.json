@@ -1,0 +1,5 @@
+{
+  "mcp": {"home": {"type": "local", "command": ["/usr/local/bin/home-mcp", "--token", "oc-home-777"]}},
+  "plugin": ["opencode-wakatime"],
+  "permission": {"bash": "ask"}
+}

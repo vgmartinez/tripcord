@@ -1,0 +1,371 @@
+{
+  "items": [
+    {
+      "harness": "opencode",
+      "scope": "managed",
+      "path": "/etc/opencode/opencode.json",
+      "sha256": "6306ddb37b060d40ba5d569ee5dba238c43cda9b48f5cea0f45b5201c4e16f4c",
+      "kind": "mcp-server",
+      "payload": {
+        "key": "[\"mcp\",\"corp\",\"sig:777b6f2185176cdd\",\"sig:56b26b04\"]",
+        "name": "corp",
+        "type": "remote",
+        "url": "https://mcp.corp.example/"
+      }
+    },
+    {
+      "harness": "opencode",
+      "scope": "managed",
+      "path": "/etc/opencode/opencode.json",
+      "sha256": "6306ddb37b060d40ba5d569ee5dba238c43cda9b48f5cea0f45b5201c4e16f4c",
+      "kind": "permissions",
+      "payload": {
+        "key": "[\"setting\",\"permission\",\"sig:7cfd2422983eb753\"]",
+        "setting": "permission",
+        "value": {
+          "bash": "deny"
+        }
+      }
+    },
+    {
+      "harness": "opencode",
+      "scope": "repo",
+      "path": ".opencode/agents/security.md",
+      "sha256": "e05494d683e713ccc10e5f6c854b61feac080f373b5b399349810c5b4be1414c",
+      "kind": "instructions",
+      "payload": {
+        "content": "Look for injection bugs.\n",
+        "frontmatter": {
+          "description": "Security reviewer",
+          "mode": "subagent",
+          "tools": {
+            "bash": false
+          }
+        },
+        "key": "[\"agent\",\"sig:7a701b525b794ef8\"]",
+        "role": "agent"
+      }
+    },
+    {
+      "harness": "opencode",
+      "scope": "repo",
+      "path": ".opencode/commands/test.md",
+      "sha256": "1393d1d09e7f208b458a242c7dd10482c88a901f4f33d6e9d6b5822d8b349284",
+      "kind": "instructions",
+      "payload": {
+        "content": "Run `go test ./...` and summarize.\n",
+        "frontmatter": {
+          "description": "Run tests"
+        },
+        "key": "[\"command\",\"sig:aabc87c778c5c7cd\"]",
+        "role": "command"
+      }
+    },
+    {
+      "harness": "opencode",
+      "scope": "repo",
+      "path": ".opencode/plugins/notify.ts",
+      "sha256": "be89a4dedf6568adb4a14da5967b8c83e6744be99840f556e9f5b445ccd9a333",
+      "kind": "plugin",
+      "payload": {
+        "executable": true,
+        "key": "[\"plugin\",\"notify.ts\",\"sig:75b3a5976f9bdd4e\"]",
+        "language": "ts",
+        "name": "notify.ts",
+        "role": "plugin"
+      }
+    },
+    {
+      "harness": "opencode",
+      "scope": "repo",
+      "path": ".opencode/tools/db.ts",
+      "sha256": "ee1992b940301dd4e193a27852ef40736a1a0fa3726ea41c351514481a958246",
+      "kind": "plugin",
+      "payload": {
+        "executable": true,
+        "key": "[\"tool\",\"db.ts\",\"sig:088f3f67826a4fa2\"]",
+        "language": "ts",
+        "name": "db.ts",
+        "role": "tool"
+      }
+    },
+    {
+      "harness": "opencode",
+      "scope": "repo",
+      "path": "opencode.jsonc",
+      "sha256": "04d11c1fa5bc9be5afe5f1b98f90068388fa77afb46be559cde15b089c312aea",
+      "kind": "env-setup",
+      "payload": {
+        "key": "[\"setting\",\"formatter\",\"sig:4a796754ed9b930b\"]",
+        "setting": "formatter",
+        "value": {
+          "prettier": {
+            "command": [
+              "npx",
+              "prettier",
+              "--write",
+              "$FILE"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "harness": "opencode",
+      "scope": "repo",
+      "path": "opencode.jsonc",
+      "sha256": "04d11c1fa5bc9be5afe5f1b98f90068388fa77afb46be559cde15b089c312aea",
+      "kind": "env-setup",
+      "payload": {
+        "key": "[\"setting\",\"lsp\",\"sig:5ebfda3e1d037a79\"]",
+        "setting": "lsp",
+        "value": {
+          "go": {
+            "command": [
+              "gopls"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "harness": "opencode",
+      "scope": "repo",
+      "path": "opencode.jsonc",
+      "sha256": "04d11c1fa5bc9be5afe5f1b98f90068388fa77afb46be559cde15b089c312aea",
+      "kind": "instructions",
+      "payload": {
+        "key": "[\"agent\",\"reviewer\",\"sig:66123d6ca01e1a9a\"]",
+        "name": "reviewer",
+        "role": "agent",
+        "setting": "agent",
+        "value": {
+          "model": "anthropic/claude",
+          "prompt": "Review the diff",
+          "tools": {
+            "write": false
+          }
+        }
+      }
+    },
+    {
+      "harness": "opencode",
+      "scope": "repo",
+      "path": "opencode.jsonc",
+      "sha256": "04d11c1fa5bc9be5afe5f1b98f90068388fa77afb46be559cde15b089c312aea",
+      "kind": "instructions",
+      "payload": {
+        "key": "[\"command\",\"deploy\",\"sig:9194250ea67f1591\",\"sig:94105c4c\"]",
+        "name": "deploy",
+        "role": "command",
+        "setting": "command",
+        "value": {
+          "agent": "build",
+          "template": "run deploy --token [REDACTED]"
+        }
+      }
+    },
+    {
+      "harness": "opencode",
+      "scope": "repo",
+      "path": "opencode.jsonc",
+      "sha256": "04d11c1fa5bc9be5afe5f1b98f90068388fa77afb46be559cde15b089c312aea",
+      "kind": "instructions",
+      "payload": {
+        "key": "[\"setting\",\"instructions\",\"sig:be56c4c1148745d0\"]",
+        "setting": "instructions",
+        "value": [
+          "docs/rules.md",
+          "{file:./extra.md}"
+        ]
+      }
+    },
+    {
+      "harness": "opencode",
+      "scope": "repo",
+      "path": "opencode.jsonc",
+      "sha256": "04d11c1fa5bc9be5afe5f1b98f90068388fa77afb46be559cde15b089c312aea",
+      "kind": "mcp-server",
+      "payload": {
+        "command": [
+          "npx",
+          "-y",
+          "db-mcp",
+          "--api-key",
+          "[REDACTED]"
+        ],
+        "enabled": true,
+        "env_keys": [
+          "DB_HOST",
+          "DB_TOKEN"
+        ],
+        "environment": {
+          "DB_HOST": "localhost",
+          "DB_TOKEN": "[REDACTED]"
+        },
+        "key": "[\"mcp\",\"local-db\",\"sig:1f13f45145ff8d13\",\"sig:dda580a7\"]",
+        "name": "local-db",
+        "type": "local"
+      }
+    },
+    {
+      "harness": "opencode",
+      "scope": "repo",
+      "path": "opencode.jsonc",
+      "sha256": "04d11c1fa5bc9be5afe5f1b98f90068388fa77afb46be559cde15b089c312aea",
+      "kind": "mcp-server",
+      "payload": {
+        "header_keys": [
+          "Authorization"
+        ],
+        "headers": {
+          "Authorization": "[REDACTED]"
+        },
+        "key": "[\"mcp\",\"remote\",\"sig:08a4eeb9ff685511\",\"sig:2ceb0a59\"]",
+        "name": "remote",
+        "type": "remote",
+        "url": "https://mcp.example.com/sse"
+      }
+    },
+    {
+      "harness": "opencode",
+      "scope": "repo",
+      "path": "opencode.jsonc",
+      "sha256": "04d11c1fa5bc9be5afe5f1b98f90068388fa77afb46be559cde15b089c312aea",
+      "kind": "permissions",
+      "payload": {
+        "key": "[\"setting\",\"permission\",\"sig:e39d901b61a887fb\"]",
+        "setting": "permission",
+        "value": {
+          "bash": {
+            "*": "ask",
+            "git status": "allow"
+          },
+          "edit": "allow"
+        }
+      }
+    },
+    {
+      "harness": "opencode",
+      "scope": "repo",
+      "path": "opencode.jsonc",
+      "sha256": "04d11c1fa5bc9be5afe5f1b98f90068388fa77afb46be559cde15b089c312aea",
+      "kind": "permissions",
+      "payload": {
+        "key": "[\"setting\",\"tools\",\"sig:578751ad84889411\"]",
+        "setting": "tools",
+        "value": {
+          "webfetch": false
+        }
+      }
+    },
+    {
+      "harness": "opencode",
+      "scope": "repo",
+      "path": "opencode.jsonc",
+      "sha256": "04d11c1fa5bc9be5afe5f1b98f90068388fa77afb46be559cde15b089c312aea",
+      "kind": "plugin",
+      "payload": {
+        "key": "[\"plugin\",\"@acme/opencode-guard\",\"sig:0c8de8daf6d19cce\"]",
+        "plugin": "@acme/opencode-guard",
+        "setting": "plugin"
+      }
+    },
+    {
+      "harness": "opencode",
+      "scope": "repo",
+      "path": "opencode.jsonc",
+      "sha256": "04d11c1fa5bc9be5afe5f1b98f90068388fa77afb46be559cde15b089c312aea",
+      "kind": "plugin",
+      "payload": {
+        "key": "[\"plugin\",\"opencode-notify@1.2.3\",\"sig:443415eaa46c4828\"]",
+        "plugin": "opencode-notify@1.2.3",
+        "setting": "plugin"
+      }
+    },
+    {
+      "harness": "opencode",
+      "scope": "user",
+      "path": "~/.config/opencode/AGENTS.md",
+      "sha256": "7de1c85bf9334e11b38101ba3211666bc2d927f55aa0dfd90e2ba37f69d99ea2",
+      "kind": "instructions",
+      "payload": {
+        "content": "Global OpenCode rules.\n",
+        "key": "[\"agents\",\"sig:86a0cf0876d19043\"]",
+        "role": "agents"
+      }
+    },
+    {
+      "harness": "opencode",
+      "scope": "user",
+      "path": "~/.config/opencode/opencode.json",
+      "sha256": "becf11838ae50046e2c174c5d7363cbc835a194f7ecb7e7d5648ff02d6549816",
+      "kind": "mcp-server",
+      "payload": {
+        "command": [
+          "/usr/local/bin/home-mcp",
+          "--token",
+          "[REDACTED]"
+        ],
+        "key": "[\"mcp\",\"home\",\"sig:2a010dee006c0e2c\",\"sig:646907f4\"]",
+        "name": "home",
+        "type": "local"
+      }
+    },
+    {
+      "harness": "opencode",
+      "scope": "user",
+      "path": "~/.config/opencode/opencode.json",
+      "sha256": "becf11838ae50046e2c174c5d7363cbc835a194f7ecb7e7d5648ff02d6549816",
+      "kind": "permissions",
+      "payload": {
+        "key": "[\"setting\",\"permission\",\"sig:aa0321b81519d3d6\"]",
+        "setting": "permission",
+        "value": {
+          "bash": "ask"
+        }
+      }
+    },
+    {
+      "harness": "opencode",
+      "scope": "user",
+      "path": "~/.config/opencode/opencode.json",
+      "sha256": "becf11838ae50046e2c174c5d7363cbc835a194f7ecb7e7d5648ff02d6549816",
+      "kind": "plugin",
+      "payload": {
+        "key": "[\"plugin\",\"opencode-wakatime\",\"sig:6c64ffd5192e7887\"]",
+        "plugin": "opencode-wakatime",
+        "setting": "plugin"
+      }
+    },
+    {
+      "harness": "opencode",
+      "scope": "user",
+      "path": "~/.config/opencode/plugins/audit.js",
+      "sha256": "3ee3077734c4920bc5c89119fd6de3eb2caea998a1b2b36af1612a96582979d5",
+      "kind": "plugin",
+      "payload": {
+        "executable": true,
+        "key": "[\"plugin\",\"audit.js\",\"sig:1136c5392790aaaa\"]",
+        "language": "js",
+        "name": "audit.js",
+        "role": "plugin"
+      }
+    },
+    {
+      "harness": "opencode",
+      "scope": "user",
+      "path": "~/.local/share/opencode/auth.json",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "kind": "env-setup",
+      "payload": {
+        "file": "auth.json",
+        "key": "[\"credentials\",\"auth.json\",\"sig:f72918a937ef0e41\"]",
+        "secret_bearing": true,
+        "setting": "credentials",
+        "value": "[REDACTED]"
+      }
+    }
+  ],
+  "diagnostics": []
+}
