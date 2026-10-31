@@ -120,9 +120,13 @@ Markdown items keep the raw content and the frontmatter (minus `hooks` and
 Each item uses the model's `claude:<scope>:<path>` config ID. The payload
 carries a content-derived `key`, a JSON array such as
 `["hook","PreToolUse","Bash","command","./check.sh"]` or
-`["mcp","~/src/app","local"]`. It includes the hook event and a stable
-discriminator, so entries that differ only by event or position do not
-collide. The fingerprint algorithm in [fingerprint.md](../fingerprint.md)
+`["mcp","~/src/app","local"]`. It includes the hook event, then the same
+trailing parts as the kit-based adapters (`kit.Source.EntrySignature`): a
+digest of the entry as kit sanitizes it, so a value this adapter keeps
+raw never feeds the fingerprint, and, when sanitizing removed anything
+from any field, a discriminator over all of the removed text. Entries
+that differ only by event, position, or a redacted value therefore do
+not collide. The fingerprint algorithm in [fingerprint.md](../fingerprint.md)
 is unchanged; only the key content is adapter-defined.
 
 ## Safe reads

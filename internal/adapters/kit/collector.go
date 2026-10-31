@@ -229,6 +229,22 @@ func (s *Source) Add(kind model.ConfigKind, key []string, payload map[string]any
 	s.c.items = append(s.c.items, item)
 }
 
+// EntrySignature returns the "sig:" key parts Add would append for
+// payload, for an adapter that builds its items itself (the Claude
+// adapter): a digest of payload as this Source sanitizes it, so a value
+// the caller left raw never feeds the digest, then a discriminator over
+// removed (what the caller's own sanitization removed, in a
+// deterministic order) followed by what this Source's sanitization of
+// payload removed.
+func (s *Source) EntrySignature(payload map[string]any, removed []string) []string {
+	s.removed = nil
+	s.recordRemoved(removed...)
+	view, _ := s.SafeValue("", payload).(map[string]any)
+	all := s.removed
+	s.removed = nil
+	return discriminated([]string{"sig:" + PayloadDigest(view)}, all)
+}
+
 // EvidenceKey encodes parts as a compact JSON array, so no choice of
 // separator inside a matcher or command can make two keys collide.
 func EvidenceKey(parts []string) string {

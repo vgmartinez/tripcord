@@ -100,14 +100,20 @@ func (s *src) warnAll(warnings []string) {
 }
 
 // add emits one item. payload["key"] is the content-derived evidence key;
-// it never encodes a position in the file. A kit.PayloadDigest of the
-// full payload is always appended, so two entries whose caller-supplied
-// key parts match, but whose other fields differ, never share a key (and
-// therefore never share a fingerprint): see kit.Source.Add, which this
-// mirrors.
-func (s *src) add(kind model.ConfigKind, key []string, payload map[string]any) {
-	fullKey := append(s.safeKey(key), "sig:"+kit.PayloadDigest(payload))
-	payload["key"] = evidenceKey(fullKey)
+// it never encodes a position in the file. kit.Source.EntrySignature's
+// parts are always appended: a digest of the payload as kit sanitizes it
+// (so a value this adapter keeps raw never feeds the fingerprint), and a
+// discriminator over removed, every raw value this adapter's own
+// sanitization removed while building the entry, plus what kit's
+// removed. Two entries whose caller-supplied key parts match, but whose
+// other fields differ, even only in redacted text, never share a key
+// (and therefore never share a fingerprint): see kit.Source.Add, which
+// this mirrors.
+func (s *src) add(kind model.ConfigKind, key []string, payload map[string]any, removed []string) {
+	c := kit.NewCollector(s.c.harness, "Claude Code")
+	c.SetHome(s.c.home)
+	sig := c.SourceSHA(s.scope, s.path, s.sha).EntrySignature(payload, removed)
+	payload["key"] = evidenceKey(append(s.safeKey(key), sig...))
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		s.warn("cannot encode %s entry: %v", kind, err)
@@ -186,7 +192,7 @@ var (
 // (output.RedactToolFlags), and credential-named assignments such as
 // PGPASSWORD=X or npm's :_authToken=X (output.RedactAssignments) inside
 // value. It returns the redacted text and the raw secret substrings it
-// removed, for keyDiscriminator.
+// removed, for kit.KeyDiscriminator.
 func redactCommandSecrets(value string) (string, []string) {
 	var removed []string
 	value = commandSecretFlag.ReplaceAllStringFunc(value, func(m string) string {
@@ -221,7 +227,7 @@ func redactCommandSecrets(value string) (string, []string) {
 // anywhere inside value, not only when the whole value is one URL (so a
 // command such as "curl '<url>?sig=...' | sh" is covered, not just a bare
 // "url" hook field). It returns the rewritten text and the raw removed
-// substrings, for keyDiscriminator.
+// substrings, for kit.KeyDiscriminator.
 func stripEmbeddedURLSecrets(value string) (string, []string) {
 	var removed []string
 	value = embeddedURL.ReplaceAllStringFunc(value, func(m string) string {
@@ -239,7 +245,7 @@ func stripEmbeddedURLSecrets(value string) (string, []string) {
 
 // sanitizeResult is the outcome of sanitizing one string: the safe text to
 // store or display, and the raw secret substrings that were removed to
-// produce it (never stored; only hashed by keyDiscriminator).
+// produce it (never stored; only hashed by kit.KeyDiscriminator).
 type sanitizeResult struct {
 	value   string
 	removed []string
@@ -273,34 +279,6 @@ func (s *src) tildeHome(value string) string {
 
 func (s *src) safeString(value string) string {
 	return s.sanitizeString(value).value
-}
-
-// keyDiscriminator is the first 8 hex characters of SHA-256 over removed,
-// joined by NUL. Appending it to an evidence key keeps two entries whose
-// only difference is a secret value (a signed URL's query, a --token
-// value, ...) from colliding on the same key, and therefore the same
-// fingerprint, once that secret is redacted: without it, suppressing one
-// as a false positive would silently suppress the other too. It is
-// computed from the raw value that was removed, never the sanitized
-// text, so it stays the same across machines with different home
-// directories (home substitution is not "removed"; see tildeHome) but
-// differs whenever the underlying secret differs. This does let someone
-// who has already guessed a low-entropy secret (a short shared token or
-// signature) confirm that guess by recomputing the hash; that is accepted
-// here because signatures and tokens are the values this guards, and the
-// alternative -- two different secrets sharing one key -- is worse.
-func keyDiscriminator(removed []string) string {
-	sum := sha256.Sum256([]byte(strings.Join(removed, "\x00")))
-	return hex.EncodeToString(sum[:])[:8]
-}
-
-// withDiscriminator appends "sig:<keyDiscriminator(removed)>" to key when
-// sanitizing the entry removed any secret.
-func withDiscriminator(key, removed []string) []string {
-	if len(removed) == 0 {
-		return key
-	}
-	return append(key, "sig:"+keyDiscriminator(removed))
 }
 
 // evidenceKey encodes parts as a compact JSON array, so no choice of
@@ -348,7 +326,7 @@ func (s *src) settingsObject(obj map[string]any) {
 				continue
 			}
 			payload["env_keys"] = sortedKeys(envObj)
-			value = redactValues(envObj)
+			value, removed = redactValues(envObj)
 		default:
 			// Every other curated setting's value can itself be, or
 			// contain, a credential (apiKeyHelper's command, a
@@ -361,15 +339,7 @@ func (s *src) settingsObject(obj map[string]any) {
 		if command := commandOf(value); command != "" {
 			payload["command"] = s.safeString(command)
 		}
-		key := []string{"setting", name}
-		// See keyDiscriminator: without this, two settings entries that
-		// differ only in a secret value removed above (a --token in
-		// awsAuthRefresh, userinfo in a marketplace URL, ...) would
-		// collide on the same key and fingerprint once redacted.
-		if len(removed) > 0 {
-			key = append(key, "sig:"+keyDiscriminator(removed))
-		}
-		s.add(kind, key, payload)
+		s.add(kind, []string{"setting", name}, payload, removed)
 	}
 }
 
@@ -435,38 +405,30 @@ func (s *src) hooks(value any) {
 
 func (s *src) hook(event, matcher string, hook map[string]any) {
 	payload := map[string]any{}
-	for k, v := range hook {
-		// The discriminator for a hook already comes independently from
-		// the raw selected field via hookAction below, so the removed
-		// secrets safePayloadValue reports here are not also needed.
-		payload[k], _ = s.safePayloadValue(k, v)
+	var removed []string
+	// Sorted so removed is the same on every run. Every field's removed
+	// text counts, not only the action's: two hooks may differ only in a
+	// redacted secondary field.
+	for _, k := range sortedKeys(hook) {
+		sanitized, itemRemoved := s.safePayloadValue(k, hook[k])
+		payload[k] = sanitized
+		removed = append(removed, itemRemoved...)
 	}
 	if headers, ok := hook["headers"].(map[string]any); ok {
-		payload["headers"] = redactValues(headers)
+		var headerRemoved []string
+		payload["headers"], headerRemoved = redactValues(headers)
 		payload["header_keys"] = sortedKeys(headers)
+		removed = append(removed, headerRemoved...)
 	}
 	payload["event"] = event
 	payload["matcher"] = matcher
 	hookType, _ := hook["type"].(string)
-	field, action := hookAction(payload)
-	key := []string{"hook", event, matcher, hookType, action}
-	// The discriminator must come from the RAW field value, before
-	// sanitization: by the time "action" above is computed, a secret
-	// value has already been replaced with the constant string
-	// redacted, so re-sanitizing it here could never recover what was
-	// removed. See keyDiscriminator.
-	if field != "" {
-		if raw, ok := hook[field].(string); ok {
-			if removed := s.sanitizeString(raw).removed; len(removed) > 0 {
-				key = append(key, "sig:"+keyDiscriminator(removed))
-			}
-		}
-	}
-	s.add(model.ConfigKindHook, key, payload)
+	_, action := hookAction(payload)
+	s.add(model.ConfigKindHook, []string{"hook", event, matcher, hookType, action}, payload, removed)
 }
 
 // safePayloadValue sanitizes value and returns the raw secret substrings
-// it removed, for keyDiscriminator. For an array (an MCP server's
+// it removed, for kit.KeyDiscriminator. For an array (an MCP server's
 // "args", for example), three two-element shapes are recognized, since
 // neither element alone carries both the flag and its value for
 // commandSecretFlag or bearerToken to match on a single string:
@@ -523,7 +485,7 @@ func (s *src) safePayloadValue(key string, value any) (any, []string) {
 	case map[string]any:
 		out := make(map[string]any, len(v))
 		var removed []string
-		// Sorted so removed, and therefore keyDiscriminator, is the same
+		// Sorted so removed, and therefore kit.KeyDiscriminator, is the same
 		// on every run despite Go's randomized map iteration order.
 		for _, name := range sortedKeys(v) {
 			sanitized, itemRemoved := s.safePayloadValue(name, v[name])
@@ -605,12 +567,16 @@ func (s *src) mcpServers(value any, project string) {
 		}
 		removed = append(removed, redactToolArgs(payload)...)
 		if env, ok := server["env"].(map[string]any); ok {
-			payload["env"] = redactValues(env)
+			var envRemoved []string
+			payload["env"], envRemoved = redactValues(env)
 			payload["env_keys"] = sortedKeys(env)
+			removed = append(removed, envRemoved...)
 		}
 		if headers, ok := server["headers"].(map[string]any); ok {
-			payload["headers"] = redactValues(headers)
+			var headerRemoved []string
+			payload["headers"], headerRemoved = redactValues(headers)
 			payload["header_keys"] = sortedKeys(headers)
+			removed = append(removed, headerRemoved...)
 		}
 		payload["name"] = name
 		key := []string{"mcp", name}
@@ -618,14 +584,7 @@ func (s *src) mcpServers(value any, project string) {
 			payload["project"] = project
 			key = []string{"mcp", project, name}
 		}
-		// See keyDiscriminator: without this, two MCP servers that
-		// differ only in a secret value removed above (a --token
-		// argument, userinfo in a connection URL, ...) would collide on
-		// the same key and fingerprint once redacted.
-		if len(removed) > 0 {
-			key = append(key, "sig:"+keyDiscriminator(removed))
-		}
-		s.add(model.ConfigKindMCPServer, key, payload)
+		s.add(model.ConfigKindMCPServer, key, payload, removed)
 	}
 }
 
@@ -694,7 +653,7 @@ func (s *src) markdown(kind model.ConfigKind, role string, raw []byte) {
 		}
 		payload["frontmatter"] = frontmatter
 	}
-	s.add(kind, []string{role}, payload)
+	s.add(kind, []string{role}, payload, nil)
 	if meta == nil {
 		return
 	}
@@ -724,45 +683,64 @@ func secretKey(name string) bool {
 // redactValues keeps values rules need to see: URLs (userinfo and query
 // removed), hosts, booleans, numbers, and other non-secrets. A value is
 // replaced with [REDACTED] when its name looks like a secret or the value
-// matches output.DefaultRedactor. Sinks redact again.
-func redactValues(m map[string]any) map[string]any {
+// matches output.DefaultRedactor. Sinks redact again. It also returns
+// the raw text it removed, in key order, for kit.KeyDiscriminator.
+func redactValues(m map[string]any) (map[string]any, []string) {
 	out := make(map[string]any, len(m))
+	var removed []string
 	for _, k := range sortedKeys(m) {
-		out[k] = redactValue(k, m[k])
+		out[k] = redactValue(k, m[k], &removed)
 	}
-	return out
+	return out, removed
 }
 
-func redactValue(key string, value any) any {
+func redactValue(key string, value any, removed *[]string) any {
 	if key != "" && secretKey(key) {
+		*removed = append(*removed, removedText(value))
 		return redacted
 	}
 	switch v := value.(type) {
 	case map[string]any:
-		return redactValues(v)
+		out, inner := redactValues(v)
+		*removed = append(*removed, inner...)
+		return out
 	case []any:
 		out := make([]any, len(v))
 		for i, item := range v {
-			out[i] = redactValue("", item)
+			out[i] = redactValue("", item, removed)
 		}
 		return out
 	case string:
-		return redactString(v)
+		return redactString(v, removed)
 	case bool, json.Number, float64, nil:
 		return v
 	default:
-		return redactString(fmt.Sprint(v))
+		return redactString(fmt.Sprint(v), removed)
 	}
 }
 
-func redactString(value string) string {
-	if stripped, _, ok := stripURLSecrets(value); ok {
+func redactString(value string, removed *[]string) string {
+	if stripped, raw, ok := stripURLSecrets(value); ok {
+		if raw != "" {
+			*removed = append(*removed, raw)
+		}
 		value = stripped
 	}
 	if output.DefaultRedactor(value) != value {
+		*removed = append(*removed, value)
 		return redacted
 	}
 	return value
+}
+
+// removedText is the text a whole redacted value contributes to
+// kit.KeyDiscriminator.
+func removedText(value any) string {
+	if text, ok := value.(string); ok {
+		return text
+	}
+	raw, _ := json.Marshal(value)
+	return string(raw)
 }
 
 // stripURLSecrets reports whether raw parses as an absolute URL (any
@@ -771,7 +749,7 @@ func redactString(value string) string {
 // userinfo too) and, if so, returns it without userinfo, query, or
 // fragment. The host and path stay so a rule can see where a proxy or
 // base URL points. removedRaw is the exact userinfo, query, and fragment
-// text that was removed (NUL-joined), used only by keyDiscriminator; it
+// text that was removed (NUL-joined), used only by kit.KeyDiscriminator; it
 // is never stored or displayed.
 func stripURLSecrets(raw string) (stripped, removedRaw string, ok bool) {
 	u, err := url.Parse(raw)

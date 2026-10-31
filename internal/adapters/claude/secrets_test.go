@@ -377,7 +377,7 @@ func TestSingleDashSecretFlagInCommandIsRedacted(t *testing.T) {
 	}
 }
 
-// keyDiscriminator extension: two MCP servers differing only in a
+// kit.KeyDiscriminator extension: two MCP servers differing only in a
 // secret value removed from a non-hook field (an args token, here) must
 // not collide on the same key, and therefore the same fingerprint, the
 // same way two hooks differing only by a secret already do not (see

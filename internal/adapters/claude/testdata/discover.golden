@@ -147,7 +147,7 @@
           "name": "reviewer",
           "tools": "Read, Grep"
         },
-        "key": "[\"agent\",\"sig:2176568ca2e62a8d\"]",
+        "key": "[\"agent\",\"sig:59592a1d8694c9ce\",\"sig:152fd978\"]",
         "role": "agent"
       }
     },
@@ -165,7 +165,7 @@
         "env_keys": [
           "TRACKER_TOKEN"
         ],
-        "key": "[\"mcp\",\"tracker\",\"sig:1ed0dc9d7ad6659c\"]",
+        "key": "[\"mcp\",\"tracker\",\"sig:1ed0dc9d7ad6659c\",\"sig:9c81c200\"]",
         "name": "tracker"
       }
     },
@@ -231,7 +231,7 @@
       "kind": "env-setup",
       "payload": {
         "command": "security find-generic-password -w",
-        "key": "[\"setting\",\"apiKeyHelper\",\"sig:c642117fd56ee531\"]",
+        "key": "[\"setting\",\"apiKeyHelper\",\"sig:c5c27b78526eff38\",\"sig:72d32e3e\"]",
         "setting": "apiKeyHelper",
         "value": "security find-generic-password -w"
       }
@@ -263,7 +263,7 @@
           "ANTHROPIC_BASE_URL",
           "GITHUB_TOKEN"
         ],
-        "key": "[\"setting\",\"env\",\"sig:021ea274b5f0899a\"]",
+        "key": "[\"setting\",\"env\",\"sig:021ea274b5f0899a\",\"sig:6099c33a\"]",
         "setting": "env",
         "value": {
           "ANTHROPIC_BASE_URL": "https://proxy.example.test",
@@ -342,7 +342,7 @@
         "headers": {
           "Authorization": "[REDACTED]"
         },
-        "key": "[\"hook\",\"PreToolUse\",\"Bash\",\"http\",\"https://audit.example.test/hook\",\"sig:7b0889ac23af6670\"]",
+        "key": "[\"hook\",\"PreToolUse\",\"Bash\",\"http\",\"https://audit.example.test/hook\",\"sig:7b0889ac23af6670\",\"sig:31fe1b40\"]",
         "matcher": "Bash",
         "type": "http",
         "url": "https://audit.example.test/hook"
@@ -505,7 +505,7 @@
           "API_TOKEN",
           "LOG_LEVEL"
         ],
-        "key": "[\"mcp\",\"filesystem\",\"sig:16d52e70bafa60d9\"]",
+        "key": "[\"mcp\",\"filesystem\",\"sig:16d52e70bafa60d9\",\"sig:2ded201d\"]",
         "name": "filesystem"
       }
     },
@@ -522,7 +522,7 @@
         "headers": {
           "Authorization": "[REDACTED]"
         },
-        "key": "[\"mcp\",\"remote\",\"sig:d535ec3e\",\"sig:ffd4f9b691436fd0\"]",
+        "key": "[\"mcp\",\"remote\",\"sig:ffd4f9b691436fd0\",\"sig:5e69e589\"]",
         "name": "remote",
         "type": "http",
         "url": "https://mcp.example.test/mcp"
@@ -634,7 +634,7 @@
         "env_keys": [
           "KEY"
         ],
-        "key": "[\"mcp\",\"/srv/app\",\"local\",\"sig:7fc65e2761d608a0\"]",
+        "key": "[\"mcp\",\"/srv/app\",\"local\",\"sig:7fc65e2761d608a0\",\"sig:85923475\"]",
         "name": "local",
         "project": "/srv/app"
       }

@@ -74,7 +74,22 @@ Two things that do look like metadata, but **are** hashed:
   folded into the payload, so it never makes a repository fingerprint
   depend on which scopes this scan happened to read.
 
-Credential values, secret values, and network URLs are never inputs.
+  The digest is over the sanitized payload, so two entries that differ
+  only in a value redaction replaced with `[REDACTED]` (a `--token` in a
+  hook's `powershell` field, an `API_TOKEN` env value, ...) would share
+  it. Every sanitizer in `kit` therefore records the raw text it removes
+  while an entry is built, walking maps in sorted key order, and
+  `kit.Source.Add` appends `sig:` plus `kit.KeyDiscriminator` of that
+  whole sequence (8 hex characters of SHA-256). The Claude adapter,
+  which keeps some values raw in its payloads, uses
+  `kit.Source.EntrySignature`: the digest of its payload as kit
+  sanitizes it, and the same discriminator over its own removals and
+  kit's. The discriminator is a truncated hash of removed text, never
+  the text itself; it is home-normalized in user scope, so it does not
+  depend on the scanning machine.
+
+Credential values, secret values, and network URLs are never inputs,
+other than through the truncated-hash discriminator described above.
 Evidence excerpts must already be redacted; this package does not search
 them for secrets.
 
