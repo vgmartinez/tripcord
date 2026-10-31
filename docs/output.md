@@ -110,8 +110,10 @@ Summary-table cells keep backslashes as written, so a Windows path
 appears once (`C:\dir`). A literal `|` is escaped as `\|` so it cannot
 end the cell. Detail sections show the same backslashes.
 
-A literal backslash is doubled only when what follows would otherwise
-read as one of this tool's own control-character escapes: `\xNN`,
-`\uXXXX`, or `\UXXXXXXXX`. For example, literal text `\x1b` renders as
-`\\x1b`, distinct from an actual ESC byte, which renders as `\x1b`. An
-ordinary path fragment such as `\new` or `\temp` is unaffected.
+A run of n literal backslashes before an escape body (`n`, `r`, `t`,
+`xNN`, `uXXXX`, `UXXXXXXXX`) or before a character that will be escaped
+is rendered as 2n backslashes, so literal text and real control
+characters never render the same. For example, `C:\temp` renders as
+`C:\\temp`, and literal text `\x1b` renders as `\\x1b`, distinct from an
+actual ESC byte, which renders as `\x1b`. A backslash that does not
+precede an escape, such as `C:\dir`, is unchanged.
