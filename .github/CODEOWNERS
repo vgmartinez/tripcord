@@ -1,0 +1,5 @@
+# Merging a change here freezes the floor the next v1 schema edit is
+# compared against (see schemas/README.md Compatibility). Require review
+# from the spec owner before that floor moves.
+/schemas/*.schema.json @vgmartinez
+/schemas/testdata/baseline/ @vgmartinez
