@@ -522,7 +522,7 @@
         "headers": {
           "Authorization": "[REDACTED]"
         },
-        "key": "[\"mcp\",\"remote\",\"sig:ffd4f9b691436fd0\"]",
+        "key": "[\"mcp\",\"remote\",\"sig:d535ec3e\",\"sig:ffd4f9b691436fd0\"]",
         "name": "remote",
         "type": "http",
         "url": "https://mcp.example.test/mcp"

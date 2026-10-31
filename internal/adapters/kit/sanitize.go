@@ -21,6 +21,8 @@ var (
 	commandSecretFlag = regexp.MustCompile(`(?i)(` + output.SecretFlagAlternation() + `)(?:=|\s+)('[^']*'|"[^"]*"|\S+)`)
 	secretFlagName    = regexp.MustCompile(`(?i)^(?:` + output.SecretFlagAlternation() + `)$`)
 	bearerToken       = regexp.MustCompile(`(?i)\b(bearer)\s+([^\s'"]+)`)
+	bearerSchemeWord  = regexp.MustCompile(`(?i)^bearer$`)
+	userFlagName      = regexp.MustCompile(`(?i)^(?:` + output.UserFlagAlternation + `)$`)
 	// embeddedURL finds an absolute URL inside a larger string, such as a
 	// curl command. It stops at whitespace and quotes so a trailing shell
 	// quote or the rest of a pipeline is not swallowed.
@@ -67,7 +69,15 @@ func (s *Source) SafeKey(parts []string) []string {
 // sanitizing raw removed a secret, so two entries that differ only by a
 // secret keep distinct keys.
 func (s *Source) Discriminated(key []string, raw string) []string {
-	if removed := s.Sanitize(raw).Removed; len(removed) > 0 {
+	return s.DiscriminatedAll(key, s.Sanitize(raw).Removed)
+}
+
+// DiscriminatedAll is Discriminated for a caller that already collected
+// the raw secret substrings removed across more than one field (an MCP
+// server's url and its command's tool-specific flags, say), so the
+// discriminator depends on all of them, not just one.
+func (s *Source) DiscriminatedAll(key []string, removed []string) []string {
+	if len(removed) > 0 {
 		return append(key, "sig:"+KeyDiscriminator(removed))
 	}
 	return key
@@ -94,9 +104,14 @@ func KeyDiscriminator(removed []string) string {
 }
 
 // SafeValue sanitizes a decoded value recursively. Strings are sanitized;
-// in an array, the element after a bare secret flag ("--token", "X") is
-// redacted; a string or number under a secret-looking key name is
-// redacted.
+// in an array, the element after a bare secret flag ("--token", "X") or
+// a bare "Bearer" scheme word (an MCP server's args split across two
+// elements, ["Bearer", "X"], where neither element alone carries
+// "Bearer X" for Sanitize's bearerToken regex to match) is redacted
+// unconditionally; the element after a bare curl user flag ("-u",
+// "user:pass") is redacted only when it has "user:pass" shape
+// (output.LooksLikeUserPass), so ["-u", "root"] ("sudo -u root") is left
+// alone; a string or number under a secret-looking key name is redacted.
 func (s *Source) SafeValue(key string, value any) any {
 	if key != "" && SecretKey(key) && !namesEnvVar(key) {
 		switch value.(type) {
@@ -110,15 +125,26 @@ func (s *Source) SafeValue(key string, value any) any {
 	case []any:
 		out := make([]any, len(v))
 		redactNext := false
+		gateUserPass := false
 		for i, item := range v {
 			if redactNext {
-				out[i] = Redacted
-				redactNext = false
+				name, isString := item.(string)
+				if gateUserPass && (!isString || !output.LooksLikeUserPass(name)) {
+					out[i] = s.SafeValue("", item)
+				} else {
+					out[i] = Redacted
+				}
+				redactNext, gateUserPass = false, false
 				continue
 			}
 			out[i] = s.SafeValue("", item)
-			if name, ok := item.(string); ok && secretFlagName.MatchString(name) {
-				redactNext = true
+			if name, ok := item.(string); ok {
+				switch {
+				case isArraySecretMarker(name):
+					redactNext = true
+				case userFlagName.MatchString(name):
+					redactNext, gateUserPass = true, true
+				}
 			}
 		}
 		return out
@@ -131,6 +157,13 @@ func (s *Source) SafeValue(key string, value any) any {
 	default:
 		return value
 	}
+}
+
+// isArraySecretMarker reports whether name is an array element that
+// marks the next element as a credential: a bare secret CLI flag
+// ("--token") or the bare HTTP auth scheme word "Bearer".
+func isArraySecretMarker(name string) bool {
+	return secretFlagName.MatchString(name) || bearerSchemeWord.MatchString(name)
 }
 
 // SafeObject sanitizes every field of obj with SafeValue.

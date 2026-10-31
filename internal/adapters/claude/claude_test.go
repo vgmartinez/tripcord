@@ -402,6 +402,9 @@ func TestPerFileErrorsDoNotAbort(t *testing.T) {
 	}
 }
 
+// The bearer-token-split-across-two-array-elements case is covered by
+// TestMCPArgsBearerAsTwoElementsIsRedacted in secrets_test.go.
+
 func TestRepoLimits(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

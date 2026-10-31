@@ -93,6 +93,46 @@ func TestSafeValueRedactsSecretNamesAndFlagArguments(t *testing.T) {
 	}
 }
 
+// TestSafeValueRedactsBearerSchemeInArray is the repro for an MCP
+// server's args split across two array elements, ["Bearer", "TOKEN"]:
+// neither element alone matches Sanitize's bearerToken regex (it needs
+// "Bearer TOKEN" in one string), so without this, the credential
+// element reaches the payload unredacted.
+func TestSafeValueRedactsBearerSchemeInArray(t *testing.T) {
+	t.Parallel()
+	s := source(model.ScopeRepo, "a")
+	got := s.SafeValue("", map[string]any{
+		"args": []any{"mcp-remote", "--header", "Authorization", "Bearer", "sk-live-secret"},
+	})
+	raw, _ := json.Marshal(got)
+	if strings.Contains(string(raw), "sk-live-secret") {
+		t.Fatalf("leaked bearer token: %s", raw)
+	}
+	for _, kept := range []string{"mcp-remote", "--header", "Authorization", "Bearer"} {
+		if !strings.Contains(string(raw), kept) {
+			t.Fatalf("dropped non-secret element %q: %s", kept, raw)
+		}
+	}
+}
+
+// TestSafeValueGatesUserFlagOnUserPassShape is curl's -u/--user flag: the
+// element after it is a credential only when it has "user:pass" shape
+// (output.LooksLikeUserPass); "sudo -u root" must not redact "root".
+func TestSafeValueGatesUserFlagOnUserPassShape(t *testing.T) {
+	t.Parallel()
+	s := source(model.ScopeRepo, "a")
+	got := s.SafeValue("", map[string]any{
+		"args": []any{"-u", "alice:s3cr3t-pass", "sudo", "-u", "root"},
+	})
+	raw, _ := json.Marshal(got)
+	if strings.Contains(string(raw), "s3cr3t-pass") {
+		t.Fatalf("leaked user:pass credential: %s", raw)
+	}
+	if !strings.Contains(string(raw), `"root"`) {
+		t.Fatalf("redacted a plain username with no password: %s", raw)
+	}
+}
+
 func TestDecodeJSON(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

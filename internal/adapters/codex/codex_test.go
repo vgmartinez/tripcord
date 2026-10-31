@@ -105,6 +105,58 @@ func TestProjectIgnoredKeys(t *testing.T) {
 	}
 }
 
+// TestMCPServerArgsRedactsBearerScheme is the Codex repro: an MCP
+// server's args array splits a bearer token across two elements,
+// ["Bearer", "<token>"], so Sanitize's bearerToken regex (which needs
+// "Bearer <token>" in one string) never sees it.
+func TestMCPServerArgsRedactsBearerScheme(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(root, ".codex", "config.toml"),
+		"[mcp_servers.remote]\ncommand = \"npx\"\nargs = [\"mcp-remote\", \"--header\", \"Authorization\", \"Bearer\", \"sk-live-secret-token\"]\n")
+	got := kittest.Discover(t, New(Options{}), root)
+	items := got.Find(".codex/config.toml", model.ConfigKindMCPServer)
+	if len(items) != 1 {
+		t.Fatalf("items = %+v", got.Items)
+	}
+	raw := string(items[0].Payload)
+	if strings.Contains(raw, "sk-live-secret-token") {
+		t.Fatalf("payload leaks the bearer token: %s", raw)
+	}
+	for _, kept := range []string{"mcp-remote", "--header", "Authorization", "Bearer"} {
+		if !strings.Contains(raw, kept) {
+			t.Fatalf("payload dropped non-secret arg %q: %s", kept, raw)
+		}
+	}
+}
+
+// TestMCPServerArgsRedactsToolSpecificFlag is the Codex repro for
+// output.RedactToolArgv: "docker login -p X" is a credential only
+// because the command is docker's login subcommand, which SafeValue's
+// generic secret-flag scan does not know (a bare "-p" is not in
+// output.SecretFlags, since it means something unrelated for most
+// commands, such as "publish a port" for docker run).
+func TestMCPServerArgsRedactsToolSpecificFlag(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(root, ".codex", "config.toml"),
+		"[mcp_servers.registry]\ncommand = \"docker\"\nargs = [\"login\", \"-u\", \"alice\", \"-p\", \"sk-live-secret-token\", \"registry.example\"]\n")
+	got := kittest.Discover(t, New(Options{}), root)
+	items := got.Find(".codex/config.toml", model.ConfigKindMCPServer)
+	if len(items) != 1 {
+		t.Fatalf("items = %+v", got.Items)
+	}
+	raw := string(items[0].Payload)
+	if strings.Contains(raw, "sk-live-secret-token") {
+		t.Fatalf("payload leaks the docker login password: %s", raw)
+	}
+	for _, kept := range []string{"login", "alice", "registry.example"} {
+		if !strings.Contains(raw, kept) {
+			t.Fatalf("payload dropped non-secret arg %q: %s", kept, raw)
+		}
+	}
+}
+
 func TestHostileInputs(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/vgmartinez/tripcord/internal/model"
+	"github.com/vgmartinez/tripcord/internal/output"
 )
 
 // HookShape is how a harness nests hook handlers under an event.
@@ -158,13 +159,55 @@ func (s *Source) MCPServers(value any, what string) {
 		}
 		payload := s.SafeObject(server)
 		s.redactMaps(server, payload, "env", "headers", "http_headers", "env_http_headers")
+		removed := s.redactToolArgs(server, payload)
 		payload["name"] = name
 		key := []string{"mcp", name}
 		if url, ok := server["url"].(string); ok {
-			key = s.Discriminated(key, url)
+			removed = append(removed, s.Sanitize(url).Removed...)
 		}
+		key = s.DiscriminatedAll(key, removed)
 		s.Add(model.ConfigKindMCPServer, key, payload)
 	}
+}
+
+// redactToolArgs applies output.RedactToolArgv to server's command and
+// args, where a tool-specific flag and its value are separate array
+// elements (["login", "-p", "X"] for command "docker") that SafeValue's
+// generic per-element scan does not redact, because a short flag like
+// -p or -t means something unrelated for most commands and is only
+// safe to redact for the specific tool that treats it as a credential
+// (see output.RedactToolArgv). It rewrites payload["args"] in place and
+// returns the raw values it removed, for the caller's key discriminator.
+func (s *Source) redactToolArgs(server, payload map[string]any) []string {
+	command, ok := server["command"].(string)
+	if !ok {
+		return nil
+	}
+	rawArgs, _ := server["args"].([]any)
+	argv := make([]string, 0, len(rawArgs)+1)
+	argv = append(argv, command)
+	for _, arg := range rawArgs {
+		text, _ := arg.(string)
+		argv = append(argv, text)
+	}
+	redactedArgv, removed := output.RedactToolArgv(argv)
+	if len(removed) == 0 {
+		return nil
+	}
+	args, ok := payload["args"].([]any)
+	if !ok {
+		return removed
+	}
+	out := make([]any, len(args))
+	for i, arg := range args {
+		if _, isString := rawArgs[i].(string); isString {
+			out[i] = redactedArgv[i+1]
+		} else {
+			out[i] = arg
+		}
+	}
+	payload["args"] = out
+	return removed
 }
 
 // Frontmatter selects how Markdown frontmatter errors are treated.
