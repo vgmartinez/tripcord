@@ -48,6 +48,9 @@ var sha256Hex = regexp.MustCompile(`^[0-9a-f]{64}$`)
 // ConfigItem is one config file or entry.
 // The spec describes the fields and does not publish a sample document,
 // so the JSON names are harness, scope, path, sha256, kind, and payload.
+// Path must match Scope: repo-relative for repo scope, rooted at "~/"
+// for user scope, and unrestricted for managed scope. See
+// normalizeScopedPath.
 type ConfigItem struct {
 	Harness Harness         `json:"harness"`
 	Scope   Scope           `json:"scope"`
@@ -101,6 +104,25 @@ func ParseConfigKind(s string) (ConfigKind, error) {
 	return k, nil
 }
 
+// ID returns a stable identifier for this config item: harness, scope,
+// and the scope-normalized path, joined with ":". It does not include
+// the sha256, so the id names the same config entry (for example,
+// ".claude/settings.json" in the repo) across edits to its content.
+// Finding.Evidence.Config cites this id.
+func (c ConfigItem) ID() (string, error) {
+	if !c.Harness.Valid() {
+		return "", fmt.Errorf("config id: harness %q: unknown", c.Harness)
+	}
+	if !c.Scope.Valid() {
+		return "", fmt.Errorf("config id: scope %q: unknown", c.Scope)
+	}
+	path, err := normalizeScopedPath(c.Scope, c.Path)
+	if err != nil {
+		return "", fmt.Errorf("config id: %w", err)
+	}
+	return string(c.Harness) + ":" + string(c.Scope) + ":" + path, nil
+}
+
 // Validate checks the closed vocabularies and the sha256 shape.
 // Payload may be empty. When set, it must be one JSON value.
 func (c ConfigItem) Validate() error {
@@ -110,8 +132,8 @@ func (c ConfigItem) Validate() error {
 	if !c.Scope.Valid() {
 		return fmt.Errorf("config: scope %q: unknown", c.Scope)
 	}
-	if c.Path == "" {
-		return fmt.Errorf("config: empty path")
+	if _, err := normalizeScopedPath(c.Scope, c.Path); err != nil {
+		return fmt.Errorf("config: %w", err)
 	}
 	if !sha256Hex.MatchString(c.SHA256) {
 		return fmt.Errorf("config: sha256 must be 64 lowercase hex characters")

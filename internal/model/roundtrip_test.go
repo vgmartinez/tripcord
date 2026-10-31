@@ -70,10 +70,10 @@ func TestEventSampleRoundTrip(t *testing.T) {
 	}
 
 	idx := loadSchemaIndex(t)
-	if err := idx.validate(SchemaEvent, raw); err != nil {
+	if err := idx.validate(schemaIDEvent, raw); err != nil {
 		t.Fatal(err)
 	}
-	if err := idx.validate(SchemaEvent, out); err != nil {
+	if err := idx.validate(schemaIDEvent, out); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -99,7 +99,7 @@ func TestEventNilSlicesMarshalAsArrays(t *testing.T) {
 			t.Fatalf("missing %s in %s", fragment, out)
 		}
 	}
-	if err := loadSchemaIndex(t).validate(SchemaEvent, out); err != nil {
+	if err := loadSchemaIndex(t).validate(schemaIDEvent, out); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -134,7 +134,7 @@ func TestEventDropsSecretFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := loadSchemaIndex(t).validate(SchemaEvent, open); err != nil {
+	if err := loadSchemaIndex(t).validate(schemaIDEvent, open); err != nil {
 		t.Fatal(err)
 	}
 	var decoded Event
@@ -210,10 +210,10 @@ func TestFindingSampleRoundTrip(t *testing.T) {
 		t.Fatalf("remarshal = %s", out2)
 	}
 	idx := loadSchemaIndex(t)
-	if err := idx.validate(SchemaFinding, raw); err != nil {
+	if err := idx.validate(schemaIDFinding, raw); err != nil {
 		t.Fatal(err)
 	}
-	if err := idx.validate(SchemaFinding, out); err != nil {
+	if err := idx.validate(schemaIDFinding, out); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -243,7 +243,7 @@ func TestSessionRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	idx := loadSchemaIndex(t)
-	if err := idx.validate(SchemaSession, out); err != nil {
+	if err := idx.validate(schemaIDSession, out); err != nil {
 		t.Fatal(err)
 	}
 	var again Session
@@ -278,7 +278,7 @@ func TestSessionRoundTrip(t *testing.T) {
 	if !bytes.Contains(emptyOut, []byte(`"events":[]`)) || !bytes.Contains(emptyOut, []byte(`"parent":null`)) {
 		t.Fatalf("empty = %s", emptyOut)
 	}
-	if err := idx.validate(SchemaSession, emptyOut); err != nil {
+	if err := idx.validate(schemaIDSession, emptyOut); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -304,6 +304,155 @@ func TestValidateRejectsClosedFields(t *testing.T) {
 	finding.Decision = "enforce"
 	if err := finding.Validate(); err == nil {
 		t.Fatal("enforce accepted as a decision")
+	}
+}
+
+func TestEventMinimalRoundTrip(t *testing.T) {
+	t.Parallel()
+	// Only the required fields: schema, id, ts, source.harness,
+	// session.id, kind. A local, non-git, non-cloud session has no
+	// repo, branch, actor, surface, version, origin, tool, command, or
+	// raw_ref to report.
+	ev := Event{
+		Schema: SchemaEvent,
+		ID:     "evt_minimal",
+		TS:     time.Date(2026, 10, 31, 8, 0, 0, 0, time.UTC),
+		Source: Source{Harness: HarnessCodex},
+		Session: EventSession{
+			ID: "local-session",
+		},
+		Kind: EventKindRead,
+	}
+	if err := ev.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	out, err := json.Marshal(ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, absent := range []string{"surface", "version", "origin", "repo", "branch", "actor", "tool", "command", "raw_ref"} {
+		if bytes.Contains(out, []byte(`"`+absent+`"`)) {
+			t.Fatalf("marshal kept optional empty field %q: %s", absent, out)
+		}
+	}
+	for _, present := range []string{`"paths":[]`, `"net":[]`, `"credentials":[]`, `"redactions":0`, `"parent":null`} {
+		if !bytes.Contains(out, []byte(present)) {
+			t.Fatalf("marshal missing %s: %s", present, out)
+		}
+	}
+	if err := loadSchemaIndex(t).validate(schemaIDEvent, out); err != nil {
+		t.Fatal(err)
+	}
+	var again Event
+	if err := json.Unmarshal(out, &again); err != nil {
+		t.Fatal(err)
+	}
+	if err := again.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	out2, err := json.Marshal(again)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(out, out2) {
+		t.Fatalf("remarshal = %s", out2)
+	}
+}
+
+func TestEventValidateRequiresOnlySixFields(t *testing.T) {
+	t.Parallel()
+	base := Event{
+		Schema:  SchemaEvent,
+		ID:      "evt_1",
+		TS:      time.Date(2026, 10, 31, 8, 0, 0, 0, time.UTC),
+		Source:  Source{Harness: HarnessCodex},
+		Session: EventSession{ID: "s"},
+		Kind:    EventKindRead,
+	}
+	if err := base.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	cases := []func(*Event){
+		func(e *Event) { e.Schema = "" },
+		func(e *Event) { e.ID = "" },
+		func(e *Event) { e.TS = time.Time{} },
+		func(e *Event) { e.Source.Harness = "" },
+		func(e *Event) { e.Source.Harness = SurfaceGeneric },
+		func(e *Event) { e.Session.ID = "" },
+		func(e *Event) { e.Kind = "" },
+		func(e *Event) { e.Redactions = -1 },
+	}
+	for i, mutate := range cases {
+		e := base
+		mutate(&e)
+		if err := e.Validate(); err == nil {
+			t.Fatalf("case %d: expected error", i)
+		}
+	}
+}
+
+func TestEvidenceExactlyOneOfEventOrConfig(t *testing.T) {
+	t.Parallel()
+	base := func() Finding {
+		var f Finding
+		if err := json.Unmarshal(readTestdata(t, "finding.json"), &f); err != nil {
+			t.Fatal(err)
+		}
+		return f
+	}
+	eventOnly := base()
+	if err := eventOnly.Validate(); err != nil {
+		t.Fatal(err)
+	}
+
+	configOnly := base()
+	configOnly.Evidence = []Evidence{{Config: "claude:repo:.claude/settings.json", Excerpt: "hooks.PreToolUse"}}
+	if err := configOnly.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	out, err := json.Marshal(configOnly)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(out, []byte(`"config":"claude:repo:.claude/settings.json"`)) || bytes.Contains(out, []byte(`"event"`)) {
+		t.Fatalf("marshal = %s", out)
+	}
+	if err := loadSchemaIndex(t).validate(schemaIDFinding, out); err != nil {
+		t.Fatal(err)
+	}
+
+	neither := base()
+	neither.Evidence = []Evidence{{Excerpt: "no id at all"}}
+	if err := neither.Validate(); err == nil {
+		t.Fatal("evidence with neither event nor config validated")
+	}
+
+	both := base()
+	both.Evidence = []Evidence{{Event: "evt_1", Config: "claude:repo:.claude/settings.json"}}
+	if err := both.Validate(); err == nil {
+		t.Fatal("evidence with both event and config validated")
+	}
+
+	noExcerpt := base()
+	noExcerpt.Evidence = []Evidence{{Config: "claude:repo:.claude/settings.json"}}
+	if err := noExcerpt.Validate(); err != nil {
+		t.Fatalf("excerpt should be optional: %v", err)
+	}
+}
+
+func TestLocationScopeValidate(t *testing.T) {
+	t.Parallel()
+	var finding Finding
+	if err := json.Unmarshal(readTestdata(t, "finding.json"), &finding); err != nil {
+		t.Fatal(err)
+	}
+	finding.Location.Scope = ScopeRepo
+	if err := finding.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	finding.Location.Scope = "global"
+	if err := finding.Validate(); err == nil {
+		t.Fatal("global scope validated")
 	}
 }
 

@@ -9,21 +9,30 @@ import (
 
 // fingerprintPattern is the wire shape: tcf_ plus lowercase hex.
 // The length is not fixed here. The spec sample uses 6 hex digits.
-// Fingerprint emits 16.
+// Fingerprint emits 16. This stays permissive, rather than pinning
+// {16}, so a document carrying the spec's own sample value
+// ("tcf_8c1e77") still validates; see docs/fingerprint.md.
 var fingerprintPattern = regexp.MustCompile(`^tcf_[0-9a-f]+$`)
 
-// Evidence cites one event. Excerpts stored on a finding must already
-// be redacted; Fingerprint hashes the excerpt text it is given.
+// Evidence cites one event or one config item, never both. Event is an
+// Event.ID; Config is a ConfigItem.ID. Excerpt is optional either way
+// and, when set, must already be redacted; Fingerprint hashes only the
+// normalized excerpt text, never Event or Config (see Fingerprint).
 type Evidence struct {
-	Event   string `json:"event"`
-	Excerpt string `json:"excerpt"`
+	Event   string `json:"event,omitempty"`
+	Config  string `json:"config,omitempty"`
+	Excerpt string `json:"excerpt,omitempty"`
 }
 
 // Location is where a finding applies.
-// Path and line are optional. The spec sample has harness and session only.
+// Scope, path, and line are optional. The spec sample has harness and
+// session only. Scope and path together feed Fingerprint; see
+// normalizeScopedPath. Line is for display: it is never hashed, so
+// adding a line above a hook does not change the fingerprint.
 type Location struct {
 	Harness Harness `json:"harness"`
 	Session string  `json:"session,omitempty"`
+	Scope   Scope   `json:"scope,omitempty"`
 	Path    string  `json:"path,omitempty"`
 	Line    *int    `json:"line,omitempty"`
 }
@@ -74,12 +83,15 @@ func (f Finding) Validate() error {
 		return fmt.Errorf("finding: confidence out of range")
 	}
 	for i, ev := range f.Evidence {
-		if ev.Event == "" || ev.Excerpt == "" {
-			return fmt.Errorf("finding: evidence %d: event and excerpt are required", i)
+		if (ev.Event == "") == (ev.Config == "") {
+			return fmt.Errorf("finding: evidence %d: exactly one of event or config is required", i)
 		}
 	}
 	if !f.Location.Harness.Valid() {
 		return fmt.Errorf("finding: location harness %q: unknown", f.Location.Harness)
+	}
+	if f.Location.Scope != "" && !f.Location.Scope.Valid() {
+		return fmt.Errorf("finding: location scope %q: unknown", f.Location.Scope)
 	}
 	if f.Location.Line != nil && *f.Location.Line < 1 {
 		return fmt.Errorf("finding: location line %d", *f.Location.Line)
