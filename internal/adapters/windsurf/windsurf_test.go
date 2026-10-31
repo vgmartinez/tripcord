@@ -39,6 +39,104 @@ func TestDiscoverGolden(t *testing.T) {
 	if len(got.Find("web/.windsurf/hooks.json", model.ConfigKindHook)) != 1 {
 		t.Fatal("nested .windsurf/hooks.json not read")
 	}
+	if len(got.Find("~/.codeium/windsurf/memories/global_rules.md", model.ConfigKindInstructions)) != 1 {
+		t.Fatal("global rules were not read")
+	}
+	if len(got.Find(".windsurf/global_rules.md", model.ConfigKindInstructions)) != 1 {
+		t.Fatal("repository global rules were not read")
+	}
+}
+
+func TestDevinHooksTakePriority(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(root, ".devin", "hooks.json"), `{"hooks":{"pre_run_command":[{"command":"devin-hook"}]}}`)
+	kittest.WriteFile(t, filepath.Join(root, ".windsurf", "hooks.json"), `{"hooks":{"pre_run_command":[{"command":"windsurf-hook"}]}}`)
+	kittest.WriteFile(t, filepath.Join(root, ".windsurf", "rules", "a.md"), "still read")
+	got := kittest.Discover(t, New(Options{}), root)
+	if len(got.Find(".devin/hooks.json", model.ConfigKindHook)) != 1 || len(got.Find(".windsurf/hooks.json", model.ConfigKindHook)) != 0 {
+		t.Fatalf("items = %+v", got.Items)
+	}
+	if len(got.Find(".windsurf/rules/a.md", model.ConfigKindInstructions)) != 1 || !got.HasDiag(".windsurf/hooks.json") || !got.HasDiag("takes priority") {
+		t.Fatalf("got %+v", got)
+	}
+	if kittest.Blocking(t, New(Options{}), root, "takes priority") {
+		t.Fatal("the priority note was blocking")
+	}
+	for _, item := range got.Items {
+		if strings.Contains(string(item.Payload), "windsurf-hook") {
+			t.Fatalf("the lower-priority hooks were loaded: %s", item.Payload)
+		}
+	}
+}
+
+func TestChannelDirsAndGlobalRules(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	for _, dir := range []string{"windsurf", "windsurf-next", "windsurf-insiders"} {
+		kittest.WriteFile(t, filepath.Join(home, ".codeium", dir, "memories", "global_rules.md"), "rules for "+dir)
+		kittest.WriteFile(t, filepath.Join(home, ".codeium", dir, "hooks.json"), `{"hooks":{"pre_read_code":[{"command":"`+dir+`"}]}}`)
+		kittest.WriteFile(t, filepath.Join(home, ".codeium", dir, "mcp_config.json"), `{"mcpServers":{"`+dir+`":{"command":"x"}}}`)
+	}
+	got := kittest.Discover(t, New(Options{SkipRepo: true, IncludeUser: true, HomeDir: home}), t.TempDir())
+	for _, dir := range []string{"windsurf", "windsurf-next", "windsurf-insiders"} {
+		base := "~/.codeium/" + dir
+		if len(got.Find(base+"/memories/global_rules.md", model.ConfigKindInstructions)) != 1 ||
+			len(got.Find(base+"/hooks.json", model.ConfigKindHook)) != 1 ||
+			len(got.Find(base+"/mcp_config.json", model.ConfigKindMCPServer)) != 1 {
+			t.Fatalf("%s not fully read: %+v", dir, got.Items)
+		}
+	}
+}
+
+func TestDevinSystemHooksFallback(t *testing.T) {
+	t.Parallel()
+	hooks := func(command string) string {
+		return `{"hooks":{"pre_run_command":[{"command":"` + command + `"}]}}`
+	}
+	t.Run("fallback", func(t *testing.T) {
+		t.Parallel()
+		windsurf := t.TempDir()
+		kittest.WriteFile(t, filepath.Join(windsurf, "hooks.json"), hooks("from-windsurf"))
+		got := kittest.Discover(t, New(Options{SkipRepo: true, IncludeManaged: true, ManagedDir: windsurf, DevinManagedDir: t.TempDir()}), t.TempDir())
+		if len(got.Find(kit.ManagedPath(windsurf)+"/hooks.json", model.ConfigKindHook)) != 1 || len(got.Diagnostics) != 0 {
+			t.Fatalf("got %+v", got)
+		}
+	})
+	t.Run("devin wins", func(t *testing.T) {
+		t.Parallel()
+		devin := t.TempDir()
+		windsurf := t.TempDir()
+		kittest.WriteFile(t, filepath.Join(devin, "hooks.json"), hooks("from-devin"))
+		kittest.WriteFile(t, filepath.Join(windsurf, "hooks.json"), hooks("from-windsurf"))
+		got := kittest.Discover(t, New(Options{SkipRepo: true, IncludeManaged: true, ManagedDir: windsurf, DevinManagedDir: devin}), t.TempDir())
+		if len(got.Find(kit.ManagedPath(devin)+"/hooks.json", model.ConfigKindHook)) != 1 || len(got.Find(kit.ManagedPath(windsurf)+"/hooks.json", model.ConfigKindHook)) != 0 {
+			t.Fatalf("items = %+v", got.Items)
+		}
+		if !got.HasDiag("take priority") || kittest.Blocking(t, New(Options{SkipRepo: true, IncludeManaged: true, ManagedDir: windsurf, DevinManagedDir: devin}), t.TempDir(), "take priority") {
+			t.Fatalf("diagnostics = %v", got.Diagnostics)
+		}
+		for _, item := range got.Items {
+			if strings.Contains(string(item.Payload), "from-windsurf") {
+				t.Fatalf("fallback hooks were loaded: %s", item.Payload)
+			}
+		}
+	})
+}
+
+func TestDevinManagedDir(t *testing.T) {
+	t.Parallel()
+	cases := []struct{ goos, programData, want string }{
+		{"linux", "", "/etc/devin"},
+		{"darwin", "", "/Library/Application Support/Devin"},
+		{"windows", "", `C:\ProgramData\Devin`},
+		{"windows", `D:\PD`, `D:\PD\Devin`},
+	}
+	for _, tc := range cases {
+		if got := devinManagedDir(tc.goos, kittest.Env("ProgramData", tc.programData)); got != tc.want {
+			t.Errorf("%s: %q, want %q", tc.goos, got, tc.want)
+		}
+	}
 }
 
 func TestHooksShapes(t *testing.T) {

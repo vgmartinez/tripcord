@@ -25,6 +25,7 @@ the [Codex adapter](codex.md), since nothing else reads it.
 | `.agents/skills`, `.github/skills` | generic | Codex, Copilot, Claude Code, OpenCode, Gemini CLI |
 | `~/.agents/skills` | generic | Codex |
 | `.vscode/tasks.json`, `.vscode/mcp.json` | generic (harness `vscode`) | VS Code with Copilot, Cursor, Windsurf |
+| `.devin/hooks.json`, `.windsurf/hooks.json` | windsurf | Devin Local (`.devin/hooks.json` takes priority) |
 | `.mcp.json` | claude | Copilot CLI |
 | `.claude/settings.json`, `.claude/settings.local.json` | claude | Copilot CLI and Cursor (third-party hooks) |
 | `CLAUDE.md`, `.claude/skills` | claude | OpenCode (fallback) |

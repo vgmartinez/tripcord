@@ -14,8 +14,10 @@ Cascade also loads `AGENTS.md`, which is reported by the
 
 | Location | Normalized kinds |
 | --- | --- |
-| `.windsurf/hooks.json` (any depth) | `hook` |
+| `.devin/hooks.json` (any depth) | `hook` |
+| `.windsurf/hooks.json` (any depth) | `hook`, unless a `.devin/hooks.json` is present, which takes priority; the file is then named in an informational note and not loaded |
 | `.windsurf/rules/**/*.md` (any depth) | `instructions` (role `rule`) |
+| `.windsurf/global_rules.md` (any depth) | `instructions` (role `global`) |
 | `.windsurfrules` (repository root) | `instructions` (role `rules`, legacy) |
 
 Cascade discovers `.windsurf/` directories in subdirectories of the
@@ -29,6 +31,7 @@ case-insensitive.
 | `~/.codeium/windsurf/hooks.json` | `hook` |
 | `~/.codeium/windsurf/mcp_config.json` | `mcp-server` |
 | `~/.codeium/windsurf/memories/global_rules.md` | `instructions` (role `global`) |
+| `~/.codeium/windsurf-next/` and `~/.codeium/windsurf-insiders/` | the same three files, for the Next and Insiders channels |
 | `~/.codeium/hooks.json` (the JetBrains plugin's user hooks) | `hook` |
 
 Windsurf has no environment override for these paths.
@@ -36,13 +39,15 @@ Windsurf has no environment override for these paths.
 ### Managed (`--scope managed`)
 
 The system-level `hooks.json`, deployed by an administrator for every
-user of the machine:
+user of the machine. Devin Local's directory takes priority. The
+Windsurf directory is the fallback, and is not loaded when the Devin
+file is present; an informational note names it.
 
-| OS | Path |
-| --- | --- |
-| macOS | `/Library/Application Support/Windsurf/hooks.json` |
-| Linux | `/etc/windsurf/hooks.json` |
-| Windows | `%ProgramData%\Windsurf\hooks.json` (default `C:\ProgramData`) |
+| OS | Devin (priority) | Windsurf (fallback) |
+| --- | --- | --- |
+| macOS | `/Library/Application Support/Devin/hooks.json` | `/Library/Application Support/Windsurf/hooks.json` |
+| Linux | `/etc/devin/hooks.json` | `/etc/windsurf/hooks.json` |
+| Windows | `%ProgramData%\Devin\hooks.json` | `%ProgramData%\Windsurf\hooks.json` |
 
 ## Normalized payloads
 
@@ -92,8 +97,9 @@ adapter.
   and Cascade's auto-generated memories.
 - Team- and enterprise-managed rules and MCP allow lists set in the
   Windsurf admin dashboard, which live server-side.
-- The Devin Local configuration (`.devin/`), which newer Windsurf
-  releases document in place of `.windsurf/`.
+- The rest of the Devin Local configuration (rules, skills, MCP,
+  `~/.config/devin`, `.devin/config.json`). `.devin/hooks.json` and the
+  Devin system hooks are read here; a full `devin` harness is later work.
 - Windsurf editor settings (`settings.json`, terminal auto-execution
   allow and deny lists).
 
@@ -102,3 +108,6 @@ adapter.
 - [Cascade hooks](https://docs.windsurf.com/windsurf/cascade/hooks)
 - [Cascade MCP](https://docs.windsurf.com/windsurf/cascade/mcp)
 - [Cascade memories and rules](https://docs.windsurf.com/windsurf/cascade/memories)
+- [Devin Local customizations](https://docs.devin.ai/desktop/devin-local/customizations)
+- [Devin hooks](https://docs.devin.ai/cli/extensibility/hooks)
+- [Devin desktop controls](https://docs.devin.ai/desktop/controls)

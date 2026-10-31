@@ -1,10 +1,12 @@
-// Package windsurf discovers Windsurf (Cascade) configuration without
-// executing it: Cascade hooks (.windsurf/hooks.json in the repository,
-// the user's ~/.codeium/windsurf/hooks.json and the JetBrains plugin's
-// ~/.codeium/hooks.json, and the system hooks.json), MCP servers
-// (~/.codeium/windsurf/mcp_config.json), and rules (.windsurf/rules/,
-// the legacy .windsurfrules, and the global rules file). AGENTS.md is
-// read by the generic adapter.
+// Package windsurf discovers Windsurf (Cascade) and Devin Local hook
+// configuration without executing it: hooks (.devin/hooks.json, which
+// takes priority over .windsurf/hooks.json; the user's
+// ~/.codeium/windsurf, windsurf-next and windsurf-insiders hooks; the
+// JetBrains plugin's ~/.codeium/hooks.json; and the system hooks, Devin's
+// directory with the Windsurf directory as fallback), MCP servers, and
+// rules (.windsurf/rules/, .windsurf/global_rules.md, the legacy
+// .windsurfrules, and memories/global_rules.md). AGENTS.md is read by
+// the generic adapter.
 package windsurf
 
 import (
@@ -31,11 +33,17 @@ type Options struct {
 	HomeDir string
 	// Getenv overrides os.Getenv (for ProgramData).
 	Getenv func(string) string
-	// ManagedDir overrides the system hooks directory:
+	// ManagedDir overrides the Windsurf system hooks directory, which is
+	// the fallback when no Devin system hooks file is present:
 	// /Library/Application Support/Windsurf on macOS, /etc/windsurf on
 	// Linux, and %ProgramData%\Windsurf on Windows.
 	ManagedDir string
-	Limits     *kit.Limits
+	// DevinManagedDir overrides the Devin system hooks directory:
+	// /Library/Application Support/Devin on macOS, /etc/devin on Linux,
+	// and %ProgramData%\Devin on Windows. It takes priority over
+	// ManagedDir.
+	DevinManagedDir string
+	Limits          *kit.Limits
 }
 
 // Adapter discovers Windsurf config.
@@ -113,6 +121,7 @@ const (
 	roleNone role = iota
 	roleHooks
 	roleRule
+	roleGlobalRules
 	roleLegacyRules
 )
 
@@ -129,19 +138,36 @@ func classify(rel string) role {
 		return roleLegacyRules
 	}
 	for i := n - 2; i >= 0; i-- {
-		if segments[i] != ".windsurf" {
-			continue
-		}
 		rest := segments[i+1:]
-		switch {
-		case len(rest) == 1 && base == "hooks.json":
-			return roleHooks
-		case len(rest) >= 2 && rest[0] == "rules" && path.Ext(base) == ".md":
-			return roleRule
+		switch segments[i] {
+		case ".devin":
+			// Devin Local loads .devin/hooks.json in place of the
+			// Cascade .windsurf/hooks.json. Same format.
+			if len(rest) == 1 && base == "hooks.json" {
+				return roleHooks
+			}
+			return roleNone
+		case ".windsurf":
+			switch {
+			case len(rest) == 1 && base == "hooks.json":
+				return roleHooks
+			case len(rest) == 1 && base == "global_rules.md":
+				return roleGlobalRules
+			case len(rest) >= 2 && rest[0] == "rules" && path.Ext(base) == ".md":
+				return roleRule
+			}
+			return roleNone
 		}
-		return roleNone
 	}
 	return roleNone
+}
+
+// devinHooks reports whether rel is a Devin Local hooks file. When one
+// is present it takes priority over every .windsurf/hooks.json.
+func devinHooks(rel string) bool {
+	segments := kit.Segments(rel)
+	n := len(segments)
+	return n >= 2 && segments[n-2] == ".devin" && segments[n-1] == "hooks.json"
 }
 
 var matcher = kit.Matcher{
@@ -167,13 +193,25 @@ func (a *Adapter) discoverRepo(ctx context.Context, repoRoot string, c *kit.Coll
 		c.Warn(model.ScopeRepo, "", "cannot list repository: %v", err)
 		return nil
 	}
+	devin := false
+	for _, rel := range files {
+		if devinHooks(rel) {
+			devin = true
+			break
+		}
+	}
 	r := kit.NewRepoReader(reader, a.limits, c)
 	for _, rel := range files {
+		role := classify(rel)
+		if devin && role == roleHooks && !devinHooks(rel) {
+			c.Note(model.ScopeRepo, rel, true, ".devin/hooks.json takes priority over this file, so it was not loaded")
+			continue
+		}
 		raw, ok := r.Read(rel)
 		if !ok {
 			continue
 		}
-		normalize(c.Source(model.ScopeRepo, rel, raw), classify(rel), raw)
+		normalize(c.Source(model.ScopeRepo, rel, raw), role, raw)
 	}
 	return nil
 }
@@ -185,6 +223,8 @@ func normalize(src *kit.Source, r role, raw []byte) {
 		f.hooks(raw)
 	case roleRule:
 		f.Markdown(model.ConfigKindInstructions, "rule", raw, kit.LooseFrontmatter)
+	case roleGlobalRules:
+		f.Markdown(model.ConfigKindInstructions, "global", raw, kit.LooseFrontmatter)
 	case roleLegacyRules:
 		f.Markdown(model.ConfigKindInstructions, "rules", raw, kit.LooseFrontmatter)
 	case roleNone:
@@ -201,7 +241,20 @@ func (a *Adapter) discoverUser(c *kit.Collector) {
 		return
 	}
 	codeium := kit.HomeDir(home, ".codeium")
-	dir := codeium.Dir("windsurf")
+	// windsurf-next and windsurf-insiders are the Next and Insiders
+	// release channels; each has the same user configuration as stable.
+	for _, name := range []string{"windsurf", "windsurf-next", "windsurf-insiders"} {
+		readProfile(c, codeium.Dir(name))
+	}
+	abs, logical := codeium.File("hooks.json")
+	if raw, ok := c.ReadLocal(model.ScopeUser, abs, logical); ok {
+		(&file{Source: c.Source(model.ScopeUser, logical, raw)}).hooks(raw)
+	}
+}
+
+// readProfile reads one channel's user configuration: hooks, MCP
+// servers, and the global rules.
+func readProfile(c *kit.Collector, dir kit.UserDir) {
 	for _, f := range []struct {
 		dir  kit.UserDir
 		name string
@@ -212,7 +265,6 @@ func (a *Adapter) discoverUser(c *kit.Collector) {
 		{dir.Dir("memories"), "global_rules.md", func(f *file, raw []byte) {
 			f.Markdown(model.ConfigKindInstructions, "global", raw, kit.LooseFrontmatter)
 		}},
-		{codeium, "hooks.json", (*file).hooks},
 	} {
 		abs, logical := f.dir.File(f.name)
 		if raw, ok := c.ReadLocal(model.ScopeUser, abs, logical); ok {
@@ -221,7 +273,25 @@ func (a *Adapter) discoverUser(c *kit.Collector) {
 	}
 }
 
-// defaultManagedDir is the documented system-level hooks directory.
+// devinManagedDir is the Devin Local system hooks directory. It takes
+// priority over defaultManagedDir; the Windsurf directory is the fallback.
+func devinManagedDir(goos string, getenv func(string) string) string {
+	switch goos {
+	case "darwin":
+		return "/Library/Application Support/Devin"
+	case "windows":
+		base := getenv("ProgramData")
+		if base == "" {
+			base = `C:\ProgramData`
+		}
+		return base + `\Devin`
+	default:
+		return "/etc/devin"
+	}
+}
+
+// defaultManagedDir is the Windsurf system hooks directory, used when no
+// Devin system hooks file is present.
 func defaultManagedDir(goos string, getenv func(string) string) string {
 	switch goos {
 	case "darwin":
@@ -237,15 +307,34 @@ func defaultManagedDir(goos string, getenv func(string) string) string {
 	}
 }
 
-// discoverManaged reads the system hooks.json, which an administrator
-// deploys to every user of the machine.
+// discoverManaged reads the system hooks.json an administrator deploys
+// for every user. Devin Local's file takes priority; the Windsurf file
+// is the fallback when it is absent. When ManagedDir is set and
+// DevinManagedDir is not (tests), only the Windsurf directory is
+// consulted, so a host's /etc/devin is never read by accident.
 func (a *Adapter) discoverManaged(c *kit.Collector) {
-	dir := a.options.ManagedDir
-	if dir == "" {
-		dir = defaultManagedDir(runtime.GOOS, a.getenv)
+	windsurfDir := a.options.ManagedDir
+	if windsurfDir == "" {
+		windsurfDir = defaultManagedDir(runtime.GOOS, a.getenv)
 	}
-	abs := filepath.Join(dir, "hooks.json")
-	logical := path.Join(kit.ManagedPath(dir), "hooks.json")
+	devinDir := a.options.DevinManagedDir
+	if devinDir == "" && a.options.ManagedDir == "" {
+		devinDir = devinManagedDir(runtime.GOOS, a.getenv)
+	}
+	if devinDir != "" {
+		abs := filepath.Join(devinDir, "hooks.json")
+		logical := path.Join(kit.ManagedPath(devinDir), "hooks.json")
+		if raw, ok := c.ReadLocal(model.ScopeManaged, abs, logical); ok {
+			(&file{Source: c.Source(model.ScopeManaged, logical, raw)}).hooks(raw)
+			fallback := filepath.Join(windsurfDir, "hooks.json")
+			if info, err := os.Lstat(fallback); err == nil && !info.IsDir() {
+				c.Note(model.ScopeManaged, path.Join(kit.ManagedPath(windsurfDir), "hooks.json"), true, "Devin system hooks take priority over this file, so it was not loaded")
+			}
+			return
+		}
+	}
+	abs := filepath.Join(windsurfDir, "hooks.json")
+	logical := path.Join(kit.ManagedPath(windsurfDir), "hooks.json")
 	if raw, ok := c.ReadLocal(model.ScopeManaged, abs, logical); ok {
 		(&file{Source: c.Source(model.ScopeManaged, logical, raw)}).hooks(raw)
 	}

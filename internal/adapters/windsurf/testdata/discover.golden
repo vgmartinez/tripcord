@@ -16,6 +16,18 @@
     {
       "harness": "windsurf",
       "scope": "repo",
+      "path": ".windsurf/global_rules.md",
+      "sha256": "77183cae94fcb105274d5a1b5ab7d91140b30575a15fd4751c8f8ba4cc9dd2c1",
+      "kind": "instructions",
+      "payload": {
+        "content": "Global rules for the workspace.\n",
+        "key": "[\"global\",\"sig:4f18990bfeaa43b9\"]",
+        "role": "global"
+      }
+    },
+    {
+      "harness": "windsurf",
+      "scope": "repo",
       "path": ".windsurf/hooks.json",
       "sha256": "fb063ca4a3a8282de4597d249e791c897c953f1218a98d1018a5de30c75ed17f",
       "kind": "hook",
