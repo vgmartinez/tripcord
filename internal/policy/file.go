@@ -24,6 +24,8 @@ const MaxFileBytes = 256 << 10
 const Version = 1
 
 // Mode is the policy mode. Enforce is the strictest and audit the least.
+// The mode used when no policy layer sets one depends on the surface;
+// see DefaultsFor.
 type Mode string
 
 const (
@@ -31,11 +33,6 @@ const (
 	ModeWarn    Mode = "warn"
 	ModeAudit   Mode = "audit"
 )
-
-// DefaultMode is the mode when no policy layer sets one.
-// The spec owner has not confirmed this value. Change this constant
-// to change the default.
-const DefaultMode Mode = ModeEnforce
 
 // strength orders modes for locking: a lower layer may not pick a mode
 // with lower strength than a locked one.
@@ -82,17 +79,18 @@ func (s *StringList) UnmarshalYAML(node *yaml.Node) error {
 // File is one policy.yaml as written. Omitted sections inherit from
 // the layer below; see Merge.
 type File struct {
-	Version   int          `yaml:"version"`
-	Pack      StringList   `yaml:"pack"`
-	Extends   StringList   `yaml:"extends"`
-	Mode      Mode         `yaml:"mode"`
-	Harnesses []string     `yaml:"harnesses"`
-	Rules     RulesSection `yaml:"rules"`
-	Custom    []CustomSpec `yaml:"custom"`
-	Secrets   *Secrets     `yaml:"secrets"`
-	Privacy   *Privacy     `yaml:"privacy"`
-	Cloud     *Cloud       `yaml:"cloud"`
-	Locked    *Locked      `yaml:"locked"`
+	Version   int            `yaml:"version"`
+	Pack      StringList     `yaml:"pack"`
+	Extends   StringList     `yaml:"extends"`
+	Mode      Mode           `yaml:"mode"`
+	FailOn    model.Severity `yaml:"fail-on"`
+	Harnesses []string       `yaml:"harnesses"`
+	Rules     RulesSection   `yaml:"rules"`
+	Custom    []CustomSpec   `yaml:"custom"`
+	Secrets   *Secrets       `yaml:"secrets"`
+	Privacy   *Privacy       `yaml:"privacy"`
+	Cloud     *Cloud         `yaml:"cloud"`
+	Locked    *Locked        `yaml:"locked"`
 }
 
 // RulesSection selects and adjusts rules.
@@ -203,6 +201,11 @@ func (f *File) Validate() error {
 	}
 	if f.Mode != "" && f.Mode.strength() == 0 {
 		add("mode %q: want enforce, warn, or audit", f.Mode)
+	}
+	if f.FailOn != "" {
+		if _, err := model.ParseSeverity(string(f.FailOn)); err != nil {
+			add("fail-on: %v", err)
+		}
 	}
 	if f.Harnesses != nil {
 		if len(f.Harnesses) == 0 {

@@ -61,17 +61,27 @@ func layer(t *testing.T, kind LayerKind, doc string) Layer {
 
 func merge(t *testing.T, cat RuleCatalog, docs ...string) (*Effective, error) {
 	t.Helper()
+	return mergeOn(t, SurfaceScan, cat, docs...)
+}
+
+func mergeOn(t *testing.T, surface Surface, cat RuleCatalog, docs ...string) (*Effective, error) {
+	t.Helper()
 	kinds := []LayerKind{LayerOrg, LayerRepo, LayerLocal}
 	var layers []Layer
 	for i, d := range docs {
 		layers = append(layers, layer(t, kinds[i], d))
 	}
-	return Merge(testEnv(t), cat, layers)
+	return Merge(testEnv(t), cat, surface, layers)
 }
 
 func mustMerge(t *testing.T, cat RuleCatalog, docs ...string) *Effective {
 	t.Helper()
-	e, err := merge(t, cat, docs...)
+	return mustMergeOn(t, SurfaceScan, cat, docs...)
+}
+
+func mustMergeOn(t *testing.T, surface Surface, cat RuleCatalog, docs ...string) *Effective {
+	t.Helper()
+	e, err := mergeOn(t, surface, cat, docs...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +97,7 @@ func wantErr(t *testing.T, err error, substr string) {
 
 func TestDefaults(t *testing.T) {
 	e := mustMerge(t, nil)
-	if e.Mode != DefaultMode || len(e.Harnesses) != 7 || !e.Enabled("TC-CFG-001", model.HarnessClaude) || e.Egress != EgressNone || !e.Redact {
+	if e.Mode != ModeEnforce || e.FailOn != model.SeverityHigh || len(e.Harnesses) != 7 || !e.Enabled("TC-CFG-001", model.HarnessClaude) || e.Egress != EgressNone || !e.Redact {
 		t.Fatalf("defaults = %+v", e)
 	}
 	if e.Provenance["mode"].Layer != LayerDefault {

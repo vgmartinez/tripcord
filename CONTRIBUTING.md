@@ -134,6 +134,12 @@ after the org layer; it cannot replace or skip it.
 committed. `tripcord init`, when it lands, must add
 `.tripcord/policy.local.yaml` to the `.gitignore` it writes.
 
+With no policy file, `scan`, `preopen`, `pr-context`, and the Action
+run in `enforce` and fail on `high`. The hook runs in `warn` and does
+not block. `DefaultsFor` in `internal/policy` is the only definition of
+that. An explicit `mode` or `fail-on` replaces it. See
+[docs/policy.md](docs/policy.md).
+
 `locked` can freeze `mode`, `rules`, and `exceptions`. A locked rule
 stays enabled even if a later `rules.include` leaves it out, and a
 later layer cannot add an exception for it, pin its pack below the

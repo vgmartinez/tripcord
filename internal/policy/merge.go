@@ -120,10 +120,14 @@ type HarnessLock struct {
 // "rules.include", "rules.severity_overrides.<id>",
 // "rules.exceptions[<i>]" (index into Exceptions), "custom.<id>",
 // "secrets.rulesets", "secrets.store", "privacy.egress",
-// "privacy.redact", "cloud.report_channel", "locked.mode",
+// "privacy.redact", "cloud.report_channel", "fail-on", "locked.mode",
 // "locked.rules[<pattern>]", and "locked.exceptions[<pattern>]".
 type Effective struct {
-	Mode              Mode
+	Mode Mode
+	// FailOn is the lowest severity that fails the run. The zero value
+	// never fails. It starts as the surface default and a policy layer
+	// replaces it.
+	FailOn            model.Severity
 	Packs             []rules.PackRef
 	Harnesses         []model.Harness
 	Include           []string
@@ -146,13 +150,14 @@ type Effective struct {
 
 var defaultOrigin = Origin{Layer: LayerDefault, Source: "default"}
 
-// defaults is the policy with no files. DefaultMode is pending
-// confirmation; the other values are the spec sample's local-only
-// choices (every harness, every rule, no egress, redacted, fingerprint
-// store).
-func defaults() *Effective {
+// defaults is the policy with no files. Mode and fail-on come from the
+// surface (DefaultsFor). The other values are the spec sample's
+// local-only choices (every harness, every rule, no egress, redacted,
+// fingerprint store).
+func defaults(d Defaults) *Effective {
 	e := &Effective{
-		Mode: DefaultMode,
+		Mode:   d.Mode,
+		FailOn: d.FailOn,
 		Harnesses: []model.Harness{
 			model.HarnessClaude, model.HarnessCodex, model.HarnessCursor, model.HarnessCopilot,
 			model.HarnessGemini, model.HarnessOpenCode, model.HarnessWindsurf,
@@ -166,17 +171,23 @@ func defaults() *Effective {
 		Provenance:        map[string]Origin{},
 		Layers:            []Origin{defaultOrigin},
 	}
-	for _, k := range []string{"mode", "harnesses", "rules.include", "secrets.store", "privacy.egress", "privacy.redact"} {
+	for _, k := range []string{"mode", "fail-on", "harnesses", "rules.include", "secrets.store", "privacy.egress", "privacy.redact"} {
 		e.Provenance[k] = defaultOrigin
 	}
 	return e
 }
 
-// Merge applies layers over the defaults. env compiles custom rules.
-// catalog may be nil, in which case no lower layer may override the
-// severity of a locked rule that an upper layer did not override.
-func Merge(env *rules.Env, catalog RuleCatalog, layers []Layer) (*Effective, error) {
-	e := defaults()
+// Merge applies layers over the defaults for surface. env compiles
+// custom rules. catalog may be nil, in which case no lower layer may
+// override the severity of a locked rule that an upper layer did not
+// override. A layer that sets mode or fail-on replaces the surface
+// default; a layer that omits them leaves it.
+func Merge(env *rules.Env, catalog RuleCatalog, surface Surface, layers []Layer) (*Effective, error) {
+	d, err := DefaultsFor(surface)
+	if err != nil {
+		return nil, err
+	}
+	e := defaults(d)
 	customIDs := map[string]Origin{}
 	for _, l := range layers {
 		if err := e.apply(env, catalog, l, customIDs); err != nil {
@@ -199,6 +210,10 @@ func (e *Effective) apply(env *rules.Env, catalog RuleCatalog, l Layer, customID
 			e.Mode = f.Mode
 			e.Provenance["mode"] = o
 		}
+	}
+	if f.FailOn != "" {
+		e.FailOn = f.FailOn
+		e.Provenance["fail-on"] = o
 	}
 	for _, p := range f.Pack {
 		ref, _ := rules.ParsePackRef(p)
@@ -487,6 +502,13 @@ func (e *Effective) RuleFilter() rules.Filter {
 	return func(r *rules.Rule, item model.ConfigItem) bool {
 		return e.Enabled(r.ID, item.Harness)
 	}
+}
+
+// Fails reports whether a finding of severity sev fails this policy's
+// run: sev is at or above FailOn. A zero FailOn never fails, which is
+// the hook default, so the hook shows findings and does not block.
+func (e *Effective) Fails(sev model.Severity) (bool, error) {
+	return (Defaults{FailOn: e.FailOn}).Fails(sev)
 }
 
 // Severity returns the override for id, or base.

@@ -9,6 +9,11 @@
 // tripcord init, in a later change, must add that path to the
 // .gitignore it generates.
 //
+// With no policy file, mode and fail-on come from DefaultsFor: enforce
+// and fail-on high for scan, preopen, pr-context, and the Action, and
+// warn with no failure for the hook. A layer that sets mode or fail-on
+// replaces that default.
+//
 // A later layer overrides an earlier one, except for values an earlier
 // layer listed under locked: mode, rules, and exceptions. Locking a
 // rule also keeps it on the allowlist, floors the pack versions in

@@ -90,6 +90,7 @@ func TestParseRejects(t *testing.T) {
 		"version 2":            r("version: 1", "version: 2").Replace(specSample),
 		"no version":           r("version: 1\n", "").Replace(specSample),
 		"bad mode":             r("mode: enforce ", "mode: block ").Replace(specSample),
+		"bad fail-on":          specSample + "fail-on: severe\n",
 		"egress":               r("egress: none ", "egress: https ").Replace(specSample),
 		"store":                r("store: fingerprint-only", "store: plaintext").Replace(specSample),
 		"report channel":       r("[hook-message, git-notes]", "[slack]").Replace(specSample),

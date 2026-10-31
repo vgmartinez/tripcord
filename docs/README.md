@@ -2,6 +2,12 @@
 
 Design notes for this private pre-release.
 
+## Policy defaults
+
+[policy.md](policy.md) defines the mode and fail-on used when a repo has
+no policy file, and how an explicit policy overrides them. The value
+depends on the surface: scans fail on high, and the hook warns.
+
 ## Finding fingerprints
 
 [fingerprint.md](fingerprint.md) defines the canonical finding fingerprint.

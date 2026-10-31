@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/vgmartinez/tripcord/internal/exitcode"
+	"github.com/vgmartinez/tripcord/internal/model"
 )
 
 func write(t *testing.T, path, body string) {
@@ -35,11 +36,11 @@ func layerNames(layers []Layer) string {
 }
 
 func TestLoadNoFiles(t *testing.T) {
-	e, err := Load(Options{RepoRoot: t.TempDir(), ManagedPolicy: noManaged(t), Env: testEnv(t)})
+	e, err := Load(Options{RepoRoot: t.TempDir(), ManagedPolicy: noManaged(t), Surface: SurfaceScan, Env: testEnv(t)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if e.Mode != DefaultMode || len(e.Layers) != 1 {
+	if e.Mode != ModeEnforce || e.FailOn != model.SeverityHigh || len(e.Layers) != 1 {
 		t.Fatalf("effective %+v", e)
 	}
 }
@@ -72,7 +73,7 @@ func TestLoadLayers(t *testing.T) {
 
 	opts := Options{
 		RepoRoot: repo, ManagedPolicy: managed, OrgPolicy: []string{filepath.Join(root, "flag", "org.yaml")},
-		Env: testEnv(t), Catalog: catalog, Resolver: DirResolver{Root: packs},
+		Surface: SurfaceScan, Env: testEnv(t), Catalog: catalog, Resolver: DirResolver{Root: packs},
 	}
 	layers, err := LoadLayers(opts)
 	if err != nil {
@@ -114,7 +115,7 @@ func TestOrgLocksWithoutExtends(t *testing.T) {
 	managed := filepath.Join(root, "managed", "policy.yaml")
 	write(t, managed, "version: 1\nmode: enforce\nrules:\n  include: [\"*\"]\nlocked:\n  mode: true\n  rules: [TC-CFG-*]\n")
 	write(t, filepath.Join(root, "lax.yaml"), "version: 1\nmode: audit\n")
-	opts := Options{RepoRoot: root, ManagedPolicy: managed, Env: testEnv(t), Catalog: catalog}
+	opts := Options{RepoRoot: root, ManagedPolicy: managed, Surface: SurfaceScan, Env: testEnv(t), Catalog: catalog}
 
 	write(t, filepath.Join(root, RepoFile), "version: 1\nrules:\n  include: [TC-MCP-*]\n")
 	e, err := Load(opts)
@@ -244,7 +245,7 @@ func TestLoadErrors(t *testing.T) {
 			for rel, body := range c.files {
 				write(t, filepath.Join(root, rel), body)
 			}
-			opts := Options{RepoRoot: root, ManagedPolicy: noManaged(t), Env: testEnv(t), Catalog: catalog}
+			opts := Options{RepoRoot: root, ManagedPolicy: noManaged(t), Surface: SurfaceScan, Env: testEnv(t), Catalog: catalog}
 			if c.opts != nil {
 				c.opts(&opts)
 			}

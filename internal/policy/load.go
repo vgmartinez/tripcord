@@ -75,7 +75,10 @@ type Options struct {
 	// --org-policy flag or the GitHub Action input. Each must exist.
 	// They merge after the managed policy.
 	OrgPolicy []string
-	Env       *rules.Env
+	// Surface selects the no-policy mode and fail-on. Required.
+	// An explicit policy mode or fail-on overrides that default.
+	Surface Surface
+	Env     *rules.Env
 	// Catalog may be nil; see Merge.
 	Catalog RuleCatalog
 	// Resolver resolves pack references in extends. Nil rejects them.
@@ -86,11 +89,14 @@ type Options struct {
 // and merges the layers. Errors are *Error; invalid policy maps to exit
 // code 3.
 func Load(opts Options) (*Effective, error) {
+	if _, err := DefaultsFor(opts.Surface); err != nil {
+		return nil, &Error{Err: err}
+	}
 	layers, err := LoadLayers(opts)
 	if err != nil {
 		return nil, err
 	}
-	return Merge(opts.Env, opts.Catalog, layers)
+	return Merge(opts.Env, opts.Catalog, opts.Surface, layers)
 }
 
 // LoadLayers returns the parsed layers in merge order:
