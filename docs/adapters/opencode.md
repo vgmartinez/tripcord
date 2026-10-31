@@ -46,12 +46,19 @@ In user directories the agent and command trees are walked; plugin and
 tool directories are listed (at most 256 files each) instead, because
 OpenCode installs plugin dependencies under the config directory.
 
-`XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `OPENCODE_CONFIG` (its directory),
-and `OPENCODE_CONFIG_DIR` are handled like
-[`CODEX_HOME`](codex.md#user---scope-user): a relative value is reported
-and not scanned; a value outside the home directory is scanned, its
-paths are shown as `~/<VAR>/...`, and a blocking diagnostic makes the
+`OPENCODE_CONFIG` (its directory) and `OPENCODE_CONFIG_DIR` are handled
+like [`CODEX_HOME`](codex.md#user---scope-user): a relative value is
+reported and not scanned; a value outside the home directory is scanned,
+its paths are shown as `~/<VAR>/...`, and a blocking diagnostic makes the
 scan exit non-zero.
+
+`XDG_CONFIG_HOME` and `XDG_DATA_HOME` follow the freedesktop
+base-directory spec instead, because they relocate configuration for
+every program and are not OpenCode-specific. A relative value is invalid
+and ignored, and the default (`~/.config`, `~/.local/share`) is used. An
+absolute value outside the home directory is scanned and shown as
+`~/XDG_CONFIG_HOME/...` or `~/XDG_DATA_HOME/...`, with an informational
+note that does not by itself make the scan exit non-zero.
 
 ### Managed (`--scope managed`)
 

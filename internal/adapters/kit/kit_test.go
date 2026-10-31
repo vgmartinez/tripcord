@@ -699,6 +699,27 @@ func TestResolveUserDir(t *testing.T) {
 	}
 }
 
+func TestResolveXDGDir(t *testing.T) {
+	t.Parallel()
+	c := NewCollector(model.HarnessOpenCode, "OpenCode")
+	dir := ResolveXDGDir(c, "/home/dev", "XDG_CONFIG_HOME", "", ".config")
+	if dir.Logical != "~/.config" || len(c.Diagnostics()) != 0 {
+		t.Fatalf("default: %+v %v", dir, c.Diagnostics())
+	}
+	dir = ResolveXDGDir(c, "/home/dev", "XDG_CONFIG_HOME", "relative", ".config")
+	if dir.Abs != "/home/dev/.config" || dir.Logical != "~/.config" || len(c.Diagnostics()) != 0 {
+		t.Fatalf("relative value was not ignored: %+v %v", dir, c.Diagnostics())
+	}
+	dir = ResolveXDGDir(c, "/home/dev", "XDG_CONFIG_HOME", "/home/dev/xdg", ".config")
+	if dir.Logical != "~/xdg" || len(c.Diagnostics()) != 0 {
+		t.Fatalf("inside home: %+v %v", dir, c.Diagnostics())
+	}
+	dir = ResolveXDGDir(c, "/home/dev", "XDG_DATA_HOME", "/var/xdg", ".local/share")
+	if dir.Logical != "~/XDG_DATA_HOME" || len(c.Diagnostics()) != 1 || !c.Diagnostics()[0].Informational {
+		t.Fatalf("outside home: %+v %v", dir, c.Diagnostics())
+	}
+}
+
 func TestResolveHomeRejectsRoot(t *testing.T) {
 	t.Parallel()
 	for _, home := range []string{"/", `C:\`} {

@@ -480,14 +480,15 @@ func TestNoDuplicateEvidenceKeysInAnyFile(t *testing.T) {
 	})
 }
 
-// TestHomeOverrideOutsideHomeIsBlocking checks that CLAUDE_CONFIG_DIR,
-// CODEX_HOME, COPILOT_HOME, GEMINI_CLI_HOME, OPENCODE_CONFIG_DIR, and
-// XDG_CONFIG_HOME (for OpenCode) behave the same way when pointed outside
-// the home directory: the redirected configuration is still scanned, but
-// a blocking (non-informational) diagnostic is reported, so `tripcord
-// scan` exits non-zero. An adapter that only logged an informational
-// note would let a scan exit clean while reading files outside the
-// developer's home.
+// TestHomeOverrideOutsideHomeIsBlocking checks that tool-specific
+// overrides (CLAUDE_CONFIG_DIR, CODEX_HOME, COPILOT_HOME,
+// GEMINI_CLI_HOME, OPENCODE_CONFIG, OPENCODE_CONFIG_DIR) behave the same
+// way when pointed outside the home directory: the redirected
+// configuration is still scanned, but a blocking diagnostic is reported,
+// so `tripcord scan` exits non-zero. XDG_CONFIG_HOME and XDG_DATA_HOME
+// are not in this list: they relocate configuration for every program,
+// and an outside-home value is informational (see
+// TestXDGOverrideOutsideHomeIsInformational).
 func TestHomeOverrideOutsideHomeIsBlocking(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -506,10 +507,15 @@ func TestHomeOverrideOutsideHomeIsBlocking(t *testing.T) {
 		{"GEMINI_CLI_HOME", func(home string, getenv func(string) string) adapters.Adapter {
 			return gemini.New(gemini.Options{SkipRepo: true, IncludeUser: true, HomeDir: home, Getenv: getenv})
 		}},
-		{"OPENCODE_CONFIG_DIR", func(home string, getenv func(string) string) adapters.Adapter {
-			return opencode.New(opencode.Options{SkipRepo: true, IncludeUser: true, HomeDir: home, Getenv: getenv})
+		{"OPENCODE_CONFIG", func(home string, getenv func(string) string) adapters.Adapter {
+			return opencode.New(opencode.Options{SkipRepo: true, IncludeUser: true, HomeDir: home, Getenv: func(name string) string {
+				if name == "OPENCODE_CONFIG" {
+					return filepath.Join(getenv("OPENCODE_CONFIG"), "config.json")
+				}
+				return getenv(name)
+			}})
 		}},
-		{"XDG_CONFIG_HOME", func(home string, getenv func(string) string) adapters.Adapter {
+		{"OPENCODE_CONFIG_DIR", func(home string, getenv func(string) string) adapters.Adapter {
 			return opencode.New(opencode.Options{SkipRepo: true, IncludeUser: true, HomeDir: home, Getenv: getenv})
 		}},
 	}
@@ -540,6 +546,62 @@ func TestHomeOverrideOutsideHomeIsBlocking(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestXDGOverrideOutsideHomeIsInformational checks the other half of the
+// override rule: XDG_CONFIG_HOME and XDG_DATA_HOME outside home are
+// scanned and noted, and the note is informational, so it does not by
+// itself make a scan exit non-zero. A relative value is invalid per the
+// freedesktop spec and is ignored in favor of the default.
+func TestXDGOverrideOutsideHomeIsInformational(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"XDG_CONFIG_HOME", "XDG_DATA_HOME"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			home := t.TempDir()
+			outside := t.TempDir()
+			a := opencode.New(opencode.Options{SkipRepo: true, IncludeUser: true, HomeDir: home, Getenv: kittest.Env(name, outside)})
+			_, err := a.Discover(context.Background(), t.TempDir())
+			var diag *adapters.DiagnosticError
+			if !errors.As(err, &diag) {
+				t.Fatalf("%s outside home: Discover returned %v, want an informational diagnostic", name, err)
+			}
+			var informational bool
+			for _, d := range diag.Diagnostics {
+				if strings.Contains(d.Message, "outside the home directory") && !d.Informational {
+					t.Fatalf("%s outside home was blocking: %+v", name, diag.Diagnostics)
+				}
+				if strings.Contains(d.Message, "outside the home directory") && d.Informational {
+					informational = true
+				}
+			}
+			if !informational {
+				t.Fatalf("%s outside home produced no informational diagnostic: %+v", name, diag.Diagnostics)
+			}
+		})
+	}
+	t.Run("relative", func(t *testing.T) {
+		t.Parallel()
+		home := t.TempDir()
+		kittest.WriteFile(t, filepath.Join(home, ".config", "opencode", "opencode.json"), `{"plugin":["from-default"]}`)
+		a := opencode.New(opencode.Options{SkipRepo: true, IncludeUser: true, HomeDir: home, Getenv: kittest.Env("XDG_CONFIG_HOME", "rel", "XDG_DATA_HOME", "rel")})
+		items, err := a.Discover(context.Background(), t.TempDir())
+		if err != nil {
+			t.Fatalf("relative XDG: %v", err)
+		}
+		found := false
+		for _, item := range items {
+			if item.Path == "~/.config/opencode/opencode.json" {
+				found = true
+			}
+			if strings.Contains(item.Path, "rel") {
+				t.Fatalf("relative XDG was used: %s", item.Path)
+			}
+		}
+		if !found {
+			t.Fatalf("default config was not read: %+v", items)
+		}
+	})
 }
 
 var urlWithQuery = regexp.MustCompile(`https?://[^\s"'<>\\]*\?[^\s"'<>\\]+`)

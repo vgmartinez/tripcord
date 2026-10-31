@@ -62,7 +62,10 @@ func ResolveHome(c *Collector, override string) (string, bool) {
 // "~/<envName>" so no absolute path reaches an item; this is reported as
 // a blocking diagnostic (matching how the Claude adapter treats
 // CLAUDE_CONFIG_DIR outside home), so the scan exits non-zero even though
-// the redirected configuration is still read.
+// the redirected configuration is still read. Tool-specific overrides
+// (CODEX_HOME, GEMINI_CLI_HOME, OPENCODE_CONFIG_DIR, ...) use this.
+// XDG base directories use ResolveXDGDir instead: they are not
+// tool-specific, and a value outside home must not by itself fail a scan.
 func ResolveUserDir(c *Collector, home, envName, envValue, defaultRel string) (UserDir, bool) {
 	dir := filepath.Join(home, filepath.FromSlash(defaultRel))
 	if v := strings.TrimSpace(envValue); v != "" {
@@ -72,12 +75,39 @@ func ResolveUserDir(c *Collector, home, envName, envValue, defaultRel string) (U
 		}
 		dir = filepath.Clean(v)
 	}
-	logical := TildePath(home, dir)
-	if logical != "~" && !strings.HasPrefix(logical, "~/") {
-		c.Warn(model.ScopeUser, "~/"+envName, "%s is outside the home directory; configuration is scanned and paths are shown as ~/%s", envName, envName)
-		logical = "~/" + envName
-	}
+	logical := outsideHome(c, home, envName, dir, false)
 	return UserDir{Abs: dir, Logical: logical}, true
+}
+
+// ResolveXDGDir resolves an XDG base directory (XDG_CONFIG_HOME,
+// XDG_DATA_HOME) per the freedesktop base-directory spec. A relative
+// value is invalid and ignored, and home/defaultRel is used, with no
+// diagnostic. An absolute value outside home is still scanned and named
+// "~/<envName>", and reported as an informational note: these variables
+// relocate configuration for every program, so they must not by
+// themselves make a scan exit non-zero.
+func ResolveXDGDir(c *Collector, home, envName, envValue, defaultRel string) UserDir {
+	dir := filepath.Join(home, filepath.FromSlash(defaultRel))
+	if v := strings.TrimSpace(envValue); filepath.IsAbs(v) {
+		dir = filepath.Clean(v)
+	}
+	return UserDir{Abs: dir, Logical: outsideHome(c, home, envName, dir, true)}
+}
+
+// outsideHome returns the logical "~/"-rooted name of dir. When dir is
+// outside home it is shown as "~/<envName>". informational selects a
+// note (XDG) instead of a blocking diagnostic (a tool-specific override).
+func outsideHome(c *Collector, home, envName, dir string, informational bool) string {
+	logical := TildePath(home, dir)
+	if logical == "~" || strings.HasPrefix(logical, "~/") {
+		return logical
+	}
+	if informational {
+		c.Note(model.ScopeUser, "~/"+envName, true, "%s is outside the home directory; configuration is scanned and paths are shown as ~/%s", envName, envName)
+	} else {
+		c.Warn(model.ScopeUser, "~/"+envName, "%s is outside the home directory; configuration is scanned and paths are shown as ~/%s", envName, envName)
+	}
+	return "~/" + envName
 }
 
 // ReadLocal reads a user or managed file through adapters.ReadLocal. A

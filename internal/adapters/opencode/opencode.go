@@ -268,16 +268,18 @@ func normalize(src *kit.Source, r role, rel string, raw []byte) {
 // default ~/.config/opencode), OPENCODE_CONFIG and OPENCODE_CONFIG_DIR
 // when set, and records the credential files in the data directory
 // ($XDG_DATA_HOME/opencode, default ~/.local/share/opencode) without
-// reading them.
+// reading them. A relative XDG value is ignored (the default is used);
+// an XDG value outside home is scanned and noted, and does not by itself
+// fail the scan. OPENCODE_CONFIG and OPENCODE_CONFIG_DIR outside home
+// stay blocking.
 func (a *Adapter) discoverUser(ctx context.Context, c *kit.Collector) error {
 	home, ok := kit.ResolveHome(c, a.options.HomeDir)
 	if !ok {
 		return nil
 	}
-	if base, ok := kit.ResolveUserDir(c, home, "XDG_CONFIG_HOME", a.getenv("XDG_CONFIG_HOME"), ".config"); ok {
-		if err := a.configDir(ctx, c, base.Dir("opencode"), true); err != nil {
-			return err
-		}
+	base := kit.ResolveXDGDir(c, home, "XDG_CONFIG_HOME", a.getenv("XDG_CONFIG_HOME"), ".config")
+	if err := a.configDir(ctx, c, base.Dir("opencode"), true); err != nil {
+		return err
 	}
 	if v := strings.TrimSpace(a.getenv("OPENCODE_CONFIG")); v != "" {
 		if dir, ok := kit.ResolveUserDir(c, home, "OPENCODE_CONFIG", filepath.Dir(v), ""); ok {
@@ -294,9 +296,8 @@ func (a *Adapter) discoverUser(ctx context.Context, c *kit.Collector) error {
 			}
 		}
 	}
-	if base, ok := kit.ResolveUserDir(c, home, "XDG_DATA_HOME", a.getenv("XDG_DATA_HOME"), ".local/share"); ok {
-		credentials(c, base.Dir("opencode"))
-	}
+	data := kit.ResolveXDGDir(c, home, "XDG_DATA_HOME", a.getenv("XDG_DATA_HOME"), ".local/share")
+	credentials(c, data.Dir("opencode"))
 	return nil
 }
 

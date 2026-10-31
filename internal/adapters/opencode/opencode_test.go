@@ -264,7 +264,7 @@ func TestConfigDirOverrides(t *testing.T) {
 
 func TestOverridesOutsideHomeAreBlocking(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"OPENCODE_CONFIG_DIR", "XDG_CONFIG_HOME", "XDG_DATA_HOME"} {
+	for _, name := range []string{"OPENCODE_CONFIG_DIR"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			opts := Options{SkipRepo: true, IncludeUser: true, HomeDir: t.TempDir(), Getenv: kittest.Env(name, t.TempDir())}
@@ -286,6 +286,64 @@ func TestOverridesOutsideHomeAreBlocking(t *testing.T) {
 			t.Fatal("OPENCODE_CONFIG outside home did not produce a blocking diagnostic")
 		}
 	})
+}
+
+func TestXDGOverrideOutsideHomeIsInformational(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"XDG_CONFIG_HOME", "XDG_DATA_HOME"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			home := t.TempDir()
+			outside := t.TempDir()
+			if name == "XDG_CONFIG_HOME" {
+				kittest.WriteFile(t, filepath.Join(outside, "opencode", "opencode.json"), `{"plugin":["from-xdg"]}`)
+			} else {
+				kittest.WriteFile(t, filepath.Join(outside, "opencode", "auth.json"), `{"key":"should-not-be-read"}`)
+			}
+			opts := Options{SkipRepo: true, IncludeUser: true, HomeDir: home, Getenv: kittest.Env(name, outside)}
+			got := kittest.Discover(t, New(opts), t.TempDir())
+			if !got.HasDiag("outside the home directory") {
+				t.Fatalf("diagnostics = %v", got.Diagnostics)
+			}
+			if kittest.Blocking(t, New(opts), t.TempDir(), "outside the home directory") {
+				t.Fatalf("%s outside home was blocking", name)
+			}
+			if name == "XDG_CONFIG_HOME" && len(got.Find("~/XDG_CONFIG_HOME/opencode/opencode.json", model.ConfigKindPlugin)) != 1 {
+				t.Fatalf("xdg config was not scanned: %+v", got.Items)
+			}
+			if name == "XDG_DATA_HOME" {
+				items := got.Find("~/XDG_DATA_HOME/opencode/auth.json", model.ConfigKindEnvSetup)
+				if len(items) != 1 || strings.Contains(string(items[0].Payload), "should-not-be-read") {
+					t.Fatalf("items = %+v", got.Items)
+				}
+			}
+		})
+	}
+}
+
+func TestRelativeXDGUsesDefault(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(home, ".config", "opencode", "opencode.json"), `{"plugin":["from-default"]}`)
+	kittest.WriteFile(t, filepath.Join(home, "rel", "opencode", "opencode.json"), `{"plugin":["from-relative"]}`)
+	kittest.WriteFile(t, filepath.Join(home, ".local", "share", "opencode", "auth.json"), `{"key":"x"}`)
+	opts := Options{SkipRepo: true, IncludeUser: true, HomeDir: home, Getenv: kittest.Env("XDG_CONFIG_HOME", "rel", "XDG_DATA_HOME", "also-rel")}
+	got := kittest.Discover(t, New(opts), t.TempDir())
+	if len(got.Diagnostics) != 0 {
+		t.Fatalf("diagnostics = %v", got.Diagnostics)
+	}
+	if len(got.Find("~/.config/opencode/opencode.json", model.ConfigKindPlugin)) != 1 || len(got.Find("~/.local/share/opencode/auth.json", model.ConfigKindEnvSetup)) != 1 {
+		t.Fatalf("items = %+v", got.Items)
+	}
+	for _, item := range got.Items {
+		if strings.Contains(string(item.Payload), "from-relative") || strings.Contains(item.Path, "rel/") {
+			t.Fatalf("relative XDG was used: %+v", item)
+		}
+	}
+}
+
+func TestRelativeOPENCODEConfigDirIsBlocking(t *testing.T) {
+	t.Parallel()
 	t.Run("relative", func(t *testing.T) {
 		t.Parallel()
 		opts := Options{SkipRepo: true, IncludeUser: true, HomeDir: t.TempDir(), Getenv: kittest.Env("OPENCODE_CONFIG_DIR", "rel")}
