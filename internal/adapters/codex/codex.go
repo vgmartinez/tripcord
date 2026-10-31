@@ -96,9 +96,9 @@ func (a *Adapter) Discover(ctx context.Context, repoRoot string) ([]model.Config
 		return nil, err
 	}
 	c := kit.NewCollector(model.HarnessCodex, product)
-	trust := trustUnknown
+	trust := func(string) string { return trustUnknown }
 	if a.options.IncludeUser {
-		trust = a.discoverUser(ctx, c, repoRoot)
+		trust = a.discoverUser(ctx, c)
 	}
 	if !a.options.SkipRepo {
 		if err := a.discoverRepo(ctx, repoRoot, c, trust); err != nil {
@@ -157,7 +157,10 @@ var matcher = kit.Matcher{
 	Relevant:  func(rel string) bool { return kit.HasSegment(kit.Segments(rel), ".codex") },
 }
 
-func (a *Adapter) discoverRepo(ctx context.Context, repoRoot string, c *kit.Collector, trust string) error {
+// trustOf returns the project_trust of a project directory.
+type trustOf func(projectDir string) string
+
+func (a *Adapter) discoverRepo(ctx context.Context, repoRoot string, c *kit.Collector, trust trustOf) error {
 	reader, err := adapters.NewSafeReader(repoRoot)
 	if err != nil {
 		c.Warn(model.ScopeRepo, "", "cannot open repository: %v", err)
@@ -179,42 +182,60 @@ func (a *Adapter) discoverRepo(ctx context.Context, repoRoot string, c *kit.Coll
 			continue
 		}
 		src := c.Source(model.ScopeRepo, rel, raw)
+		// A nested .codex belongs to the directory that holds it, which
+		// the user config may trust differently from the repository root.
+		projectTrust := func() *kit.Source {
+			return src.WithField("project_trust", trust(filepath.Join(repoRoot, filepath.FromSlash(codexProjectDir(rel)))))
+		}
 		switch classify(rel) {
 		case roleConfig:
-			(&file{Source: src.WithField("project_trust", trust)}).config(raw)
+			(&file{Source: projectTrust()}).config(raw)
 		case roleHooks:
-			(&file{Source: src.WithField("project_trust", trust)}).hooksFile(raw)
+			(&file{Source: projectTrust()}).hooksFile(raw)
 		case roleOverride:
 			src.Markdown(model.ConfigKindInstructions, "agents-override", raw, kit.LooseFrontmatter)
 		case roleRules:
-			(&file{Source: src.WithField("project_trust", trust)}).rulesFile(raw)
+			(&file{Source: projectTrust()}).rulesFile(raw)
 		case roleNone:
 		}
 	}
 	return nil
 }
 
-// discoverUser reads $CODEX_HOME (default ~/.codex) and returns the trust
-// status of repoRoot recorded in its config.toml.
-func (a *Adapter) discoverUser(ctx context.Context, c *kit.Collector, repoRoot string) string {
+// codexProjectDir is the repository-relative directory a .codex file
+// configures: the one holding its .codex directory ("" for the root).
+func codexProjectDir(rel string) string {
+	segments := kit.Segments(rel)
+	for i := len(segments) - 1; i >= 0; i-- {
+		if segments[i] == ".codex" {
+			return path.Join(segments[:i]...)
+		}
+	}
+	return path.Dir(rel)
+}
+
+// discoverUser reads $CODEX_HOME (default ~/.codex) and returns how its
+// config.toml trusts a project directory.
+func (a *Adapter) discoverUser(ctx context.Context, c *kit.Collector) trustOf {
+	unknown := func(string) string { return trustUnknown }
 	home, ok := kit.ResolveHome(c, a.options.HomeDir)
 	if !ok {
-		return trustUnknown
+		return unknown
 	}
 	dir, ok := kit.ResolveUserDir(c, home, "CODEX_HOME", a.getenv("CODEX_HOME"), ".codex")
 	if !ok {
-		return trustUnknown
+		return unknown
 	}
-	trust := trustUnknown
+	trust := unknown
 	abs, logical := dir.File("config.toml")
 	diags := len(c.Diagnostics())
 	if raw, ok := c.ReadLocal(model.ScopeUser, abs, logical); ok {
 		f := &file{Source: c.Source(model.ScopeUser, logical, raw)}
 		if tree := f.config(raw); tree != nil {
-			trust = projectTrust(tree, repoRoot)
+			trust = func(projectDir string) string { return projectTrust(tree, projectDir) }
 		}
 	} else if len(c.Diagnostics()) == diags {
-		trust = trustUnset
+		trust = func(string) string { return trustUnset }
 	}
 	for _, name := range c.ListLocal(model.ScopeUser, dir.Abs, dir.Logical, ".config.toml", maxProfiles) {
 		abs, logical := dir.File(name)
@@ -303,41 +324,62 @@ const (
 	trustUnknown = "unknown"
 )
 
-// projectTrust looks up projects.<path>.trust_level for repoRoot or, if
-// repoRoot has no entry of its own, the closest ancestor directory that
-// does: Codex extends a project's trust to its subfolders, so scanning a
-// subdirectory of a trusted repository is trusted too. Keys are absolute
-// paths; both sides are cleaned and symlink-resolved. When more than one
-// ancestor has an entry, the longest (most specific) path wins.
-func projectTrust(tree map[string]any, repoRoot string) string {
+// projectTrust looks up projects.<path>.trust_level for dir or, if dir
+// has no entry of its own, the closest ancestor directory that does:
+// Codex extends a project's trust to its subfolders, so a subdirectory of
+// a trusted repository is trusted too. Keys are absolute paths; both
+// sides are cleaned and symlink-resolved. The longest (most specific)
+// path wins. Several keys can resolve to the same path ("/a/b", "/a/b/",
+// "/a/b/.", a symlink to it); among those, a key already in canonical
+// form wins, and if that still ties, untrusted wins, so the result never
+// depends on map order. Only the exact values "trusted" and "untrusted"
+// count; any other spelling is ignored.
+func projectTrust(tree map[string]any, dir string) string {
 	projects, ok := tree["projects"].(map[string]any)
 	if !ok {
 		return trustUnset
 	}
-	want := canonical(repoRoot)
+	want := canonical(dir)
 	if want == "" {
 		return trustUnset
 	}
-	best, bestLevel := "", trustUnset
-	for key, value := range projects {
+	type candidate struct {
+		path  string
+		exact bool
+		level string
+	}
+	var best *candidate
+	better := func(c candidate) bool {
+		switch {
+		case best == nil || len(c.path) != len(best.path):
+			return best == nil || len(c.path) > len(best.path)
+		case c.exact != best.exact:
+			return c.exact
+		default:
+			return c.level == trustUntrusted && best.level != trustUntrusted
+		}
+	}
+	for _, key := range kit.SortedKeys(projects) {
 		projectPath := canonical(key)
 		if projectPath == "" || !isSelfOrDescendant(want, projectPath) {
 			continue
 		}
-		entry, ok := value.(map[string]any)
+		entry, ok := projects[key].(map[string]any)
 		if !ok {
 			continue
 		}
-		rawLevel, _ := entry["trust_level"].(string)
-		level := strings.ToLower(rawLevel)
+		level, _ := entry["trust_level"].(string)
 		if level != trustTrusted && level != trustUntrusted {
 			continue
 		}
-		if len(projectPath) > len(best) {
-			best, bestLevel = projectPath, level
+		if c := (candidate{projectPath, key == projectPath, level}); better(c) {
+			best = &c
 		}
 	}
-	return bestLevel
+	if best == nil {
+		return trustUnset
+	}
+	return best.level
 }
 
 // isSelfOrDescendant reports whether path is ancestor itself or a

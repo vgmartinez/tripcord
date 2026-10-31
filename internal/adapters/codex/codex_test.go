@@ -643,3 +643,98 @@ func FuzzParseConfig(f *testing.F) {
 		}
 	})
 }
+
+// Several keys can name the same directory. The result must not depend
+// on Go's map order: a key already in canonical form wins, and between
+// non-canonical spellings, untrusted wins.
+func TestProjectTrustTieBreakIsDeterministic(t *testing.T) {
+	t.Parallel()
+	repo := canonical(t.TempDir())
+	link := filepath.Join(canonical(t.TempDir()), "link")
+	if err := os.Symlink(repo, link); err != nil {
+		t.Skipf("symlink: %v", err)
+	}
+	entry := func(level string) map[string]any { return map[string]any{"trust_level": level} }
+	cases := []struct {
+		name     string
+		projects map[string]any
+		want     string
+	}{
+		{"exact key beats trailing slash", map[string]any{repo: entry("trusted"), repo + "/": entry("untrusted")}, trustTrusted},
+		{"exact key beats dot segment", map[string]any{repo: entry("untrusted"), repo + "/.": entry("trusted")}, trustUntrusted},
+		{"exact key beats symlink", map[string]any{repo: entry("trusted"), link: entry("untrusted")}, trustTrusted},
+		{"untrusted wins between spellings", map[string]any{repo + "/": entry("trusted"), repo + "/.": entry("untrusted")}, trustUntrusted},
+		{"untrusted wins against symlink", map[string]any{link: entry("trusted"), repo + "/": entry("untrusted")}, trustUntrusted},
+	}
+	for _, tc := range cases {
+		tree := map[string]any{"projects": tc.projects}
+		for i := 0; i < 200; i++ {
+			if got := projectTrust(tree, repo); got != tc.want {
+				t.Fatalf("%s: run %d: trust = %s, want %s", tc.name, i, got, tc.want)
+			}
+		}
+	}
+}
+
+func TestProjectTrustAcceptsOnlyCanonicalLevels(t *testing.T) {
+	t.Parallel()
+	repo := canonical(t.TempDir())
+	for _, level := range []string{"Trusted", "TRUSTED", "trusted ", "Untrusted"} {
+		tree := map[string]any{"projects": map[string]any{repo: map[string]any{"trust_level": level}}}
+		if got := projectTrust(tree, repo); got != trustUnset {
+			t.Errorf("trust_level %q: trust = %s, want %s", level, got, trustUnset)
+		}
+	}
+}
+
+// A nested .codex directory takes the trust of the directory holding it,
+// so a subfolder the user marked untrusted is not reported as trusted
+// just because the repository root is.
+func TestNestedCodexUsesItsOwnProjectTrust(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	sub := filepath.Join(repo, "sub")
+	other := filepath.Join(repo, "other")
+	tree := "[projects.\"" + filepath.ToSlash(repo) + "\"]\ntrust_level = \"trusted\"\n" +
+		"[projects.\"" + filepath.ToSlash(sub) + "\"]\ntrust_level = \"untrusted\"\n"
+	for _, dir := range []string{repo, sub, other} {
+		kittest.WriteFile(t, filepath.Join(dir, ".codex", "config.toml"), "sandbox_mode = \"danger-full-access\"\n")
+		kittest.WriteFile(t, filepath.Join(dir, ".codex", "hooks.json"), `{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"./stop.sh"}]}]}}`)
+		kittest.WriteFile(t, filepath.Join(dir, ".codex", "rules", "a.rules"), `prefix_rule(pattern=["ls"], decision="allow")`)
+	}
+	home := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(home, ".codex", "config.toml"), tree)
+	got := kittest.Discover(t, New(Options{IncludeUser: true, HomeDir: home, Getenv: kittest.Env()}), repo)
+	want := map[string]string{"": trustTrusted, "sub/": trustUntrusted, "other/": trustTrusted}
+	for prefix, trust := range want {
+		for _, name := range []string{".codex/config.toml", ".codex/hooks.json", ".codex/rules/a.rules"} {
+			var found bool
+			for _, item := range got.Items {
+				if item.Path != prefix+name {
+					continue
+				}
+				found = true
+				if got := kittest.Payload(t, item)["project_trust"]; got != trust {
+					t.Errorf("%s%s: project_trust = %v, want %s", prefix, name, got, trust)
+				}
+			}
+			if !found {
+				t.Errorf("no item for %s%s", prefix, name)
+			}
+		}
+	}
+}
+
+func TestCodexProjectDir(t *testing.T) {
+	t.Parallel()
+	for rel, want := range map[string]string{
+		".codex/config.toml":          "",
+		"a/b/.codex/hooks.json":       "a/b",
+		"a/.codex/rules/x.rules":      "a",
+		".codex/x/.codex/config.toml": ".codex/x",
+	} {
+		if got := codexProjectDir(rel); got != want {
+			t.Errorf("codexProjectDir(%q) = %q, want %q", rel, got, want)
+		}
+	}
+}

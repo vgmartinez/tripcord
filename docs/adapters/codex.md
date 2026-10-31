@@ -68,8 +68,8 @@ Codex loads a project `.codex/` layer only when the project is trusted
 
 | Value | Meaning |
 | --- | --- |
-| `trusted`, `untrusted` | The user config has an entry for the scanned root or one of its ancestor directories (paths compared after cleaning and resolving symlinks). Trust extends from a repository to its subfolders, so scanning `<repo>/sub/dir` inherits `<repo>`'s entry when `sub/dir` has none of its own; when both have an entry, the more specific (longer) path wins. |
-| `unset` | The user config was read and has no entry for the scanned root or any ancestor, or does not exist. Codex asks before loading the layer. |
+| `trusted`, `untrusted` | The user config has an entry for the directory holding that `.codex/` (the repository root, or a subfolder for a nested `.codex/`) or one of its ancestor directories (paths compared after cleaning and resolving symlinks). Trust extends from a repository to its subfolders, so `<repo>/sub/.codex/` inherits `<repo>`'s entry when `<repo>/sub` has none of its own; when both have an entry, the more specific (longer) path wins, so a subfolder marked untrusted stays untrusted inside a trusted repository. When several keys name the same directory (`/a/b`, `/a/b/`, `/a/b/.`, a symlink to it), the key already in canonical form wins, and if that still ties, `untrusted` wins. Only the exact lowercase values count: `"Trusted"` or `"TRUSTED"` is ignored, as if the entry were absent. |
+| `unset` | The user config was read and has no usable entry for that directory or any ancestor, or does not exist. Codex asks before loading the layer. |
 | `unknown` | User scope was not scanned (the default), or the user config could not be parsed. |
 
 Codex also trusts hooks by hash. Where it stores those hashes is not
