@@ -8,14 +8,32 @@ import (
 
 // Engine evaluates compiled rules against config items.
 type Engine struct {
-	env   *Env
-	rules []*Rule
+	env    *Env
+	rules  []*Rule
+	filter Filter
+}
+
+// Filter decides whether a rule that applies to an item runs on it.
+// Policy supplies one, so the engine evaluates exactly the rules the
+// effective policy enables.
+type Filter func(r *Rule, item model.ConfigItem) bool
+
+// Option configures an Engine.
+type Option func(*Engine)
+
+// WithFilter skips every rule and item pair that f rejects.
+func WithFilter(f Filter) Option {
+	return func(e *Engine) { e.filter = f }
 }
 
 // NewEngine returns an engine for rules, which must have been compiled
 // in env.
-func NewEngine(env *Env, rules []*Rule) *Engine {
-	return &Engine{env: env, rules: append([]*Rule(nil), rules...)}
+func NewEngine(env *Env, rules []*Rule, opts ...Option) *Engine {
+	e := &Engine{env: env, rules: append([]*Rule(nil), rules...)}
+	for _, o := range opts {
+		o(e)
+	}
+	return e
 }
 
 // Match is a rule whose when expression was true for a config item.
@@ -88,17 +106,22 @@ type Result struct {
 
 // ScanConfig evaluates every applicable rule against every item, in
 // item order and then rule order. A rule applies when the item's
-// harness is listed and its path matches one of the rule's globs.
+// harness is listed, its path matches one of the rule's globs, and the
+// filter, if any, accepts it. The whole scan runs under the env's
+// Budget; when the budget or ctx ends, the scan stops and records the
+// cause for the next rule.
 func (e *Engine) ScanConfig(ctx context.Context, items []model.ConfigItem) Result {
+	ctx, cancel := e.env.Limits().WithBudget(ctx)
+	defer cancel()
 	var res Result
 	for _, item := range items {
 		var in *Input
 		for _, r := range e.rules {
-			if !r.Applies(item) {
+			if !r.Applies(item) || (e.filter != nil && !e.filter(r, item)) {
 				continue
 			}
-			if err := ctx.Err(); err != nil {
-				res.Errors = append(res.Errors, EvalError{Rule: r.ID, Path: item.Path, Err: err})
+			if ctx.Err() != nil {
+				res.Errors = append(res.Errors, EvalError{Rule: r.ID, Path: item.Path, Err: ctxError(ctx)})
 				return res
 			}
 			if in == nil {

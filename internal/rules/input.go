@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/vgmartinez/tripcord/internal/model"
 )
@@ -39,8 +40,24 @@ func ConfigInput(item model.ConfigItem, limits Limits) (*Input, error) {
 		VarConfig:  configVars(id, item),
 		VarPayload: payload,
 		VarTask:    task,
-		VarEvent:   map[string]any{},
+		VarEvent:   emptyEvent(),
 	}}, nil
+}
+
+// emptyEvent and emptyConfig bind every always-present field, so the
+// fields checkGuards lets rules read unguarded exist on both paths.
+func emptyEvent() map[string]any {
+	m := map[string]any{}
+	fillEventFields(m)
+	return m
+}
+
+func emptyConfig() map[string]any {
+	m := make(map[string]any, len(configKeys))
+	for _, k := range configKeys {
+		m[k] = ""
+	}
+	return m
 }
 
 func configVars(id string, item model.ConfigItem) map[string]any {
@@ -68,12 +85,40 @@ func EventInput(ev model.Event, limits Limits) (*Input, error) {
 	if err := json.Unmarshal(raw, &event); err != nil {
 		return nil, fmt.Errorf("event %s: %w", ev.ID, err)
 	}
+	fillEventFields(event)
 	return &Input{vars: map[string]any{
-		VarConfig:  map[string]any{},
+		VarConfig:  emptyConfig(),
 		VarPayload: map[string]any{},
 		VarTask:    map[string]any{},
 		VarEvent:   event,
 	}}, nil
+}
+
+// eventFields are the event paths EventInput always binds: every
+// tripcord.event/v1 field outside the lists. Fields the wire form omits
+// when empty are bound as "", so rules read them without a has() guard.
+var eventFields = []string{
+	"schema", "id", "ts", "kind", "tool", "command", "paths", "net", "credentials", "redactions", "raw_ref",
+	"source", "source.harness", "source.surface", "source.version", "source.origin",
+	"session", "session.id", "session.repo", "session.branch", "session.actor", "session.parent",
+}
+
+func fillEventFields(event map[string]any) {
+	for _, f := range eventFields {
+		m := event
+		parts := strings.Split(f, ".")
+		for _, p := range parts[:len(parts)-1] {
+			next, ok := m[p].(map[string]any)
+			if !ok {
+				next = map[string]any{}
+				m[p] = next
+			}
+			m = next
+		}
+		if _, ok := m[parts[len(parts)-1]]; !ok {
+			m[parts[len(parts)-1]] = ""
+		}
+	}
 }
 
 func sortedStrings(s []string) []string {

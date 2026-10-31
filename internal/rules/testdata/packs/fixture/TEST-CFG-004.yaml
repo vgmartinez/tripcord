@@ -1,0 +1,15 @@
+# Dummy negated rule: an MCP server without a tool allowlist. A server
+# with no "tools" key must match; without the has() guard the missing
+# key would make the expression false and the rule would fail open.
+id: TEST-CFG-004
+pack: fixture/demo
+title: "MCP server without a tool allowlist"
+severity: medium
+harness: [claude, cursor]
+files: [".mcp.json", ".cursor/mcp.json"]
+when: >-
+  config.kind == "mcp-server" &&
+    !(has(payload.tools) && size(payload.tools) > 0)
+fix: "List the tools the server may expose under tools"
+refs:
+  - https://modelcontextprotocol.io/specification

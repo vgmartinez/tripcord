@@ -1,0 +1,8 @@
+{
+  "harness": "cursor",
+  "scope": "repo",
+  "path": ".cursor/mcp.json",
+  "sha256": "",
+  "kind": "mcp-server",
+  "payload": {"name": "fs", "command": "npx", "tools": []}
+}

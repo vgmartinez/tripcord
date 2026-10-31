@@ -23,7 +23,9 @@ const MaxRuleBytes = 64 << 10
 //	severity: high
 //	harness: [vscode, cursor, windsurf]
 //	files: [".vscode/tasks.json"]
-//	when: task.runOptions.runOn == "folderOpen"
+//	when: >-
+//	  has(task.runOptions) && has(task.runOptions.runOn) &&
+//	    task.runOptions.runOn == "folderOpen"
 //	fix: "Remove runOn: folderOpen or move the task to an explicit script"
 //	refs:
 //	  - https://example.com/incident

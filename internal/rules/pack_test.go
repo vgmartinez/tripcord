@@ -46,7 +46,7 @@ func TestLoadFixturePack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pack.Ref.String() != "fixture/demo@2026.11" || len(pack.Rules) != 2 {
+	if pack.Ref.String() != "fixture/demo@2026.11" || len(pack.Rules) != 3 {
 		t.Fatalf("pack = %+v", pack)
 	}
 	for _, r := range pack.Rules {
@@ -205,7 +205,7 @@ func TestCatalogRejectsDuplicates(t *testing.T) {
 	for _, r := range c.Rules() {
 		ids = append(ids, r.ID)
 	}
-	if strings.Join(ids, ",") != "ACME-CFG-001,TEST-CFG-001,TEST-CFG-002" {
+	if strings.Join(ids, ",") != "ACME-CFG-001,TEST-CFG-001,TEST-CFG-002,TEST-CFG-004" {
 		t.Fatalf("ids = %v", ids)
 	}
 	if _, ok := c.Rule("TEST-CFG-002"); !ok {

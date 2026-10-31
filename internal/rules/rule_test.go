@@ -7,13 +7,15 @@ import (
 	"github.com/vgmartinez/tripcord/internal/model"
 )
 
+const validWhen = `when: has(task.runOptions) && has(task.runOptions.runOn) && task.runOptions.runOn == "folderOpen"`
+
 const validRule = `id: TC-CFG-002
 pack: tripcord/core
 title: "VS Code task that runs when the folder opens"
 severity: high
 harness: [vscode, cursor, windsurf]
 files: [".vscode/tasks.json"]
-when: task.runOptions.runOn == "folderOpen"
+when: has(task.runOptions) && has(task.runOptions.runOn) && task.runOptions.runOn == "folderOpen"
 fix: "Remove runOn: folderOpen or move the task to an explicit script"
 refs:
   - https://workos.com/blog/npm-worm-coding-agent-config-credentials
@@ -155,13 +157,14 @@ func TestCompileRejectsBadWhen(t *testing.T) {
 		"syntax":         `task.runOptions.runOn ==`,
 		"not bool":       `task.runOptions.runOn`,
 		"unknown var":    `env.HOME == "x"`,
-		"backreference":  `payload.command.matches("(a)\\1")`,
+		"backreference":  `has(payload.command) && payload.command.matches("(a)\\1")`,
 		"unknown func":   `readFile("/etc/passwd") == ""`,
-		"lookahead":      `payload.command.matches("a(?=b)")`,
+		"lookahead":      `has(payload.command) && payload.command.matches("a(?=b)")`,
+		"unguarded":      `payload.command == "sh"`,
 		"string literal": `"true"`,
 	} {
 		t.Run(name, func(t *testing.T) {
-			doc := strings.Replace(validRule, `when: task.runOptions.runOn == "folderOpen"`, "when: '"+strings.ReplaceAll(when, "'", "''")+"'", 1)
+			doc := strings.Replace(validRule, validWhen, "when: '"+strings.ReplaceAll(when, "'", "''")+"'", 1)
 			spec, err := ParseSpec([]byte(doc))
 			if err != nil {
 				t.Fatal(err)

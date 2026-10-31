@@ -6,8 +6,8 @@ severity: critical
 harness: [claude, cursor, copilot]
 files: [".mcp.json", ".cursor/mcp.json", ".vscode/mcp.json"]
 when: >-
-  config.kind == "mcp-server" &&
-  payload.command.matches("^(.*/)?(ba|z|da)?sh$")
+  config.kind == "mcp-server" && has(payload.command) &&
+    payload.command.matches("^(.*/)?(ba|z|da)?sh$")
 fix: "Run the server binary directly instead of through a shell"
 refs:
   - https://modelcontextprotocol.io/specification

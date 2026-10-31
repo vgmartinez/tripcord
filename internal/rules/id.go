@@ -1,8 +1,10 @@
 package rules
 
 import (
+	"cmp"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -58,3 +60,23 @@ func ParsePackRef(s string) (PackRef, error) {
 
 // String returns name@version.
 func (p PackRef) String() string { return p.Name + "@" + p.Version }
+
+// CompareVersions compares two pack versions that match YYYY.MM[.N]
+// and returns -1, 0, or +1. A missing patch is .0.
+func CompareVersions(a, b string) int {
+	pa, pb := versionParts(a), versionParts(b)
+	for i := range pa {
+		if c := cmp.Compare(pa[i], pb[i]); c != 0 {
+			return c
+		}
+	}
+	return 0
+}
+
+func versionParts(v string) [3]int {
+	var p [3]int
+	for i, s := range strings.SplitN(v, ".", 3) {
+		p[i], _ = strconv.Atoi(s)
+	}
+	return p
+}

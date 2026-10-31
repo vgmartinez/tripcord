@@ -1,0 +1,8 @@
+{
+  "harness": "claude",
+  "scope": "repo",
+  "path": ".mcp.json",
+  "sha256": "",
+  "kind": "mcp-server",
+  "payload": {"name": "fs", "command": "npx", "tools": ["read_file"]}
+}

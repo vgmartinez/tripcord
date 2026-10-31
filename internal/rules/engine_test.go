@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/vgmartinez/tripcord/internal/model"
 )
@@ -37,8 +38,8 @@ func TestScanConfig(t *testing.T) {
 		item(model.SurfaceVSCode, ".vscode/tasks.json", model.ConfigKindTask, `{"runOptions":{"runOn":"folderOpen"}}`),
 		item(model.SurfaceVSCode, ".vscode/tasks.json", model.ConfigKindTask, `{"label":"build"}`),
 		item(model.HarnessClaude, ".vscode/tasks.json", model.ConfigKindTask, `{"runOptions":{"runOn":"folderOpen"}}`),
-		item(model.HarnessClaude, ".mcp.json", model.ConfigKindMCPServer, `{"command":"sh"}`),
-		item(model.HarnessClaude, ".mcp.json", model.ConfigKindMCPServer, `{"command":"node"}`),
+		item(model.HarnessClaude, ".mcp.json", model.ConfigKindMCPServer, `{"command":"sh","tools":["a"]}`),
+		item(model.HarnessClaude, ".mcp.json", model.ConfigKindMCPServer, `{"command":"node","tools":["a"]}`),
 		item(model.HarnessClaude, ".mcp.json", model.ConfigKindMCPServer, `{}`),
 	}
 	res := engine.ScanConfig(context.Background(), items)
@@ -49,7 +50,7 @@ func TestScanConfig(t *testing.T) {
 	for _, m := range res.Matches {
 		got = append(got, m.Rule.ID+"@"+m.Item.Harness.String())
 	}
-	if strings.Join(got, ",") != "TEST-CFG-001@vscode,TEST-CFG-002@claude" {
+	if strings.Join(got, ",") != "TEST-CFG-001@vscode,TEST-CFG-002@claude,TEST-CFG-004@claude" {
 		t.Fatalf("matches = %v", got)
 	}
 }
@@ -171,7 +172,7 @@ func TestConfigIDVariable(t *testing.T) {
 func TestScanConfigErrorsAreNotMatches(t *testing.T) {
 	engine, _ := fixtureEngine(t)
 	items := []model.ConfigItem{
-		item(model.HarnessClaude, ".mcp.json", model.ConfigKindMCPServer, `{"command":42}`),
+		item(model.HarnessClaude, ".mcp.json", model.ConfigKindMCPServer, `{"command":42,"tools":["a"]}`),
 		item(model.HarnessClaude, ".mcp.json", model.ConfigKindMCPServer, `{not json`),
 	}
 	res := engine.ScanConfig(context.Background(), items)
@@ -209,5 +210,40 @@ func TestScanConfigCancelled(t *testing.T) {
 	res := engine.ScanConfig(ctx, []model.ConfigItem{item(model.HarnessClaude, ".mcp.json", model.ConfigKindMCPServer, `{"command":"sh"}`)})
 	if len(res.Matches) != 0 || len(res.Errors) != 1 || !errors.Is(res.Errors[0].Err, context.Canceled) {
 		t.Fatalf("res = %+v", res)
+	}
+}
+
+func TestScanConfigFilter(t *testing.T) {
+	_, c := fixtureEngine(t)
+	engine := NewEngine(testEnv(t), c.Rules(), WithFilter(func(r *Rule, it model.ConfigItem) bool {
+		return r.ID != "TEST-CFG-004" && it.Harness != model.HarnessCursor
+	}))
+	items := []model.ConfigItem{
+		item(model.HarnessClaude, ".mcp.json", model.ConfigKindMCPServer, `{"command":"sh"}`),
+		item(model.HarnessCursor, ".cursor/mcp.json", model.ConfigKindMCPServer, `{"command":"sh"}`),
+	}
+	res := engine.ScanConfig(context.Background(), items)
+	if len(res.Errors) != 0 || len(res.Matches) != 1 || res.Matches[0].Rule.ID != "TEST-CFG-002" || res.Matches[0].Item.Harness != model.HarnessClaude {
+		t.Fatalf("matches %v errors %v", res.Matches, res.Errors)
+	}
+}
+
+func TestScanConfigBudget(t *testing.T) {
+	limits := DefaultLimits()
+	limits.Budget = time.Nanosecond
+	benv, err := NewEnv(limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pack, err := LoadDir(fixturePackDir, benv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine := NewEngine(benv, pack.Rules)
+	res := engine.ScanConfig(context.Background(), []model.ConfigItem{
+		item(model.HarnessClaude, ".mcp.json", model.ConfigKindMCPServer, `{"command":"sh"}`),
+	})
+	if len(res.Matches) != 0 || len(res.Errors) != 1 || !errors.Is(res.Errors[0].Err, ErrBudget) {
+		t.Fatalf("matches %v errors %v", res.Matches, res.Errors)
 	}
 }
