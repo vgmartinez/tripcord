@@ -184,11 +184,11 @@ const (
 // for Unicode and instruction checks, with URL secrets stripped (and the
 // home directory rewritten in user scope). It returns the parsed
 // frontmatter, or nil, so the caller can emit hooks or servers it
-// declares.
-func (s *Source) Markdown(kind model.ConfigKind, role string, raw []byte, mode Frontmatter) map[string]any {
+// declares. folded is passed to DecodeYAML.
+func (s *Source) Markdown(kind model.ConfigKind, role string, raw []byte, mode Frontmatter, folded ...string) map[string]any {
 	content, _ := stripEmbeddedURLSecrets(string(raw))
 	payload := map[string]any{"role": role, "content": s.tildeHome(content)}
-	meta := s.frontmatter(raw, mode)
+	meta := s.frontmatter(raw, mode, folded)
 	if meta != nil {
 		front := map[string]any{}
 		for k, v := range meta {
@@ -204,7 +204,7 @@ func (s *Source) Markdown(kind model.ConfigKind, role string, raw []byte, mode F
 	return meta
 }
 
-func (s *Source) frontmatter(raw []byte, mode Frontmatter) map[string]any {
+func (s *Source) frontmatter(raw []byte, mode Frontmatter, folded []string) map[string]any {
 	front, found, err := SplitFrontmatter(raw)
 	if err != nil {
 		if mode == StrictFrontmatter {
@@ -215,7 +215,7 @@ func (s *Source) frontmatter(raw []byte, mode Frontmatter) map[string]any {
 	if !found {
 		return nil
 	}
-	tree, warnings, err := DecodeYAML(front, s.c.product)
+	tree, warnings, err := DecodeYAML(front, s.c.product, folded...)
 	if err != nil {
 		if mode == LooseFrontmatter {
 			return ParseLooseFrontmatter(front)

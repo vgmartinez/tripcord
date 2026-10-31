@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 )
 
@@ -31,8 +32,11 @@ const (
 // json.Number, bool, and nil, keeping keys exactly as written. An exact
 // duplicate key wins last (JSON.parse and jsonc-parser semantics) and is
 // reported; case-variant keys in one object are reported too, because a
-// harness that reads exact key names would ignore one of them.
-func DecodeJSON(raw []byte, syntax Syntax, product string) (any, []string, error) {
+// harness that reads exact key names would ignore one of them. folded
+// names objects (dotted, as in warnings) whose keys the harness matches
+// case-insensitively, such as Copilot's hook event names; case variants
+// there are not reported.
+func DecodeJSON(raw []byte, syntax Syntax, product string, folded ...string) (any, []string, error) {
 	if syntax == JSONC {
 		cleaned, err := stripJSONC(bytes.TrimPrefix(raw, utf8BOM))
 		if err != nil {
@@ -44,7 +48,7 @@ func DecodeJSON(raw []byte, syntax Syntax, product string) (any, []string, error
 	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.UseNumber()
-	t := &treeDecoder{dec: dec, product: product}
+	t := &treeDecoder{dec: dec, product: product, folded: folded}
 	value, err := t.value(0, "")
 	if err != nil {
 		return nil, t.warnings, err
@@ -61,6 +65,7 @@ func DecodeJSON(raw []byte, syntax Syntax, product string) (any, []string, error
 type treeDecoder struct {
 	dec      *json.Decoder
 	product  string
+	folded   []string
 	warnings []string
 }
 
@@ -80,6 +85,7 @@ func (t *treeDecoder) value(depth int, where string) (any, error) {
 	case '{':
 		obj := map[string]any{}
 		keys := NewKeySet(where, t.product)
+		keys.foldOK = slices.Contains(t.folded, where)
 		for t.dec.More() {
 			keyTok, err := t.dec.Token()
 			if err != nil {
@@ -176,6 +182,7 @@ type KeySet struct {
 	product string
 	exact   map[string]bool
 	folds   map[string]string
+	foldOK  bool
 }
 
 // NewKeySet starts a key set for the object at where ("" for the root).
@@ -190,7 +197,7 @@ func (k *KeySet) Add(key string) []string {
 		warnings = append(warnings, fmt.Sprintf("duplicate key %q%s; the last value is used", key, k.suffix()))
 	}
 	fold := strings.ToLower(key)
-	if prev, ok := k.folds[fold]; ok && prev != key {
+	if prev, ok := k.folds[fold]; ok && prev != key && !k.foldOK {
 		warnings = append(warnings, fmt.Sprintf("case-variant keys %q and %q%s; %s reads only the exact key name", prev, key, k.suffix(), k.product))
 	}
 	k.exact[key] = true

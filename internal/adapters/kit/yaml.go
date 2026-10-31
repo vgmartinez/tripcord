@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 
 	"go.yaml.in/yaml/v3"
@@ -51,8 +52,8 @@ func SplitFrontmatter(raw []byte) (front []byte, found bool, err error) {
 // DecodeJSON. Aliases and merge keys are rejected so an alias bomb fails
 // closed; nesting is bounded by MaxNesting. Duplicate and case-variant
 // keys are reported, with the last value used. A UTF-8 byte order mark
-// and CRLF line endings are accepted.
-func DecodeYAML(raw []byte, product string) (any, []string, error) {
+// and CRLF line endings are accepted. folded is as for DecodeJSON.
+func DecodeYAML(raw []byte, product string, folded ...string) (any, []string, error) {
 	raw = bytes.TrimPrefix(raw, utf8BOM)
 	var doc yaml.Node
 	if err := yaml.Unmarshal(raw, &doc); err != nil {
@@ -64,12 +65,18 @@ func DecodeYAML(raw []byte, product string) (any, []string, error) {
 	if doc.Kind != yaml.DocumentNode || len(doc.Content) != 1 {
 		return nil, nil, errors.New("not one YAML document")
 	}
-	var warnings []string
-	value, err := yamlValue(doc.Content[0], 0, "", product, &warnings)
-	return value, warnings, err
+	d := &yamlDecoder{product: product, folded: folded}
+	value, err := d.value(doc.Content[0], 0, "")
+	return value, d.warnings, err
 }
 
-func yamlValue(n *yaml.Node, depth int, where, product string, warnings *[]string) (any, error) {
+type yamlDecoder struct {
+	product  string
+	folded   []string
+	warnings []string
+}
+
+func (d *yamlDecoder) value(n *yaml.Node, depth int, where string) (any, error) {
 	if depth >= MaxNesting {
 		return nil, fmt.Errorf("YAML nesting exceeds %d levels", MaxNesting)
 	}
@@ -78,7 +85,8 @@ func yamlValue(n *yaml.Node, depth int, where, product string, warnings *[]strin
 		return nil, errors.New("YAML aliases are not supported")
 	case yaml.MappingNode:
 		obj := map[string]any{}
-		keys := NewKeySet(where, product)
+		keys := NewKeySet(where, d.product)
+		keys.foldOK = slices.Contains(d.folded, where)
 		for i := 0; i+1 < len(n.Content); i += 2 {
 			keyNode, valueNode := n.Content[i], n.Content[i+1]
 			if keyNode.Kind != yaml.ScalarNode {
@@ -87,18 +95,18 @@ func yamlValue(n *yaml.Node, depth int, where, product string, warnings *[]strin
 			if keyNode.Tag == "!!merge" {
 				return nil, errors.New("YAML merge keys are not supported")
 			}
-			value, err := yamlValue(valueNode, depth+1, JoinWhere(where, keyNode.Value), product, warnings)
+			value, err := d.value(valueNode, depth+1, JoinWhere(where, keyNode.Value))
 			if err != nil {
 				return nil, err
 			}
-			*warnings = append(*warnings, keys.Add(keyNode.Value)...)
+			d.warnings = append(d.warnings, keys.Add(keyNode.Value)...)
 			obj[keyNode.Value] = value
 		}
 		return obj, nil
 	case yaml.SequenceNode:
 		arr := make([]any, 0, len(n.Content))
 		for _, item := range n.Content {
-			value, err := yamlValue(item, depth+1, where+"[]", product, warnings)
+			value, err := d.value(item, depth+1, where+"[]")
 			if err != nil {
 				return nil, err
 			}

@@ -337,3 +337,20 @@ func TestHooksShapes(t *testing.T) {
 		})
 	}
 }
+
+func TestFoldedObjectsSkipCaseVariantWarnings(t *testing.T) {
+	t.Parallel()
+	raw := []byte(`{"hooks":{"stop":[],"Stop":[],"stop":[]},"Hooks":{}}`)
+	_, warnings, err := DecodeJSON(raw, StrictJSON, "Copilot", "hooks")
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(warnings, "\n")
+	if strings.Contains(joined, `"stop" and "Stop"`) || !strings.Contains(joined, `duplicate key "stop"`) || !strings.Contains(joined, `"hooks" and "Hooks"`) {
+		t.Fatalf("warnings = %v", warnings)
+	}
+	_, warnings, err = DecodeYAML([]byte("hooks:\n  stop: 1\n  Stop: 2\n"), "Copilot", "hooks")
+	if err != nil || len(warnings) != 0 {
+		t.Fatalf("yaml warnings = %v err %v", warnings, err)
+	}
+}
