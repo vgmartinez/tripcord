@@ -406,6 +406,9 @@ func changedFiles(root, ref string) (map[string]bool, error) {
 		if !errors.As(err, &exitErr) {
 			return nil, &gitInvokeError{err: fmt.Errorf("--since: git could not be started: %w", err), missing: true}
 		}
+		if detail := sanitizeGitStderr(exitErr.Stderr); detail != "" {
+			return nil, fmt.Errorf("--since %q: git diff failed: %s", ref, detail)
+		}
 		return nil, fmt.Errorf("--since %q: git diff failed: %w", ref, err)
 	}
 	changed := map[string]bool{}
@@ -440,6 +443,20 @@ func gitCommandEnv(root string) []string {
 		"GIT_CEILING_DIRECTORIES="+filepath.Dir(root),
 		"GIT_NO_LAZY_FETCH=1",
 	)
+}
+
+// sanitizeGitStderr trims git's diagnostic output for inclusion in an
+// error message, replacing the user's home directory with "~" so the
+// message does not leak the local account path.
+func sanitizeGitStderr(stderr []byte) string {
+	msg := strings.TrimSpace(string(stderr))
+	if msg == "" {
+		return ""
+	}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		msg = strings.ReplaceAll(msg, home, "~")
+	}
+	return strings.ReplaceAll(msg, "\n", "; ")
 }
 
 func decision(mode policy.Mode) model.Decision {

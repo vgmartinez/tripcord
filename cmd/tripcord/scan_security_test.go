@@ -215,6 +215,41 @@ func TestSinceKeepsNonASCIIAndSkipsUntracked(t *testing.T) {
 	}
 }
 
+// TestSinceErrorKeepsGitStderr checks that a --since failure keeps git's
+// own diagnostic (e.g. "bad revision") in the error message, instead of
+// only the generic wrapper text, so the user can tell why the ref did
+// not resolve.
+func TestSinceErrorKeepsGitStderr(t *testing.T) {
+	t.Parallel()
+	repo := gitRepo(t)
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"scan", repo, "--since", "nonexistent-ref-xyz"}, &stdout, &stderr)
+	if code != int(exitcode.Config) {
+		t.Fatalf("exit code = %d, stderr = %q", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "bad revision") {
+		t.Fatalf("stderr = %q, want git's own diagnostic", stderr.String())
+	}
+}
+
+// TestSanitizeGitStderrReplacesHome checks that sanitizeGitStderr hides
+// the local home directory while keeping the rest of git's message.
+func TestSanitizeGitStderrReplacesHome(t *testing.T) {
+	t.Parallel()
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		t.Skip("no home directory to redact")
+	}
+	raw := "fatal: not a git repository: " + home + "/repo/.git\nsome more detail\n"
+	got := sanitizeGitStderr([]byte(raw))
+	if strings.Contains(got, home) {
+		t.Fatalf("sanitizeGitStderr(%q) = %q, still contains home directory", raw, got)
+	}
+	if !strings.Contains(got, "fatal: not a git repository: ~/repo/.git") || !strings.Contains(got, "some more detail") {
+		t.Fatalf("sanitizeGitStderr(%q) = %q", raw, got)
+	}
+}
+
 func TestSinceMissingGit(t *testing.T) {
 	repo := gitRepo(t)
 	t.Setenv("PATH", t.TempDir())
