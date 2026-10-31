@@ -98,7 +98,7 @@ func KeyDiscriminator(removed []string) string {
 // redacted; a string or number under a secret-looking key name is
 // redacted.
 func (s *Source) SafeValue(key string, value any) any {
-	if key != "" && SecretKey(key) {
+	if key != "" && SecretKey(key) && !namesEnvVar(key) {
 		switch value.(type) {
 		case string, json.Number, int64, float64:
 			return Redacted
@@ -199,6 +199,13 @@ func SecretKey(name string) bool {
 		}
 	}
 	return false
+}
+
+// namesEnvVar reports whether a field holds the name of an environment
+// variable rather than its value, such as Codex's bearer_token_env_var.
+// A string there is a variable name and is sanitized, not redacted.
+func namesEnvVar(name string) bool {
+	return strings.HasSuffix(strings.ToLower(name), "_env_var")
 }
 
 func redactCommandSecrets(value string) (string, []string) {
