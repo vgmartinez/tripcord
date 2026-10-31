@@ -1,26 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "tripcord.event/v1",
+  "$id": "https://schemas.tripcord.invalid/tripcord.event/v1",
   "$comment": "SPDX-License-Identifier: Apache-2.0",
   "title": "Tripcord event",
-  "description": "One session fact: a tool call, read, write, network access, or message.",
+  "description": "One session fact: a tool call, read, write, network access, or message. Required: schema, id, ts, source.harness, session.id, kind. Every other property is optional, so a minimal local event can omit tool, command, paths, net, credentials, redactions, and raw_ref. Objects are open (additionalProperties: true): a reader must ignore properties it does not recognize, so a v1.x addition never breaks it.",
   "type": "object",
-  "additionalProperties": false,
-  "required": [
-    "schema",
-    "id",
-    "ts",
-    "source",
-    "session",
-    "kind",
-    "tool",
-    "command",
-    "paths",
-    "net",
-    "credentials",
-    "redactions",
-    "raw_ref"
-  ],
+  "additionalProperties": true,
+  "required": ["schema", "id", "ts", "source", "session", "kind"],
   "properties": {
     "schema": {
       "const": "tripcord.event/v1"
@@ -35,8 +21,8 @@
     },
     "source": {
       "type": "object",
-      "additionalProperties": false,
-      "required": ["harness", "surface", "version", "origin"],
+      "additionalProperties": true,
+      "required": ["harness"],
       "properties": {
         "harness": {
           "type": "string",
@@ -58,8 +44,8 @@
     },
     "session": {
       "type": "object",
-      "additionalProperties": false,
-      "required": ["id", "repo", "branch", "actor", "parent"],
+      "additionalProperties": true,
+      "required": ["id"],
       "properties": {
         "id": {
           "type": "string",

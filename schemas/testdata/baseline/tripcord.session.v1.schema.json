@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "tripcord.session/v1",
+  "$id": "https://schemas.tripcord.invalid/tripcord.session/v1",
   "$comment": "SPDX-License-Identifier: Apache-2.0",
   "title": "Tripcord session",
-  "description": "Events grouped for one session. Origin is local, cloud, or imported.",
+  "description": "Events grouped for one session. Origin is local, cloud, or imported. Objects are open (additionalProperties: true): a reader must ignore properties it does not recognize, so a v1.x addition never breaks it.",
   "type": "object",
-  "additionalProperties": false,
+  "additionalProperties": true,
   "required": ["schema", "id", "origin", "events"],
   "properties": {
     "schema": {
@@ -34,7 +34,7 @@
     "events": {
       "type": "array",
       "items": {
-        "$ref": "tripcord.event/v1"
+        "$ref": "https://schemas.tripcord.invalid/tripcord.event/v1"
       }
     }
   }

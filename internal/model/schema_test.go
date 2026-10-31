@@ -9,7 +9,7 @@ import (
 func TestPublishedSchemaIDs(t *testing.T) {
 	t.Parallel()
 	idx := loadSchemaIndex(t)
-	for _, id := range []string{SchemaEvent, SchemaFinding, SchemaSession} {
+	for _, id := range []string{schemaIDEvent, schemaIDFinding, schemaIDSession} {
 		schema, ok := idx.byID[id]
 		if !ok {
 			t.Fatalf("missing %s", id)
@@ -27,18 +27,49 @@ func TestPublishedSchemaIDs(t *testing.T) {
 func TestSchemaEnumsMatchGo(t *testing.T) {
 	t.Parallel()
 	idx := loadSchemaIndex(t)
-	event := idx.byID[SchemaEvent]
-	finding := idx.byID[SchemaFinding]
-	session := idx.byID[SchemaSession]
+	event := idx.byID[schemaIDEvent]
+	finding := idx.byID[schemaIDFinding]
+	session := idx.byID[schemaIDSession]
 
 	assertEnum(t, subSchema(t, event, "source", "harness"), harnessStrings(productHarnesses))
 	ids := make([]Harness, 0, len(productHarnesses)+len(surfaces))
 	ids = append(ids, productHarnesses...)
 	ids = append(ids, surfaces...)
 	assertEnum(t, subSchema(t, finding, "location", "harness"), harnessStrings(ids))
+	assertEnum(t, subSchema(t, finding, "location", "scope"), scopeStrings())
 	assertEnum(t, subSchema(t, finding, "severity"), severityStrings())
 	assertEnum(t, subSchema(t, finding, "decision"), decisionStrings())
 	assertEnum(t, subSchema(t, session, "origin"), originStrings())
+}
+
+func TestSchemaRequiredFields(t *testing.T) {
+	t.Parallel()
+	event := loadSchemaIndex(t).byID[schemaIDEvent]
+	if got := stringSlice(t, event["required"]); !equalSet(got, []string{"schema", "id", "ts", "source", "session", "kind"}) {
+		t.Fatalf("event required = %v", got)
+	}
+	source := subSchema(t, event, "source")
+	if got := stringSlice(t, source["required"]); !equalSet(got, []string{"harness"}) {
+		t.Fatalf("source required = %v", got)
+	}
+	session := subSchema(t, event, "session")
+	if got := stringSlice(t, session["required"]); !equalSet(got, []string{"id"}) {
+		t.Fatalf("event.session required = %v", got)
+	}
+}
+
+func TestSchemaObjectsAreOpenAtModelLevel(t *testing.T) {
+	t.Parallel()
+	idx := loadSchemaIndex(t)
+	event := mustObject(t, readTestdata(t, "event.json"))
+	event["extra_future_field"] = "ignored by an old reader"
+	raw, err := json.Marshal(event)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := idx.validate(schemaIDEvent, raw); err != nil {
+		t.Fatalf("open event schema rejected an unknown property: %v", err)
+	}
 }
 
 func TestSchemaRejectsInvalidDocuments(t *testing.T) {
@@ -48,39 +79,40 @@ func TestSchemaRejectsInvalidDocuments(t *testing.T) {
 	finding := mustObject(t, readTestdata(t, "finding.json"))
 
 	delete(event, "id")
-	expectSchemaError(t, idx, SchemaEvent, event, "required property is missing")
-
-	event = mustObject(t, readTestdata(t, "event.json"))
-	event["extra"] = true
-	expectSchemaError(t, idx, SchemaEvent, event, "unexpected property")
+	expectSchemaError(t, idx, schemaIDEvent, event, "required property is missing")
 
 	event = mustObject(t, readTestdata(t, "event.json"))
 	source := event["source"].(map[string]any)
 	source["harness"] = "vscode"
-	expectSchemaError(t, idx, SchemaEvent, event, "not in the enum")
+	expectSchemaError(t, idx, schemaIDEvent, event, "not in the enum")
 
 	event = mustObject(t, readTestdata(t, "event.json"))
 	event["ts"] = "yesterday"
-	expectSchemaError(t, idx, SchemaEvent, event, "date-time")
+	expectSchemaError(t, idx, schemaIDEvent, event, "date-time")
 
 	event = mustObject(t, readTestdata(t, "event.json"))
 	event["redactions"] = 1.5
-	expectSchemaError(t, idx, SchemaEvent, event, "does not match type")
+	expectSchemaError(t, idx, schemaIDEvent, event, "does not match type")
 
 	finding["severity"] = "info"
-	expectSchemaError(t, idx, SchemaFinding, finding, "not in the enum")
+	expectSchemaError(t, idx, schemaIDFinding, finding, "not in the enum")
 
 	finding = mustObject(t, readTestdata(t, "finding.json"))
 	finding["decision"] = "enforce"
-	expectSchemaError(t, idx, SchemaFinding, finding, "not in the enum")
+	expectSchemaError(t, idx, schemaIDFinding, finding, "not in the enum")
 
 	finding = mustObject(t, readTestdata(t, "finding.json"))
 	finding["confidence"] = 1.2
-	expectSchemaError(t, idx, SchemaFinding, finding, "above maximum")
+	expectSchemaError(t, idx, schemaIDFinding, finding, "above maximum")
 
 	finding = mustObject(t, readTestdata(t, "finding.json"))
 	finding["fingerprint"] = "abc"
-	expectSchemaError(t, idx, SchemaFinding, finding, "does not match pattern")
+	expectSchemaError(t, idx, schemaIDFinding, finding, "does not match pattern")
+
+	finding = mustObject(t, readTestdata(t, "finding.json"))
+	location := finding["location"].(map[string]any)
+	location["scope"] = "global"
+	expectSchemaError(t, idx, schemaIDFinding, finding, "not in the enum")
 
 	session := map[string]any{
 		"schema": SchemaSession,
@@ -88,7 +120,7 @@ func TestSchemaRejectsInvalidDocuments(t *testing.T) {
 		"origin": "remote",
 		"events": []any{},
 	}
-	expectSchemaError(t, idx, SchemaSession, session, "not in the enum")
+	expectSchemaError(t, idx, schemaIDSession, session, "not in the enum")
 
 	var ev any
 	if err := json.Unmarshal(readTestdata(t, "event.json"), &ev); err != nil {
@@ -98,7 +130,7 @@ func TestSchemaRejectsInvalidDocuments(t *testing.T) {
 	delete(badEvent, "id")
 	session["origin"] = "local"
 	session["events"] = []any{badEvent}
-	expectSchemaError(t, idx, SchemaSession, session, "required property is missing")
+	expectSchemaError(t, idx, schemaIDSession, session, "required property is missing")
 }
 
 func TestAuditRejectsUnsupportedKeyword(t *testing.T) {
@@ -171,6 +203,39 @@ func assertEnum(t *testing.T, schema map[string]any, want []string) {
 	}
 }
 
+func stringSlice(t *testing.T, v any) []string {
+	t.Helper()
+	items, ok := v.([]any)
+	if !ok {
+		t.Fatalf("%v is not an array", v)
+	}
+	out := make([]string, len(items))
+	for i, item := range items {
+		text, ok := item.(string)
+		if !ok {
+			t.Fatalf("entry %v is not a string", item)
+		}
+		out[i] = text
+	}
+	return out
+}
+
+func equalSet(got, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	set := make(map[string]struct{}, len(got))
+	for _, item := range got {
+		set[item] = struct{}{}
+	}
+	for _, item := range want {
+		if _, ok := set[item]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
 func harnessStrings(list []Harness) []string {
 	out := make([]string, len(list))
 	for i, item := range list {
@@ -198,6 +263,14 @@ func decisionStrings() []string {
 func originStrings() []string {
 	out := make([]string, len(origins))
 	for i, item := range origins {
+		out[i] = string(item)
+	}
+	return out
+}
+
+func scopeStrings() []string {
+	out := make([]string, len(scopes))
+	for i, item := range scopes {
 		out[i] = string(item)
 	}
 	return out

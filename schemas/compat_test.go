@@ -38,6 +38,65 @@ func TestV1SchemasStayCompatibleWithBaseline(t *testing.T) {
 	}
 }
 
+func TestSchemaObjectsStayOpen(t *testing.T) {
+	t.Parallel()
+	dir := schemasDir(t)
+	for _, name := range schemaNames(t, dir) {
+		schema := loadSchema(t, filepath.Join(dir, name))
+		assertObjectsOpen(t, schema, name+":$")
+	}
+}
+
+// assertObjectsOpen walks every object-typed schema node (the root, each
+// property, and each array's items) and fails if any of them sets
+// additionalProperties: false. A v1 schema must stay open so that a
+// reader built against an earlier v1.x minor version does not reject a
+// document carrying a later, additive property.
+func assertObjectsOpen(t *testing.T, node map[string]any, path string) {
+	t.Helper()
+	if typ, _ := node["type"].(string); typ == "object" {
+		if raw, ok := node["additionalProperties"]; ok {
+			if closed, isBool := raw.(bool); isBool && !closed {
+				t.Fatalf("%s: additionalProperties is false; v1 object schemas must stay open", path)
+			}
+		}
+	}
+	if props, ok := node["properties"].(map[string]any); ok {
+		names := make([]string, 0, len(props))
+		for name := range props {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			child, ok := props[name].(map[string]any)
+			if !ok {
+				t.Fatalf("%s.%s: property schema is not an object", path, name)
+			}
+			assertObjectsOpen(t, child, path+"."+name)
+		}
+	}
+	if items, ok := node["items"].(map[string]any); ok {
+		assertObjectsOpen(t, items, path+".items")
+	}
+}
+
+func TestSchemaIDsAreAbsoluteURIs(t *testing.T) {
+	t.Parallel()
+	for _, name := range schemaNames(t, schemasDir(t)) {
+		schema := loadLive(t, name)
+		id, _ := schema["$id"].(string)
+		if !strings.HasPrefix(id, "https://") {
+			t.Fatalf("%s: $id = %q, want an absolute https:// URI so $ref resolves in ajv or check-jsonschema", name, id)
+		}
+	}
+	session := loadLive(t, "tripcord.session.v1.schema.json")
+	ref := object(t, object(t, props(t, session)["events"])["items"])["$ref"]
+	event := loadLive(t, "tripcord.event.v1.schema.json")
+	if ref != event["$id"] {
+		t.Fatalf("session events.items.$ref = %v, want event's $id %v", ref, event["$id"])
+	}
+}
+
 func TestSchemaReadmeRequiresV2ForBreakingChanges(t *testing.T) {
 	t.Parallel()
 	raw, err := os.ReadFile(filepath.Join(schemasDir(t), "README.md"))

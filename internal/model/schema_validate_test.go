@@ -17,11 +17,40 @@ import (
 )
 
 // schemaIndex validates documents against the published JSON Schemas.
-// It covers the keyword subset those files use. Other keywords fail
-// at load time so a schema change cannot skip validation.
+// It covers the keyword subset those files use: type, const, enum,
+// properties, required, additionalProperties (boolean only), items,
+// minLength, minimum, maximum, minItems, pattern, format (date-time
+// only), and $ref. It does NOT implement the rest of 2020-12: no
+// oneOf/anyOf/allOf/not, no $dynamicRef or $defs, no
+// patternProperties, dependentRequired, unevaluatedProperties,
+// multipleOf, uniqueItems, contains, or other formats. A schema file
+// that uses an unsupported keyword fails to load (see
+// auditSchemaNode), so a schema change cannot silently go unchecked by
+// this validator; it either stays inside this subset or the loader
+// rejects it and a contributor notices in review. Extend both
+// schemaKeywords and the matching check function together if a v1.x
+// schema needs a keyword this validator does not yet cover.
+//
+// byID keys on each schema's JSON-Schema $id (an absolute URI, for
+// example "https://schemas.tripcord.invalid/tripcord.event/v1"), which
+// is separate from the document-level "schema" field a Tripcord record
+// carries (for example SchemaEvent, "tripcord.event/v1"). The schemaID*
+// constants below name the $id values; Schema*  name the document field
+// values.
 type schemaIndex struct {
 	byID map[string]map[string]any
 }
+
+// schemaID* are the JSON-Schema $id values, used to key schemaIndex.byID
+// and as the id argument to validate. They intentionally use the
+// reserved ".invalid" TLD (RFC 2606): $id only needs to be a syntactically
+// absolute URI so $ref resolves; it is not meant to be dereferenced over
+// the network, and the project does not control a real tripcord.* domain.
+const (
+	schemaIDEvent   = "https://schemas.tripcord.invalid/tripcord.event/v1"
+	schemaIDFinding = "https://schemas.tripcord.invalid/tripcord.finding/v1"
+	schemaIDSession = "https://schemas.tripcord.invalid/tripcord.session/v1"
+)
 
 func loadSchemaIndex(t requireFatal) *schemaIndex {
 	t.Helper()
