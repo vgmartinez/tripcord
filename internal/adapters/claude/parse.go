@@ -160,12 +160,12 @@ var (
 	// for example a command embedding "'Authorization: Bearer x'".
 	bearerToken = regexp.MustCompile(`(?i)\b(bearer)\s+([^\s'"]+)`)
 	// bearerWord matches an array element that is the word "Bearer" or
-	// ends in ": Bearer", used the same way secretFlagName is: to recognize an MCP
-	// "args" element such as ["Bearer", "X"], ["--header",
-	// "Authorization: Bearer", "X"], or ["--header=Authorization:
-	// Bearer", "X"] (the token in a separate element, rather than one
-	// "Bearer X" string bearerToken above matches) so the next element
-	// is redacted unconditionally.
+	// ends in ": Bearer", used the same way secretFlagName is: to
+	// recognize an MCP "args" element such as ["Bearer", "X"],
+	// ["--header", "Authorization: Bearer", "X"], or
+	// ["--header=Authorization: Bearer", "X"] (the token in a separate
+	// element, rather than one "Bearer X" string bearerToken above
+	// matches) so the next element is redacted unconditionally.
 	bearerWord = regexp.MustCompile(`(?i)(?:^|:)\s*bearer\s*$`)
 	// embeddedURL finds an absolute URL anywhere inside a larger string,
 	// such as the command of "curl 'https://host/x?sig=y' | sh". It stops
@@ -221,15 +221,23 @@ type sanitizeResult struct {
 
 // sanitizeString strips URL secrets and CLI/header credentials from value,
 // then rewrites a home-directory prefix to "~" (user scope only; see
-// tildeHome). Unlike the old implementation, it never blanket-converts
-// backslashes to slashes: only the home-directory prefix it actually
-// matches is rewritten, so two commands that differ only by `\` vs `/`
-// outside that prefix stay distinct.
+// tildeHome), and finally redacts any credential shape
+// output.DefaultRedactor recognizes (a ghp_ token in an apiKeyHelper
+// command, for example), recording the whole value as removed, as
+// kit.Source.Sanitize does. Unlike the old implementation, it never
+// blanket-converts backslashes to slashes: only the home-directory
+// prefix it actually matches is rewritten, so two commands that differ
+// only by `\` vs `/` outside that prefix stay distinct.
 func (s *src) sanitizeString(value string) sanitizeResult {
-	value, removedURLs := stripEmbeddedURLSecrets(value)
+	value, removed := stripEmbeddedURLSecrets(value)
 	value, removedFlags := redactCommandSecrets(value)
+	removed = append(removed, removedFlags...)
 	value = s.tildeHome(value)
-	return sanitizeResult{value: value, removed: append(removedURLs, removedFlags...)}
+	if out := output.DefaultRedactor(value); out != value {
+		removed = append(removed, value)
+		value = out
+	}
+	return sanitizeResult{value: value, removed: removed}
 }
 
 // tildeHome rewrites every path-segment-bounded occurrence of the home
