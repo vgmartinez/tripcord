@@ -110,3 +110,25 @@ func TestRulesFileOpaqueScopesToolFlagsToEachList(t *testing.T) {
 		t.Fatalf("opaque content leaks a tool secret: %s", content)
 	}
 }
+
+func TestRulesFileOpaqueConservativelyRedactsNestedAndUnresolvedArgv(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(root, ".codex", "rules", "default.rules"),
+		"x = unknown\n"+
+			`prefix_rule(pattern = ["mysql", ("-pQR09X", "-pQR09Y")])`+"\n"+
+			`["redis-cli"] + ["-a", "QR07X"]`+"\n"+
+			`T = "redis-cli"`+"\n"+
+			`[T, "-a", "QR06X"]`+"\n")
+	got := kittest.Discover(t, New(Options{}), root)
+	items := got.Find(".codex/rules/default.rules", model.ConfigKindPermissions)
+	if len(items) != 1 {
+		t.Fatalf("items = %+v, want one opaque item", got.Items)
+	}
+	content, _ := kittest.Payload(t, items[0])["content"].(string)
+	for _, secret := range []string{"QR09X", "QR09Y", "QR07X", "QR06X"} {
+		if strings.Contains(content, secret) {
+			t.Errorf("opaque content leaks %q: %s", secret, content)
+		}
+	}
+}

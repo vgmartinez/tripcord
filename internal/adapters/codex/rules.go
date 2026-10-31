@@ -1,6 +1,7 @@
 package codex
 
 import (
+	"bytes"
 	"encoding/json"
 	"strings"
 
@@ -78,7 +79,7 @@ func (f *file) safeExamples(examples []any) []any {
 
 // rulesLiteral is one string literal found in a rules file the parser
 // could not model: its byte span, quote, decoded text, and group, the
-// innermost "[...]" or "(...)" enclosing it (a literal outside any has
+// outermost "[...]" or "(...)" enclosing it (a literal outside any has
 // a group of its own).
 type rulesLiteral struct {
 	start, end int
@@ -119,6 +120,23 @@ func (f *file) sanitizeRulesLiterals(raw []byte) string {
 			sanitized[i], _ = out[j].(string)
 		}
 	}
+	// Syntax the opaque scanner cannot resolve (an argv concatenation or
+	// a variable standing for a tool) gets the conservative pre-e8a570c
+	// treatment within that expression. Ordinary adjacent lists retain
+	// their independent argv groups above.
+	for _, group := range conservativeRulesGroups(raw, literals) {
+		values := make([]any, 0, len(group.prefix)+len(group.members))
+		for _, value := range group.prefix {
+			values = append(values, value)
+		}
+		for _, i := range group.members {
+			values = append(values, literals[i].text)
+		}
+		out, _ := f.SafeValue("", f.SafeToolArgv(values)).([]any)
+		for j, i := range group.members {
+			sanitized[i], _ = out[len(group.prefix)+j].(string)
+		}
+	}
 	var b strings.Builder
 	pos := 0
 	for i, lit := range literals {
@@ -132,6 +150,57 @@ func (f *file) sanitizeRulesLiterals(raw []byte) string {
 	}
 	b.Write(raw[pos:])
 	return b.String()
+}
+
+type rulesConservativeGroup struct {
+	members []int
+	prefix  []string
+}
+
+// conservativeRulesGroups recognizes the two opaque constructs where an
+// argv can cross a list boundary: A + B and a variable previously assigned
+// a literal tool name. It deliberately confines fallback to that source
+// line, preserving the per-list isolation for unrelated rules.
+func conservativeRulesGroups(raw []byte, literals []rulesLiteral) []rulesConservativeGroup {
+	var out []rulesConservativeGroup
+	tools := map[string]string{}
+	lineStart := 0
+	for lineStart <= len(raw) {
+		lineEnd := bytes.IndexByte(raw[lineStart:], '\n')
+		if lineEnd < 0 {
+			lineEnd = len(raw)
+		} else {
+			lineEnd += lineStart
+		}
+		var members []int
+		for i, lit := range literals {
+			if lit.start >= lineStart && lit.end <= lineEnd {
+				members = append(members, i)
+			}
+		}
+		line := string(raw[lineStart:lineEnd])
+		if len(members) == 1 {
+			prefix := strings.TrimSpace(line[:literals[members[0]].start-lineStart])
+			if name, ok := strings.CutSuffix(strings.TrimSpace(prefix), "="); ok && name != "" {
+				tools[strings.TrimSpace(name)] = literals[members[0]].text
+			}
+		}
+		if len(members) > 0 && strings.Contains(line, "+") {
+			out = append(out, rulesConservativeGroup{members: members})
+		} else if len(members) > 0 {
+			for name, tool := range tools {
+				if strings.Contains(line, "["+name) || strings.Contains(line, ", "+name) {
+					out = append(out, rulesConservativeGroup{members: members, prefix: []string{tool}})
+					break
+				}
+			}
+		}
+		if lineEnd == len(raw) {
+			break
+		}
+		lineStart = lineEnd + 1
+	}
+	return out
 }
 
 func scanRulesLiterals(raw []byte) []rulesLiteral {
@@ -160,7 +229,7 @@ func scanRulesLiterals(raw []byte) []rulesLiteral {
 				continue
 			}
 			if len(open) > 0 {
-				lit.group = open[len(open)-1]
+				lit.group = open[0]
 			} else {
 				groups++
 				lit.group = groups
