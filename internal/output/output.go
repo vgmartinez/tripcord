@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"sort"
 	"strings"
 
@@ -16,11 +17,30 @@ type Format string
 
 const (
 	FormatJSON  Format = "json"
+	FormatJSONL Format = "jsonl"
 	FormatSARIF Format = "sarif"
 	FormatText  Format = "text"
 	FormatGHA   Format = "gha"
 	FormatMD    Format = "md"
 )
+
+// SARIFNonRepoLocation selects how user and managed paths are represented.
+type SARIFNonRepoLocation string
+
+const (
+	// SARIFNonRepoURIBase is the default. User and managed paths use a
+	// relative artifact URI and uriBaseId USERHOME or MANAGED.
+	SARIFNonRepoURIBase SARIFNonRepoLocation = "uri-base"
+	// SARIFNonRepoLogical is the fallback for a code-scanning importer that
+	// rejects or ignores uriBaseId-relative results. It emits logicalLocations
+	// and keeps the normalized path in the result message.
+	SARIFNonRepoLogical SARIFNonRepoLocation = "logical"
+)
+
+// DefaultSARIFNonRepoLocation is the representation used when Options does
+// not select one. A real GitHub code scanning upload still has to confirm
+// that the uriBaseId form is preserved.
+const DefaultSARIFNonRepoLocation = SARIFNonRepoURIBase
 
 // Target identifies the supported output destination.
 type Target string
@@ -32,9 +52,12 @@ const (
 
 // Options controls rendering without changing a finding document.
 type Options struct {
-	// RepoRoot makes absolute finding paths safe, repository-relative URIs.
-	// A path outside RepoRoot is omitted from SARIF and GHA locations.
+	// RepoRoot makes an absolute repository path repository-relative when the
+	// path is inside it. A repository path outside RepoRoot is omitted.
 	RepoRoot string
+	// NonRepoSARIF selects the SARIF form for user and managed paths.
+	// The zero value uses DefaultSARIFNonRepoLocation.
+	NonRepoSARIF SARIFNonRepoLocation
 }
 
 // Sink receives findings and writes a complete result when flushed.
@@ -57,26 +80,68 @@ type Summary struct {
 func ParseFormat(value string) (Format, error) {
 	format := Format(value)
 	switch format {
-	case FormatJSON, FormatSARIF, FormatText, FormatGHA, FormatMD:
+	case FormatJSON, FormatJSONL, FormatSARIF, FormatText, FormatGHA, FormatMD:
 		return format, nil
 	default:
-		return "", fmt.Errorf("output format %q: supported formats are json, sarif, text, gha, md", value)
+		return "", fmt.Errorf("output format %q: supported formats are json, jsonl, sarif, text, gha, md", value)
 	}
 }
 
-// NewSink creates a sink for a local output destination. JSON is intentionally
-// limited to files because its contract is newline-delimited finding documents.
-// All other formats may be directed to stdout or a file.
+// SelectSink routes formatName and an optional output path to a local sink.
+// json and jsonl both write newline-delimited tripcord.finding/v1 documents.
+// An empty outputPath or "-" selects stdout. Any other path selects that file.
+// text, sarif, gha, and md use the same path rule. There is no network sink.
+// Close the returned handle when outputPath names a file.
+func SelectSink(formatName, outputPath string, stdout io.Writer, options Options) (*Handle, error) {
+	format, err := ParseFormat(formatName)
+	if err != nil {
+		return nil, err
+	}
+	if outputPath == "" || outputPath == "-" {
+		sink, err := NewStdoutSink(format, stdout, options)
+		if err != nil {
+			return nil, err
+		}
+		return &Handle{Sink: sink}, nil
+	}
+	file, err := os.OpenFile(outputPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	if err != nil {
+		return nil, fmt.Errorf("open output file: %w", err)
+	}
+	sink, err := NewFileSink(format, file, options)
+	if err != nil {
+		_ = file.Close()
+		return nil, err
+	}
+	return &Handle{Sink: sink, close: file.Close}, nil
+}
+
+// Handle is a sink and, for a path opened by SelectSink, its file.
+type Handle struct {
+	Sink
+	close func() error
+}
+
+// Close closes a file opened by SelectSink. It is safe on stdout.
+func (h *Handle) Close() error {
+	if h == nil || h.close == nil {
+		return nil
+	}
+	err := h.close()
+	h.close = nil
+	return err
+}
+
+// NewSink creates a sink for a local stdout or file writer.
 func NewSink(format Format, target Target, writer io.Writer, options Options) (Sink, error) {
 	if writer == nil {
 		return nil, errors.New("output writer is nil")
 	}
+	if _, err := sarifNonRepoMode(options); err != nil {
+		return nil, err
+	}
 	switch format {
-	case FormatJSON:
-		if target != TargetFile {
-			return nil, errors.New("json output requires a file sink")
-		}
-	case FormatSARIF, FormatText, FormatGHA, FormatMD:
+	case FormatJSON, FormatJSONL, FormatSARIF, FormatText, FormatGHA, FormatMD:
 		if target != TargetStdout && target != TargetFile {
 			return nil, fmt.Errorf("output target %q: supported targets are stdout, file", target)
 		}
@@ -125,7 +190,7 @@ func (s *sink) Flush() error {
 
 	var err error
 	switch s.format {
-	case FormatJSON:
+	case FormatJSON, FormatJSONL:
 		err = renderJSONL(s.writer, findings)
 	case FormatSARIF:
 		err = renderSARIF(s.writer, findings, s.options)

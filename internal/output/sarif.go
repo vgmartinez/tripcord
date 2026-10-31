@@ -2,7 +2,9 @@ package output
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
+	"path"
 	"sort"
 
 	"github.com/vgmartinez/tripcord/internal/model"
@@ -17,8 +19,9 @@ type sarifLog struct {
 }
 
 type sarifRun struct {
-	Tool    sarifTool     `json:"tool"`
-	Results []sarifResult `json:"results"`
+	Tool               sarifTool                        `json:"tool"`
+	OriginalURIBaseIDs map[string]sarifArtifactLocation `json:"originalUriBaseIds,omitempty"`
+	Results            []sarifResult                    `json:"results"`
 }
 
 type sarifTool struct {
@@ -41,6 +44,16 @@ type sarifResult struct {
 	Message             sarifMessage      `json:"message"`
 	Locations           []sarifLocation   `json:"locations,omitempty"`
 	PartialFingerprints map[string]string `json:"partialFingerprints"`
+	Properties          *sarifProperties  `json:"properties,omitempty"`
+}
+
+type sarifProperties struct {
+	Tripcord sarifTripcord `json:"tripcord"`
+}
+
+type sarifTripcord struct {
+	Scope string `json:"scope"`
+	Path  string `json:"path"`
 }
 
 type sarifMessage struct {
@@ -48,7 +61,14 @@ type sarifMessage struct {
 }
 
 type sarifLocation struct {
-	PhysicalLocation sarifPhysicalLocation `json:"physicalLocation"`
+	PhysicalLocation *sarifPhysicalLocation `json:"physicalLocation,omitempty"`
+	LogicalLocations []sarifLogicalLocation `json:"logicalLocations,omitempty"`
+}
+
+type sarifLogicalLocation struct {
+	Name               string `json:"name,omitempty"`
+	FullyQualifiedName string `json:"fullyQualifiedName,omitempty"`
+	Kind               string `json:"kind,omitempty"`
 }
 
 type sarifPhysicalLocation struct {
@@ -57,7 +77,9 @@ type sarifPhysicalLocation struct {
 }
 
 type sarifArtifactLocation struct {
-	URI string `json:"uri"`
+	URI         string        `json:"uri,omitempty"`
+	URIBaseID   string        `json:"uriBaseId,omitempty"`
+	Description *sarifMessage `json:"description,omitempty"`
 }
 
 type sarifRegion struct {
@@ -65,28 +87,47 @@ type sarifRegion struct {
 }
 
 func renderSARIF(writer io.Writer, findings []model.Finding, options Options) error {
+	mode, err := sarifNonRepoMode(options)
+	if err != nil {
+		return err
+	}
 	rules := make(map[string]string, len(findings))
 	results := make([]sarifResult, 0, len(findings))
+	var bases map[string]sarifArtifactLocation
 	for _, finding := range findings {
 		rules[finding.Rule] = finding.Title
+		level, err := sarifLevel(finding.Severity)
+		if err != nil {
+			return err
+		}
+		ref := locate(finding.Location, options.RepoRoot)
 		result := sarifResult{
 			RuleID:  finding.Rule,
-			Level:   sarifLevel(finding.Severity),
-			Message: sarifMessage{Text: finding.Title + ": " + finding.Fix},
+			Level:   level,
+			Message: sarifMessage{Text: resultMessage(finding, ref.path)},
 			PartialFingerprints: map[string]string{
 				"tripcord/fingerprint": finding.Fingerprint,
 			},
 		}
-		if uri, ok := repoRelativeURI(finding.Location, options.RepoRoot); ok {
-			location := sarifLocation{
-				PhysicalLocation: sarifPhysicalLocation{
-					ArtifactLocation: sarifArtifactLocation{URI: uri},
-				},
+		if ref.path != "" {
+			result.Properties = &sarifProperties{Tripcord: sarifTripcord{Scope: ref.scope, Path: ref.path}}
+		}
+		switch ref.kind {
+		case locNone:
+		case locRepo:
+			result.Locations = []sarifLocation{{PhysicalLocation: physicalLocation(ref, false)}}
+		case locUser, locManaged:
+			if mode == SARIFNonRepoLogical {
+				result.Locations = []sarifLocation{{LogicalLocations: []sarifLogicalLocation{logicalLocation(ref)}}}
+				break
 			}
-			if finding.Location.Line != nil {
-				location.PhysicalLocation.Region = &sarifRegion{StartLine: *finding.Location.Line}
+			if bases == nil {
+				bases = map[string]sarifArtifactLocation{}
 			}
-			result.Locations = []sarifLocation{location}
+			bases[ref.baseID] = sarifArtifactLocation{Description: &sarifMessage{Text: uriBaseDescription(ref.baseID)}}
+			result.Locations = []sarifLocation{{PhysicalLocation: physicalLocation(ref, true)}}
+		default:
+			return fmt.Errorf("output: unhandled location kind %d", ref.kind)
 		}
 		results = append(results, result)
 	}
@@ -105,8 +146,9 @@ func renderSARIF(writer io.Writer, findings []model.Finding, options Options) er
 		Schema:  sarifSchemaURL,
 		Version: "2.1.0",
 		Runs: []sarifRun{{
-			Tool:    sarifTool{Driver: sarifDriver{Name: "tripcord", Rules: sarifRules}},
-			Results: results,
+			Tool:               sarifTool{Driver: sarifDriver{Name: "tripcord", Rules: sarifRules}},
+			OriginalURIBaseIDs: bases,
+			Results:            results,
 		}},
 	}
 	encoder := json.NewEncoder(writer)
@@ -115,15 +157,66 @@ func renderSARIF(writer io.Writer, findings []model.Finding, options Options) er
 	return encoder.Encode(log)
 }
 
-func sarifLevel(severity model.Severity) string {
+func sarifNonRepoMode(options Options) (SARIFNonRepoLocation, error) {
+	switch options.NonRepoSARIF {
+	case "", DefaultSARIFNonRepoLocation:
+		return DefaultSARIFNonRepoLocation, nil
+	case SARIFNonRepoLogical:
+		return SARIFNonRepoLogical, nil
+	default:
+		return "", fmt.Errorf("output SARIF location %q: supported values are %q and %q", options.NonRepoSARIF, SARIFNonRepoURIBase, SARIFNonRepoLogical)
+	}
+}
+
+func resultMessage(finding model.Finding, path string) string {
+	text := finding.Title + ": " + finding.Fix
+	if path == "" {
+		return text
+	}
+	return text + " (" + path + ")"
+}
+
+func physicalLocation(ref locationRef, withBase bool) *sarifPhysicalLocation {
+	artifact := sarifArtifactLocation{URI: ref.uri}
+	if withBase {
+		artifact.URIBaseID = ref.baseID
+	}
+	location := &sarifPhysicalLocation{ArtifactLocation: artifact}
+	if ref.line != nil {
+		location.Region = &sarifRegion{StartLine: *ref.line}
+	}
+	return location
+}
+
+func logicalLocation(ref locationRef) sarifLogicalLocation {
+	return sarifLogicalLocation{
+		Name:               path.Base(ref.path),
+		FullyQualifiedName: ref.path,
+		Kind:               ref.scope,
+	}
+}
+
+func uriBaseDescription(id string) string {
+	switch id {
+	case URIBaseUserHome:
+		return "The user's home directory."
+	case URIBaseManaged:
+		return "Managed configuration location."
+	default:
+		return ""
+	}
+}
+
+// SARIF's level enum is none, note, warning, and error. low maps to note.
+func sarifLevel(severity model.Severity) (string, error) {
 	switch severity {
 	case model.SeverityCritical, model.SeverityHigh:
-		return "error"
+		return "error", nil
 	case model.SeverityMedium:
-		return "warning"
+		return "warning", nil
 	case model.SeverityLow:
-		return "note"
+		return "note", nil
 	default:
-		return "none"
+		return "", fmt.Errorf("output: unhandled severity %q", severity)
 	}
 }

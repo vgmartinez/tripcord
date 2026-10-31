@@ -50,23 +50,50 @@ func renderText(writer io.Writer, findings []model.Finding) error {
 
 func renderGHA(writer io.Writer, findings []model.Finding, options Options) error {
 	for _, finding := range findings {
-		command := "warning"
-		if finding.Severity == model.SeverityHigh || finding.Severity == model.SeverityCritical {
-			command = "error"
+		command, err := ghaCommand(finding.Severity)
+		if err != nil {
+			return err
 		}
+		ref := locate(finding.Location, options.RepoRoot)
 		properties := []string{}
-		if uri, ok := repoRelativeURI(finding.Location, options.RepoRoot); ok {
-			properties = append(properties, "file="+escapeGHAProperty(uri))
-			if finding.Location.Line != nil {
-				properties = append(properties, "line="+strconv.Itoa(*finding.Location.Line))
-			}
-		}
 		message := fmt.Sprintf("%s [%s] %s (%s)", finding.Title, finding.Rule, finding.Fix, finding.Fingerprint)
+		switch ref.kind {
+		case locNone:
+		case locRepo:
+			properties = append(properties, "file="+escapeGHAProperty(ref.uri))
+			if ref.line != nil {
+				properties = append(properties, "line="+strconv.Itoa(*ref.line))
+			}
+		case locUser, locManaged:
+			shown := ref.path
+			if ref.line != nil {
+				shown += ":" + strconv.Itoa(*ref.line)
+			}
+			properties = append(properties, "title="+escapeGHAProperty(shown))
+			message += " " + shown
+		default:
+			return fmt.Errorf("output: unhandled location kind %d", ref.kind)
+		}
 		if _, err := fmt.Fprintf(writer, "::%s%s::%s\n", command, ghaProperties(properties), escapeGHAData(message)); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func ghaCommand(severity model.Severity) (string, error) {
+	switch severity {
+	case model.SeverityLow:
+		return "notice", nil
+	case model.SeverityMedium:
+		return "warning", nil
+	case model.SeverityHigh:
+		return "error", nil
+	case model.SeverityCritical:
+		return "error", nil
+	default:
+		return "", fmt.Errorf("output: unhandled severity %q", severity)
+	}
 }
 
 func renderMarkdown(writer io.Writer, findings []model.Finding) error {

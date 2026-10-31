@@ -27,7 +27,7 @@
           "ruleId": "TC-CFG-002",
           "level": "warning",
           "message": {
-            "text": "Task runs on folder open: Remove runOn: folderOpen."
+            "text": "Task runs on folder open: Remove runOn: folderOpen. (configs/tasks.json)"
           },
           "locations": [
             {
@@ -40,13 +40,19 @@
           ],
           "partialFingerprints": {
             "tripcord/fingerprint": "tcf_fedcba9876543210"
+          },
+          "properties": {
+            "tripcord": {
+              "scope": "repo",
+              "path": "configs/tasks.json"
+            }
           }
         },
         {
           "ruleId": "TC-CFG-010",
           "level": "error",
           "message": {
-            "text": "Plugin executes arbitrary code: Remove the plugin or review and pin it."
+            "text": "Plugin executes arbitrary code: Remove the plugin or review and pin it. (configs/hook.json)"
           },
           "locations": [
             {
@@ -62,6 +68,12 @@
           ],
           "partialFingerprints": {
             "tripcord/fingerprint": "tcf_0123456789abcdef"
+          },
+          "properties": {
+            "tripcord": {
+              "scope": "repo",
+              "path": "configs/hook.json"
+            }
           }
         }
       ]
