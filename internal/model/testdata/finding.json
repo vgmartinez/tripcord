@@ -17,5 +17,5 @@
   },
   "refs": ["https://novee.security/blog/breaking-ai-agent-sandboxes/"],
   "fix": "Ejecuta el agente con PID namespace propio o hidepid=2",
-  "fingerprint": "tcf_bf8994fdb9dc73ed"
+  "fingerprint": "tcf_c761c03b24e7b179"
 }

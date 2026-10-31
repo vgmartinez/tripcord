@@ -180,7 +180,7 @@ func TestFindingSampleRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const sampleFingerprint = "tcf_bf8994fdb9dc73ed"
+	const sampleFingerprint = "tcf_c761c03b24e7b179"
 	if computed != sampleFingerprint || !fingerprintPattern.MatchString(computed) {
 		t.Fatalf("computed fingerprint = %s", computed)
 	}

@@ -15,8 +15,8 @@ var fingerprintPattern = regexp.MustCompile(`^tcf_[0-9a-f]{16}$`)
 
 // Evidence cites one event or one config item, never both. Event is an
 // Event.ID; Config is a ConfigItem.ID. Excerpt is optional either way
-// and, when set, must already be redacted; Fingerprint hashes only the
-// normalized excerpt text, never Event or Config (see Fingerprint).
+// and, when set, must already be redacted. Fingerprint hashes the
+// normalized excerpt and Config, but never Event (see Fingerprint).
 type Evidence struct {
 	Event   string `json:"event,omitempty"`
 	Config  string `json:"config,omitempty"`

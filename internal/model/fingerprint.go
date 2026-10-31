@@ -24,6 +24,7 @@ var (
 	errEmptyRule      = errors.New("fingerprint: empty rule")
 	errEmptyHarness   = errors.New("fingerprint: empty location harness")
 	errUnknownHarness = errors.New("fingerprint: unknown location harness")
+	errUnknownScope   = errors.New("fingerprint: unknown location scope")
 )
 
 // Fingerprint returns the stable id for rule, loc, and evidence.
@@ -31,8 +32,8 @@ var (
 // The result is "tcf_" plus the first 16 lowercase hex characters of
 // SHA-256 over a canonical UTF-8 JSON document. The same inputs always
 // produce the same id across Tripcord versions. Golden tests lock the
-// digest. The full write-up, including why line, event ids, and config
-// ids are excluded, is docs/fingerprint.md.
+// digest. The full write-up, including why line and event ids are
+// excluded, is docs/fingerprint.md.
 //
 // Canonical document, encoding/json compact form, HTML escaping
 // disabled, trailing encoder newline removed, keys in this order:
@@ -44,32 +45,58 @@ var (
 // rule is the rule id byte for byte. It must be non-empty. There is no
 // trimming and no case folding.
 //
-// location is an object. harness is required. It is trimmed with
-// strings.TrimSpace and must be a known harness or surface. There is
-// no case folding. session is strings.TrimSpace and omitted when empty.
-// path is normalizeScopedPath(loc.Scope, loc.Path) (an empty scope is
-// repo scope) and is omitted when loc.Path is empty; an absolute path
-// for repo scope, or a path not rooted at "~/" for user scope, is an
+// location is an object. harness is required: trimmed with
+// strings.TrimSpace, and must be a known harness or surface, with no
+// case folding. session is strings.TrimSpace and omitted when empty.
+// scope is always present: an empty loc.Scope defaults to repo, and any
+// other value must be a known Scope or Fingerprint errors. scope is
+// hashed, unlike line, because a path's scope is part of what the path
+// names: before scope was validated per path shape (see
+// normalizeScopedPath), a managed-scope path had no required shape and
+// could collide, as plain text, with a repo- or user-scope path that
+// happened to use the same characters. Hashing scope removes any
+// reliance on path shape alone to tell the three apart. path is
+// normalizeScopedPath(loc.Scope, loc.Path) and is omitted when
+// loc.Path is empty; an absolute path for repo scope, a path not rooted
+// at "~/" for user scope, or a relative path for managed scope, is an
 // error. loc.Line is NOT hashed: a line number is volatile (an edit
 // above the finding's line shifts it) and is not part of what a finding
-// identifies. Line stays on Finding.Location for display. loc.Scope is
-// also not hashed; it is already implied by the normalized path's shape
-// (relative, "~/"-rooted, or managed-absolute), so including it would
-// not disambiguate anything further.
+// identifies. Line stays on Finding.Location for display.
 //
-// evidence is an array of the normalized, non-empty excerpts, sorted as
-// raw strings (byte order); duplicates are kept. Each evidence excerpt
-// is strings.Fields-joined with single spaces (Unicode white space
-// collapsed, ends dropped); an item that normalizes to "" is dropped.
-// Evidence.Event and Evidence.Config are NOT hashed. Event ids are
-// ULIDs minted at ingest, so the same finding re-derived from a
-// reimported transcript, or from a hook event deduped against its
-// transcript copy, would otherwise get a different id for the same
-// occurrence; config ids are comparatively stable (see ConfigItem.ID)
-// but are left out too, for the same one-input-shape rule: a finding's
-// identity is the rule, the location, and what the evidence says, not
-// which record happens to cite it. The array is [] when nothing
-// remains, never null.
+// evidence is an array of items built from the non-empty normalized
+// fields of each Evidence: config (strings.TrimSpace of Evidence.Config)
+// and excerpt (strings.Fields-joined with single spaces: Unicode white
+// space collapsed, ends dropped). An item with neither is dropped (this
+// matters because Excerpt is optional on a config-only citation: a
+// finding evidenced only by {Config: "..."} with no excerpt must not
+// vanish from the hash the way an all-whitespace excerpt does). Items
+// are sorted by (config, excerpt) as raw strings for a deterministic
+// order; duplicates are kept. The array is [] when nothing remains,
+// never null.
+//
+// Evidence.Event is NEVER hashed. Event ids are ULIDs minted at
+// ingest, so the same finding re-derived from a reimported transcript,
+// or from a hook event deduped against its transcript copy, would
+// otherwise mint a different fingerprint for the same occurrence.
+//
+// Evidence.Config IS hashed, unlike Event, because ConfigItem.ID (see
+// ConfigItem.ID) is already content-stable: harness, scope, and
+// normalized path, with no sha256, so editing the config file's body
+// does not change it, and nothing mints a new one per run the way a
+// ULID does. Leaving it out of the hash entirely let two findings that
+// cite different config files collapse onto the same fingerprint
+// whenever Location.Path was unset and the evidence carried no excerpt
+// (reducing the preimage to just rule, harness, and an empty evidence
+// list). Hashing the cited config id closes that collision without
+// reopening the reimport-instability problem Event's exclusion solves.
+//
+// Because occurrence-identifying fields (the event id) are excluded, a
+// command that recurs across a session — the same shell command run
+// twice, or a hook that fires on every matching tool call — produces
+// evidence with the same normalized excerpt both times, so those
+// repeated occurrences hash to the same fingerprint rather than minting
+// a new one per repetition. A store can dedup on that fingerprint, both
+// within one scan and across a reimport of the same transcript.
 //
 // Credential values, secret values, network URLs, and any other fields
 // are not inputs. Excerpts must already be redacted. This function does
@@ -99,10 +126,12 @@ type fingerprintDocument struct {
 type fingerprintLocation struct {
 	Harness string `json:"harness"`
 	Session string `json:"session,omitempty"`
+	Scope   string `json:"scope"`
 	Path    string `json:"path,omitempty"`
 }
 
 type fingerprintEvidence struct {
+	Config  string `json:"config,omitempty"`
 	Excerpt string `json:"excerpt,omitempty"`
 }
 
@@ -117,7 +146,11 @@ func fingerprintPreimage(rule string, loc Location, evidence []Evidence) ([]byte
 	if !Harness(harness).Valid() {
 		return nil, fmt.Errorf("%w: %q", errUnknownHarness, harness)
 	}
-	canonicalLoc := fingerprintLocation{Harness: harness}
+	scope, err := canonicalFingerprintScope(loc.Scope)
+	if err != nil {
+		return nil, err
+	}
+	canonicalLoc := fingerprintLocation{Harness: harness, Scope: string(scope)}
 	if session := strings.TrimSpace(loc.Session); session != "" {
 		canonicalLoc.Session = session
 	}
@@ -132,12 +165,16 @@ func fingerprintPreimage(rule string, loc Location, evidence []Evidence) ([]byte
 	items := make([]fingerprintEvidence, 0, len(evidence))
 	for _, ev := range evidence {
 		excerpt := strings.Join(strings.Fields(ev.Excerpt), " ")
-		if excerpt == "" {
+		config := strings.TrimSpace(ev.Config)
+		if excerpt == "" && config == "" {
 			continue
 		}
-		items = append(items, fingerprintEvidence{Excerpt: excerpt})
+		items = append(items, fingerprintEvidence{Config: config, Excerpt: excerpt})
 	}
 	slices.SortFunc(items, func(a, b fingerprintEvidence) int {
+		if c := cmp.Compare(a.Config, b.Config); c != 0 {
+			return c
+		}
 		return cmp.Compare(a.Excerpt, b.Excerpt)
 	})
 
@@ -147,6 +184,18 @@ func fingerprintPreimage(rule string, loc Location, evidence []Evidence) ([]byte
 		Location: canonicalLoc,
 		Evidence: items,
 	})
+}
+
+// canonicalFingerprintScope defaults an empty scope to repo and
+// validates any other value against the closed Scope vocabulary.
+func canonicalFingerprintScope(scope Scope) (Scope, error) {
+	if scope == "" {
+		return ScopeRepo, nil
+	}
+	if !scope.Valid() {
+		return "", fmt.Errorf("%w: %q", errUnknownScope, scope)
+	}
+	return scope, nil
 }
 
 func canonicalJSON(v any) ([]byte, error) {

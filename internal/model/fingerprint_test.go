@@ -36,8 +36,8 @@ func TestFingerprintGoldens(t *testing.T) {
 				Event:   "evt_01JD7Q2M9X",
 				Excerpt: "cat /proc/$PPID/environ",
 			}},
-			preimage: `{"v":1,"rule":"TC-SEC-018","location":{"harness":"claude","session":"00893aaf-19fa-41d2"},"evidence":[{"excerpt":"cat /proc/$PPID/environ"}]}`,
-			want:     "tcf_bf8994fdb9dc73ed",
+			preimage: `{"v":1,"rule":"TC-SEC-018","location":{"harness":"claude","session":"00893aaf-19fa-41d2","scope":"repo"},"evidence":[{"excerpt":"cat /proc/$PPID/environ"}]}`,
+			want:     "tcf_c761c03b24e7b179",
 		},
 		{
 			// Default (unset) scope is repo scope: the path is already
@@ -52,15 +52,15 @@ func TestFingerprintGoldens(t *testing.T) {
 				{Event: "evt_a", Excerpt: "a && b < c"},
 				{Event: "evt_b", Excerpt: "runOn: folderOpen"},
 			},
-			preimage: `{"v":1,"rule":"TC-CFG-002","location":{"harness":"vscode","path":".vscode/tasks.json"},"evidence":[{"excerpt":"a && b < c"},{"excerpt":"runOn: folderOpen"}]}`,
-			want:     "tcf_4dbb91737d62173a",
+			preimage: `{"v":1,"rule":"TC-CFG-002","location":{"harness":"vscode","scope":"repo","path":".vscode/tasks.json"},"evidence":[{"excerpt":"a && b < c"},{"excerpt":"runOn: folderOpen"}]}`,
+			want:     "tcf_591bc1431fb15369",
 		},
 		{
 			name:     "empty evidence",
 			rule:     "TC-CFG-001",
 			harness:  SurfaceGeneric,
-			preimage: `{"v":1,"rule":"TC-CFG-001","location":{"harness":"generic"},"evidence":[]}`,
-			want:     "tcf_6dcfe79827b07f1b",
+			preimage: `{"v":1,"rule":"TC-CFG-001","location":{"harness":"generic","scope":"repo"},"evidence":[]}`,
+			want:     "tcf_0877dad3c1549226",
 		},
 		{
 			name:    "duplicate evidence is kept",
@@ -71,8 +71,8 @@ func TestFingerprintGoldens(t *testing.T) {
 				{Event: "evt_01JD7Q2M9X", Excerpt: "cat /proc/$PPID/environ"},
 				{Event: "evt_01JD7Q2M9X", Excerpt: "cat /proc/$PPID/environ"},
 			},
-			preimage: `{"v":1,"rule":"TC-SEC-018","location":{"harness":"claude","session":"00893aaf-19fa-41d2"},"evidence":[{"excerpt":"cat /proc/$PPID/environ"},{"excerpt":"cat /proc/$PPID/environ"}]}`,
-			want:     "tcf_eaaf73b622312f0e",
+			preimage: `{"v":1,"rule":"TC-SEC-018","location":{"harness":"claude","session":"00893aaf-19fa-41d2","scope":"repo"},"evidence":[{"excerpt":"cat /proc/$PPID/environ"},{"excerpt":"cat /proc/$PPID/environ"}]}`,
+			want:     "tcf_6c99ffc985c03010",
 		},
 		{
 			name:    "user scope path",
@@ -83,20 +83,41 @@ func TestFingerprintGoldens(t *testing.T) {
 			evidence: []Evidence{
 				{Event: "evt_x", Excerpt: "hooks: SessionStart -> curl | bash"},
 			},
-			preimage: `{"v":1,"rule":"TC-CFG-007","location":{"harness":"claude","path":"~/.claude/settings.json"},"evidence":[{"excerpt":"hooks: SessionStart -> curl | bash"}]}`,
-			want:     "tcf_1a124c7ffb40127b",
+			preimage: `{"v":1,"rule":"TC-CFG-007","location":{"harness":"claude","scope":"user","path":"~/.claude/settings.json"},"evidence":[{"excerpt":"hooks: SessionStart -> curl | bash"}]}`,
+			want:     "tcf_be9d29a5dd7a25fd",
 		},
 		{
-			// Managed scope is not restricted to a relative shape: the
-			// managed config files in the adapter table are fixed
-			// absolute system paths.
 			name:     "managed scope path",
 			rule:     "TC-CFG-016",
 			harness:  HarnessCursor,
 			scope:    ScopeManaged,
 			path:     "/etc/cursor/hooks.json",
-			preimage: `{"v":1,"rule":"TC-CFG-016","location":{"harness":"cursor","path":"/etc/cursor/hooks.json"},"evidence":[]}`,
-			want:     "tcf_de048560c3426d6c",
+			preimage: `{"v":1,"rule":"TC-CFG-016","location":{"harness":"cursor","scope":"managed","path":"/etc/cursor/hooks.json"},"evidence":[]}`,
+			want:     "tcf_87e0e591cef79388",
+		},
+		{
+			// A Windows drive path case-folds to one canonical spelling
+			// (see normalizeScopedPath), so this golden is also the
+			// value TestFingerprintWindowsPathsNormalizeIdentically
+			// checks a differently-spelled equivalent path against.
+			name:     "managed scope windows drive path",
+			rule:     "TC-CFG-020",
+			harness:  HarnessCursor,
+			scope:    ScopeManaged,
+			path:     `C:\ProgramData\cursor\hooks.json`,
+			preimage: `{"v":1,"rule":"TC-CFG-020","location":{"harness":"cursor","scope":"managed","path":"C:/programdata/cursor/hooks.json"},"evidence":[]}`,
+			want:     "tcf_fbae6525ff920e63",
+		},
+		{
+			// A config-only citation (no excerpt) is still hashed: see
+			// TestFingerprintDifferentConfigsHaveDifferentFingerprints
+			// for the companion case this must NOT collide with.
+			name:     "config evidence, no excerpt",
+			rule:     "TC-CFG-003",
+			harness:  HarnessClaude,
+			evidence: []Evidence{{Config: "claude:repo:.claude/settings.json"}},
+			preimage: `{"v":1,"rule":"TC-CFG-003","location":{"harness":"claude","scope":"repo"},"evidence":[{"config":"claude:repo:.claude/settings.json"}]}`,
+			want:     "tcf_5ea48caca58af7bd",
 		},
 	}
 	for _, tc := range cases {
@@ -139,6 +160,25 @@ func TestFingerprintGoldens(t *testing.T) {
 	}
 }
 
+func TestFingerprintWindowsPathsNormalizeIdentically(t *testing.T) {
+	t.Parallel()
+	backslashMixedCase, err := Fingerprint("TC-CFG-020", Location{
+		Harness: HarnessCursor, Scope: ScopeManaged, Path: `C:\ProgramData\cursor\hooks.json`,
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	forwardSlashLowercase, err := Fingerprint("TC-CFG-020", Location{
+		Harness: HarnessCursor, Scope: ScopeManaged, Path: "c:/programdata/cursor/hooks.json",
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if backslashMixedCase != forwardSlashLowercase {
+		t.Fatalf("Windows paths normalized differently: %s vs %s", backslashMixedCase, forwardSlashLowercase)
+	}
+}
+
 func TestFingerprintLineIsNotHashed(t *testing.T) {
 	t.Parallel()
 	withLine := 12
@@ -155,6 +195,21 @@ func TestFingerprintLineIsNotHashed(t *testing.T) {
 	}
 }
 
+func TestFingerprintScopeDefaultsToRepo(t *testing.T) {
+	t.Parallel()
+	unset, err := Fingerprint("TC-CFG-002", Location{Harness: SurfaceVSCode, Path: ".vscode/tasks.json"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	explicit, err := Fingerprint("TC-CFG-002", Location{Harness: SurfaceVSCode, Scope: ScopeRepo, Path: ".vscode/tasks.json"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unset != explicit {
+		t.Fatalf("unset scope = %s, explicit repo scope = %s", unset, explicit)
+	}
+}
+
 func TestFingerprintEventIDIsNotHashed(t *testing.T) {
 	t.Parallel()
 	loc := Location{Harness: HarnessClaude, Session: "00893aaf-19fa-41d2"}
@@ -164,7 +219,8 @@ func TestFingerprintEventIDIsNotHashed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Same occurrence, reimported with a new ULID minted at ingest.
+	// Same occurrence, reimported with a new ULID minted at ingest: only
+	// the event id differs, so the fingerprint must not move.
 	fromReimport, err := Fingerprint("TC-SEC-018", loc, []Evidence{
 		{Event: "evt_09ZZZZZZZZ", Excerpt: "cat /proc/$PPID/environ"},
 	})
@@ -174,16 +230,62 @@ func TestFingerprintEventIDIsNotHashed(t *testing.T) {
 	if fromHookEvent != fromReimport {
 		t.Fatalf("event id changed the fingerprint: hook=%s reimport=%s", fromHookEvent, fromReimport)
 	}
-	// Cited by a config item instead of an event: still the same text,
-	// so still the same fingerprint.
+}
+
+func TestFingerprintConfigIDIsHashed(t *testing.T) {
+	t.Parallel()
+	loc := Location{Harness: HarnessClaude, Session: "00893aaf-19fa-41d2"}
+	fromEvent, err := Fingerprint("TC-SEC-018", loc, []Evidence{
+		{Event: "evt_01JD7Q2M9X", Excerpt: "cat /proc/$PPID/environ"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Same excerpt, but cited by a config item instead of an event:
+	// unlike an event id, a config id is content-stable (ConfigItem.ID
+	// has no sha256), so hashing it is safe, and it must change the
+	// fingerprint: the two citations are not interchangeable evidence.
 	fromConfig, err := Fingerprint("TC-SEC-018", loc, []Evidence{
 		{Config: "claude:repo:.claude/settings.json", Excerpt: "cat /proc/$PPID/environ"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fromConfig != fromHookEvent {
-		t.Fatalf("evidence kind changed the fingerprint: config=%s event=%s", fromConfig, fromHookEvent)
+	if fromConfig == fromEvent {
+		t.Fatalf("config id did not change the fingerprint: %s", fromConfig)
+	}
+	if fromConfig != "tcf_ac27273936e13b0d" {
+		t.Fatalf("config-cited fingerprint = %s", fromConfig)
+	}
+}
+
+func TestFingerprintDifferentConfigsHaveDifferentFingerprints(t *testing.T) {
+	t.Parallel()
+	// Before config ids were hashed, a config-only citation (no
+	// excerpt) with no Location.Path reduced the preimage to just rule,
+	// harness, and an empty evidence list: two findings citing
+	// different config files collided onto the same fingerprint. These
+	// must now differ.
+	settings, err := Fingerprint("TC-CFG-003", Location{Harness: HarnessClaude}, []Evidence{
+		{Config: "claude:repo:.claude/settings.json"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := Fingerprint("TC-CFG-003", Location{Harness: HarnessClaude}, []Evidence{
+		{Config: "claude:repo:other/settings.json"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings == other {
+		t.Fatalf("different config ids collided: %s", settings)
+	}
+	if settings != "tcf_5ea48caca58af7bd" {
+		t.Fatalf("settings fingerprint = %s", settings)
+	}
+	if other != "tcf_6b381da69de9f6cd" {
+		t.Fatalf("other fingerprint = %s", other)
 	}
 }
 
@@ -281,9 +383,13 @@ func TestFingerprintRejectsBadInput(t *testing.T) {
 	if !errors.Is(err, errUnknownHarness) {
 		t.Fatalf("devin: %v", err)
 	}
+	_, err = Fingerprint("TC-SEC-018", Location{Harness: HarnessClaude, Scope: "global"}, nil)
+	if !errors.Is(err, errUnknownScope) {
+		t.Fatalf("unknown scope: %v", err)
+	}
 }
 
-func TestFingerprintRejectsAbsolutePaths(t *testing.T) {
+func TestFingerprintRejectsBadPaths(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		name  string
@@ -295,8 +401,11 @@ func TestFingerprintRejectsAbsolutePaths(t *testing.T) {
 		{"default scope, unix absolute", "", "/home/runner/work/acme/acme/.vscode/tasks.json", errPathNotRelative},
 		{"repo scope, windows drive", ScopeRepo, `C:\Users\runner\acme\.vscode\tasks.json`, errPathNotRelative},
 		{"repo scope, home-relative", ScopeRepo, "~/.claude/settings.json", errPathNotRelative},
+		{"repo scope, dotdot segment", ScopeRepo, "../etc/passwd", errPathDotDot},
+		{"repo scope, dotdot mid path", ScopeRepo, "a/../b", errPathDotDot},
 		{"user scope, absolute (no tilde)", ScopeUser, "/home/dev/.claude/settings.json", errPathNotUserHome},
 		{"user scope, repo-relative", ScopeUser, ".claude/settings.json", errPathNotUserHome},
+		{"managed scope, repo-relative", ScopeManaged, "cursor/hooks.json", errPathNotAbsolute},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -327,7 +436,7 @@ func TestFingerprintPreimageKeys(t *testing.T) {
 	if !ok {
 		t.Fatalf("location %T", doc["location"])
 	}
-	assertKeys(t, location, "harness", "session")
+	assertKeys(t, location, "harness", "session", "scope")
 	evidence, ok := doc["evidence"].([]any)
 	if !ok || len(evidence) != 1 {
 		t.Fatalf("evidence %#v", doc["evidence"])
@@ -346,10 +455,10 @@ func TestFingerprintDocMatchesGoldens(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, fragment := range []string{
-		`{"v":1,"rule":"TC-SEC-018","location":{"harness":"claude","session":"00893aaf-19fa-41d2"},"evidence":[{"excerpt":"cat /proc/$PPID/environ"}]}`,
-		`{"v":1,"rule":"TC-CFG-002","location":{"harness":"vscode","path":".vscode/tasks.json"},"evidence":[{"excerpt":"a && b < c"},{"excerpt":"runOn: folderOpen"}]}`,
-		`{"v":1,"rule":"TC-CFG-001","location":{"harness":"generic"},"evidence":[]}`,
-		"tcf_6dcfe79827b07f1b",
+		`{"v":1,"rule":"TC-SEC-018","location":{"harness":"claude","session":"00893aaf-19fa-41d2","scope":"repo"},"evidence":[{"excerpt":"cat /proc/$PPID/environ"}]}`,
+		`{"v":1,"rule":"TC-CFG-002","location":{"harness":"vscode","scope":"repo","path":".vscode/tasks.json"},"evidence":[{"excerpt":"a && b < c"},{"excerpt":"runOn: folderOpen"}]}`,
+		`{"v":1,"rule":"TC-CFG-001","location":{"harness":"generic","scope":"repo"},"evidence":[]}`,
+		"tcf_0877dad3c1549226",
 	} {
 		if !bytes.Contains(raw, []byte(fragment)) {
 			t.Fatalf("docs/fingerprint.md missing %s", fragment)
