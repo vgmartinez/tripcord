@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/vgmartinez/tripcord/internal/adapters"
+	"github.com/vgmartinez/tripcord/internal/adapters/claude"
 	"github.com/vgmartinez/tripcord/internal/exitcode"
 	"github.com/vgmartinez/tripcord/internal/model"
 	"github.com/vgmartinez/tripcord/internal/output"
@@ -130,7 +131,7 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return scanConfigError(stderr, err)
 	}
-	registry, err := adapters.NewRegistry()
+	registry, err := adapters.NewRegistry(claude.New(claude.Options{}))
 	if err != nil {
 		return scanInternalError(stderr, err)
 	}

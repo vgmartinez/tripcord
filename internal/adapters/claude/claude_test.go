@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/vgmartinez/tripcord/internal/adapters"
 	"github.com/vgmartinez/tripcord/internal/model"
 )
 
@@ -70,7 +72,7 @@ func TestDiscoverRejectsMalformedAndOversizeJSON(t *testing.T) {
 		data []byte
 	}{
 		{name: "malformed", data: []byte("{ // comments are invalid JSON\n}")},
-		{name: "oversize", data: bytes.Repeat([]byte("a"), maxFileBytes+1)},
+		{name: "oversize", data: bytes.Repeat([]byte("a"), int(adapters.MaxConfigFileBytes)+1)},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -103,12 +105,9 @@ func TestDiscoverSkipsRepoSymlink(t *testing.T) {
 	if err := os.Symlink(outside, filepath.Join(root, ".claude", "settings.json")); err != nil {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
-	items, err := New(Options{}).Discover(context.Background(), root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(items) != 0 {
-		t.Fatalf("items = %#v, want none", items)
+	_, err := New(Options{}).Discover(context.Background(), root)
+	if !errors.Is(err, adapters.ErrUnsafePath) {
+		t.Fatalf("Discover error = %v, want ErrUnsafePath", err)
 	}
 }
 

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/vgmartinez/tripcord/internal/adapters/claude"
 	"github.com/vgmartinez/tripcord/internal/model"
 )
 
@@ -27,9 +26,6 @@ type Registry struct {
 
 // NewRegistry validates and registers adapters.
 func NewRegistry(adapters ...Adapter) (*Registry, error) {
-	if len(adapters) == 0 {
-		adapters = []Adapter{claude.New(claude.Options{})}
-	}
 	r := &Registry{adapters: make(map[model.Harness]Adapter, len(adapters))}
 	for _, adapter := range adapters {
 		if adapter == nil {

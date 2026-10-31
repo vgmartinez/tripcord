@@ -3,6 +3,9 @@
 The Claude Code adapter discovers configuration statically. It never starts
 Claude Code, runs a hook, starts an MCP server, expands environment variables,
 or follows a symlink.
+All configuration reads use the shared safe reader, which rejects absolute
+and traversal paths, symlinks, non-regular files (including FIFOs and
+devices), and files larger than 1 MiB before parsing.
 
 `tripcord scan` autodetects Claude Code when the repository contains one of:
 
@@ -48,5 +51,5 @@ Claude Code documents settings as strict JSON: comments and trailing commas are
 syntax errors. The adapter therefore rejects them instead of accepting a
 different language than Claude Code. Each file is capped at 1 MiB. An invalid
 or oversized configuration returns a configuration error without executing
-any input. Repository symlinks are skipped so discovery cannot leave the
-repository tree.
+any input. Unsafe paths are reported as configuration errors; they are never
+followed.

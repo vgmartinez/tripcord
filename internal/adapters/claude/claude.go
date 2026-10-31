@@ -16,11 +16,10 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/vgmartinez/tripcord/internal/adapters"
 	"github.com/vgmartinez/tripcord/internal/model"
 	"go.yaml.in/yaml/v3"
 )
-
-const maxFileBytes = 1 << 20
 
 // Options controls non-repository discovery. Repository discovery is always
 // enabled. The CLI intentionally constructs Adapter with the zero value so
@@ -49,8 +48,12 @@ func (*Adapter) Harness() model.Harness { return model.HarnessClaude }
 
 // Detect reports whether any repository-scoped Claude Code input exists.
 func (*Adapter) Detect(repoRoot string) bool {
+	reader, err := adapters.NewSafeReader(repoRoot)
+	if err != nil {
+		return false
+	}
 	for _, path := range repoPaths {
-		if regularRepoFile(repoRoot, filepath.Join(repoRoot, filepath.FromSlash(path))) {
+		if reader.Exists(path) || repoPathPresent(repoRoot, path) {
 			return true
 		}
 	}
@@ -63,15 +66,19 @@ func (a *Adapter) Discover(ctx context.Context, repoRoot string) ([]model.Config
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	reader, err := adapters.NewSafeReader(repoRoot)
+	if err != nil {
+		return nil, fmt.Errorf("claude: repository reader: %w", err)
+	}
 	var items []model.ConfigItem
 	for _, path := range repoPaths {
-		found, err := a.parseFile(repoRoot, model.ScopeRepo, path, filepath.Join(repoRoot, filepath.FromSlash(path)))
+		found, err := a.parseFile(reader, model.ScopeRepo, path)
 		if err != nil {
 			return nil, err
 		}
 		items = append(items, found...)
 	}
-	treeItems, err := a.discoverClaudeTree(ctx, repoRoot)
+	treeItems, err := a.discoverClaudeTree(ctx, repoRoot, reader)
 	if err != nil {
 		return nil, err
 	}
@@ -111,47 +118,25 @@ var repoPaths = []string{
 
 func hasClaudeTreeInput(repoRoot string) bool {
 	for _, root := range []string{".claude/rules", ".claude/skills", ".claude/plugins"} {
-		if info, err := os.Lstat(filepath.Join(repoRoot, filepath.FromSlash(root))); err == nil && !info.Mode().IsRegular() && info.Mode()&os.ModeSymlink == 0 {
+		if info, err := safeRepoDir(repoRoot, root); err == nil && info.IsDir() {
+			return true
+		} else if repoPathPresent(repoRoot, root) {
 			return true
 		}
 	}
 	return false
 }
 
-func regularRepoFile(repoRoot, path string) bool {
-	if !containedBy(repoRoot, path) {
-		return false
-	}
-	info, err := os.Lstat(path)
-	return err == nil && info.Mode().IsRegular()
-}
-
-func containedBy(root, path string) bool {
-	cleanRoot, err := filepath.EvalSymlinks(root)
-	if err != nil {
-		return false
-	}
-	cleanPath, err := filepath.EvalSymlinks(path)
-	if err != nil {
-		return false
-	}
-	relative, err := filepath.Rel(cleanRoot, cleanPath)
-	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator)) && !filepath.IsAbs(relative)
-}
-
-func (a *Adapter) discoverClaudeTree(ctx context.Context, repoRoot string) ([]model.ConfigItem, error) {
+func (a *Adapter) discoverClaudeTree(ctx context.Context, repoRoot string, reader *adapters.SafeReader) ([]model.ConfigItem, error) {
 	var items []model.ConfigItem
 	for _, root := range []string{".claude/rules", ".claude/skills", ".claude/plugins"} {
 		absolute := filepath.Join(repoRoot, filepath.FromSlash(root))
-		info, err := os.Lstat(absolute)
+		_, err := safeRepoDir(repoRoot, root)
 		if errors.Is(err, os.ErrNotExist) {
 			continue
 		}
 		if err != nil {
 			return nil, fmt.Errorf("claude: inspect %s: %w", root, err)
-		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			continue
 		}
 		err = filepath.WalkDir(absolute, func(path string, entry fs.DirEntry, walkErr error) error {
 			if walkErr != nil {
@@ -176,19 +161,19 @@ func (a *Adapter) discoverClaudeTree(ctx context.Context, repoRoot string) ([]mo
 			relative = filepath.ToSlash(relative)
 			switch {
 			case strings.HasPrefix(relative, ".claude/rules/") && strings.HasSuffix(relative, ".md"):
-				found, err := a.parseFile(repoRoot, model.ScopeRepo, relative, path)
+				found, err := a.parseFile(reader, model.ScopeRepo, relative)
 				if err != nil {
 					return err
 				}
 				items = append(items, found...)
 			case strings.HasPrefix(relative, ".claude/skills/") && strings.HasSuffix(relative, "/SKILL.md"):
-				found, err := a.parseFile(repoRoot, model.ScopeRepo, relative, path)
+				found, err := a.parseFile(reader, model.ScopeRepo, relative)
 				if err != nil {
 					return err
 				}
 				items = append(items, found...)
 			case strings.HasPrefix(relative, ".claude/plugins/") && strings.HasSuffix(relative, "/hooks/hooks.json"):
-				found, err := a.parseFile(repoRoot, model.ScopeRepo, relative, path)
+				found, err := a.parseFile(reader, model.ScopeRepo, relative)
 				if err != nil {
 					return err
 				}
@@ -203,6 +188,26 @@ func (a *Adapter) discoverClaudeTree(ctx context.Context, repoRoot string) ([]mo
 	return items, nil
 }
 
+func repoPathPresent(repoRoot, relative string) bool {
+	_, err := os.Lstat(filepath.Join(repoRoot, filepath.FromSlash(relative)))
+	return err == nil
+}
+
+func safeRepoDir(repoRoot, relative string) (fs.FileInfo, error) {
+	current := repoRoot
+	for _, segment := range strings.Split(filepath.FromSlash(relative), string(filepath.Separator)) {
+		current = filepath.Join(current, segment)
+		info, err := os.Lstat(current)
+		if err != nil {
+			return nil, err
+		}
+		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+			return nil, fmt.Errorf("unsafe repository directory %q", current)
+		}
+	}
+	return os.Lstat(current)
+}
+
 func (a *Adapter) discoverUser(ctx context.Context) ([]model.ConfigItem, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -215,10 +220,13 @@ func (a *Adapter) discoverUser(ctx context.Context) ([]model.ConfigItem, error) 
 			return nil, fmt.Errorf("claude: user home: %w", err)
 		}
 	}
+	reader, err := adapters.NewSafeReader(home)
+	if err != nil {
+		return nil, fmt.Errorf("claude: user reader: %w", err)
+	}
 	var items []model.ConfigItem
 	for _, path := range []string{"~/.claude/settings.json", "~/.claude.json"} {
-		absolute := filepath.Join(home, filepath.FromSlash(strings.TrimPrefix(path, "~/")))
-		found, err := a.parseFile("", model.ScopeUser, path, absolute)
+		found, err := a.parseFile(reader, model.ScopeUser, path)
 		if err != nil {
 			return nil, err
 		}
@@ -237,7 +245,11 @@ func (a *Adapter) discoverManaged(ctx context.Context) ([]model.ConfigItem, erro
 	}
 	var items []model.ConfigItem
 	for _, path := range paths {
-		found, err := a.parseFile("", model.ScopeManaged, filepath.ToSlash(path), path)
+		reader, err := adapters.NewSafeReader(filepath.Dir(path))
+		if err != nil {
+			return nil, fmt.Errorf("claude: managed reader: %w", err)
+		}
+		found, err := a.parseFile(reader, model.ScopeManaged, filepath.ToSlash(path))
 		if err != nil {
 			return nil, err
 		}
@@ -247,23 +259,30 @@ func (a *Adapter) discoverManaged(ctx context.Context) ([]model.ConfigItem, erro
 }
 
 func defaultManagedPaths() []string {
-	switch {
-	case runtime.GOOS == "darwin":
+	switch runtime.GOOS {
+	case "darwin":
 		return []string{"/Library/Application Support/ClaudeCode/managed-settings.json"}
-	case runtime.GOOS == "windows":
+	case "windows":
 		return []string{"C:/ProgramData/ClaudeCode/managed-settings.json"}
 	default:
 		return []string{"/etc/claude-code/managed-settings.json"}
 	}
 }
 
-func (a *Adapter) parseFile(repoRoot string, scope model.Scope, logicalPath, path string) ([]model.ConfigItem, error) {
-	if scope == model.ScopeRepo && !containedBy(repoRoot, path) {
+func (a *Adapter) parseFile(reader *adapters.SafeReader, scope model.Scope, logicalPath string) ([]model.ConfigItem, error) {
+	readPath := logicalPath
+	switch scope {
+	case model.ScopeUser:
+		readPath = strings.TrimPrefix(logicalPath, "~/")
+	case model.ScopeManaged:
+		readPath = filepath.Base(logicalPath)
+	}
+	raw, err := reader.ReadFile(readPath)
+	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
 	}
-	raw, found, err := readFile(path)
-	if err != nil || !found {
-		return nil, err
+	if err != nil {
+		return nil, fmt.Errorf("claude: read %s: %w", logicalPath, err)
 	}
 	sha := digest(raw)
 	switch {
@@ -278,35 +297,6 @@ func (a *Adapter) parseFile(repoRoot string, scope model.Scope, logicalPath, pat
 	default:
 		return parseSettings(scope, logicalPath, sha, raw)
 	}
-}
-
-func readFile(path string) ([]byte, bool, error) {
-	info, err := os.Lstat(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, false, nil
-	}
-	if err != nil {
-		return nil, false, fmt.Errorf("claude: inspect %s: %w", path, err)
-	}
-	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
-		return nil, false, nil
-	}
-	if info.Size() > maxFileBytes {
-		return nil, false, fmt.Errorf("claude: %s exceeds %d byte limit", path, maxFileBytes)
-	}
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, false, fmt.Errorf("claude: open %s: %w", path, err)
-	}
-	defer file.Close()
-	raw, err := io.ReadAll(io.LimitReader(file, maxFileBytes+1))
-	if err != nil {
-		return nil, false, fmt.Errorf("claude: read %s: %w", path, err)
-	}
-	if len(raw) > maxFileBytes {
-		return nil, false, fmt.Errorf("claude: %s exceeds %d byte limit", path, maxFileBytes)
-	}
-	return raw, true, nil
 }
 
 func parseSettings(scope model.Scope, path, sha string, raw []byte) ([]model.ConfigItem, error) {
@@ -351,13 +341,11 @@ func parseMCP(scope model.Scope, path, sha string, raw []byte) ([]model.ConfigIt
 	if document == nil {
 		return nil, fmt.Errorf("claude: parse %s: MCP config must be a JSON object", path)
 	}
-	value := json.RawMessage(raw)
-	if servers, ok := document["mcpServers"]; ok {
-		value = servers
-	} else {
+	servers, ok := document["mcpServers"]
+	if !ok {
 		return nil, nil
 	}
-	return parseMCPValue(scope, path, sha, value)
+	return parseMCPValue(scope, path, sha, servers)
 }
 
 func parseMCPValue(scope model.Scope, path, sha string, raw json.RawMessage) ([]model.ConfigItem, error) {
