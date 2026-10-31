@@ -14,7 +14,10 @@ import (
 
 const (
 	fingerprintVersion = 1
-	fingerprintHexLen  = 16
+	// fingerprintHexLen is the number of hex digits after "tcf_".
+	// Encoding the first fingerprintHexLen/2 bytes of the SHA-256 sum
+	// is exactly this many characters, and it matches fingerprintPattern.
+	fingerprintHexLen = 16
 )
 
 var (
@@ -77,7 +80,13 @@ func Fingerprint(rule string, loc Location, evidence []Evidence) (string, error)
 		return "", err
 	}
 	sum := sha256.Sum256(pre)
-	return "tcf_" + hex.EncodeToString(sum[:])[:fingerprintHexLen], nil
+	// 16 hex digits are 8 bytes. Encoding that prefix is always exactly
+	// fingerprintHexLen characters, never a shorter or longer id.
+	raw := hex.EncodeToString(sum[:fingerprintHexLen/2])
+	if len(raw) != fingerprintHexLen {
+		return "", fmt.Errorf("fingerprint: digest length %d, want %d hex digits", len(raw), fingerprintHexLen)
+	}
+	return "tcf_" + raw, nil
 }
 
 type fingerprintDocument struct {

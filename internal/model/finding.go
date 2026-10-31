@@ -7,12 +7,11 @@ import (
 	"regexp"
 )
 
-// fingerprintPattern is the wire shape: tcf_ plus lowercase hex.
-// The length is not fixed here. The spec sample uses 6 hex digits.
-// Fingerprint emits 16. This stays permissive, rather than pinning
-// {16}, so a document carrying the spec's own sample value
-// ("tcf_8c1e77") still validates; see docs/fingerprint.md.
-var fingerprintPattern = regexp.MustCompile(`^tcf_[0-9a-f]+$`)
+// fingerprintPattern is the wire shape: "tcf_" plus exactly 16 lowercase
+// hex digits, the length Fingerprint emits. Pinning the length here, and
+// in tripcord.finding/v1, is part of the frozen v1 contract: narrowing
+// it later would be a breaking schema change.
+var fingerprintPattern = regexp.MustCompile(`^tcf_[0-9a-f]{16}$`)
 
 // Evidence cites one event or one config item, never both. Event is an
 // Event.ID; Config is a ConfigItem.ID. Excerpt is optional either way

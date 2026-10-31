@@ -42,6 +42,15 @@ func TestSchemaEnumsMatchGo(t *testing.T) {
 	assertEnum(t, subSchema(t, session, "origin"), originStrings())
 }
 
+func TestFingerprintPatternMatchesSchema(t *testing.T) {
+	t.Parallel()
+	finding := loadSchemaIndex(t).byID[schemaIDFinding]
+	pattern, _ := subSchema(t, finding, "fingerprint")["pattern"].(string)
+	if pattern != fingerprintPattern.String() {
+		t.Fatalf("schema pattern %q, Go pattern %q", pattern, fingerprintPattern.String())
+	}
+}
+
 func TestSchemaRequiredFields(t *testing.T) {
 	t.Parallel()
 	event := loadSchemaIndex(t).byID[schemaIDEvent]
@@ -107,6 +116,14 @@ func TestSchemaRejectsInvalidDocuments(t *testing.T) {
 
 	finding = mustObject(t, readTestdata(t, "finding.json"))
 	finding["fingerprint"] = "abc"
+	expectSchemaError(t, idx, schemaIDFinding, finding, "does not match pattern")
+
+	finding = mustObject(t, readTestdata(t, "finding.json"))
+	finding["fingerprint"] = "tcf_8c1e77"
+	expectSchemaError(t, idx, schemaIDFinding, finding, "does not match pattern")
+
+	finding = mustObject(t, readTestdata(t, "finding.json"))
+	finding["fingerprint"] = "tcf_bf8994fdb9dc73ed0"
 	expectSchemaError(t, idx, schemaIDFinding, finding, "does not match pattern")
 
 	finding = mustObject(t, readTestdata(t, "finding.json"))

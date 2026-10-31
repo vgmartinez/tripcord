@@ -109,7 +109,10 @@ never null.
 ## Digest
 
 SHA-256 over the canonical UTF-8 bytes. Lowercase hex. The fingerprint is
-`tcf_` plus the first 16 hex characters.
+`tcf_` plus the first 16 hex characters, and no other length.
+`Finding.Validate` and `tripcord.finding/v1` both require
+`^tcf_[0-9a-f]{16}$`. `Fingerprint` encodes the first 8 bytes of the
+digest, which is exactly those 16 digits.
 
 ## Config item ids
 
@@ -171,8 +174,6 @@ A repo-scope path such as `/home/runner/work/acme/acme/.vscode/tasks.json`
 (an absolute, CI-runner-specific path) is rejected by `Fingerprint`
 rather than hashed as-is; see "Path scope" above.
 
-The spec sample stores `fingerprint` as `tcf_8c1e77`. That field shows the
-`tcf_` prefix. The digest this algorithm computes for the sample's rule,
-location, and evidence is `tcf_bf8994fdb9dc73ed`, not that literal value;
-see `schemas/README.md` and the finding schema's lenient `pattern` for why
-the stored sample value still passes schema validation.
+`internal/model/testdata/finding.json` stores the digest this algorithm
+computes for that document's rule, location, and evidence:
+`tcf_bf8994fdb9dc73ed`.

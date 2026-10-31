@@ -174,7 +174,17 @@ func TestFindingSampleRoundTrip(t *testing.T) {
 	if finding.Fix != "Ejecuta el agente con PID namespace propio o hidepid=2" {
 		t.Fatalf("fix = %s", finding.Fix)
 	}
-	if finding.Fingerprint != "tcf_8c1e77" {
+	// The stored id is the digest Fingerprint computes for this
+	// document's rule, location, and evidence. It is 16 hex digits.
+	computed, err := Fingerprint(finding.Rule, finding.Location, finding.Evidence)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const sampleFingerprint = "tcf_bf8994fdb9dc73ed"
+	if computed != sampleFingerprint || !fingerprintPattern.MatchString(computed) {
+		t.Fatalf("computed fingerprint = %s", computed)
+	}
+	if finding.Fingerprint != sampleFingerprint {
 		t.Fatalf("stored fingerprint = %s", finding.Fingerprint)
 	}
 	if finding.Confidence != 0.95 {
@@ -195,7 +205,7 @@ func TestFindingSampleRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertJSONEqual(t, raw, out)
-	if !bytes.Contains(out, []byte(`"confidence":0.95`)) || !bytes.Contains(out, []byte(`"fingerprint":"tcf_8c1e77"`)) {
+	if !bytes.Contains(out, []byte(`"confidence":0.95`)) || !bytes.Contains(out, []byte(`"fingerprint":"`+sampleFingerprint+`"`)) {
 		t.Fatalf("marshal = %s", out)
 	}
 	var again Finding
@@ -215,6 +225,28 @@ func TestFindingSampleRoundTrip(t *testing.T) {
 	}
 	if err := idx.validate(schemaIDFinding, out); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestFindingFingerprintMustBeSixteenHex(t *testing.T) {
+	t.Parallel()
+	var finding Finding
+	if err := json.Unmarshal(readTestdata(t, "finding.json"), &finding); err != nil {
+		t.Fatal(err)
+	}
+	if err := finding.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []string{
+		"tcf_8c1e77",
+		"tcf_bf8994fdb9dc73e",
+		"tcf_bf8994fdb9dc73ed0",
+		"tcf_BF8994FDB9DC73ED",
+	} {
+		finding.Fingerprint = bad
+		if err := finding.Validate(); err == nil {
+			t.Fatalf("%s validated", bad)
+		}
 	}
 }
 

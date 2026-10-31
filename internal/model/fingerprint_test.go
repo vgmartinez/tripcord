@@ -126,6 +126,9 @@ func TestFingerprintGoldens(t *testing.T) {
 			if got != tc.want {
 				t.Fatalf("Fingerprint = %s, want %s", got, tc.want)
 			}
+			if !fingerprintPattern.MatchString(got) || len(got) != len("tcf_")+fingerprintHexLen {
+				t.Fatalf("Fingerprint %q is not tcf_ plus %d hex digits", got, fingerprintHexLen)
+			}
 			if strings.Contains(tc.preimage, "secret") || strings.Contains(tc.preimage, "password") || strings.Contains(tc.preimage, "token") {
 				t.Fatalf("preimage contains a secret-shaped key: %s", tc.preimage)
 			}
