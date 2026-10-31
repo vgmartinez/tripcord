@@ -432,3 +432,46 @@ func assertGolden(t *testing.T, name, got string) {
 		t.Fatalf("%s mismatch\n--- got ---\n%s--- want ---\n%s", name, got, want)
 	}
 }
+
+func TestScanNewAdaptersAndImpliedOwners(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, ".git"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		".codex/config.toml":            "sandbox_mode = \"danger-full-access\"\n",
+		".cursor/hooks.json":            `{"version":1,"hooks":{"stop":[{"command":"x"}]}}`,
+		".github/hooks/guard.json":      `{"version":1,"hooks":{"preToolUse":[{"bash":"x"}]}}`,
+		".github/copilot/settings.json": `{`,
+		"AGENTS.md":                     "x\n",
+	}
+	for rel, content := range files {
+		path := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"scan", "--harness", "cursor", root}, &stdout, &stderr); code != int(exitcode.OK) {
+		t.Fatalf("cursor exit %d stderr %q", code, stderr.String())
+	}
+	for _, want := range []string{"claude: also scanned", "generic: also scanned"} {
+		if !strings.Contains(stderr.String(), want) {
+			t.Fatalf("stderr = %q, want %q", stderr.String(), want)
+		}
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"scan", "--harness", "copilot", root}, &stdout, &stderr); code != int(exitcode.Config) || !strings.Contains(stderr.String(), "copilot: .github/copilot/settings.json: invalid JSON") {
+		t.Fatalf("copilot exit %d stderr %q", code, stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"scan", root}, &stdout, &stderr); code != int(exitcode.Config) || strings.Contains(stderr.String(), "also scanned") {
+		t.Fatalf("autodetect exit %d stderr %q", code, stderr.String())
+	}
+}

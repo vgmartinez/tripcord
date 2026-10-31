@@ -21,6 +21,9 @@ import (
 
 	"github.com/vgmartinez/tripcord/internal/adapters"
 	"github.com/vgmartinez/tripcord/internal/adapters/claude"
+	"github.com/vgmartinez/tripcord/internal/adapters/codex"
+	"github.com/vgmartinez/tripcord/internal/adapters/copilot"
+	"github.com/vgmartinez/tripcord/internal/adapters/cursor"
 	"github.com/vgmartinez/tripcord/internal/adapters/generic"
 	"github.com/vgmartinez/tripcord/internal/exitcode"
 	"github.com/vgmartinez/tripcord/internal/model"
@@ -142,6 +145,9 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 	}
 	registry, err := adapters.NewRegistry(
 		claude.New(claude.Options{SkipRepo: !repoScope, IncludeUser: userScope, IncludeManaged: managedScope}),
+		codex.New(codex.Options{SkipRepo: !repoScope, IncludeUser: userScope, IncludeManaged: managedScope}),
+		copilot.New(copilot.Options{SkipRepo: !repoScope, IncludeUser: userScope, IncludeManaged: managedScope}),
+		cursor.New(cursor.Options{SkipRepo: !repoScope, IncludeUser: userScope, IncludeManaged: managedScope}),
 		generic.New(generic.Options{SkipRepo: !repoScope}),
 	)
 	if err != nil {
@@ -153,6 +159,13 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 	}
 	var items []model.ConfigItem
 	var diagnostics []adapters.Diagnostic
+	for _, owner := range registry.ImpliedOwners(requested) {
+		diagnostics = append(diagnostics, adapters.Diagnostic{
+			Harness:       owner,
+			Message:       "also scanned: a requested harness loads files this adapter reports",
+			Informational: true,
+		})
+	}
 	for _, adapter := range selected {
 		discovered, err := adapter.Discover(context.Background(), root)
 		var partial *adapters.DiagnosticError
