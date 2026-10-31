@@ -2,8 +2,9 @@
 
 `tripcord scan [PATH]` statically scans executable coding-agent configuration.
 It reads configuration only: it never executes repository content, starts
-hooks, or contacts a network service. `PATH` defaults to the current directory
-and must be inside a Git repository.
+hooks, or contacts a network service. `PATH` defaults to the current directory.
+A directory that is not a Git repository can still be scanned. `--since` is
+the only mode that requires Git.
 
 ## Flags
 
@@ -14,17 +15,17 @@ and must be inside a Git repository.
 | `--all` (v1) | Not available. Secret scanning lands in v1; v0 supports `--config` only. |
 | `--harness claude,cursor,...` | Restrict discovery to comma-separated harnesses. With no value, installed adapters autodetect their files. Harness adapters arrive after the scan orchestration. |
 | `--format text\|json\|sarif\|md\|gha` | Select human text, JSONL finding documents, SARIF 2.1.0, Markdown, or GitHub Actions annotations. Default: `text`. |
-| `--output <path\|->` | Write output to a private (`0600`) local file or `-` for stdout (default). |
-| `--since <git-ref>` | Scan only repository configuration files reported by `git diff --no-ext-diff --name-only <git-ref> --`. It does not execute repository content or hooks. |
-| `--fail-on low\|medium\|high\|critical` | Replace the effective policy threshold for this invocation. The threshold is inclusive. |
+| `--output <path\|->` | Write output to a new private (`0600`) local file or `-` for stdout (default). A symlink is rejected. The destination is replaced only after the result is complete. |
+| `--since <git-ref>` | Scan repository configuration files that differ between `<git-ref>` and `HEAD`. The ref must not start with `-`. Untracked files and uncommitted worktree edits are not included. Names with non-ASCII characters are included. Git is invoked with repository hooks, fsmonitor, textconv, and external diff drivers disabled, and it does not execute repository content. |
+| `--fail-on low\|medium\|high\|critical` | Set this invocation's threshold. The threshold is inclusive. A locked policy ceiling can be tightened and cannot be loosened. |
 | `--policy <path>` | Use this repository policy file instead of `.tripcord/policy.yaml`. |
 | `--org-policy <path>` | Add one required organization policy layer before the repository policy. |
 
 v0 accepts `--config` only. `--secrets` (v1) and `--all` (v1) stop before scanning and exit 3.
 
 Policy defaults are `enforce` and `high` for scan. Policy files control mode
-and the normal threshold; `--fail-on` is the final per-invocation override.
-See [policy.md](policy.md).
+and the normal threshold. `--fail-on` then applies, subject to a locked
+ceiling. See [policy.md](policy.md).
 
 ## Exit codes
 
@@ -32,8 +33,8 @@ See [policy.md](policy.md).
 | --- | --- |
 | 0 | No finding meets the effective threshold. |
 | 1 | At least one finding meets the effective threshold. |
-| 3 | Invalid flags, configuration/policy error, unavailable v0 secret scan, or unknown command. |
-| 4 | Internal, discovery, output, or file write error. |
+| 3 | Invalid flags or format, configuration/policy error, a Git ref `--since` cannot use, unavailable v0 secret scan, or unknown command. `--help` exits 0. |
+| 4 | Internal error, or a failure to start Git or write the output file. |
 
 ## Examples
 

@@ -133,14 +133,70 @@ func TestScanSecretsAndAllDoNotScan(t *testing.T) {
 
 func TestScanHelpMarksSecretFlagsAsV1(t *testing.T) {
 	t.Parallel()
-	var stdout, stderr bytes.Buffer
-	run([]string{"scan", "--help"}, &stdout, &stderr)
-	help := stdout.String() + stderr.String()
-	for _, flagName := range []string{"-secrets", "-all"} {
-		if !strings.Contains(help, flagName) || !strings.Contains(help, "(v1) not available") {
-			t.Fatalf("help = %q", help)
-		}
+	for _, arg := range []string{"--help", "-h"} {
+		t.Run(arg, func(t *testing.T) {
+			t.Parallel()
+			var stdout, stderr bytes.Buffer
+			if code := run([]string{"scan", arg}, &stdout, &stderr); code != int(exitcode.OK) {
+				t.Fatalf("exit code = %d, stderr = %q", code, stderr.String())
+			}
+			help := stdout.String()
+			for _, flagName := range []string{"-secrets", "-all"} {
+				if !strings.Contains(help, flagName) || !strings.Contains(help, "(v1) not available") {
+					t.Fatalf("help = %q", help)
+				}
+			}
+		})
 	}
+}
+
+func TestScanFlagErrors(t *testing.T) {
+	t.Parallel()
+	dir := outsideGit(t)
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"format", []string{"scan", "--format", "xml", dir}, "output format"},
+		{"config and secrets", []string{"scan", "--config", "--secrets", dir}, "mutually exclusive"},
+		{"config and all", []string{"scan", "--config", "--all", dir}, "mutually exclusive"},
+		{"secrets and all", []string{"scan", "--secrets", "--all", dir}, "mutually exclusive"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var stdout, stderr bytes.Buffer
+			if code := run(tc.args, &stdout, &stderr); code != int(exitcode.Config) {
+				t.Fatalf("exit code = %d, stderr = %q", code, stderr.String())
+			}
+			if stdout.Len() != 0 || !strings.Contains(stderr.String(), tc.want) {
+				t.Fatalf("stdout = %q, stderr = %q", stdout.String(), stderr.String())
+			}
+		})
+	}
+}
+
+func TestScanFlagsAfterPath(t *testing.T) {
+	t.Parallel()
+	dir := outsideGit(t)
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"scan", dir, "--format", "text"}, &stdout, &stderr); code != int(exitcode.OK) {
+		t.Fatalf("exit code = %d, stderr = %q", code, stderr.String())
+	}
+	if stderr.Len() != 0 || !strings.Contains(stdout.String(), "0 finding(s)") {
+		t.Fatalf("stdout = %q, stderr = %q", stdout.String(), stderr.String())
+	}
+}
+
+func outsideGit(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("/tmp", "tripcord-scan-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
 }
 
 func assertGolden(t *testing.T, name, got string) {
