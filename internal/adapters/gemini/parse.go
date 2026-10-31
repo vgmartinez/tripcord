@@ -107,9 +107,6 @@ func (f *file) hooks(value any, disabled map[string]bool) {
 		return
 	}
 	for _, event := range kit.SortedKeys(table) {
-		if disabled[event] {
-			f.Note("hooks.%s is named in hooksConfig.disabled; it is still reported, because a higher-precedence settings file can re-enable it", event)
-		}
 		entries, isArray := table[event].([]any)
 		if !isArray {
 			f.setting(model.ConfigKindPermissions, "hooks."+event, table[event])
@@ -132,7 +129,7 @@ func (f *file) hooks(value any, disabled map[string]bool) {
 				continue
 			}
 			for _, h := range list {
-				f.handler(event, matcher, group, h)
+				f.handler(event, matcher, group, h, disabled)
 			}
 		}
 	}
@@ -152,7 +149,7 @@ func matcherOf(group map[string]any) (string, bool) {
 // handler emits one handler of a matcher group. The group's sequential
 // flag is copied onto the handler as group_sequential, since it decides
 // how the handler runs relative to its siblings.
-func (f *file) handler(event, matcher string, group map[string]any, h any) {
+func (f *file) handler(event, matcher string, group map[string]any, h any, disabled map[string]bool) {
 	hook, ok := h.(map[string]any)
 	if !ok {
 		f.opaque(event, h)
@@ -165,6 +162,11 @@ func (f *file) handler(event, matcher string, group map[string]any, h any) {
 			f.Warn("hooks.%s handler type %q is not documented; Gemini CLI documents only \"command\"", event, t)
 		}
 	}
+	if id, ok := hookIdentity(hook); ok && disabled[id] {
+		// Redact before Hook so a secret removed from this name stays on
+		// this handler's discriminator instead of the next item's.
+		f.Note("hook %s is named in hooksConfig.disabled; it is still reported, because a higher-precedence settings file can re-enable it", f.SafeString(id))
+	}
 	if seq, present := group["sequential"]; present {
 		copied := make(map[string]any, len(hook)+1)
 		for k, v := range hook {
@@ -176,10 +178,22 @@ func (f *file) handler(event, matcher string, group map[string]any, h any) {
 	f.Hook(event, matcher, hook, hookActions)
 }
 
-// hooksConfig returns the hook event names that hooksConfig.disabled
-// disables, plus whether hooksConfig.enabled disables every event in this
-// file. disabled is an array of hook names, not a boolean; matching
-// events are still emitted and individually noted.
+// hookIdentity is the name Gemini CLI compares with hooksConfig.disabled.
+// getHookName returns config.name, or config.command when name is missing
+// or empty. An event name is not an identity.
+func hookIdentity(hook map[string]any) (string, bool) {
+	if name, ok := hook["name"].(string); ok && name != "" {
+		return name, true
+	}
+	command, ok := hook["command"].(string)
+	return command, ok && command != ""
+}
+
+// hooksConfigDisabled returns the names hooksConfig.disabled lists, plus
+// whether hooksConfig.enabled is false. disabled is an array of hook
+// names, not event names and not a boolean: Gemini CLI matches a handler
+// by its name, or by its command when it has no name. A match is still
+// emitted and noted.
 func hooksConfigDisabled(value any) (map[string]bool, bool) {
 	disabled := map[string]bool{}
 	obj, ok := value.(map[string]any)

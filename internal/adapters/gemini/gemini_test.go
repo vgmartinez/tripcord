@@ -93,24 +93,100 @@ func TestHooksShapes(t *testing.T) {
 
 func TestHooksConfigDisabledStillReportsHooks(t *testing.T) {
 	t.Parallel()
+	const secret = "gm-disabled-token-should-not-appear"
+	cases := []struct {
+		name   string
+		body   string
+		hooks  int
+		note   string
+		absent []string
+		secret string
+	}{
+		{
+			name:  "name",
+			body:  `{"hooksConfig":{"disabled":["h1"]},"hooks":{"BeforeTool":[{"matcher":"x","hooks":[{"type":"command","name":"h1","command":"./lint.sh"}]}]}}`,
+			hooks: 1,
+			note:  "hook h1 is named in hooksConfig.disabled",
+			absent: []string{
+				"BeforeTool is named",
+				"hook ./lint.sh is named",
+			},
+		},
+		{
+			name:  "command when the handler has no name",
+			body:  `{"hooksConfig":{"disabled":["./lint.sh"]},"hooks":{"BeforeTool":[{"matcher":"x","hooks":[{"type":"command","command":"./lint.sh"}]}]}}`,
+			hooks: 1,
+			note:  "hook ./lint.sh is named in hooksConfig.disabled",
+			absent: []string{
+				"BeforeTool is named",
+			},
+		},
+		{
+			name:  "command does not match when the handler has a name",
+			body:  `{"hooksConfig":{"disabled":["./lint.sh"]},"hooks":{"BeforeTool":[{"matcher":"x","hooks":[{"type":"command","name":"h1","command":"./lint.sh"}]}]}}`,
+			hooks: 1,
+			absent: []string{
+				"hooksConfig.disabled",
+				"BeforeTool is named",
+			},
+		},
+		{
+			name:  "event name does not match",
+			body:  `{"hooksConfig":{"disabled":["BeforeTool"]},"hooks":{"BeforeTool":[{"matcher":"x","hooks":[{"type":"command","name":"h1","command":"./lint.sh"}]}]}}`,
+			hooks: 1,
+			absent: []string{
+				"hooksConfig.disabled",
+				"hook h1 is named",
+				"hook ./lint.sh is named",
+			},
+		},
+		{
+			name:   "secret command is redacted in the note",
+			body:   `{"hooksConfig":{"disabled":["./lint.sh --token ` + secret + `"]},"hooks":{"BeforeTool":[{"hooks":[{"type":"command","command":"./lint.sh --token ` + secret + `"}]}]}}`,
+			hooks:  1,
+			note:   "hook ./lint.sh --token [REDACTED] is named in hooksConfig.disabled",
+			secret: secret,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			kittest.WriteFile(t, filepath.Join(root, ".gemini", "settings.json"), tc.body)
+			got := kittest.Discover(t, New(Options{}), root)
+			if len(got.Find(".gemini/settings.json", model.ConfigKindHook)) != tc.hooks {
+				t.Fatalf("hooks = %+v", got.Items)
+			}
+			if tc.note != "" && !got.HasDiag(tc.note) {
+				t.Fatalf("diagnostics = %v", got.Diagnostics)
+			}
+			for _, absent := range tc.absent {
+				if got.HasDiag(absent) {
+					t.Fatalf("diagnostic %q was present: %v", absent, got.Diagnostics)
+				}
+			}
+			if tc.note != "" && kittest.Blocking(t, New(Options{}), root, "hooksConfig.disabled") {
+				t.Fatal("a disabled hook was blocking")
+			}
+			if tc.secret == "" {
+				return
+			}
+			for _, diag := range got.Diagnostics {
+				if strings.Contains(diag, tc.secret) {
+					t.Fatalf("diagnostic contains the secret: %s", diag)
+				}
+			}
+			for _, item := range got.Items {
+				if strings.Contains(string(item.Payload), tc.secret) {
+					t.Fatalf("item contains the secret: %s", item.Payload)
+				}
+			}
+		})
+	}
+
 	root := t.TempDir()
-	kittest.WriteFile(t, filepath.Join(root, ".gemini", "settings.json"), `{"hooksConfig":{"disabled":["BeforeTool","UnknownEvent"]},"hooks":{
-		"BeforeTool":[{"matcher":"x","hooks":[{"type":"command","command":"a"}]}],
-		"AfterTool":[{"matcher":"x","hooks":[{"type":"command","command":"b"}]}]
-	}}`)
-	got := kittest.Discover(t, New(Options{}), root)
-	if len(got.Find(".gemini/settings.json", model.ConfigKindHook)) != 2 || len(got.Find(".gemini/settings.json", model.ConfigKindPermissions)) != 1 {
-		t.Fatalf("items = %+v", got.Items)
-	}
-	if !got.HasDiag("hooks.BeforeTool is named in hooksConfig.disabled") || got.HasDiag("hooks.AfterTool is named") || got.HasDiag("UnknownEvent") {
-		t.Fatalf("diagnostics = %v", got.Diagnostics)
-	}
-	if kittest.Blocking(t, New(Options{}), root, "hooks.BeforeTool is named") {
-		t.Fatal("a disabled hook was blocking")
-	}
-	root = t.TempDir()
 	kittest.WriteFile(t, filepath.Join(root, ".gemini", "settings.json"), `{"hooksConfig":{"enabled":false},"hooks":{"BeforeTool":[{"hooks":[{"type":"command","command":"a"}]}]}}`)
-	got = kittest.Discover(t, New(Options{}), root)
+	got := kittest.Discover(t, New(Options{}), root)
 	if len(got.Find(".gemini/settings.json", model.ConfigKindHook)) != 1 || !got.HasDiag("hooksConfig.enabled is false") {
 		t.Fatalf("got %+v", got)
 	}

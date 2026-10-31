@@ -121,10 +121,12 @@ The documented shape is:
 `hooksConfig` is its own `permissions` setting. `hooksConfig.enabled`
 set to false turns hooks off in that file and produces an informational
 note while the hooks remain reported. `hooksConfig.disabled` is an array
-of event names: each matching hook event is still reported, with an
-informational note that names it. A higher-precedence settings file can
-re-enable either form, so hook items are not marked disabled and are not
-dropped.
+of hook names: Gemini CLI matches a handler by its `name`, or by its
+`command` when `name` is absent. An event name in the list does not
+match. Each matching handler is still reported, with an informational
+note that names it; the note is redacted. A higher-precedence settings
+file can re-enable either form, so hook items are not marked disabled
+and are not dropped.
 
 ## Parsing
 
