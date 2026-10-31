@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"path"
 	"regexp"
 	"sort"
 	"strings"
@@ -739,11 +740,18 @@ func sortedKeys(m map[string]any) []string {
 	return keys
 }
 
-// tildePath rewrites an absolute path under home as "~/...".
+// tildePath rewrites an absolute path under home as "~/...". home is
+// cleaned with the "path" package (always "/"-separated, regardless of
+// the OS tripcord itself runs on, since home and p are both normalized
+// to "/" just above) after the backslash-to-slash conversion, so a home
+// such as "/x/victor/." is treated the same as "/x/victor" instead of
+// being left with a trailing "/." that would then never match a "p"
+// that does not also happen to carry that exact literal suffix.
 func tildePath(home, p string) string {
-	home = strings.TrimSuffix(strings.ReplaceAll(home, `\`, "/"), "/")
+	home = strings.ReplaceAll(home, `\`, "/")
+	home = strings.TrimSuffix(path.Clean(home), "/")
 	p = strings.ReplaceAll(p, `\`, "/")
-	if home != "" && (p == home || strings.HasPrefix(p, home+"/")) {
+	if home != "" && home != "." && (p == home || strings.HasPrefix(p, home+"/")) {
 		return "~" + strings.TrimPrefix(p, home)
 	}
 	return p

@@ -209,6 +209,34 @@ func TestHookKeysAndPayloadDoNotLeakHomeOrURLSecrets(t *testing.T) {
 	}
 }
 
+// S6: HomeDir with a trailing "." segment (filepath.Join(t.TempDir(),
+// "victor", ".") is a realistic shape for a caller-supplied value, and
+// matches what some systems can return from os.UserHomeDir) must still
+// let user-scope files be found under "~/...", not rejected as "home
+// directory is too short to scope user configuration under it" (see
+// tildePath).
+func TestHomeDirWithTrailingDotSegmentScopesUserFiles(t *testing.T) {
+	t.Parallel()
+	home := filepath.Join(t.TempDir(), "victor") + string(filepath.Separator) + "."
+	writeFile(t, filepath.Join(home, ".claude", "settings.json"), `{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"notify-send done"}]}]}}`)
+	got := discover(t, New(Options{IncludeUser: true, HomeDir: home, Getenv: noEnv}), t.TempDir())
+	if containsDiag(got, "too short") {
+		t.Fatalf("home with a trailing dot segment was rejected as too short: %q", got.Diagnostics)
+	}
+	var userItem *model.ConfigItem
+	for i := range got.Items {
+		if got.Items[i].Scope == model.ScopeUser {
+			userItem = &got.Items[i]
+		}
+	}
+	if userItem == nil {
+		t.Fatalf("no user-scope item found: items=%+v diagnostics=%q", got.Items, got.Diagnostics)
+	}
+	if userItem.Path != "~/.claude/settings.json" {
+		t.Fatalf("user item path = %q, want ~/.claude/settings.json", userItem.Path)
+	}
+}
+
 func TestCaseInsensitiveClaudePaths(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
