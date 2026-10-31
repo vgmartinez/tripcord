@@ -2,6 +2,7 @@ package output
 
 import (
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -22,7 +23,11 @@ func TestCredentialNamedAssignmentsAreRedacted(t *testing.T) {
 		{"DJANGO_SECRETKEY=GLUEDVAL run", "DJANGO_SECRETKEY=[REDACTED] run", "GLUEDVAL"},
 		{"API_KEY_V2=V2VAL run", "API_KEY_V2=[REDACTED] run", "V2VAL"},
 		{"TOKEN_TTL=30,SECRET_KEY=LATERVAL", "TOKEN_TTL=30,SECRET_KEY=[REDACTED]", "LATERVAL"},
+		{"PRIVATE_KEY=BAREPK deploy", "PRIVATE_KEY=[REDACTED] deploy", "BAREPK"},
+		{"docker run -e DB_PASS=DBPASSVAL img", "docker run -e DB_PASS=[REDACTED] img", "DBPASSVAL"},
+		{"SMTP_PASS='SMTPVAL' mailer", "SMTP_PASS='[REDACTED]' mailer", "SMTPVAL"},
 		{"SECRET_KEY: YAMLVAL", "SECRET_KEY: [REDACTED]", "YAMLVAL"},
+		{"DB_PASS: YAMLPASS", "DB_PASS: [REDACTED]", "YAMLPASS"},
 		{"env: {AWS_SECRET_ACCESS_KEY: FLOWVAL}", "env: {AWS_SECRET_ACCESS_KEY: [REDACTED]}", "FLOWVAL"},
 	}
 	for _, tc := range cases {
@@ -43,10 +48,13 @@ func TestCredentialNamedAssignmentsAreRedacted(t *testing.T) {
 //     credential (a lifetime, a reference), not its value.
 //   - PWD and OLDPWD are the shell's working directories; "pwd" counts
 //     only after another segment (DB_PWD).
-//   - TOKENIZER and SECRETARY merely start with a credential word.
+//   - TOKENIZER and SECRETARY merely start with a credential word, and
+//     BYPASS and PASS_THROUGH are not a "pass" after another segment.
 func TestCredentialMetadataAssignmentsAreKept(t *testing.T) {
 	t.Parallel()
 	for _, in := range []string{
+		"BYPASS=1 make",
+		"PASS_THROUGH=1 make",
 		"SECRET_KEY_FILE=/run/secrets/key app",
 		"docker run -e TOKEN_PATH=/var/run/token img",
 		"GITHUB_TOKEN_ENV_VAR=GH_TOKEN tool",
@@ -67,14 +75,43 @@ func TestCredentialMetadataAssignmentsAreKept(t *testing.T) {
 	}
 }
 
+// gh auth login --with-token is a boolean flag (the token comes from
+// stdin), not a secret flag: neither it, its "=true" spelling, nor the
+// word after it is redacted, while a real token piped in is still caught
+// by the token-shape patterns.
+func TestWithTokenIsABooleanFlag(t *testing.T) {
+	t.Parallel()
+	for _, in := range []string{
+		"gh auth login --with-token < token.txt",
+		"gh auth login --with-token <token.txt",
+		"echo $GH_TOKEN | gh auth login --with-token",
+		"gh auth login --with-token --hostname ghe.example",
+		"gh auth login --with-token=true",
+		"gh auth login --hostname ghe.example --with-token",
+	} {
+		if got := DefaultRedactor(in); got != in {
+			t.Errorf("DefaultRedactor(%q) = %q, want unchanged", in, got)
+		}
+		if got, removed := RedactCommand(in); got != in || len(removed) != 0 {
+			t.Errorf("RedactCommand(%q) = %q, %q; want unchanged", in, got, removed)
+		}
+	}
+	in := "echo ghp_abcdefghijklmnopqrstuvwxyz0123456789 | gh auth login --with-token"
+	if got := DefaultRedactor(in); strings.Contains(got, "ghp_abcdefghijklmnopqrstuvwxyz0123456789") {
+		t.Errorf("DefaultRedactor(%q) = %q, leaked the piped token", in, got)
+	}
+}
+
 func TestCredentialName(t *testing.T) {
 	t.Parallel()
 	for name, want := range map[string]bool{
 		"SECRET_KEY": true, "AWS_SECRET_ACCESS_KEY": true, "aws_access_key_id": true,
 		"GITHUB_TOKEN": true, "_authToken": true, "PGPASSWORD": true, "DB_PWD": true,
 		"X-Api-Key": true, "PRIVATE_KEY": true, "credentials": true, "client-secrets": true,
+		"DB_PASS": true, "redis-pass": true,
 		"SECRET_KEY_FILE": false, "TOKEN_TTL": false, "PWD": false, "OLDPWD": false,
 		"TOKENIZER": false, "SECRETARY": false, "MONKEY": false, "KEY": false, "": false,
+		"BYPASS": false, "PASS": false, "--with-token": false,
 	} {
 		if got := CredentialName(name); got != want {
 			t.Errorf("CredentialName(%q) = %v, want %v", name, got, want)

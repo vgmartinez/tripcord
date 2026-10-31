@@ -69,7 +69,7 @@ const quotedValue = `"(?:[^"\\\n]|\\.)*"|'[^'\n]*'`
 
 // credentialNameCandidate matches a name that may hold a credential;
 // CredentialName decides.
-const credentialNameCandidate = `[A-Za-z0-9_-]*(?:secret|token|passw(?:or)?d|pwd|api[_-]?key|access[_-]?key|private[_-]?key|credential)[A-Za-z0-9_-]*`
+const credentialNameCandidate = `[A-Za-z0-9_-]*(?:secret|token|pass(?:w(?:or)?d)?|pwd|api[_-]?key|access[_-]?key|private[_-]?key|credential)[A-Za-z0-9_-]*`
 
 // assignmentPatternEquals matches a shell-style KEY=value assignment
 // whose key may be a credential name (see CredentialName), as in
@@ -108,17 +108,27 @@ var metadataSuffixes = map[string]bool{
 	"length": true, "len": true, "size": true, "name": true, "enabled": true,
 }
 
+// booleanFlags are flags whose name contains a credential word but that
+// take no value: gh auth login --with-token reads the token from stdin,
+// so "--with-token=true" or the word after it is not a secret.
+var booleanFlags = map[string]bool{"--with-token": true}
+
 // CredentialName reports whether an assignment key such as SECRET_KEY,
-// AWS_SECRET_ACCESS_KEY, GITHUB_TOKEN, DB_PWD, or X-Api-Key names a
-// credential, case-insensitively. A segment matches when it is or ends
-// in one of credentialWords, optionally followed by a glued "key"; a
-// "key" segment matches after api, access, or private; "pwd" matches
-// only after another segment, so the shell's PWD and OLDPWD do not. A
-// name whose last segment is a metadataSuffixes word (SECRET_KEY_FILE,
-// TOKEN_TTL) does not match, and neither does a word that merely starts
-// with a credential word (TOKENIZER, SECRETARY).
+// AWS_SECRET_ACCESS_KEY, PRIVATE_KEY, GITHUB_TOKEN, DB_PASS, DB_PWD, or
+// X-Api-Key names a credential, case-insensitively. A segment matches
+// when it is or ends in one of credentialWords, optionally followed by
+// a glued "key"; a "key" segment matches after api, access, or private;
+// "pass" and "pwd" match only as a whole segment after another one, so
+// BYPASS, PASS_THROUGH, and the shell's PWD and OLDPWD do not. A name
+// whose last segment is a metadataSuffixes word (SECRET_KEY_FILE,
+// TOKEN_TTL) does not match, nor does a word that merely starts with a
+// credential word (TOKENIZER, SECRETARY), nor a booleanFlags flag.
 func CredentialName(name string) bool {
-	segments := strings.FieldsFunc(strings.ToLower(name), func(r rune) bool { return r == '_' || r == '-' })
+	lower := strings.ToLower(name)
+	if booleanFlags[lower] {
+		return false
+	}
+	segments := strings.FieldsFunc(lower, func(r rune) bool { return r == '_' || r == '-' })
 	if len(segments) == 0 || metadataSuffixes[segments[len(segments)-1]] {
 		return false
 	}
@@ -126,7 +136,8 @@ func CredentialName(name string) bool {
 		switch {
 		case credentialSegment(segment), credentialSegment(strings.TrimSuffix(segment, "key")):
 			return true
-		case segment == "pwd" && i > 0, segment == "key" && i > 0 && keyQualifiers[segments[i-1]]:
+		case (segment == "pwd" || segment == "pass") && i > 0,
+			segment == "key" && i > 0 && keyQualifiers[segments[i-1]]:
 			return true
 		}
 	}
@@ -134,7 +145,7 @@ func CredentialName(name string) bool {
 }
 
 // credentialStems covers every word credentialNameCandidate can match.
-var credentialStems = []string{"secret", "token", "passw", "pwd", "key", "credential"}
+var credentialStems = []string{"secret", "token", "pass", "pwd", "key", "credential"}
 
 // mayNameCredential is a fast prefilter for RedactAssignments: the head
 // patterns cannot use a literal prefix, so text with no credential stem
