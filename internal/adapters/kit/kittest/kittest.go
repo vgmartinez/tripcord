@@ -54,6 +54,24 @@ func (d Discovery) HasDiag(part string) bool {
 	return false
 }
 
+// Blocking runs a and reports whether Discover returned a diagnostic that
+// is not informational and contains part. Only a blocking diagnostic
+// makes `tripcord scan` exit non-zero; an informational one does not.
+func Blocking(t testing.TB, a adapters.Adapter, root, part string) bool {
+	t.Helper()
+	_, err := a.Discover(context.Background(), root)
+	var diag *adapters.DiagnosticError
+	if !errors.As(err, &diag) {
+		return false
+	}
+	for _, d := range diag.Diagnostics {
+		if !d.Informational && strings.Contains(d.String(), part) {
+			return true
+		}
+	}
+	return false
+}
+
 // Find returns the items whose path and kind match.
 func (d Discovery) Find(path string, kind model.ConfigKind) []model.ConfigItem {
 	var out []model.ConfigItem

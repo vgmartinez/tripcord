@@ -203,6 +203,58 @@ func TestFingerprintsAcrossMachines(t *testing.T) {
 	}
 }
 
+// TestHomeOverrideOutsideHomeIsBlocking checks that CLAUDE_CONFIG_DIR,
+// CODEX_HOME, and COPILOT_HOME behave the same way when pointed outside
+// the home directory: the redirected configuration is still scanned, but
+// a blocking (non-informational) diagnostic is reported, so `tripcord
+// scan` exits non-zero. An adapter that only logged an informational
+// note would let a scan exit clean while reading files outside the
+// developer's home.
+func TestHomeOverrideOutsideHomeIsBlocking(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		envName string
+		adapter func(home string, getenv func(string) string) adapters.Adapter
+	}{
+		{"CLAUDE_CONFIG_DIR", func(home string, getenv func(string) string) adapters.Adapter {
+			return claude.New(claude.Options{SkipRepo: true, IncludeUser: true, HomeDir: home, Getenv: getenv})
+		}},
+		{"CODEX_HOME", func(home string, getenv func(string) string) adapters.Adapter {
+			return codex.New(codex.Options{SkipRepo: true, IncludeUser: true, HomeDir: home, Getenv: getenv})
+		}},
+		{"COPILOT_HOME", func(home string, getenv func(string) string) adapters.Adapter {
+			return copilot.New(copilot.Options{SkipRepo: true, IncludeUser: true, HomeDir: home, Getenv: getenv})
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.envName, func(t *testing.T) {
+			t.Parallel()
+			home := t.TempDir()
+			outside := t.TempDir()
+			a := tc.adapter(home, kittest.Env(tc.envName, outside))
+			_, err := a.Discover(context.Background(), t.TempDir())
+			var diag *adapters.DiagnosticError
+			if !errors.As(err, &diag) {
+				t.Fatalf("%s outside home: Discover returned %v, want a *DiagnosticError", tc.envName, err)
+			}
+			var blocking, informational int
+			for _, d := range diag.Diagnostics {
+				if !strings.Contains(d.Message, "outside the home directory") {
+					continue
+				}
+				if d.Informational {
+					informational++
+				} else {
+					blocking++
+				}
+			}
+			if blocking == 0 {
+				t.Fatalf("%s outside home produced no blocking diagnostic (informational: %d): %+v", tc.envName, informational, diag.Diagnostics)
+			}
+		})
+	}
+}
+
 var urlWithQuery = regexp.MustCompile(`https?://[^\s"'<>\\]*\?[^\s"'<>\\]+`)
 
 func TestNoHomePathOrSecretInAnyFormat(t *testing.T) {

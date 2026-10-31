@@ -172,6 +172,24 @@ func TestCopilotHome(t *testing.T) {
 	}
 }
 
+func TestCopilotHomeOutsideHome(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	alt := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(alt, "hooks", "a.json"), `{"version":1,"hooks":{"sessionStart":[{"bash":"x"}]}}`)
+	opts := Options{SkipRepo: true, IncludeUser: true, HomeDir: home, Getenv: kittest.Env("COPILOT_HOME", alt)}
+	got := kittest.Discover(t, New(opts), t.TempDir())
+	if len(got.Find("~/COPILOT_HOME/hooks/a.json", model.ConfigKindHook)) != 1 || !got.HasDiag("outside the home directory") {
+		t.Fatalf("got %+v", got)
+	}
+	// COPILOT_HOME outside home must behave like Claude's CLAUDE_CONFIG_DIR:
+	// the configuration is still scanned, but the diagnostic is blocking
+	// (not informational), so a scan exits non-zero.
+	if !kittest.Blocking(t, New(opts), t.TempDir(), "outside the home directory") {
+		t.Fatal("COPILOT_HOME outside home did not produce a blocking diagnostic")
+	}
+}
+
 func TestDefaultPolicyDir(t *testing.T) {
 	t.Parallel()
 	cases := []struct{ goos, programData, want string }{

@@ -289,7 +289,7 @@ func TestResolveUserDir(t *testing.T) {
 		t.Fatalf("inside home: %+v", dir)
 	}
 	dir, ok = ResolveUserDir(c, "/home/dev", "CODEX_HOME", "/opt/codex", ".codex")
-	if !ok || dir.Logical != "~/CODEX_HOME" || len(c.Diagnostics()) != 1 || !c.Diagnostics()[0].Informational {
+	if !ok || dir.Logical != "~/CODEX_HOME" || len(c.Diagnostics()) != 1 || c.Diagnostics()[0].Informational {
 		t.Fatalf("outside home: %+v %v", dir, c.Diagnostics())
 	}
 	if _, ok := ResolveUserDir(c, "/home/dev", "CODEX_HOME", "relative", ".codex"); ok {

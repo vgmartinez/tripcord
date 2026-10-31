@@ -370,6 +370,55 @@ func TestScanErrorsRedactHomeDirectory(t *testing.T) {
 	}
 }
 
+// TestHomeOverrideOutsideHomeFailsScan checks that CODEX_HOME and
+// COPILOT_HOME, like Claude's CLAUDE_CONFIG_DIR, make `tripcord scan`
+// exit non-zero when they point outside the home directory, even though
+// the redirected configuration is still read and reported.
+func TestHomeOverrideOutsideHomeFailsScan(t *testing.T) {
+	cases := []struct {
+		harness string
+		envName string
+		setup   func(dir string)
+	}{
+		{"codex", "CODEX_HOME", func(dir string) {
+			if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte("approval_policy = \"never\"\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{"copilot", "COPILOT_HOME", func(dir string) {
+			if err := os.MkdirAll(filepath.Join(dir, "hooks"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, "hooks", "a.json"), []byte(`{"version":1,"hooks":{"sessionStart":[{"bash":"x"}]}}`), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.harness, func(t *testing.T) {
+			root := t.TempDir()
+			if err := os.Mkdir(filepath.Join(root, ".git"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			home := t.TempDir()
+			outside := t.TempDir()
+			tc.setup(outside)
+			t.Setenv("HOME", home)
+			t.Setenv("USERPROFILE", home)
+			t.Setenv(tc.envName, outside)
+
+			var stdout, stderr bytes.Buffer
+			code := run([]string{"scan", "--scope", "user", "--harness", tc.harness, "--format", "text", root}, &stdout, &stderr)
+			if code != int(exitcode.Config) {
+				t.Fatalf("exit code = %d, stderr = %q", code, stderr.String())
+			}
+			if !strings.Contains(stderr.String(), "outside the home directory") || !strings.Contains(stderr.String(), "incomplete") {
+				t.Fatalf("stderr = %q", stderr.String())
+			}
+		})
+	}
+}
+
 func TestLegacyNoteDoesNotFailScan(t *testing.T) {
 	legacy := t.TempDir()
 	restore := claude.SetLegacyManagedDirForTest(legacy)

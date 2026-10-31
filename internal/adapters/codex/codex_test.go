@@ -208,9 +208,16 @@ func TestCodexHomeOutsideHome(t *testing.T) {
 	home := t.TempDir()
 	alt := t.TempDir()
 	kittest.WriteFile(t, filepath.Join(alt, "config.toml"), "approval_policy = \"never\"\n")
-	got := kittest.Discover(t, New(Options{SkipRepo: true, IncludeUser: true, HomeDir: home, Getenv: kittest.Env("CODEX_HOME", alt)}), t.TempDir())
+	opts := Options{SkipRepo: true, IncludeUser: true, HomeDir: home, Getenv: kittest.Env("CODEX_HOME", alt)}
+	got := kittest.Discover(t, New(opts), t.TempDir())
 	if len(got.Find("~/CODEX_HOME/config.toml", model.ConfigKindPermissions)) != 1 || !got.HasDiag("outside the home directory") {
 		t.Fatalf("got %+v", got)
+	}
+	// CODEX_HOME outside home must behave like Claude's CLAUDE_CONFIG_DIR:
+	// the configuration is still scanned, but the diagnostic is blocking
+	// (not informational), so a scan exits non-zero.
+	if !kittest.Blocking(t, New(opts), t.TempDir(), "outside the home directory") {
+		t.Fatal("CODEX_HOME outside home did not produce a blocking diagnostic")
 	}
 }
 

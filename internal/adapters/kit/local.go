@@ -47,8 +47,10 @@ func ResolveHome(c *Collector, override string) (string, bool) {
 // ResolveUserDir returns home/defaultRel, or the directory named by the
 // environment variable envName when envValue is set. A relative override
 // is refused. An override outside home is scanned and named
-// "~/<envName>" so no absolute path reaches an item; an informational
-// note says so.
+// "~/<envName>" so no absolute path reaches an item; this is reported as
+// a blocking diagnostic (matching how the Claude adapter treats
+// CLAUDE_CONFIG_DIR outside home), so the scan exits non-zero even though
+// the redirected configuration is still read.
 func ResolveUserDir(c *Collector, home, envName, envValue, defaultRel string) (UserDir, bool) {
 	dir := filepath.Join(home, filepath.FromSlash(defaultRel))
 	if v := strings.TrimSpace(envValue); v != "" {
@@ -60,7 +62,7 @@ func ResolveUserDir(c *Collector, home, envName, envValue, defaultRel string) (U
 	}
 	logical := TildePath(home, dir)
 	if logical != "~" && !strings.HasPrefix(logical, "~/") {
-		c.Note(model.ScopeUser, "~/"+envName, true, "%s is outside the home directory; configuration is scanned and paths are shown as ~/%s", envName, envName)
+		c.Warn(model.ScopeUser, "~/"+envName, "%s is outside the home directory; configuration is scanned and paths are shown as ~/%s", envName, envName)
 		logical = "~/" + envName
 	}
 	return UserDir{Abs: dir, Logical: logical}, true
