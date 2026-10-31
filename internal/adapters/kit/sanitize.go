@@ -40,7 +40,8 @@ type Sanitized struct {
 // Sanitize strips URL userinfo, query, and fragment from every URL inside
 // value, redacts secret CLI flag values and bearer tokens, rewrites the
 // home directory as "~" (user scope only), and finally redacts any
-// credential shape output.DefaultRedactor recognizes.
+// credential shape output.DefaultRedactor recognizes. What it removes is
+// also recorded for the next Add's key discriminator.
 func (s *Source) Sanitize(value string) Sanitized {
 	value, removed := stripEmbeddedURLSecrets(value)
 	value, flags := redactCommandSecrets(value)
@@ -50,6 +51,7 @@ func (s *Source) Sanitize(value string) Sanitized {
 		removed = append(removed, value)
 		value = redacted
 	}
+	s.recordRemoved(removed...)
 	return Sanitized{Value: value, Removed: removed}
 }
 
@@ -65,18 +67,10 @@ func (s *Source) SafeKey(parts []string) []string {
 	return out
 }
 
-// Discriminated returns key with a "sig:" discriminator appended when
-// sanitizing raw removed a secret, so two entries that differ only by a
-// secret keep distinct keys.
-func (s *Source) Discriminated(key []string, raw string) []string {
-	return s.DiscriminatedAll(key, s.Sanitize(raw).Removed)
-}
-
-// DiscriminatedAll is Discriminated for a caller that already collected
-// the raw secret substrings removed across more than one field (an MCP
-// server's url and its command's tool-specific flags, say), so the
-// discriminator depends on all of them, not just one.
-func (s *Source) DiscriminatedAll(key []string, removed []string) []string {
+// discriminated returns key with a "sig:" discriminator over removed
+// appended when it is non-empty, so two entries that differ only by
+// redacted text keep distinct keys.
+func discriminated(key []string, removed []string) []string {
 	if len(removed) > 0 {
 		return append(key, "sig:"+KeyDiscriminator(removed))
 	}
@@ -116,6 +110,7 @@ func (s *Source) SafeValue(key string, value any) any {
 	if key != "" && SecretKey(key) && !namesEnvVar(key) {
 		switch value.(type) {
 		case string, json.Number, int64, float64:
+			s.recordRemovedValue(value)
 			return Redacted
 		}
 	}
@@ -132,6 +127,7 @@ func (s *Source) SafeValue(key string, value any) any {
 				if gateUserPass && (!isString || !output.LooksLikeUserPass(name)) {
 					out[i] = s.SafeValue("", item)
 				} else {
+					s.recordRemovedValue(item)
 					out[i] = Redacted
 				}
 				redactNext, gateUserPass = false, false
@@ -150,8 +146,8 @@ func (s *Source) SafeValue(key string, value any) any {
 		return out
 	case map[string]any:
 		out := make(map[string]any, len(v))
-		for name, item := range v {
-			out[name] = s.SafeValue(name, item)
+		for _, name := range SortedKeys(v) {
+			out[name] = s.SafeValue(name, v[name])
 		}
 		return out
 	default:
@@ -166,11 +162,12 @@ func isArraySecretMarker(name string) bool {
 	return secretFlagName.MatchString(name) || bearerSchemeWord.MatchString(name)
 }
 
-// SafeObject sanitizes every field of obj with SafeValue.
+// SafeObject sanitizes every field of obj with SafeValue, in key order
+// so what it removes is recorded in the same order on every run.
 func (s *Source) SafeObject(obj map[string]any) map[string]any {
 	out := make(map[string]any, len(obj))
-	for k, v := range obj {
-		out[k] = s.SafeValue(k, v)
+	for _, k := range SortedKeys(obj) {
+		out[k] = s.SafeValue(k, obj[k])
 	}
 	return out
 }
@@ -189,6 +186,7 @@ func (s *Source) RedactValues(m map[string]any) map[string]any {
 
 func (s *Source) redactValue(key string, value any) any {
 	if key != "" && SecretKey(key) {
+		s.recordRemovedValue(value)
 		return Redacted
 	}
 	switch v := value.(type) {
@@ -210,10 +208,14 @@ func (s *Source) redactValue(key string, value any) any {
 }
 
 func (s *Source) redactString(value string) string {
-	if stripped, _, ok := StripURLSecrets(value); ok {
+	if stripped, removed, ok := StripURLSecrets(value); ok {
+		if removed != "" {
+			s.recordRemoved(removed)
+		}
 		value = stripped
 	}
 	if output.DefaultRedactor(value) != value {
+		s.recordRemoved(value)
 		return Redacted
 	}
 	return s.tildeHome(value)

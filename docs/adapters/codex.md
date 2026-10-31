@@ -81,13 +81,18 @@ Every key below also carries a trailing content digest of the full
 sanitized entry, so two entries that match on the fields listed here but
 differ elsewhere (a second hook with the same command but a different
 `commandWindows`, say) still get distinct keys and fingerprints; see
-[fingerprint.md](../fingerprint.md#input).
+[fingerprint.md](../fingerprint.md#input). When sanitizing removed
+anything from the entry, in any field (a `--token` value in
+`commandWindows`, a redacted `env` value, a URL query), the key also
+ends with a discriminator over all of the removed text, so entries that
+differ only in what redaction replaced with `[REDACTED]` stay distinct
+too.
 
 - MCP servers (`[mcp_servers.<name>]`): every field, sanitized. Values of
   `env`, `http_headers`, and `env_http_headers` are redacted when they look
   secret; their names are kept in `<field>_keys`. `bearer_token_env_var`
   names a variable and is kept. URLs lose userinfo, query, and fragment;
-  the key is `["mcp", name]` plus a discriminator when that removed text.
+  the key is `["mcp", name]`.
 - Hooks, from `hooks.json` (`{"description", "hooks": {...}}`) or the
   inline `[hooks]` table: one item per handler with every field, `event`,
   and `matcher`. The key is `["hook", event, matcher, type, action]`,

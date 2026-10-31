@@ -81,22 +81,16 @@ func matcherOf(s *Source, event string, entry map[string]any) string {
 
 // Hook emits one hook handler. Every field is kept and sanitized; header
 // and env values are redacted. The key is event, matcher, type, and the
-// action, plus a discriminator when sanitizing the action removed a
-// secret.
+// action; Add appends the discriminator over everything sanitizing any
+// field removed.
 func (s *Source) Hook(event, matcher string, hook map[string]any, actionFields []string) {
 	payload := s.SafeObject(hook)
 	s.redactMaps(hook, payload, "headers", "env")
 	payload["event"] = event
 	payload["matcher"] = matcher
 	hookType, _ := hook["type"].(string)
-	field, action := hookAction(payload, actionFields)
-	key := []string{"hook", event, matcher, hookType, action}
-	if field != "" {
-		if raw, ok := hook[field].(string); ok {
-			key = s.Discriminated(key, raw)
-		}
-	}
-	s.Add(model.ConfigKindHook, key, payload)
+	_, action := hookAction(payload, actionFields)
+	s.Add(model.ConfigKindHook, []string{"hook", event, matcher, hookType, action}, payload)
 }
 
 // redactMaps replaces each named object field of payload with its
@@ -159,14 +153,9 @@ func (s *Source) MCPServers(value any, what string) {
 		}
 		payload := s.SafeObject(server)
 		s.redactMaps(server, payload, "env", "headers", "http_headers", "env_http_headers")
-		removed := s.redactToolArgs(server, payload)
+		s.redactToolArgs(server, payload)
 		payload["name"] = name
-		key := []string{"mcp", name}
-		if url, ok := server["url"].(string); ok {
-			removed = append(removed, s.Sanitize(url).Removed...)
-		}
-		key = s.DiscriminatedAll(key, removed)
-		s.Add(model.ConfigKindMCPServer, key, payload)
+		s.Add(model.ConfigKindMCPServer, []string{"mcp", name}, payload)
 	}
 }
 
@@ -177,11 +166,11 @@ func (s *Source) MCPServers(value any, what string) {
 // -p or -t means something unrelated for most commands and is only
 // safe to redact for the specific tool that treats it as a credential
 // (see output.RedactToolArgv). It rewrites payload["args"] in place and
-// returns the raw values it removed, for the caller's key discriminator.
-func (s *Source) redactToolArgs(server, payload map[string]any) []string {
+// records the raw values it removed for Add's key discriminator.
+func (s *Source) redactToolArgs(server, payload map[string]any) {
 	command, ok := server["command"].(string)
 	if !ok {
-		return nil
+		return
 	}
 	rawArgs, _ := server["args"].([]any)
 	argv := make([]string, 0, len(rawArgs)+1)
@@ -192,11 +181,12 @@ func (s *Source) redactToolArgs(server, payload map[string]any) []string {
 	}
 	redactedArgv, removed := output.RedactToolArgv(argv)
 	if len(removed) == 0 {
-		return nil
+		return
 	}
+	s.recordRemoved(removed...)
 	args, ok := payload["args"].([]any)
 	if !ok {
-		return removed
+		return
 	}
 	out := make([]any, len(args))
 	for i, arg := range args {
@@ -207,7 +197,6 @@ func (s *Source) redactToolArgs(server, payload map[string]any) []string {
 		}
 	}
 	payload["args"] = out
-	return removed
 }
 
 // Frontmatter selects how Markdown frontmatter errors are treated.
@@ -236,16 +225,17 @@ func (s *Source) Markdown(kind model.ConfigKind, role string, raw []byte, mode F
 	if _, body, found, err := splitFrontmatter(raw); found && err == nil {
 		text = body
 	}
-	content, _ := stripEmbeddedURLSecrets(string(text))
+	content, removed := stripEmbeddedURLSecrets(string(text))
+	s.recordRemoved(removed...)
 	payload := map[string]any{"role": role, "content": s.tildeHome(content)}
 	meta := s.frontmatter(raw, mode, folded)
 	if meta != nil {
 		front := map[string]any{}
-		for k, v := range meta {
+		for _, k := range SortedKeys(meta) {
 			switch k {
 			case "hooks", "mcpServers", "mcp-servers":
 			default:
-				front[k] = s.SafeValue(k, v)
+				front[k] = s.SafeValue(k, meta[k])
 			}
 		}
 		payload["frontmatter"] = front

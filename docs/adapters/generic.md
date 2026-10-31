@@ -40,7 +40,12 @@ Every key below also carries a trailing content digest of the full
 sanitized entry, so two entries that match on the fields listed here but
 differ elsewhere (two tasks with the same label and command but
 different `args`, say) still get distinct keys and fingerprints; see
-[fingerprint.md](../fingerprint.md#input).
+[fingerprint.md](../fingerprint.md#input). When sanitizing removed
+anything from the entry, in any field (a `--token` value in
+`commandWindows`, a redacted `env` value, a URL query), the key also
+ends with a discriminator over all of the removed text, so entries that
+differ only in what redaction replaced with `[REDACTED]` stay distinct
+too.
 
 - `AGENTS.md`: the Markdown body as `content` (URL userinfo, query, and
   fragment removed) and any frontmatter. Frontmatter that is not valid YAML
@@ -50,8 +55,7 @@ different `args`, say) still get distinct keys and fingerprints; see
   names kept in `env_keys`; `label` (falling back to `taskName` and then the
   npm `script`); `run_on`, the `runOptions.runOn` value (`default` when
   absent); and `folder_open`, true when VS Code starts the task as the
-  folder opens. The key is `["task", label, command]`, plus a discriminator
-  when sanitizing the command removed a secret.
+  folder opens. The key is `["task", label, command]`.
 - MCP servers: every field, sanitized; `env`, `headers` values redacted.
   `inputs` only declare prompts and are not emitted. A top-level
   `mcpServers` member is not read: VS Code reads `servers`.

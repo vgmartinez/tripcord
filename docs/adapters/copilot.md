@@ -52,7 +52,12 @@ Every key below also carries a trailing content digest of the full
 sanitized entry, so two entries that match on the fields listed here but
 differ elsewhere (two unnamed `uses: actions/github-script@v7` steps with
 a different `with.script`, say) still get distinct keys and
-fingerprints; see [fingerprint.md](../fingerprint.md#input).
+fingerprints; see [fingerprint.md](../fingerprint.md#input). When sanitizing removed
+anything from the entry, in any field (a `--token` value in
+`commandWindows`, a redacted `env` value, a URL query), the key also
+ends with a discriminator over all of the removed text, so entries that
+differ only in what redaction replaced with `[REDACTED]` stay distinct
+too.
 
 - Hooks (`{"version": 1, "disableAllHooks": false, "hooks": {...}}`): one
   item per handler with every field (`type`, `bash`, `powershell`,

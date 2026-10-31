@@ -59,7 +59,7 @@
         "env_keys": [
           "FMT_TOKEN"
         ],
-        "key": "[\"mcp\",\"fmt\",\"sig:b7aeb825cf7d4e42\"]",
+        "key": "[\"mcp\",\"fmt\",\"sig:b7aeb825cf7d4e42\",\"sig:be02398a\"]",
         "name": "fmt",
         "type": "local"
       }
@@ -173,7 +173,7 @@
         "headers": {
           "Authorization": "[REDACTED]"
         },
-        "key": "[\"hook\",\"sessionStart\",\"\",\"http\",\"https://hooks.example/start\",\"sig:9850b2c5\",\"sig:5d333f7b62025407\"]",
+        "key": "[\"hook\",\"sessionStart\",\"\",\"http\",\"https://hooks.example/start\",\"sig:5d333f7b62025407\",\"sig:0daceee7\"]",
         "matcher": "",
         "type": "http",
         "url": "https://hooks.example/start"
@@ -206,7 +206,7 @@
           "NPM_TOKEN": "[REDACTED]"
         },
         "job": "copilot-setup-steps",
-        "key": "[\"job\",\"copilot-setup-steps\",\"sig:7e11789393bb54ea\"]",
+        "key": "[\"job\",\"copilot-setup-steps\",\"sig:7e11789393bb54ea\",\"sig:58cbc616\"]",
         "permissions": {
           "contents": "read"
         },
@@ -223,7 +223,7 @@
       "payload": {
         "id": "deps",
         "job": "copilot-setup-steps",
-        "key": "[\"step\",\"copilot-setup-steps\",\"deps\",\"sig:779dd4183ac69b00\"]",
+        "key": "[\"step\",\"copilot-setup-steps\",\"deps\",\"sig:779dd4183ac69b00\",\"sig:b832514f\"]",
         "setting": "step",
         "uses": "actions/setup-node@v5",
         "with": {
@@ -240,7 +240,7 @@
       "kind": "env-setup",
       "payload": {
         "job": "copilot-setup-steps",
-        "key": "[\"step\",\"copilot-setup-steps\",\"Install tools\",\"curl -fsSL https://get.example/tool.sh | sh\",\"sig:8e4647d7\",\"sig:558ee56f8148e9b8\"]",
+        "key": "[\"step\",\"copilot-setup-steps\",\"Install tools\",\"curl -fsSL https://get.example/tool.sh | sh\",\"sig:558ee56f8148e9b8\",\"sig:8e4647d7\"]",
         "name": "Install tools",
         "run": "curl -fsSL https://get.example/tool.sh | sh",
         "setting": "step"
@@ -305,7 +305,7 @@
         "headers": {
           "Authorization": "[REDACTED]"
         },
-        "key": "[\"mcp\",\"github\",\"sig:d61315cbe9605935\"]",
+        "key": "[\"mcp\",\"github\",\"sig:d61315cbe9605935\",\"sig:7e999577\"]",
         "name": "github",
         "type": "http",
         "url": "https://api.example/mcp/"

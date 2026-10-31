@@ -205,7 +205,7 @@ func (f *file) step(step map[string]any) {
 	if run != "" && run != label {
 		key = append(key, run)
 	}
-	f.Add(model.ConfigKindEnvSetup, f.Discriminated(key, run), payload)
+	f.Add(model.ConfigKindEnvSetup, key, payload)
 }
 
 func (f *file) safeWithEnv(name string, value any) any {

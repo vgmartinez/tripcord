@@ -59,14 +59,18 @@ Every key below also carries a trailing content digest of the full
 sanitized entry, so two entries that match on the fields listed here but
 differ elsewhere (two terminals with the same name and command but a
 different `env.NODE_OPTIONS`, say) still get distinct keys and
-fingerprints; see [fingerprint.md](../fingerprint.md#input).
+fingerprints; see [fingerprint.md](../fingerprint.md#input). When sanitizing removed
+anything from the entry, in any field (a `--token` value in
+`commandWindows`, a redacted `env` value, a URL query), the key also
+ends with a discriminator over all of the removed text, so entries that
+differ only in what redaction replaced with `[REDACTED]` stay distinct
+too.
 
 - Hooks (`{"version": 1, "hooks": {"<event>": [{handler}, ...]}}`): one
   item per handler with every field (`command`, `type`, `prompt`, `model`,
   `matcher`, `timeout`, `failClosed`, `loop_limit`, ...) and `event`. The
   key is `["hook", event, matcher, type, action]`, where the action is
-  `command` or, for a prompt hook, `prompt`, plus a discriminator when
-  sanitizing removed a secret. All events are accepted, including the
+  `command` or, for a prompt hook, `prompt`. All events are accepted, including the
   documented `sessionStart`, `sessionEnd`, `preToolUse`, `postToolUse`,
   `postToolUseFailure`, `subagentStart`, `subagentStop`,
   `beforeShellExecution`, `afterShellExecution`, `beforeMCPExecution`,
@@ -82,8 +86,7 @@ fingerprints; see [fingerprint.md](../fingerprint.md#input).
   a diagnostic.
 - `environment.json`: one `env-setup` item per top-level member
   (`install`, `start`, `build`, `snapshot`, ...), `{"setting", "value"}`,
-  and one per entry of `terminals` (`name`, `command`, ...). A string
-  value's key carries a discriminator when sanitizing removed a secret.
+  and one per entry of `terminals` (`name`, `command`, ...).
 
 ## Parsing
 

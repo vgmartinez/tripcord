@@ -108,6 +108,28 @@ type Source struct {
 	path    string
 	sha     string
 	fields  map[string]any
+	// removed is every raw value sanitization removed since the last
+	// Add, in the order it was removed; Add hashes it into the key.
+	removed []string
+}
+
+// recordRemoved rewrites the home directory in each value (user scope
+// only, see tildeHome) so the discriminator does not depend on who ran
+// the scan.
+func (s *Source) recordRemoved(raw ...string) {
+	for _, r := range raw {
+		s.removed = append(s.removed, s.tildeHome(r))
+	}
+}
+
+// recordRemovedValue records a decoded value that was replaced whole.
+func (s *Source) recordRemovedValue(value any) {
+	if text, ok := value.(string); ok {
+		s.recordRemoved(text)
+		return
+	}
+	raw, _ := json.Marshal(value)
+	s.recordRemoved(string(raw))
 }
 
 // WithField adds name=value to the payload of every item this source
@@ -168,19 +190,28 @@ func (s *Source) WarnAll(warnings []string) {
 }
 
 // Add emits one item. key is sanitized, has a content digest of the full
-// payload appended (see PayloadDigest), and is encoded as payload["key"]:
-// the content-derived evidence key, which never encodes a position in the
+// sanitized payload appended (see PayloadDigest), then a discriminator
+// over every raw value sanitization removed while building the entry
+// (see KeyDiscriminator), and is encoded as payload["key"]: the
+// content-derived evidence key, which never encodes a position in the
 // file. The digest means two entries whose caller-supplied key parts
 // match, but whose other fields differ (a second "uses" step with a
 // different "with", a hook whose non-primary action field differs, an
-// env value, an "args" element, ...), never share a key or a fingerprint.
-// payload values must already be sanitized.
+// env value, an "args" element, ...), never share a key or a fingerprint;
+// the discriminator means the same holds when they differ only in
+// something redaction replaced with [REDACTED]. payload values must
+// already be sanitized by this Source, and nothing else may be sanitized
+// between building one entry and adding it.
 func (s *Source) Add(kind model.ConfigKind, key []string, payload map[string]any) {
+	removed := s.removed
+	s.removed = nil
+	defer func() { s.removed = nil }()
 	// The digest is computed before s.fields are merged in: those are
 	// file-level facts such as project_trust that can depend on which
 	// scopes this scan read, not on the file's own content, and must
 	// never affect the key (see WithField).
 	fullKey := append(s.SafeKey(key), "sig:"+PayloadDigest(payload))
+	fullKey = discriminated(fullKey, removed)
 	for name, value := range s.fields {
 		payload[name] = value
 	}

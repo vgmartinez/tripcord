@@ -76,7 +76,7 @@ func emitTask(s *kit.Source, task map[string]any) {
 	payload["run_on"] = runOn
 	payload["folder_open"] = strings.EqualFold(runOn, "folderOpen")
 	command := commandText(task["command"])
-	s.Add(model.ConfigKindTask, s.Discriminated([]string{"task", label, command}, command), payload)
+	s.Add(model.ConfigKindTask, []string{"task", label, command}, payload)
 }
 
 // safeTaskObject sanitizes a task or options object and redacts the
