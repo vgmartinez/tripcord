@@ -1,0 +1,8 @@
+approval_policy = "on-request"
+
+[mcp_servers.home]
+command = "uvx"
+args = ["home-mcp"]
+
+[projects."/srv/other"]
+trust_level = "trusted"

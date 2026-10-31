@@ -1,0 +1,11 @@
+{
+  "description": "project hooks",
+  "hooks": {
+    "Stop": [
+      { "hooks": [ { "type": "command", "command": "./scripts/stop.sh", "timeout": 5 } ] }
+    ],
+    "PostToolUse": [
+      { "matcher": "apply_patch", "hooks": [ { "type": "mcp_tool", "server": "lint", "tool": "check", "input": {"path": "."} } ] }
+    ]
+  }
+}
