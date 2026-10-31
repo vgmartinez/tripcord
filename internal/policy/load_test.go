@@ -46,6 +46,31 @@ func TestLoadNoFiles(t *testing.T) {
 	}
 }
 
+func TestLoadRepoPolicyMustExist(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "missing.yaml")
+	_, err := Load(Options{RepoRoot: t.TempDir(), RepoPolicy: missing, ManagedPolicy: noManaged(t), Surface: SurfaceScan, Env: testEnv(t)})
+	if err == nil {
+		t.Fatal("missing --policy file was accepted")
+	}
+	var polErr *Error
+	if !errors.As(err, &polErr) || polErr.ExitCode() != exitcode.Config {
+		t.Fatalf("err = %v, want a config Error", err)
+	}
+	if !strings.Contains(err.Error(), "does not exist") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestLoadDefaultRepoPolicyIsOptional(t *testing.T) {
+	e, err := Load(Options{RepoRoot: t.TempDir(), ManagedPolicy: noManaged(t), Surface: SurfaceScan, Env: testEnv(t)})
+	if err != nil {
+		t.Fatalf("missing default repo policy: %v", err)
+	}
+	if e.Mode != ModeEnforce {
+		t.Fatalf("effective %+v", e)
+	}
+}
+
 func TestManagedPolicyPath(t *testing.T) {
 	t.Setenv("ProgramData", `D:\Data`)
 	for goos, want := range map[string]string{

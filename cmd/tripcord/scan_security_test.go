@@ -273,6 +273,24 @@ func TestScanOutsideGit(t *testing.T) {
 	}
 }
 
+// TestMissingPolicyFileIsConfigError checks that an explicit --policy
+// path that does not exist is a configuration error, not silently
+// ignored. Unlike the default .tripcord/policy.yaml, an explicit path is
+// mandatory.
+func TestMissingPolicyFileIsConfigError(t *testing.T) {
+	t.Parallel()
+	dir := outsideGit(t)
+	missing := filepath.Join(t.TempDir(), "missing-policy.yaml")
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"scan", "--policy", missing, dir}, &stdout, &stderr)
+	if code != int(exitcode.Config) {
+		t.Fatalf("exit code = %d, stderr = %q", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "does not exist") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
 func TestFailOnCannotLoosenLock(t *testing.T) {
 	dir := outsideGit(t)
 	org := filepath.Join(t.TempDir(), "org.yaml")

@@ -136,10 +136,11 @@ func LoadLayers(opts Options) ([]Layer, error) {
 	}
 
 	repo := opts.RepoPolicy
+	explicitRepo := opts.RepoPolicy != ""
 	if repo == "" {
 		repo = filepath.Join(opts.RepoRoot, filepath.FromSlash(RepoFile))
 	}
-	if err := l.root(repo, LayerRepo, false); err != nil {
+	if err := l.root(repo, LayerRepo, explicitRepo); err != nil {
 		return nil, err
 	}
 
@@ -184,7 +185,7 @@ func (l *loader) root(source string, kind LayerKind, required bool) error {
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
 		if required {
-			return &Error{Source: source, Err: errors.New("org policy does not exist")}
+			return &Error{Source: source, Err: fmt.Errorf("%s does not exist", requiredPolicyKind(kind))}
 		}
 		return nil
 	case err != nil:
@@ -201,6 +202,19 @@ func (l *loader) root(source string, kind LayerKind, required bool) error {
 	}
 	l.layers = append(l.layers, Layer{Kind: kind, Source: source, File: f})
 	return nil
+}
+
+// requiredPolicyKind names a required but missing policy file layer for
+// the error message root returns.
+func requiredPolicyKind(kind LayerKind) string {
+	switch kind {
+	case LayerOrg:
+		return "org policy"
+	case LayerRepo:
+		return "--policy file"
+	default:
+		return "policy"
+	}
 }
 
 func (l *loader) onChain(target string) bool {
