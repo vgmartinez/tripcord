@@ -105,6 +105,55 @@ func TestProjectIgnoredKeys(t *testing.T) {
 	}
 }
 
+// TestProjectIgnoredKeysAreAllEmitted guards the gap docs/adapters/codex.md
+// documents and projectIgnored's own comment warns about: a key listed in
+// projectIgnored but missing from settingKinds is silently dropped by the
+// main config loop instead of being reported with ignored_in_project.
+func TestProjectIgnoredKeysAreAllEmitted(t *testing.T) {
+	t.Parallel()
+	for name := range projectIgnored {
+		if _, ok := settingKinds[name]; !ok && name != "profiles" {
+			t.Errorf("%q is in projectIgnored but not settingKinds (and is not the profiles table, which has its own code path), so it is never emitted", name)
+		}
+	}
+}
+
+// TestInstructionsFileRedirectIsReported covers the real repo vector a
+// trusted project's own config.toml can use: redirecting the file Codex
+// loads as model instructions instead of AGENTS.md. Unlike
+// projectIgnored's keys, Codex does honor these from a project config, so
+// they must be reported as effective, not ignored_in_project.
+func TestInstructionsFileRedirectIsReported(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(root, ".codex", "config.toml"),
+		"model_instructions_file = \"/etc/passwd\"\n"+
+			"experimental_instructions_file = \"/etc/shadow\"\n"+
+			"project_doc_fallback_filenames = [\"README.md\"]\n")
+	got := kittest.Discover(t, New(Options{}), root)
+	found := map[string]any{}
+	for _, item := range got.Items {
+		if item.Kind != model.ConfigKindInstructions {
+			continue
+		}
+		p := kittest.Payload(t, item)
+		found[p["setting"].(string)] = p["value"]
+	}
+	if found["model_instructions_file"] != "/etc/passwd" || found["experimental_instructions_file"] != "/etc/shadow" {
+		t.Fatalf("instructions file settings = %+v", found)
+	}
+	if _, ok := found["project_doc_fallback_filenames"]; !ok {
+		t.Fatalf("project_doc_fallback_filenames not reported: %+v", found)
+	}
+	for _, item := range got.Items {
+		if p := kittest.Payload(t, item); p["setting"] == "model_instructions_file" {
+			if p["ignored_in_project"] != nil {
+				t.Fatalf("model_instructions_file must not be marked ignored_in_project: %+v", p)
+			}
+		}
+	}
+}
+
 // TestMCPServerArgsRedactsBearerScheme is the Codex repro: an MCP
 // server's args array splits a bearer token across two elements,
 // ["Bearer", "<token>"], so Sanitize's bearerToken regex (which needs

@@ -93,9 +93,16 @@ differ elsewhere (a second hook with the same command but a different
     `allowed_approval_policies`, `allowed_permission_profiles`,
     `experimental_network`, `remote_sandbox_config`
   - `env-setup`: `shell_environment_policy`, `notify`, `model_providers`,
-    `openai_base_url`, `chatgpt_base_url`,
-    `experimental_realtime_ws_base_url`, `otel`
+    `model_provider`, `apps_mcp_product_sku`, `openai_base_url`,
+    `chatgpt_base_url`, `experimental_realtime_ws_base_url`, `otel`
   - `plugin`: `plugins`, `marketplaces`
+  - `permissions`: also `profile` (the active configuration profile name)
+  - `instructions`: `project_doc_fallback_filenames`,
+    `model_instructions_file`, `experimental_instructions_file` (the
+    deprecated spelling of `model_instructions_file`) — these pick the
+    file Codex loads as project instructions instead of `AGENTS.md`, and,
+    unlike the keys below, Codex does honor them from a trusted project's
+    own `.codex/config.toml`
 - Profiles: one `permissions` item per `[profiles.<name>]`, key
   `["setting", "profiles", name]`.
 - Keys Codex ignores in a project config (`openai_base_url`,

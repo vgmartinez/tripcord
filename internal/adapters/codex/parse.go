@@ -37,17 +37,33 @@ var settingKinds = map[string]model.ConfigKind{
 	"shell_environment_policy":          model.ConfigKindEnvSetup,
 	"notify":                            model.ConfigKindEnvSetup,
 	"model_providers":                   model.ConfigKindEnvSetup,
+	"model_provider":                    model.ConfigKindEnvSetup,
+	"apps_mcp_product_sku":              model.ConfigKindEnvSetup,
 	"openai_base_url":                   model.ConfigKindEnvSetup,
 	"chatgpt_base_url":                  model.ConfigKindEnvSetup,
 	"experimental_realtime_ws_base_url": model.ConfigKindEnvSetup,
 	"otel":                              model.ConfigKindEnvSetup,
 	"plugins":                           model.ConfigKindPlugin,
 	"marketplaces":                      model.ConfigKindPlugin,
+	"profile":                           model.ConfigKindPermissions,
+	// project_doc_fallback_filenames, model_instructions_file, and
+	// experimental_instructions_file (the deprecated spelling of
+	// model_instructions_file) decide which file supplies the model's
+	// project instructions instead of AGENTS.md. Codex does not list
+	// them in projectIgnored, so a trusted project's own config.toml can
+	// set them, redirecting instructions to an attacker-chosen path.
+	"project_doc_fallback_filenames": model.ConfigKindInstructions,
+	"model_instructions_file":        model.ConfigKindInstructions,
+	"experimental_instructions_file": model.ConfigKindInstructions,
 }
 
-// projectIgnored are keys Codex ignores in a project .codex/config.toml.
+// projectIgnored are keys Codex ignores in a project .codex/config.toml
+// (https://developers.openai.com/codex/config-reference#configtoml).
 // They are still emitted from a repository, marked ignored_in_project, so
-// a rule can tell a planted key from an effective one.
+// a rule can tell a planted key from an effective one; every key here
+// must also have a settingKinds entry, or it is silently dropped instead
+// (apps_mcp_product_sku, model_provider, and profile previously had no
+// settingKinds entry and were never emitted despite being listed here).
 var projectIgnored = map[string]bool{
 	"openai_base_url":                   true,
 	"chatgpt_base_url":                  true,
