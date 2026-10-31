@@ -76,38 +76,35 @@ func TestRulesFileOpaqueRedactsToolSecretFlags(t *testing.T) {
 	if strings.Contains(content+key, "OPQ") {
 		t.Fatalf("opaque content or key leaks a tool secret: %s / %s", content, key)
 	}
-	for _, kept := range []string{`"-p[REDACTED]"`, `"--pass", "[REDACTED]"`, `"-K", "[REDACTED]"`} {
-		if !strings.Contains(content, kept) {
-			t.Errorf("content lost %q: %s", kept, content)
-		}
-	}
 }
 
-// In an opaque rules file a tool word activates its flags only within its
-// own list: a later, unrelated pattern keeps its arguments.
-func TestRulesFileOpaqueScopesToolFlagsToEachList(t *testing.T) {
+// In a fully literal rules file a tool word activates its flags only
+// within its own list: a later, unrelated pattern keeps its arguments.
+func TestRulesFileScopesToolFlagsToEachList(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	kittest.WriteFile(t, filepath.Join(root, ".codex", "rules", "default.rules"),
-		`"""opaque"""`+"\n"+
-			`prefix_rule(pattern = ["redis-cli", "info"])`+"\n"+
+		`prefix_rule(pattern = ["redis-cli", "info"])`+"\n"+
 			`prefix_rule(pattern = ["make", "-a", "all"])`+"\n"+
 			`prefix_rule(pattern = ["mysql", "-pOPQ7"])`+"\n"+
 			`prefix_rule(pattern = ["jq", "-pretty"])`+"\n"+
 			`prefix_rule(pattern = ["redis-cli", "-a", "OPQ8"])`+"\n")
 	got := kittest.Discover(t, New(Options{}), root)
 	items := got.Find(".codex/rules/default.rules", model.ConfigKindPermissions)
-	if len(items) != 1 {
-		t.Fatalf("items = %+v, want one opaque item", got.Items)
+	if len(items) != 5 {
+		t.Fatalf("items = %+v, want five parsed items", got.Items)
 	}
-	content, _ := kittest.Payload(t, items[0])["content"].(string)
-	for _, kept := range []string{`["make", "-a", "all"]`, `["jq", "-pretty"]`, `["mysql", "-p[REDACTED]"]`, `["redis-cli", "-a", "[REDACTED]"]`} {
-		if !strings.Contains(content, kept) {
-			t.Errorf("content lost %q: %s", kept, content)
+	var content strings.Builder
+	for _, item := range items {
+		content.Write(item.Payload)
+	}
+	for _, kept := range []string{`"pattern":["make","-a","all"]`, `"pattern":["jq","-pretty"]`, `"pattern":["mysql","-p[REDACTED]"]`, `"pattern":["redis-cli","-a","[REDACTED]"]`} {
+		if !strings.Contains(content.String(), kept) {
+			t.Errorf("content lost %q: %s", kept, content.String())
 		}
 	}
-	if strings.Contains(content, "OPQ") {
-		t.Fatalf("opaque content leaks a tool secret: %s", content)
+	if strings.Contains(content.String(), "OPQ") {
+		t.Fatalf("parsed content leaks a tool secret: %s", content.String())
 	}
 }
 
@@ -139,20 +136,60 @@ func TestRulesFileOpaqueTokenizesIdentifiersOutsideStringsAndComments(t *testing
 
 func TestRulesFileOpaqueIgnoresStringAndCommentOperators(t *testing.T) {
 	t.Parallel()
+	raw := []byte("# q16 +\n" +
+		`prefix_rule(pattern = ["redis-cli", "q12 + q16"])` + "\n" +
+		`prefix_rule(pattern = ["make", "-a", "all"])`)
+	if !isStrictLiteralRulesFile(raw) {
+		t.Fatal("string/comment + incorrectly enabled conservative fallback")
+	}
+}
+
+func TestRulesFileOpaqueRejectsAllValueIdentifiersAndOperators(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	kittest.WriteFile(t, filepath.Join(root, ".codex", "rules", "default.rules"),
-		`"""q12 + q16"""`+"\n"+
-			"# + q16\n"+
-			`prefix_rule(pattern = ["redis-cli", "info"])`+"\n"+
-			`prefix_rule(pattern = ["make", "-a", "all"])`+"\n")
+		`pattern = "redis-cli"`+"\n"+
+			`match = "redis-cli"`+"\n"+
+			`True = "redis-cli"`+"\n"+
+			`decision = "redis-cli"`+"\n"+
+			`not_match = "redis-cli"`+"\n"+
+			`prefix_rule(pattern = [pattern, "-a", "QE01X"])`+"\n"+
+			`prefix_rule(pattern = [match, "-a", "QE02X"])`+"\n"+
+			`prefix_rule(pattern = [True, "-a", "QE03X"])`+"\n"+
+			`prefix_rule(pattern = [decision, "-a", "QE04X"])`+"\n"+
+			`prefix_rule(pattern = [not_match, "-a", "QE05X"])`+"\n"+
+			`prefix_rule(pattern = [None, "-a", "QE06X"])`+"\n"+
+			`prefix_rule(pattern = ["xredis-cli"[1:], "-a", "QE07X"])`+"\n"+
+			`prefix_rule(pattern = ["redis%s" % "cli", "-a", "QE08X"])`+"\n"+
+			`prefix_rule(pattern = ["\x64edis-cli", "-a", "QE09X"])`+"\n"+
+			`prefix_rule(pattern = ["\u0072edis-cli", "-a", "QE10X"])`+"\n"+
+			`prefix_rule(pattern = ["-%s" % "a", "QE11X"])`+"\n"+
+			`prefix_rule(pattern = ["-p%s" % "S", "QE12X"])`+"\n"+
+			"ţ = \"redis-cli\"\n")
 	got := kittest.Discover(t, New(Options{}), root)
 	items := got.Find(".codex/rules/default.rules", model.ConfigKindPermissions)
 	if len(items) != 1 {
 		t.Fatalf("items = %+v, want one opaque item", got.Items)
 	}
 	content, _ := kittest.Payload(t, items[0])["content"].(string)
-	if !strings.Contains(content, `["make", "-a", "all"]`) {
-		t.Errorf("string/comment + incorrectly enabled conservative fallback: %s", content)
+	for _, secret := range []string{"QE01X", "QE02X", "QE03X", "QE04X", "QE05X", "QE06X", "QE07X", "QE08X", "QE09X", "QE10X", "QE11X", "QE12X"} {
+		if strings.Contains(content, secret) {
+			t.Errorf("opaque content leaks %q: %s", secret, content)
+		}
+	}
+}
+
+func TestRulesFileOpaqueRedactsEveryValueAfterCredentialFlag(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(root, ".codex", "rules", "default.rules"),
+		`T = "redis-cli"`+"\n"+
+			`[T, "-a", "QB17", "QQ10"]`+"\n")
+	got := kittest.Discover(t, New(Options{}), root)
+	item := got.Find(".codex/rules/default.rules", model.ConfigKindPermissions)[0]
+	content, _ := kittest.Payload(t, item)["content"].(string)
+	if strings.Contains(content, "QB17") || strings.Contains(content, "QQ10") {
+		t.Fatalf("credential-flag tail leaks: %s", content)
 	}
 }
 

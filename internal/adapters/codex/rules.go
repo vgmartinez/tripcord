@@ -124,7 +124,7 @@ func (f *file) sanitizeRulesLiterals(raw []byte) string {
 	// the whole opaque block, trying every tool's flags. That may hide
 	// harmless text, but cannot leak a tool credential through a
 	// variable, concatenation, or function definition.
-	if hasUnresolvedRulesExpression(raw) {
+	if !isStrictLiteralRulesFile(raw) {
 		sanitized = f.sanitizeRulesConservatively(sanitized)
 	}
 	var b strings.Builder
@@ -159,76 +159,166 @@ func (f *file) sanitizeRulesConservatively(values []string) []string {
 			values[i], _ = out[i+1].(string)
 		}
 	}
+	redactFollowing := false
+	for i, value := range values {
+		if redactFollowing {
+			values[i], _ = f.SafeValue("token", value).(string)
+			continue
+		}
+		redactFollowing = opaqueCredentialFlag(value)
+	}
 	return values
 }
 
-var rulesExpressionIdentifiers = map[string]bool{
-	"prefix_rule": true, "pattern": true, "decision": true, "match": true,
-	"not_match": true, "justification": true, "True": true, "False": true,
-	"None": true,
-}
-
-// hasUnresolvedRulesExpression tokenizes source while skipping strings and
-// comments. Any identifier beyond the small grammar parseRulesFile supports,
-// or concatenation outside a string/comment, can join argv words at runtime
-// and therefore requires conservative whole-block sanitization.
-func hasUnresolvedRulesExpression(raw []byte) bool {
-	for i := 0; i < len(raw); {
-		switch raw[i] {
-		case '#':
-			for i < len(raw) && raw[i] != '\n' {
-				i++
-			}
-		case '\'', '"':
-			i = rulesStringEnd(raw, i)
-		case '+':
-			return true
-		default:
-			if !rulesIdentifierStart(raw[i]) {
-				i++
-				continue
-			}
-			start := i
-			i++
-			for i < len(raw) && rulesIdentifierPart(raw[i]) {
-				i++
-			}
-			if !rulesExpressionIdentifiers[string(raw[start:i])] {
-				return true
-			}
-		}
+func opaqueCredentialFlag(value string) bool {
+	switch value {
+	case "-a", "--pass", "-p", "-k", "-K", "-t", "-pass", "-passin", "-passout":
+		return true
 	}
 	return false
 }
 
-func rulesIdentifierStart(c byte) bool {
-	return c == '_' || c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z'
+// strictRules is intentionally narrower than the normal parser. The
+// per-list opaque-file path is safe only for a complete sequence of
+// literal-only prefix_rule calls; every other Starlark feature falls
+// back to whole-file conservative sanitization.
+type strictRules struct {
+	raw []byte
+	pos int
 }
 
-func rulesIdentifierPart(c byte) bool {
-	return rulesIdentifierStart(c) || c >= '0' && c <= '9'
+var strictRuleNames = map[string]bool{
+	"pattern": true, "decision": true, "match": true, "not_match": true,
+	"justification": true,
 }
 
-func rulesStringEnd(raw []byte, start int) int {
-	quote := raw[start]
-	if start+2 < len(raw) && raw[start+1] == quote && raw[start+2] == quote {
-		for i := start + 3; i+2 < len(raw); i++ {
-			if raw[i] == quote && raw[i+1] == quote && raw[i+2] == quote {
-				return i + 3
-			}
+func isStrictLiteralRulesFile(raw []byte) bool {
+	p := strictRules{raw: raw}
+	calls := 0
+	for {
+		p.skip()
+		if p.pos == len(raw) {
+			return calls > 0
 		}
-		return len(raw)
-	}
-	for i := start + 1; i < len(raw); i++ {
-		if raw[i] == '\\' {
-			i++
+		if !p.ident("prefix_rule") || !p.punct('(') {
+			return false
+		}
+		calls++
+		if p.punct(')') {
 			continue
 		}
-		if raw[i] == quote {
-			return i + 1
+		for {
+			name, ok := p.readIdent()
+			if !ok || !strictRuleNames[name] || !p.punct('=') || !p.value() {
+				return false
+			}
+			if p.punct(')') {
+				break
+			}
+			if !p.punct(',') {
+				return false
+			}
+			if p.punct(')') {
+				break
+			}
 		}
 	}
-	return len(raw)
+}
+
+func (p *strictRules) skip() {
+	for p.pos < len(p.raw) {
+		switch p.raw[p.pos] {
+		case ' ', '\t', '\r', '\n':
+			p.pos++
+		case '#':
+			for p.pos < len(p.raw) && p.raw[p.pos] != '\n' {
+				p.pos++
+			}
+		default:
+			return
+		}
+	}
+}
+
+func (p *strictRules) punct(want byte) bool {
+	p.skip()
+	if p.pos >= len(p.raw) || p.raw[p.pos] != want {
+		return false
+	}
+	p.pos++
+	return true
+}
+
+func (p *strictRules) ident(want string) bool {
+	name, ok := p.readIdent()
+	return ok && name == want
+}
+
+func (p *strictRules) readIdent() (string, bool) {
+	p.skip()
+	if p.pos == len(p.raw) || !isRulesIdentStart(p.raw[p.pos]) {
+		return "", false
+	}
+	start := p.pos
+	p.pos++
+	for p.pos < len(p.raw) && isRulesIdentCont(p.raw[p.pos]) {
+		p.pos++
+	}
+	return string(p.raw[start:p.pos]), true
+}
+
+func (p *strictRules) value() bool {
+	p.skip()
+	if p.pos == len(p.raw) {
+		return false
+	}
+	switch p.raw[p.pos] {
+	case '\'', '"':
+		return p.string()
+	case '[', '(':
+		open := p.raw[p.pos]
+		close := byte(']')
+		if open == '(' {
+			close = ')'
+		}
+		p.pos++
+		if p.punct(close) {
+			return true
+		}
+		for {
+			if !p.value() {
+				return false
+			}
+			if p.punct(close) {
+				return true
+			}
+			if !p.punct(',') {
+				return false
+			}
+			if p.punct(close) {
+				return true
+			}
+		}
+	default:
+		name, ok := p.readIdent()
+		return ok && (name == "True" || name == "False" || name == "None")
+	}
+}
+
+func (p *strictRules) string() bool {
+	quote := p.raw[p.pos]
+	p.pos++
+	for p.pos < len(p.raw) && p.raw[p.pos] != quote {
+		if p.raw[p.pos] == '\\' || p.raw[p.pos] < 0x20 || p.raw[p.pos] >= 0x80 {
+			return false
+		}
+		p.pos++
+	}
+	if p.pos == len(p.raw) {
+		return false
+	}
+	p.pos++
+	return true
 }
 
 func scanRulesLiterals(raw []byte) []rulesLiteral {
