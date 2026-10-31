@@ -18,6 +18,10 @@ type Input struct {
 // ConfigInput binds config, payload, and, for task items, task.
 // payload is the decoded JSON payload, or an empty map when there is none.
 func ConfigInput(item model.ConfigItem, limits Limits) (*Input, error) {
+	id, err := item.ID()
+	if err != nil {
+		return nil, err
+	}
 	if len(item.Payload) > limits.MaxInputBytes {
 		return nil, fmt.Errorf("config %s: payload is %d bytes: %w", item.Path, len(item.Payload), ErrInputLimit)
 	}
@@ -32,15 +36,16 @@ func ConfigInput(item model.ConfigItem, limits Limits) (*Input, error) {
 		task = payload
 	}
 	return &Input{vars: map[string]any{
-		VarConfig:  configVars(item),
+		VarConfig:  configVars(id, item),
 		VarPayload: payload,
 		VarTask:    task,
 		VarEvent:   map[string]any{},
 	}}, nil
 }
 
-func configVars(item model.ConfigItem) map[string]any {
+func configVars(id string, item model.ConfigItem) map[string]any {
 	return map[string]any{
+		"id":      id,
 		"harness": item.Harness.String(),
 		"scope":   item.Scope.String(),
 		"path":    item.Path,

@@ -54,6 +54,63 @@ func TestScanConfig(t *testing.T) {
 	}
 }
 
+func TestMatchFinding(t *testing.T) {
+	engine, _ := fixtureEngine(t)
+	it := item(model.SurfaceVSCode, ".vscode/tasks.json", model.ConfigKindTask, `{"runOptions":{"runOn":"folderOpen"}}`)
+	res := engine.ScanConfig(context.Background(), []model.ConfigItem{it})
+	if len(res.Matches) != 1 {
+		t.Fatalf("res = %+v", res)
+	}
+	f, err := res.Matches[0].Finding(model.SeverityHigh, model.DecisionDeny)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(f.Evidence) != 1 || f.Evidence[0].Config != "vscode:repo:.vscode/tasks.json" || f.Evidence[0].Event != "" || f.Evidence[0].Excerpt != "" {
+		t.Fatalf("evidence = %+v", f.Evidence)
+	}
+	if f.Rule != "TEST-CFG-001" || f.Location.Path != ".vscode/tasks.json" || f.Location.Scope != model.ScopeRepo || len(f.Refs) != 1 || f.Fix == "" {
+		t.Fatalf("finding = %+v", f)
+	}
+	raw, err := json.Marshal(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"evidence":[{"config":"vscode:repo:.vscode/tasks.json"}]`) {
+		t.Fatalf("json = %s", raw)
+	}
+	if len(f.Fingerprint) != len("tcf_")+16 {
+		t.Fatalf("fingerprint %q", f.Fingerprint)
+	}
+
+	// Editing the file changes sha256 but not the finding's identity.
+	edited := it
+	edited.SHA256 = strings.Repeat("f", 64)
+	g, err := Match{Rule: res.Matches[0].Rule, Item: edited}.Finding(model.SeverityHigh, model.DecisionDeny)
+	if err != nil || g.Fingerprint != f.Fingerprint {
+		t.Fatalf("fingerprint changed: %s vs %s (%v)", g.Fingerprint, f.Fingerprint, err)
+	}
+	if _, err := res.Matches[0].Finding("urgent", model.DecisionDeny); err == nil {
+		t.Fatal("invalid severity accepted")
+	}
+}
+
+func TestConfigIDVariable(t *testing.T) {
+	env := testEnv(t)
+	it := item(model.HarnessClaude, "~/.claude/settings.json", model.ConfigKindHook, `{}`)
+	if _, err := ConfigInput(it, env.Limits()); err == nil {
+		t.Fatal("user path accepted for repo scope")
+	}
+	it.Scope = model.ScopeUser
+	in, err := ConfigInput(it, env.Limits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ok, err := compileT(t, env, `config.id == "claude:user:~/.claude/settings.json" && config.scope == "user"`).Eval(context.Background(), in)
+	if err != nil || !ok {
+		t.Fatalf("got %v, %v", ok, err)
+	}
+}
+
 func TestScanConfigErrorsAreNotMatches(t *testing.T) {
 	engine, _ := fixtureEngine(t)
 	items := []model.ConfigItem{

@@ -55,7 +55,7 @@ accepted. `pack` must equal the `pack` in `rules/pack.yaml`.
 
 `when` sees these variables:
 
-- `config`: the config item (`harness`, `scope`, `path`, `sha256`, `kind`).
+- `config`: the config item (`id`, `harness`, `scope`, `path`, `sha256`, `kind`).
 - `payload`: the item's parsed content.
 - `task`: the same as `payload` when `config.kind == "task"`, otherwise empty.
 - `event`: a `tripcord.event/v1` event, for event rules.

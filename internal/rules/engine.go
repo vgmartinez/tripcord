@@ -24,6 +24,44 @@ type Match struct {
 	Item model.ConfigItem
 }
 
+// ConfigConfidence is the confidence of a config rule match. Config
+// rules are deterministic expressions over the parsed file.
+const ConfigConfidence = 1.0
+
+// Finding builds the tripcord.finding/v1 record for m. Severity and
+// decision come from the caller because policy overrides and mode
+// decide them. The evidence cites the config item by ConfigItem.ID and
+// carries no excerpt, so no file content reaches the finding.
+func (m Match) Finding(severity model.Severity, decision model.Decision) (model.Finding, error) {
+	id, err := m.Item.ID()
+	if err != nil {
+		return model.Finding{}, err
+	}
+	loc := model.Location{Harness: m.Item.Harness, Scope: m.Item.Scope, Path: m.Item.Path}
+	evidence := []model.Evidence{{Config: id}}
+	fp, err := model.Fingerprint(m.Rule.ID, loc, evidence)
+	if err != nil {
+		return model.Finding{}, err
+	}
+	f := model.Finding{
+		Schema:      model.SchemaFinding,
+		Rule:        m.Rule.ID,
+		Title:       m.Rule.Title,
+		Severity:    severity,
+		Decision:    decision,
+		Confidence:  ConfigConfidence,
+		Evidence:    evidence,
+		Location:    loc,
+		Refs:        append([]string(nil), m.Rule.Refs...),
+		Fix:         m.Rule.Fix,
+		Fingerprint: fp,
+	}
+	if err := f.Validate(); err != nil {
+		return model.Finding{}, err
+	}
+	return f, nil
+}
+
 // EvalError is a rule that could not be evaluated for an item. Rule is
 // empty when the item itself was rejected, for example by a size limit.
 type EvalError struct {

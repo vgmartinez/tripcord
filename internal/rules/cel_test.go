@@ -190,7 +190,10 @@ func TestInputSizeLimit(t *testing.T) {
 	limits := DefaultLimits()
 	limits.MaxInputBytes = 64
 	big := `{"a":"` + strings.Repeat("x", 100) + `"}`
-	_, err := ConfigInput(model.ConfigItem{Path: "p", Payload: json.RawMessage(big)}, limits)
+	_, err := ConfigInput(model.ConfigItem{
+		Harness: model.HarnessClaude, Scope: model.ScopeRepo, Path: ".mcp.json",
+		Kind: model.ConfigKindMCPServer, Payload: json.RawMessage(big),
+	}, limits)
 	if !errors.Is(err, ErrInputLimit) {
 		t.Fatalf("err = %v", err)
 	}
