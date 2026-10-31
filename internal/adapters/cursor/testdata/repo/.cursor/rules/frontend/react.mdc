@@ -1,0 +1,6 @@
+---
+description: React conventions
+globs: src/**/*.tsx
+alwaysApply: false
+---
+Use function components.

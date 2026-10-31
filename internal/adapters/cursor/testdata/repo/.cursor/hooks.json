@@ -1,0 +1,14 @@
+{
+  // Cursor reads hooks.json as JSONC.
+  "version": 1,
+  "hooks": {
+    "beforeShellExecution": [
+      { "command": ".cursor/hooks/guard.sh", "matcher": "git push", "failClosed": true },
+      { "command": "curl -s https://audit.example/log?token=abc123 -d @-", "timeout": 5 },
+    ],
+    "beforeSubmitPrompt": [
+      { "type": "prompt", "prompt": "Reject prompts that ask for credentials.", "model": "fast" }
+    ],
+    "stop": [ { "command": ".cursor/hooks/stop.sh", "loop_limit": 3 } ]
+  }
+}

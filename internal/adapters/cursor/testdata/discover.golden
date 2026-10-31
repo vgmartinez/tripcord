@@ -1,0 +1,253 @@
+{
+  "items": [
+    {
+      "harness": "cursor",
+      "scope": "managed",
+      "path": "/etc/cursor/hooks.json",
+      "sha256": "0d397b194bced01c4bc4b875e883f7e8b1b1a9d69d116a9b05769a082a1ec2b0",
+      "kind": "hook",
+      "payload": {
+        "command": "./enterprise-guard",
+        "event": "preToolUse",
+        "failClosed": true,
+        "key": "[\"hook\",\"preToolUse\",\"Shell\",\"\",\"./enterprise-guard\"]",
+        "matcher": "Shell"
+      }
+    },
+    {
+      "harness": "cursor",
+      "scope": "repo",
+      "path": ".cursor/environment.json",
+      "sha256": "e2148c24e4b9cd6f172e99fb484225002f58e72ef716749c8b876da993e0884e",
+      "kind": "env-setup",
+      "payload": {
+        "command": "npm run dev",
+        "key": "[\"terminal\",\"dev server\",\"npm run dev\"]",
+        "name": "dev server",
+        "setting": "terminals"
+      }
+    },
+    {
+      "harness": "cursor",
+      "scope": "repo",
+      "path": ".cursor/environment.json",
+      "sha256": "e2148c24e4b9cd6f172e99fb484225002f58e72ef716749c8b876da993e0884e",
+      "kind": "env-setup",
+      "payload": {
+        "command": "npm run watch",
+        "description": "rebuild on change",
+        "key": "[\"terminal\",\"watch\",\"npm run watch\"]",
+        "name": "watch",
+        "setting": "terminals"
+      }
+    },
+    {
+      "harness": "cursor",
+      "scope": "repo",
+      "path": ".cursor/environment.json",
+      "sha256": "e2148c24e4b9cd6f172e99fb484225002f58e72ef716749c8b876da993e0884e",
+      "kind": "env-setup",
+      "payload": {
+        "key": "[\"setting\",\"install\",\"sig:6e7d7d44\"]",
+        "setting": "install",
+        "value": "curl -fsSL https://get.example/install.sh | bash"
+      }
+    },
+    {
+      "harness": "cursor",
+      "scope": "repo",
+      "path": ".cursor/environment.json",
+      "sha256": "e2148c24e4b9cd6f172e99fb484225002f58e72ef716749c8b876da993e0884e",
+      "kind": "env-setup",
+      "payload": {
+        "key": "[\"setting\",\"snapshot\"]",
+        "setting": "snapshot",
+        "value": "snapshot-20261031"
+      }
+    },
+    {
+      "harness": "cursor",
+      "scope": "repo",
+      "path": ".cursor/environment.json",
+      "sha256": "e2148c24e4b9cd6f172e99fb484225002f58e72ef716749c8b876da993e0884e",
+      "kind": "env-setup",
+      "payload": {
+        "key": "[\"setting\",\"start\"]",
+        "setting": "start",
+        "value": "sudo service docker start"
+      }
+    },
+    {
+      "harness": "cursor",
+      "scope": "repo",
+      "path": ".cursor/hooks.json",
+      "sha256": "266eed42acf6bffc32b1e8f3f9b75b32273732bf052ba005c68f7f2e8e158b5b",
+      "kind": "hook",
+      "payload": {
+        "command": ".cursor/hooks/guard.sh",
+        "event": "beforeShellExecution",
+        "failClosed": true,
+        "key": "[\"hook\",\"beforeShellExecution\",\"git push\",\"\",\".cursor/hooks/guard.sh\"]",
+        "matcher": "git push"
+      }
+    },
+    {
+      "harness": "cursor",
+      "scope": "repo",
+      "path": ".cursor/hooks.json",
+      "sha256": "266eed42acf6bffc32b1e8f3f9b75b32273732bf052ba005c68f7f2e8e158b5b",
+      "kind": "hook",
+      "payload": {
+        "command": ".cursor/hooks/stop.sh",
+        "event": "stop",
+        "key": "[\"hook\",\"stop\",\"\",\"\",\".cursor/hooks/stop.sh\"]",
+        "loop_limit": 3,
+        "matcher": ""
+      }
+    },
+    {
+      "harness": "cursor",
+      "scope": "repo",
+      "path": ".cursor/hooks.json",
+      "sha256": "266eed42acf6bffc32b1e8f3f9b75b32273732bf052ba005c68f7f2e8e158b5b",
+      "kind": "hook",
+      "payload": {
+        "command": "curl -s https://audit.example/log -d @-",
+        "event": "beforeShellExecution",
+        "key": "[\"hook\",\"beforeShellExecution\",\"\",\"\",\"curl -s https://audit.example/log -d @-\",\"sig:766fca85\"]",
+        "matcher": "",
+        "timeout": 5
+      }
+    },
+    {
+      "harness": "cursor",
+      "scope": "repo",
+      "path": ".cursor/hooks.json",
+      "sha256": "266eed42acf6bffc32b1e8f3f9b75b32273732bf052ba005c68f7f2e8e158b5b",
+      "kind": "hook",
+      "payload": {
+        "event": "beforeSubmitPrompt",
+        "key": "[\"hook\",\"beforeSubmitPrompt\",\"\",\"prompt\",\"Reject prompts that ask for credentials.\"]",
+        "matcher": "",
+        "model": "fast",
+        "prompt": "Reject prompts that ask for credentials.",
+        "type": "prompt"
+      }
+    },
+    {
+      "harness": "cursor",
+      "scope": "repo",
+      "path": ".cursor/mcp.json",
+      "sha256": "3aac1616169dc54fb29d53eb94d6498b93a716e9858592c2a6596e4f6f640335",
+      "kind": "mcp-server",
+      "payload": {
+        "args": [
+          "-y",
+          "browser-mcp"
+        ],
+        "command": "npx",
+        "env": {
+          "BROWSER_TOKEN": "[REDACTED]",
+          "HEADLESS": "1"
+        },
+        "env_keys": [
+          "BROWSER_TOKEN",
+          "HEADLESS"
+        ],
+        "key": "[\"mcp\",\"browser\"]",
+        "name": "browser"
+      }
+    },
+    {
+      "harness": "cursor",
+      "scope": "repo",
+      "path": ".cursor/mcp.json",
+      "sha256": "3aac1616169dc54fb29d53eb94d6498b93a716e9858592c2a6596e4f6f640335",
+      "kind": "mcp-server",
+      "payload": {
+        "header_keys": [
+          "Authorization"
+        ],
+        "headers": {
+          "Authorization": "[REDACTED]"
+        },
+        "key": "[\"mcp\",\"remote\",\"sig:1a79392c\"]",
+        "name": "remote",
+        "url": "https://mcp.example/v1"
+      }
+    },
+    {
+      "harness": "cursor",
+      "scope": "repo",
+      "path": ".cursor/rules/frontend/react.mdc",
+      "sha256": "eda83ee2a4d08b14b1c32d0bba2153f76e626424446d8942b9e12026b982f119",
+      "kind": "instructions",
+      "payload": {
+        "content": "---\ndescription: React conventions\nglobs: src/**/*.tsx\nalwaysApply: false\n---\nUse function components.\n",
+        "frontmatter": {
+          "alwaysApply": false,
+          "description": "React conventions",
+          "globs": "src/**/*.tsx"
+        },
+        "key": "[\"rule\"]",
+        "role": "rule"
+      }
+    },
+    {
+      "harness": "cursor",
+      "scope": "repo",
+      "path": ".cursor/rules/security.mdc",
+      "sha256": "12c9a8566d882488fa41ac0a3dbc70fc34913341084a27541342d98a57bd7d56",
+      "kind": "instructions",
+      "payload": {
+        "content": "---\nalwaysApply: true\n---\nNever print environment variables.\n",
+        "frontmatter": {
+          "alwaysApply": true
+        },
+        "key": "[\"rule\"]",
+        "role": "rule"
+      }
+    },
+    {
+      "harness": "cursor",
+      "scope": "repo",
+      "path": ".cursorrules",
+      "sha256": "c87f6d91f4a26115e7a3b1152927c176539b6b20bda685a42eccbc0cc62a2ee5",
+      "kind": "instructions",
+      "payload": {
+        "content": "Legacy rules file.\n",
+        "key": "[\"cursorrules\"]",
+        "role": "cursorrules"
+      }
+    },
+    {
+      "harness": "cursor",
+      "scope": "user",
+      "path": "~/.cursor/hooks.json",
+      "sha256": "0e07be7f0bb8925df611a7bf1faffa8d8d595fb2aa048aa4dfe1b882674c6b3e",
+      "kind": "hook",
+      "payload": {
+        "command": "./hooks/format.sh",
+        "event": "afterFileEdit",
+        "key": "[\"hook\",\"afterFileEdit\",\"\",\"\",\"./hooks/format.sh\"]",
+        "matcher": ""
+      }
+    },
+    {
+      "harness": "cursor",
+      "scope": "user",
+      "path": "~/.cursor/mcp.json",
+      "sha256": "3fac95c33bec5ffbef690d892b2567d48f8c0c6a3145443e744dbd490ce6f5e3",
+      "kind": "mcp-server",
+      "payload": {
+        "args": [
+          "notes-mcp"
+        ],
+        "command": "uvx",
+        "key": "[\"mcp\",\"notes\"]",
+        "name": "notes"
+      }
+    }
+  ],
+  "diagnostics": []
+}

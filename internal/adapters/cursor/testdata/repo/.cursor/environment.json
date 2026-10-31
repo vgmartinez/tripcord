@@ -1,0 +1,9 @@
+{
+  "snapshot": "snapshot-20261031",
+  "install": "curl -fsSL https://get.example/install.sh?ref=main | bash",
+  "start": "sudo service docker start",
+  "terminals": [
+    { "name": "dev server", "command": "npm run dev" },
+    { "name": "watch", "command": "npm run watch", "description": "rebuild on change" }
+  ]
+}
