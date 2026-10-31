@@ -57,17 +57,31 @@ func redactPath(path string) string {
 // any other user from renaming or deleting the already-validated child
 // entry beneath it.
 //
-// path's immediate parent directory is resolved with filepath.EvalSymlinks
-// first, so the walk follows the real filesystem hierarchy from there.
-// Without that, if any directory on the way up were a symlink,
-// filepath.Dir would keep walking up the symlink's literal location
-// rather than its target's, checking the permissions of directories the
-// policy file is not actually under. path itself is not required to
-// exist here: checkManagedPolicyFile already confirmed that with its own
-// os.Stat before calling this, and that os.Stat follows a symlinked
-// leaf file to its real target for the ownership check.
+// path itself is resolved with filepath.EvalSymlinks first: if the
+// policy file is itself a symlink, its real target's parent is what
+// must be held to the rules above, not the symlink's own, unrelated
+// parent directory (which can be, and often is, perfectly safe while
+// the target it points at is not). path is not required to exist for
+// this step to matter: checkManagedPolicyFile's own os.Stat before
+// calling this already confirmed existence and, by following a
+// symlinked leaf to its real target, already used the right file for
+// the ownership check; EvalSymlinks failing here (a dangling symlink,
+// or path simply not existing in a caller that invokes this directly,
+// as some tests do) falls back to the literal path unchanged.
+//
+// The immediate parent directory of that (possibly resolved) leaf is
+// then itself resolved with filepath.EvalSymlinks, so the walk follows
+// the real filesystem hierarchy from there. Without that, if any
+// directory on the way up were a symlink, filepath.Dir would keep
+// walking up the symlink's literal location rather than its target's,
+// checking the permissions of directories the policy file is not
+// actually under.
 func checkManagedPolicyParentPath(path string) error {
-	dir, err := filepath.EvalSymlinks(filepath.Dir(path))
+	leaf := path
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		leaf = resolved
+	}
+	dir, err := filepath.EvalSymlinks(filepath.Dir(leaf))
 	if err != nil {
 		return fmt.Errorf("managed policy parent for %s: %w", redactPath(path), err)
 	}

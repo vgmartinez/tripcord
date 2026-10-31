@@ -189,6 +189,45 @@ func TestCheckManagedPolicyParentPathFollowsAncestorSymlinks(t *testing.T) {
 	}
 }
 
+// TestCheckManagedPolicyParentPathResolvesLeafSymlink checks that when
+// the managed policy path itself is a symlink, the walk is held to the
+// rules for the symlink's real TARGET directory, not the symlink's own,
+// unrelated and safe parent. The policy path lives in a directory that
+// is itself perfectly safe ("safe-parent"); it is a symlink
+// ("policy.yaml") pointing at a file inside a world-writable directory
+// elsewhere ("insecure-target") that is NOT an ancestor of
+// "safe-parent" at all. Before resolving the leaf's own symlink, the
+// walk would only ever see "safe-parent" and its ancestors, and would
+// never reject this: an attacker who controls "insecure-target" could
+// freely replace the file the symlink points at.
+func TestCheckManagedPolicyParentPathResolvesLeafSymlink(t *testing.T) {
+	base := t.TempDir()
+	insecureTarget := filepath.Join(base, "insecure-target")
+	if err := os.Mkdir(insecureTarget, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	realPolicy := filepath.Join(insecureTarget, "real-policy.yaml")
+	if err := os.WriteFile(realPolicy, []byte("version: 1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(insecureTarget, 0o777); err != nil {
+		t.Fatal(err)
+	}
+
+	safeParent := filepath.Join(base, "safe-parent")
+	if err := os.Mkdir(safeParent, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	policyPath := filepath.Join(safeParent, "policy.yaml")
+	if err := os.Symlink(realPolicy, policyPath); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := checkManagedPolicyParentPath(policyPath); err == nil || !strings.Contains(err.Error(), "world-writable") {
+		t.Fatalf("checkManagedPolicyParentPath(%q) = %v, want a world-writable error for the symlink's real target directory", policyPath, err)
+	}
+}
+
 // TestCheckManagedPolicyParentPathRedactsHomeDirectory checks that an
 // error from checkManagedPolicyParentPath never embeds the running
 // user's home directory, the same way every other diagnostic in this
