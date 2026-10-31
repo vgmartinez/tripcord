@@ -43,7 +43,9 @@ title: "VS Code task that runs when the folder opens"
 severity: high                       # low | medium | high | critical
 harness: [vscode, cursor, windsurf]
 files: [".vscode/tasks.json"]        # repo-relative or ~/ globs; ** is allowed
-when: task.runOptions.runOn == "folderOpen"
+when: >-
+  has(task.runOptions) && has(task.runOptions.runOn) &&
+    task.runOptions.runOn == "folderOpen"
 fix: "Remove runOn: folderOpen or move the task to an explicit script"
 refs:
   - https://workos.com/blog/npm-worm-coding-agent-config-credentials
@@ -61,16 +63,30 @@ reused.
 - `config`: the config item (`id`, `harness`, `scope`, `path`, `sha256`, `kind`).
 - `payload`: the item's parsed content.
 - `task`: the same as `payload` when `config.kind == "task"`, otherwise empty.
-- `event`: a `tripcord.event/v1` event, for event rules.
+- `event`: a `tripcord.event/v1` event, for event rules. Every
+  non-list event field is present; omitted strings are `""`.
 
-A missing key is false, so `task.runOptions.runOn == "folderOpen"` is
-false for a task without `runOptions`. Use `has()` to test presence.
+Reading a field that is missing makes the whole expression false, not
+an error. That fails open for negations and deny rules:
+`!(payload.tools.size() > 0)` would be false for a server with no
+`tools`. So the loader rejects any read below `payload`, `task`, a
+comprehension variable (`x` in `payload.servers.exists(x, ...)`), or an
+event field outside the schema, unless a `has()` test (or `"key" in x`)
+proves it present first: on the left of `&&`, negated on the left of
+`||`, or in the condition of `?:`. Guard every level:
+`has(task.runOptions) && has(task.runOptions.runOn) && ...`. Index
+only with constant string keys; use `exists()` or `all()` for lists.
+
 A match cites the config file by id. When the payload has a stable
 entry name, that name is the evidence key: `label` for a task, `name`
 for an MCP server, and `matcher|command` for a hook. Two entries in
 one file then get different fingerprints. Other kinds have no key.
 `matches()` uses RE2: no backreferences or lookaround. Each evaluation
-has a cost limit and a 10 ms timeout.
+has a cost limit and a timeout (10 ms in scans, 5 ms on the hook path),
+and a hook event's rules share a 15 ms budget with a 64 KiB input cap.
+The timeouts are cooperative: CEL checks them between steps, so one
+`matches()` over a large string finishes before it notices. The input
+caps bound that case.
 
 ### Rule ids
 
@@ -107,14 +123,22 @@ make test-rule ID=TC-CFG-002
 
 ## Policy
 
-`.tripcord/policy.yaml` is the repo policy. `.tripcord/policy.local.yaml`
-is the per-checkout layer and is not committed. `tripcord init`, when
-it lands, must add `.tripcord/policy.local.yaml` to the `.gitignore` it
-writes.
+The org policy comes from sources the repository does not control: the
+managed file (`/etc/tripcord/policy.yaml` on Linux,
+`/Library/Application Support/Tripcord/policy.yaml` on macOS,
+`%ProgramData%\Tripcord\policy.yaml` on Windows) and any file passed
+explicitly, as the `--org-policy` flag or the GitHub Action input will.
+`.tripcord/policy.yaml` is the repo policy. Its `extends` adds layers
+after the org layer; it cannot replace or skip it.
+`.tripcord/policy.local.yaml` is the per-checkout layer and is not
+committed. `tripcord init`, when it lands, must add
+`.tripcord/policy.local.yaml` to the `.gitignore` it writes.
 
 `locked` can freeze `mode`, `rules`, and `exceptions`. A locked rule
 stays enabled even if a later `rules.include` leaves it out, and a
-later layer cannot add an exception for it.
+later layer cannot add an exception for it, pin its pack below the
+version in effect at the lock, or remove a harness the rule covers
+from `harnesses`.
 
 ## Dependencies and licenses
 

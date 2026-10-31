@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/vgmartinez/tripcord/internal/rules"
 )
@@ -43,22 +44,47 @@ func (d DirResolver) ResolvePolicy(ref rules.PackRef) (string, error) {
 	return filepath.Join(d.Root, filepath.FromSlash(ref.Name)+"@"+ref.Version, PackPolicyFile), nil
 }
 
+// ManagedPolicyPath is the machine-wide org policy for goos: a path an
+// administrator controls and a repository does not. On Windows the
+// directory comes from %ProgramData%.
+func ManagedPolicyPath(goos string) string {
+	switch goos {
+	case "windows":
+		dir := os.Getenv("ProgramData")
+		if dir == "" {
+			dir = `C:\ProgramData`
+		}
+		return dir + `\Tripcord\policy.yaml`
+	case "darwin":
+		return "/Library/Application Support/Tripcord/policy.yaml"
+	default:
+		return "/etc/tripcord/policy.yaml"
+	}
+}
+
 // Options configures Load.
 type Options struct {
 	// RepoRoot holds .tripcord/policy.yaml and .tripcord/policy.local.yaml.
 	// Both are optional.
 	RepoRoot string
-	Env      *rules.Env
+	// ManagedPolicy is the managed org policy file. Empty means
+	// ManagedPolicyPath(runtime.GOOS). It is optional: when the file
+	// does not exist there is no managed layer.
+	ManagedPolicy string
+	// OrgPolicy lists org policy files given explicitly, by the
+	// --org-policy flag or the GitHub Action input. Each must exist.
+	// They merge after the managed policy.
+	OrgPolicy []string
+	Env       *rules.Env
 	// Catalog may be nil; see Merge.
 	Catalog RuleCatalog
 	// Resolver resolves pack references in extends. Nil rejects them.
 	Resolver Resolver
 }
 
-// Load reads the repo and local policy files, resolves extends, and
-// merges the layers: org (everything reached through extends from the
-// repo file), then repo, then local. Errors are *Error; invalid policy
-// maps to exit code 3.
+// Load reads the org, repo, and local policy files, resolves extends,
+// and merges the layers. Errors are *Error; invalid policy maps to exit
+// code 3.
 func Load(opts Options) (*Effective, error) {
 	layers, err := LoadLayers(opts)
 	if err != nil {
@@ -67,44 +93,90 @@ func Load(opts Options) (*Effective, error) {
 	return Merge(opts.Env, opts.Catalog, layers)
 }
 
-// LoadLayers returns the parsed layers in merge order.
+// LoadLayers returns the parsed layers in merge order:
+//
+//  1. org: the managed policy, then each OrgPolicy file, each preceded
+//     by what it extends. The repository controls none of these.
+//  2. extends: what the repo policy extends that the org layer did not
+//     already load. These come after the org layer, so they can add to
+//     it but neither replace nor skip it, and org locks bind them.
+//  3. repo, then local.
 func LoadLayers(opts Options) ([]Layer, error) {
-	var layers []Layer
-	repo := filepath.Join(opts.RepoRoot, filepath.FromSlash(RepoFile))
-	f, err := readFile(repo)
-	switch {
-	case errors.Is(err, fs.ErrNotExist):
-	case err != nil:
+	l := &loader{resolver: opts.Resolver, seen: map[string]bool{}}
+
+	managed := opts.ManagedPolicy
+	if managed == "" {
+		managed = ManagedPolicyPath(runtime.GOOS)
+	}
+	if err := l.root(managed, LayerOrg, false); err != nil {
 		return nil, err
-	default:
-		l := &loader{resolver: opts.Resolver, seen: map[string]bool{repo: true}, chain: []string{repo}}
-		if err := l.extends(repo, f, 0); err != nil {
+	}
+	for _, p := range opts.OrgPolicy {
+		if err := l.root(filepath.Clean(p), LayerOrg, true); err != nil {
 			return nil, err
 		}
-		layers = append(l.layers, Layer{Kind: LayerRepo, Source: repo, File: f})
+	}
+
+	repo := filepath.Join(opts.RepoRoot, filepath.FromSlash(RepoFile))
+	if err := l.root(repo, LayerRepo, false); err != nil {
+		return nil, err
 	}
 
 	local := filepath.Join(opts.RepoRoot, filepath.FromSlash(LocalFile))
-	f, err = readFile(local)
+	f, err := readFile(local)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
 	case err != nil:
 		return nil, err
 	default:
 		if len(f.Extends) > 0 {
-			return nil, &Error{Source: local, Err: errors.New("extends is only allowed in the repo policy and the files it extends")}
+			return nil, &Error{Source: local, Err: errors.New("extends is not allowed in the local policy")}
 		}
-		layers = append(layers, Layer{Kind: LayerLocal, Source: local, File: f})
+		l.layers = append(l.layers, Layer{Kind: LayerLocal, Source: local, File: f})
 	}
-	return layers, nil
+	return l.layers, nil
 }
 
 type loader struct {
 	resolver Resolver
-	seen     map[string]bool
-	// chain is the path of files from the repo policy to the current one.
+	// seen holds every file already loaded, across roots, so a file
+	// reached twice merges once, at its first position.
+	seen map[string]bool
+	// chain is the path of files from the current root to the current one.
 	chain  []string
 	layers []Layer
+	// kind is the layer kind of files reached through extends.
+	kind LayerKind
+}
+
+// root loads source and what it extends. A missing file is an error
+// only when required. Files the repo policy extends become
+// LayerExtends; files an org policy extends stay LayerOrg.
+func (l *loader) root(source string, kind LayerKind, required bool) error {
+	if l.seen[source] {
+		return nil
+	}
+	f, err := readFile(source)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		if required {
+			return &Error{Source: source, Err: errors.New("org policy does not exist")}
+		}
+		return nil
+	case err != nil:
+		return err
+	}
+	l.seen[source] = true
+	l.chain = []string{source}
+	l.kind = kind
+	if kind == LayerRepo {
+		l.kind = LayerExtends
+	}
+	if err := l.extends(source, f, 0); err != nil {
+		return err
+	}
+	l.layers = append(l.layers, Layer{Kind: kind, Source: source, File: f})
+	return nil
 }
 
 func (l *loader) onChain(target string) bool {
@@ -147,7 +219,7 @@ func (l *loader) extends(source string, f *File, depth int) error {
 		if err != nil {
 			return err
 		}
-		l.layers = append(l.layers, Layer{Kind: LayerOrg, Source: target, File: parent})
+		l.layers = append(l.layers, Layer{Kind: l.kind, Source: target, File: parent})
 	}
 	return nil
 }

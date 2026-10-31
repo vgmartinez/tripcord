@@ -14,16 +14,20 @@ import (
 )
 
 // LayerKind is where a policy layer comes from. Layers merge in the
-// order default, org, repo, local: later layers override earlier ones
-// except where an earlier layer locked a value.
+// order default, org, extends, repo, local: later layers override
+// earlier ones except where an earlier layer locked a value.
 type LayerKind string
 
 const (
 	LayerDefault LayerKind = "default"
-	// LayerOrg is every file reached through extends from the repo policy.
-	LayerOrg   LayerKind = "org"
-	LayerRepo  LayerKind = "repo"
-	LayerLocal LayerKind = "local"
+	// LayerOrg is the managed policy, the --org-policy files, and what
+	// they extend: sources the repository does not control.
+	LayerOrg LayerKind = "org"
+	// LayerExtends is what the repo policy extends. It merges after the
+	// org layer and cannot replace it.
+	LayerExtends LayerKind = "extends"
+	LayerRepo    LayerKind = "repo"
+	LayerLocal   LayerKind = "local"
 )
 
 // Origin records which layer and file set a value.
@@ -39,10 +43,12 @@ type Layer struct {
 	File   *File
 }
 
-// RuleCatalog supplies rule base severities for lock checks and rule
-// ids that custom rules must not reuse. *rules.Catalog implements it.
+// RuleCatalog supplies the rules that lock checks need (base severity,
+// pack, harnesses) and the ids that custom rules must not reuse.
+// *rules.Catalog implements it.
 type RuleCatalog interface {
 	Rule(id string) (*rules.Rule, bool)
+	Rules() []*rules.Rule
 }
 
 // Exception is a validated exceptions entry.
@@ -89,6 +95,26 @@ type ModeLock struct {
 	Origin Origin
 }
 
+// PackFloor is the lowest version a later layer may pin for a pack.
+// locked.rules and locked.exceptions set it to the version in effect
+// when they were declared: the pinned version, or the version of the
+// catalog rules the lock covers. A pin below it would swap the locked
+// rules for older ones.
+type PackFloor struct {
+	Version string
+	Origin  Origin
+}
+
+// HarnessLock keeps a harness in the harnesses list. locked.rules and
+// locked.exceptions create one for each listed harness that a locked
+// rule covers, or for every listed harness when the catalog knows no
+// rule the lock matches. Dropping the harness would exempt the locked
+// rules on it.
+type HarnessLock struct {
+	Harness model.Harness
+	Origin  Origin
+}
+
 // Effective is the merged policy. Provenance maps a value path to the
 // layer that set it. Keys are "mode", "pack.<name>", "harnesses",
 // "rules.include", "rules.severity_overrides.<id>",
@@ -112,6 +138,8 @@ type Effective struct {
 	ModeLock          *ModeLock
 	RuleLocks         []RuleLock
 	ExemptionLocks    []ExemptionLock
+	PackFloors        map[string]PackFloor
+	HarnessLocks      []HarnessLock
 	Provenance        map[string]Origin
 	Layers            []Origin
 }
@@ -131,6 +159,7 @@ func defaults() *Effective {
 		},
 		Include:           []string{"*"},
 		SeverityOverrides: map[string]model.Severity{},
+		PackFloors:        map[string]PackFloor{},
 		SecretStore:       SecretStoreFingerprintOnly,
 		Egress:            EgressNone,
 		Redact:            true,
@@ -173,6 +202,10 @@ func (e *Effective) apply(env *rules.Env, catalog RuleCatalog, l Layer, customID
 	}
 	for _, p := range f.Pack {
 		ref, _ := rules.ParsePackRef(p)
+		if fl, ok := e.PackFloors[ref.Name]; ok && rules.CompareVersions(ref.Version, fl.Version) < 0 {
+			errs = append(errs, fmt.Errorf("pack %s: below %s@%s, locked by %s", ref, ref.Name, fl.Version, fl.Origin.Source))
+			continue
+		}
 		i := slices.IndexFunc(e.Packs, func(r rules.PackRef) bool { return r.Name == ref.Name })
 		if i >= 0 {
 			e.Packs[i] = ref
@@ -182,11 +215,22 @@ func (e *Effective) apply(env *rules.Env, catalog RuleCatalog, l Layer, customID
 		e.Provenance["pack."+ref.Name] = o
 	}
 	if f.Harnesses != nil {
-		e.Harnesses = make([]model.Harness, len(f.Harnesses))
+		next := make([]model.Harness, len(f.Harnesses))
 		for i, h := range f.Harnesses {
-			e.Harnesses[i] = model.Harness(h)
+			next[i] = model.Harness(h)
 		}
-		e.Provenance["harnesses"] = o
+		var dropped []error
+		for _, lock := range e.HarnessLocks {
+			if !slices.Contains(next, lock.Harness) {
+				dropped = append(dropped, fmt.Errorf("harnesses: %s cannot be removed; rules locked by %s cover it", lock.Harness, lock.Origin.Source))
+			}
+		}
+		if dropped != nil {
+			errs = append(errs, dropped...)
+		} else {
+			e.Harnesses = next
+			e.Provenance["harnesses"] = o
+		}
 	}
 	if f.Rules.Include != nil {
 		e.Include = slices.Clone(f.Rules.Include)
@@ -276,8 +320,44 @@ func (e *Effective) apply(env *rules.Env, catalog RuleCatalog, l Layer, customID
 			e.ExemptionLocks = append(e.ExemptionLocks, ExemptionLock{Pattern: p, Origin: o})
 			e.Provenance["locked.exceptions["+p+"]"] = o
 		}
+		e.lockCoverage(catalog, slices.Concat(lk.Rules, lk.Exceptions), o)
 	}
 	return errors.Join(errs...)
+}
+
+// lockCoverage records the pack floors and harness locks for the rule
+// patterns a layer locked, from the packs and harnesses then in effect.
+func (e *Effective) lockCoverage(catalog RuleCatalog, patterns []string, o Origin) {
+	if len(patterns) == 0 {
+		return
+	}
+	var locked []*rules.Rule
+	if catalog != nil {
+		for _, r := range catalog.Rules() {
+			if slices.ContainsFunc(patterns, func(p string) bool { return matchID(p, r.ID) }) {
+				locked = append(locked, r)
+			}
+		}
+	}
+	// A pinned version wins over the catalog's: the lock covers the
+	// rules the pin selects.
+	floors := slices.Clone(e.Packs)
+	for _, r := range locked {
+		if r.Pack.Name != "" && !slices.ContainsFunc(floors, func(p rules.PackRef) bool { return p.Name == r.Pack.Name }) {
+			floors = append(floors, r.Pack)
+		}
+	}
+	for _, ref := range floors {
+		if fl, ok := e.PackFloors[ref.Name]; !ok || rules.CompareVersions(ref.Version, fl.Version) > 0 {
+			e.PackFloors[ref.Name] = PackFloor{Version: ref.Version, Origin: o}
+		}
+	}
+	for _, h := range e.Harnesses {
+		covered := locked == nil || slices.ContainsFunc(locked, func(r *rules.Rule) bool { return slices.Contains(r.Harness, h) })
+		if covered && !slices.ContainsFunc(e.HarnessLocks, func(l HarnessLock) bool { return l.Harness == h }) {
+			e.HarnessLocks = append(e.HarnessLocks, HarnessLock{Harness: h, Origin: o})
+		}
+	}
 }
 
 // checkSeverityLock rejects lowering a locked rule below the severity
@@ -374,16 +454,39 @@ func (e *Effective) ExemptionLocked(id string) bool {
 	return ok
 }
 
-// Enabled reports whether rule id runs. rules.include is the allowlist.
-// A rule an earlier layer locked still runs when a later include leaves
-// it out, so a repo cannot exempt itself by narrowing the allowlist.
-func (e *Effective) Enabled(id string) bool {
+// Selected reports whether rule id is selected, whatever the harness.
+// rules.include is the allowlist. A rule an earlier layer locked stays
+// selected when a later include leaves it out, so a repo cannot exempt
+// itself by narrowing the allowlist.
+func (e *Effective) Selected(id string) bool {
 	for _, p := range e.Include {
 		if matchID(p, id) {
 			return true
 		}
 	}
 	return e.ExemptionLocked(id)
+}
+
+// HarnessEnabled reports whether items of harness h are scanned. The
+// harnesses list names products only, so surfaces such as vscode are
+// always scanned.
+func (e *Effective) HarnessEnabled(h model.Harness) bool {
+	return !h.IsProduct() || slices.Contains(e.Harnesses, h)
+}
+
+// Enabled reports whether rule id runs on items of harness h: the rule
+// is selected and the harness is enabled. The rule's own harness list
+// and file globs are checked by the engine.
+func (e *Effective) Enabled(id string, h model.Harness) bool {
+	return e.Selected(id) && e.HarnessEnabled(h)
+}
+
+// RuleFilter is Enabled as an engine filter, so the engine evaluates
+// exactly the rules Enabled reports.
+func (e *Effective) RuleFilter() rules.Filter {
+	return func(r *rules.Rule, item model.ConfigItem) bool {
+		return e.Enabled(r.ID, item.Harness)
+	}
 }
 
 // Severity returns the override for id, or base.
