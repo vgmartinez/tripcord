@@ -81,6 +81,9 @@ jobs:
       - name: Fuzz policy parser
         run: go test ./internal/policy -run '^$' -fuzz '^FuzzParse$' -fuzztime 30s
 
+      - name: Fuzz Claude config parser
+        run: go test ./internal/adapters/claude -run '^$' -fuzz '^FuzzParseConfig$' -fuzztime 30s
+
   licenses:
     name: dependency licenses (${{ matrix.goos }})
     runs-on: ubuntu-latest

@@ -13,6 +13,11 @@ depends on the surface: scans fail on high, and the hook warns.
 [scan.md](scan.md) documents `tripcord scan`, its static-only behavior,
 formats, flags, policy interaction, examples, and exit codes.
 
+## Adapters
+
+[adapters/claude.md](adapters/claude.md) documents the Claude Code
+configuration adapter and its scope boundaries.
+
 ## Finding fingerprints
 
 [fingerprint.md](fingerprint.md) defines the canonical finding fingerprint.
