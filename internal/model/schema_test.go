@@ -158,6 +158,42 @@ func TestSchemaRejectsInvalidDocuments(t *testing.T) {
 	location["scope"] = "global"
 	expectSchemaError(t, idx, schemaIDFinding, finding, "not in the enum")
 
+	for _, path := range []string{
+		"/work/repo/.vscode/tasks.json",
+		"C:/Users/runner/x.json",
+		`C:\Users\x`,
+		"../../etc/passwd",
+	} {
+		finding = mustObject(t, readTestdata(t, "finding.json"))
+		location = finding["location"].(map[string]any)
+		delete(location, "scope")
+		location["path"] = path
+		expectSchemaError(t, idx, schemaIDFinding, finding, "value matched not")
+
+		finding = mustObject(t, readTestdata(t, "finding.json"))
+		location = finding["location"].(map[string]any)
+		location["scope"] = "repo"
+		location["path"] = path
+		expectSchemaError(t, idx, schemaIDFinding, finding, "value matched not")
+	}
+
+	finding = mustObject(t, readTestdata(t, "finding.json"))
+	location = finding["location"].(map[string]any)
+	location["scope"] = "repo"
+	location["path"] = ".vscode/tasks.json"
+	if raw, err := json.Marshal(finding); err != nil {
+		t.Fatal(err)
+	} else if err := idx.validate(schemaIDFinding, raw); err != nil {
+		t.Fatalf("repo-relative path: %v", err)
+	}
+	location["scope"] = "managed"
+	location["path"] = "/etc/cursor/hooks.json"
+	if raw, err := json.Marshal(finding); err != nil {
+		t.Fatal(err)
+	} else if err := idx.validate(schemaIDFinding, raw); err != nil {
+		t.Fatalf("managed absolute path: %v", err)
+	}
+
 	finding = mustObject(t, readTestdata(t, "finding.json"))
 	evidenceBoth := finding["evidence"].([]any)[0].(map[string]any)
 	evidenceBoth["config"] = map[string]any{"id": "claude:repo:.claude/settings.json"}

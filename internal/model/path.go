@@ -3,34 +3,44 @@ package model
 import (
 	"errors"
 	"fmt"
+	"path"
 	"regexp"
 	"strings"
+
+	"golang.org/x/text/unicode/norm"
 )
 
 var (
 	errPathEmpty       = errors.New("path: empty")
 	errPathNotRelative = errors.New("path: repo scope requires a repo-relative path")
-	errPathDotDot      = errors.New(`path: repo scope rejects a ".." segment`)
+	errPathDotDot      = errors.New(`path: rejects a ".." segment`)
 	errPathNotUserHome = errors.New("path: user scope requires a path rooted at ~/")
 	errPathNotAbsolute = errors.New("path: managed scope requires an absolute path")
 	errPathScope       = errors.New("path: unknown scope")
 )
 
 // windowsDriveLetter matches a leading Windows drive once "\" has already
-// been normalized to "/", such as "C:/" or "c:/".
-var windowsDriveLetter = regexp.MustCompile(`^[a-zA-Z]:/`)
+// been normalized to "/", such as "C:/" or "C:". A drive letter makes
+// the path absolute in every scope.
+var windowsDriveLetter = regexp.MustCompile(`^[a-zA-Z]:`)
 
 // normalizeScopedPath normalizes path and checks its shape against scope.
-// ConfigItem.ID and the fingerprint's location.path both call this, so a
-// path is validated and hashed the same way wherever it names a config
-// entry.
+// ConfigItem.ID, Finding.Validate, and the fingerprint's location.path
+// all call this, so a path is validated and hashed the same way wherever
+// it names a config entry.
 //
 // Normalization, in order:
 //
 //  1. Trim space.
-//  2. Replace "\" with "/".
-//  3. Collapse repeated "/" into one "/".
-//  4. Strip a trailing "/" unless the result is "/" or "~".
+//  2. Unicode NFC, so a decomposed and a composed spelling of the same
+//     path hash to one fingerprint. ASCII paths are unchanged.
+//  3. Replace "\" with "/".
+//  4. path.Clean, which removes "." segments (so "a/./b" is "a/b"),
+//     collapses repeated "/", and strips a trailing "/" other than the
+//     root. Clean also resolves a ".." that has a real parent segment
+//     ("a/../b" is "b"). A ".." that remains after Clean, including one
+//     that escapes the path ("../../etc/passwd"), is rejected in every
+//     scope.
 //  5. If the path is now a Windows drive path, case-fold it: lowercase
 //     the whole path, then uppercase just the drive letter. Windows
 //     paths are case-insensitive, so "C:\ProgramData\x" and
@@ -38,17 +48,14 @@ var windowsDriveLetter = regexp.MustCompile(`^[a-zA-Z]:/`)
 //     fingerprint location.path ("C:/programdata/x"); this project does
 //     not fold case anywhere else.
 //
-// Scope rules, checked after that normalization:
+// Scope rules, checked after that normalization. A drive-letter path is
+// absolute in every scope.
 //
 //   - Repo scope (and an empty scope, which defaults to repo) requires a
 //     repo-relative path: no leading "/", no leading "~", and no Windows
 //     drive letter. A machine-specific absolute path (such as
-//     /home/runner/work/... from a CI checkout, or C:\Users\...) does not
-//     name a stable config entry, so it is rejected. A leading "./" is
-//     stripped (repeatedly); a ".." path segment anywhere is rejected,
-//     since a repo-relative path must stay inside the repo it names and
-//     must not depend on where the scanner's working directory happens
-//     to sit.
+//     /home/runner/work/... from a CI checkout, C:\Users\..., or a UNC
+//     path) does not name a stable config entry, so it is rejected.
 //   - User scope requires a path rooted at the user's home: it must be
 //     "~" or start with "~/".
 //   - Managed scope requires an absolute path: a leading "/", or a
@@ -58,47 +65,51 @@ var windowsDriveLetter = regexp.MustCompile(`^[a-zA-Z]:/`)
 //     of the repo-relative and "~/"-rooted shapes above, keeps the three
 //     scopes' path shapes mutually exclusive: the same literal path text
 //     can no longer name a repo-scope and a managed-scope entry at once.
-func normalizeScopedPath(scope Scope, path string) (string, error) {
-	path = strings.TrimSpace(path)
-	if path == "" {
+func normalizeScopedPath(scope Scope, p string) (string, error) {
+	p = strings.TrimSpace(p)
+	if p == "" {
 		return "", errPathEmpty
 	}
-	path = strings.ReplaceAll(path, `\`, "/")
-	for strings.Contains(path, "//") {
-		path = strings.ReplaceAll(path, "//", "/")
+	p = norm.NFC.String(p)
+	p = strings.ReplaceAll(p, `\`, "/")
+	p = path.Clean(p)
+	if windowsDriveLetter.MatchString(p) {
+		p = canonicalWindowsDrivePath(p)
 	}
-	if len(path) > 1 {
-		path = strings.TrimRight(path, "/")
-	}
-	if windowsDriveLetter.MatchString(path) {
-		path = canonicalWindowsDrivePath(path)
+	if pathHasDotDot(p) {
+		return "", fmt.Errorf("%w: %q", errPathDotDot, p)
 	}
 
 	switch scope {
 	case ScopeUser:
-		if path != "~" && !strings.HasPrefix(path, "~/") {
-			return "", fmt.Errorf("%w: %q", errPathNotUserHome, path)
+		if p != "~" && !strings.HasPrefix(p, "~/") {
+			return "", fmt.Errorf("%w: %q", errPathNotUserHome, p)
 		}
 	case ScopeManaged:
-		if !strings.HasPrefix(path, "/") && !windowsDriveLetter.MatchString(path) {
-			return "", fmt.Errorf("%w: %q", errPathNotAbsolute, path)
+		if !pathIsAbsolute(p) {
+			return "", fmt.Errorf("%w: %q", errPathNotAbsolute, p)
 		}
 	case ScopeRepo, "":
-		if strings.HasPrefix(path, "/") || strings.HasPrefix(path, "~") || windowsDriveLetter.MatchString(path) {
-			return "", fmt.Errorf("%w: %q", errPathNotRelative, path)
-		}
-		for strings.HasPrefix(path, "./") {
-			path = strings.TrimPrefix(path, "./")
-		}
-		for _, segment := range strings.Split(path, "/") {
-			if segment == ".." {
-				return "", fmt.Errorf("%w: %q", errPathDotDot, path)
-			}
+		if pathIsAbsolute(p) || strings.HasPrefix(p, "~") {
+			return "", fmt.Errorf("%w: %q", errPathNotRelative, p)
 		}
 	default:
 		return "", fmt.Errorf("%w: %q", errPathScope, scope)
 	}
-	return path, nil
+	return p, nil
+}
+
+func pathIsAbsolute(p string) bool {
+	return strings.HasPrefix(p, "/") || windowsDriveLetter.MatchString(p)
+}
+
+func pathHasDotDot(p string) bool {
+	for _, segment := range strings.Split(p, "/") {
+		if segment == ".." {
+			return true
+		}
+	}
+	return false
 }
 
 // canonicalWindowsDrivePath case-folds an already slash-normalized

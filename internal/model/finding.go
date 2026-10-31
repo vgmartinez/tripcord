@@ -75,8 +75,13 @@ func (f Finding) MarshalJSON() ([]byte, error) {
 	return json.Marshal(alias(f))
 }
 
-// Validate checks closed vocabularies and the fingerprint shape.
-// It does not recompute the fingerprint.
+// Validate checks closed vocabularies, location paths, config ids, and
+// the stored fingerprint. Every fingerprint input is on the finding:
+// the rule, the location (harness, session, scope, path), and each
+// evidence excerpt and config id/key. Line and event id are on the
+// document too, and Fingerprint ignores them, so they do not have to be
+// supplied from anywhere else. Validate recomputes Fingerprint and
+// requires the stored value to match.
 func (f Finding) Validate() error {
 	if f.Schema != SchemaFinding {
 		return fmt.Errorf("finding: schema %q", f.Schema)
@@ -99,8 +104,13 @@ func (f Finding) Validate() error {
 		if hasEvent == hasConfig {
 			return fmt.Errorf("finding: evidence %d: exactly one of event or config is required", i)
 		}
-		if hasConfig && strings.TrimSpace(ev.Config.ID) == "" {
-			return fmt.Errorf("finding: evidence %d: config id is required", i)
+		if hasConfig {
+			if strings.TrimSpace(ev.Config.ID) == "" {
+				return fmt.Errorf("finding: evidence %d: config id is required", i)
+			}
+			if _, _, _, err := parseConfigID(ev.Config.ID); err != nil {
+				return fmt.Errorf("finding: evidence %d: %w", i, err)
+			}
 		}
 	}
 	if !f.Location.Harness.Valid() {
@@ -108,6 +118,11 @@ func (f Finding) Validate() error {
 	}
 	if f.Location.Scope != "" && !f.Location.Scope.Valid() {
 		return fmt.Errorf("finding: location scope %q: unknown", f.Location.Scope)
+	}
+	if f.Location.Path != "" {
+		if _, err := normalizeScopedPath(f.Location.Scope, f.Location.Path); err != nil {
+			return fmt.Errorf("finding: location %w", err)
+		}
 	}
 	if f.Location.Line != nil && *f.Location.Line < 1 {
 		return fmt.Errorf("finding: location line %d", *f.Location.Line)
@@ -119,6 +134,13 @@ func (f Finding) Validate() error {
 	}
 	if !fingerprintPattern.MatchString(f.Fingerprint) {
 		return fmt.Errorf("finding: fingerprint %q", f.Fingerprint)
+	}
+	got, err := Fingerprint(f.Rule, f.Location, f.Evidence)
+	if err != nil {
+		return fmt.Errorf("finding: fingerprint: %w", err)
+	}
+	if got != f.Fingerprint {
+		return fmt.Errorf("finding: fingerprint %q, computed %q", f.Fingerprint, got)
 	}
 	return nil
 }

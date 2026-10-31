@@ -100,25 +100,29 @@ checks its shape against the config scope (`repo`, `user`, or
 path both call it, so a path is validated the same way wherever it
 names a config entry. An empty scope defaults to repo scope.
 
-Normalization, in order: trim space; replace `\` with `/`; collapse
-repeated `/` into one `/`; strip a trailing `/` unless the result is `/`
-or `~`; then, if the result is a Windows drive path, case-fold it (see
-below).
+Normalization, in order: trim space; Unicode NFC (a decomposed and a
+composed spelling of the same path are one path; ASCII is unchanged);
+replace `\` with `/`; `path.Clean`, which removes `.` segments
+(`a/./b` becomes `a/b`), collapses repeated `/`, and resolves a `..`
+that has a parent segment (`a/../b` becomes `b`); reject any `..` that
+remains, in every scope; then, if the result is a Windows drive path,
+case-fold it (see below).
 
 Windows paths are case-insensitive. A Windows drive path — one matching
-`^[a-zA-Z]:/` once `\` has become `/` — is lowercased in full and then
-has just its drive letter uppercased, so `C:\ProgramData\x` and
-`c:/programdata/x` both normalize to the same `C:/programdata/x`. This
-project does not fold case anywhere else; a POSIX absolute path such as
-`/etc/Cursor/Hooks.json` is left exactly as given.
+`^[a-zA-Z]:` once `\` has become `/` — is absolute in every scope. It
+is lowercased in full and then has just its drive letter uppercased, so
+`C:\ProgramData\x` and `c:/programdata/x` both normalize to the same
+`C:/programdata/x`. This project does not fold case anywhere else; a
+POSIX absolute path such as `/etc/Cursor/Hooks.json` is left exactly as
+given.
 
 Scope rules, checked after that normalization:
 
 | Scope | Rule | Rejected example |
 | --- | --- | --- |
-| `repo` (default) | Must be repo-relative: no leading `/`, no leading `~`, no Windows drive letter. A leading `./` is stripped (repeatedly); a `..` path segment anywhere is rejected. | `/home/runner/work/acme/acme/.vscode/tasks.json`, `C:\Users\runner\acme\.vscode\tasks.json`, `~/.claude/settings.json`, `../etc/passwd`, `a/../b` |
-| `user` | Must be rooted at the user's home: exactly `~`, or starting with `~/`. | `/home/dev/.claude/settings.json`, `.claude/settings.json` |
-| `managed` | Must be absolute: a leading `/`, or a Windows drive letter. | `cursor/hooks.json`, `~/cursor/hooks.json` |
+| `repo` (default) | Must be repo-relative: no leading `/`, no leading `~`, no Windows drive letter, and no `..` that `path.Clean` could not resolve. | `/work/repo/.vscode/tasks.json`, `C:/Users/runner/x.json`, `C:\Users\x`, `\\server\share\hooks.json`, `~/.claude/settings.json`, `../../etc/passwd` |
+| `user` | Must be rooted at the user's home: exactly `~`, or starting with `~/`. A remaining `..` is rejected. | `/home/dev/.claude/settings.json`, `.claude/settings.json`, `~/../../x` |
+| `managed` | Must be absolute: a leading `/`, or a Windows drive letter. A remaining `..` is rejected. | `cursor/hooks.json`, `~/cursor/hooks.json`, `../etc/cursor/hooks.json` |
 
 Requiring an absolute shape for managed scope, on top of the
 repo-relative and `~/`-rooted shapes for the other two, keeps the three
@@ -150,7 +154,9 @@ citation without an excerpt is valid and common (see "Input" above).
 `Evidence.Event` is never part of an item. Items are sorted by
 `(config.id, config.key, excerpt)` as raw strings (byte order), with a
 missing config sorting as empty id and empty key, for a deterministic
-order; duplicates are kept. The array is `[]` when nothing remains,
+order. Identical items are then dropped, so N repeats of the same
+normalized excerpt and config citation produce the same preimage as
+one. The array is `[]` when nothing remains,
 never null. Because the sort key is the content-derived `key` and not
 the entry's position in the file, listing the same entries in a
 different order produces the same preimage.
@@ -163,6 +169,14 @@ SHA-256 over the canonical UTF-8 bytes. Lowercase hex. The fingerprint is
 `^tcf_[0-9a-f]{16}$`. `Fingerprint` encodes the first 8 bytes of the
 digest, which is exactly those 16 digits.
 
+`Finding.Validate` recomputes `Fingerprint` and requires the stored
+value to match. That is possible because every preimage input is on the
+finding: the rule, the location (harness, session, scope, and path),
+and each evidence excerpt and config id/key. `location.line` and
+`evidence[].event` are also on the document, and they are not inputs,
+so omitting them from the hash does not leave a gap that Validate would
+have to fill from somewhere else.
+
 ## Config item ids
 
 `ConfigItem.ID()` is a separate, non-cryptographic id used by
@@ -171,7 +185,11 @@ digest, which is exactly those 16 digits.
 the same config file (for example, `.claude/settings.json` in the
 repo) keeps the same id across edits to its content. Unlike
 `Evidence.Event`, it IS part of the fingerprint preimage; see "Input"
-above for why that is safe.
+above for why that is safe. `Finding.Validate` parses
+`Evidence.Config.ID` back into those three parts and checks each one:
+a known harness, a known scope, and a path that is already
+`normalizeScopedPath`'s result for that scope. An id that is not that
+shape, such as `/abs/../junk`, is rejected.
 
 `Evidence.Config.Key` is not part of that id. The id names the file.
 The key names one entry inside it, derived from the entry's content
@@ -186,7 +204,9 @@ command that recurs across a session — the same shell command run
 twice, or a hook that fires on every matching tool call — produces
 evidence with the same normalized excerpt both times, so those
 repeated occurrences hash to the same fingerprint rather than minting a
-new one per repetition. A store can dedup on that fingerprint, both
+new one per repetition. Identical items are also removed from the
+preimage, so listing that command N times produces the same canonical
+document as listing it once. A store can dedup on that fingerprint, both
 within one scan and across a reimport of the same transcript.
 
 This holds for a config citation too, as long as the cited config id,

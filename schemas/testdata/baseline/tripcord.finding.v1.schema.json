@@ -123,6 +123,20 @@
           "type": "integer",
           "minimum": 1
         }
+      },
+      "if": {
+        "properties": {
+          "scope": { "enum": ["repo"] }
+        }
+      },
+      "then": {
+        "properties": {
+          "path": {
+            "not": {
+              "pattern": "(^/|^~|^[A-Za-z]:)|((^|[/\\\\])\\.\\.([/\\\\]|$))"
+            }
+          }
+        }
       }
     },
     "refs": {

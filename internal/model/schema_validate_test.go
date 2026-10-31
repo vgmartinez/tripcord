@@ -20,13 +20,16 @@ import (
 // It covers the keyword subset those files use: type, const, enum,
 // properties, required, additionalProperties (boolean only), items,
 // minLength, minimum, maximum, minItems, pattern, format (date-time
-// only), $ref, and oneOf. oneOf runs the full check against each
-// branch and requires exactly one to succeed; a branch is any schema
-// this validator otherwise supports (for example {"required":[...]}),
-// not a distinct oneOf-only syntax. It does NOT implement the rest of
-// 2020-12: no anyOf/allOf/not, no $dynamicRef or $defs, no
-// patternProperties, dependentRequired, unevaluatedProperties,
-// multipleOf, uniqueItems, contains, or other formats. A schema file
+// only), $ref, oneOf, if/then, and not. oneOf runs the full check
+// against each branch and requires exactly one to succeed; a branch is
+// any schema this validator otherwise supports (for example
+// {"required":[...]}), not a distinct oneOf-only syntax. if/then applies
+// then only when the instance validates against if; else is not
+// supported. not succeeds when the instance fails the subschema. It
+// does NOT implement the rest of 2020-12: no anyOf/allOf, no
+// $dynamicRef or $defs, no patternProperties, dependentRequired,
+// unevaluatedProperties, multipleOf, uniqueItems, contains, or other
+// formats. A schema file
 // that uses an unsupported keyword fails to load (see
 // auditSchemaNode), so a schema change cannot silently go unchecked by
 // this validator; it either stays inside this subset or the loader
@@ -201,6 +204,12 @@ func (idx *schemaIndex) check(schema map[string]any, instance any, path string, 
 	if err := idx.checkOneOf(schema, instance, path, depth); err != nil {
 		return err
 	}
+	if err := idx.checkIfThen(schema, instance, path, depth); err != nil {
+		return err
+	}
+	if err := idx.checkNot(schema, instance, path, depth); err != nil {
+		return err
+	}
 	switch value := instance.(type) {
 	case map[string]any:
 		return idx.checkObject(schema, value, path, depth)
@@ -244,6 +253,51 @@ func (idx *schemaIndex) checkOneOf(schema map[string]any, instance any, path str
 	default:
 		return fmt.Errorf("%s: value matches more than one oneOf branch", path)
 	}
+}
+
+// checkIfThen applies schema.then when the instance validates against
+// schema.if. A failing if means the condition does not hold, which is
+// not an error. else is not supported.
+func (idx *schemaIndex) checkIfThen(schema map[string]any, instance any, path string, depth int) error {
+	rawIf, hasIf := schema["if"]
+	rawThen, hasThen := schema["then"]
+	if !hasIf && !hasThen {
+		return nil
+	}
+	if !hasIf {
+		return fmt.Errorf("%s: then without if", path)
+	}
+	ifSchema, ok := rawIf.(map[string]any)
+	if !ok {
+		return fmt.Errorf("%s: if is not an object", path)
+	}
+	if err := idx.check(ifSchema, instance, path, depth+1); err != nil {
+		return nil
+	}
+	if !hasThen {
+		return nil
+	}
+	thenSchema, ok := rawThen.(map[string]any)
+	if !ok {
+		return fmt.Errorf("%s: then is not an object", path)
+	}
+	return idx.check(thenSchema, instance, path+".then", depth+1)
+}
+
+// checkNot requires the instance to fail schema.not.
+func (idx *schemaIndex) checkNot(schema map[string]any, instance any, path string, depth int) error {
+	raw, ok := schema["not"]
+	if !ok {
+		return nil
+	}
+	sub, ok := raw.(map[string]any)
+	if !ok {
+		return fmt.Errorf("%s: not is not an object", path)
+	}
+	if err := idx.check(sub, instance, path, depth+1); err != nil {
+		return nil
+	}
+	return fmt.Errorf("%s: value matched not", path)
 }
 
 func siblingConstraints(schema map[string]any) bool {
@@ -491,6 +545,9 @@ var schemaKeywords = map[string]struct{}{
 	"pattern":              {},
 	"format":               {},
 	"oneOf":                {},
+	"if":                   {},
+	"then":                 {},
+	"not":                  {},
 }
 
 func auditSchemaNode(schema map[string]any, path string) error {
@@ -553,6 +610,19 @@ func walkSchema(schema map[string]any, path string, fn func(map[string]any, stri
 			return fmt.Errorf("%s: items schema is not an object", path)
 		}
 		if err := walkSchema(child, path+".items", fn); err != nil {
+			return err
+		}
+	}
+	for _, key := range []string{"if", "then", "not"} {
+		raw, ok := schema[key]
+		if !ok {
+			continue
+		}
+		child, ok := raw.(map[string]any)
+		if !ok {
+			return fmt.Errorf("%s.%s: not an object", path, key)
+		}
+		if err := walkSchema(child, path+"."+key, fn); err != nil {
 			return err
 		}
 	}

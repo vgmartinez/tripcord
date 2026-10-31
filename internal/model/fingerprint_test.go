@@ -63,16 +63,18 @@ func TestFingerprintGoldens(t *testing.T) {
 			want:     "tcf_0877dad3c1549226",
 		},
 		{
-			name:    "duplicate evidence is kept",
+			// Identical normalized evidence collapses to one item, so N
+			// repeats of this command hash as the spec sample does.
+			name:    "duplicate evidence collapses to one",
 			rule:    "TC-SEC-018",
 			harness: HarnessClaude,
 			session: "00893aaf-19fa-41d2",
 			evidence: []Evidence{
 				{Event: "evt_01JD7Q2M9X", Excerpt: "cat /proc/$PPID/environ"},
-				{Event: "evt_01JD7Q2M9X", Excerpt: "cat /proc/$PPID/environ"},
+				{Event: "evt_09ZZZZZZZZ", Excerpt: "cat /proc/$PPID/environ"},
 			},
-			preimage: `{"v":1,"rule":"TC-SEC-018","location":{"harness":"claude","session":"00893aaf-19fa-41d2","scope":"repo"},"evidence":[{"excerpt":"cat /proc/$PPID/environ"},{"excerpt":"cat /proc/$PPID/environ"}]}`,
-			want:     "tcf_6c99ffc985c03010",
+			preimage: `{"v":1,"rule":"TC-SEC-018","location":{"harness":"claude","session":"00893aaf-19fa-41d2","scope":"repo"},"evidence":[{"excerpt":"cat /proc/$PPID/environ"}]}`,
+			want:     "tcf_c761c03b24e7b179",
 		},
 		{
 			name:    "user scope path",
@@ -478,7 +480,7 @@ func TestFingerprintRejectsBadPaths(t *testing.T) {
 		{"repo scope, windows drive", ScopeRepo, `C:\Users\runner\acme\.vscode\tasks.json`, errPathNotRelative},
 		{"repo scope, home-relative", ScopeRepo, "~/.claude/settings.json", errPathNotRelative},
 		{"repo scope, dotdot segment", ScopeRepo, "../etc/passwd", errPathDotDot},
-		{"repo scope, dotdot mid path", ScopeRepo, "a/../b", errPathDotDot},
+		{"repo scope, unresolved dotdot", ScopeRepo, "foo/../../etc/passwd", errPathDotDot},
 		{"user scope, absolute (no tilde)", ScopeUser, "/home/dev/.claude/settings.json", errPathNotUserHome},
 		{"user scope, repo-relative", ScopeUser, ".claude/settings.json", errPathNotUserHome},
 		{"managed scope, repo-relative", ScopeManaged, "cursor/hooks.json", errPathNotAbsolute},

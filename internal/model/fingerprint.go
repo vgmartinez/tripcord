@@ -73,8 +73,9 @@ var (
 // optional on a config-only citation: a finding evidenced only by a
 // config id with no excerpt must not vanish from the hash the way an
 // all-whitespace excerpt does). Items are sorted by (id, key, excerpt)
-// as raw strings for a deterministic order; duplicates are kept. The
-// array is [] when nothing remains, never null.
+// as raw strings for a deterministic order. Identical items are then
+// dropped, so N repeats of the same normalized excerpt and config
+// citation hash as one. The array is [] when nothing remains, never null.
 //
 // Evidence.Event is NEVER hashed. Event ids are ULIDs minted at
 // ingest, so the same finding re-derived from a reimported transcript,
@@ -193,6 +194,9 @@ func fingerprintPreimage(rule string, loc Location, evidence []Evidence) ([]byte
 			return c
 		}
 		return cmp.Compare(a.Excerpt, b.Excerpt)
+	})
+	items = slices.CompactFunc(items, func(a, b fingerprintEvidence) bool {
+		return configID(a.Config) == configID(b.Config) && configKey(a.Config) == configKey(b.Config) && a.Excerpt == b.Excerpt
 	})
 
 	return canonicalJSON(fingerprintDocument{

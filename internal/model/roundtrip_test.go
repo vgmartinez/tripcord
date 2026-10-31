@@ -3,6 +3,7 @@ package model
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -330,6 +331,11 @@ func TestValidateRejectsClosedFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	finding.Location.Harness = SurfaceVSCode
+	fp, err := Fingerprint(finding.Rule, finding.Location, finding.Evidence)
+	if err != nil {
+		t.Fatal(err)
+	}
+	finding.Fingerprint = fp
 	if err := finding.Validate(); err != nil {
 		t.Fatal(err)
 	}
@@ -439,6 +445,11 @@ func TestEvidenceExactlyOneOfEventOrConfig(t *testing.T) {
 
 	configOnly := base()
 	configOnly.Evidence = []Evidence{{Config: &ConfigRef{ID: "claude:repo:.claude/settings.json", Key: "filesystem"}, Excerpt: "hooks.PreToolUse"}}
+	fp, err := Fingerprint(configOnly.Rule, configOnly.Location, configOnly.Evidence)
+	if err != nil {
+		t.Fatal(err)
+	}
+	configOnly.Fingerprint = fp
 	if err := configOnly.Validate(); err != nil {
 		t.Fatal(err)
 	}
@@ -467,6 +478,11 @@ func TestEvidenceExactlyOneOfEventOrConfig(t *testing.T) {
 
 	noExcerpt := base()
 	noExcerpt.Evidence = []Evidence{{Config: &ConfigRef{ID: "claude:repo:.claude/settings.json"}}}
+	fp, err = Fingerprint(noExcerpt.Rule, noExcerpt.Location, noExcerpt.Evidence)
+	if err != nil {
+		t.Fatal(err)
+	}
+	noExcerpt.Fingerprint = fp
 	if err := noExcerpt.Validate(); err != nil {
 		t.Fatalf("excerpt should be optional: %v", err)
 	}
@@ -491,6 +507,85 @@ func TestLocationScopeValidate(t *testing.T) {
 	finding.Location.Scope = "global"
 	if err := finding.Validate(); err == nil {
 		t.Fatal("global scope validated")
+	}
+}
+
+func TestFindingValidateLocationPath(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name  string
+		scope Scope
+		path  string
+		want  error
+	}{
+		{"repo absolute", ScopeRepo, "/work/repo/.vscode/tasks.json", errPathNotRelative},
+		{"empty scope absolute", "", "/work/repo/.vscode/tasks.json", errPathNotRelative},
+		{"repo drive forward slash", ScopeRepo, "C:/Users/runner/x.json", errPathNotRelative},
+		{"empty scope drive forward slash", "", "C:/Users/runner/x.json", errPathNotRelative},
+		{"repo drive backslash", ScopeRepo, `C:\Users\x`, errPathNotRelative},
+		{"empty scope drive backslash", "", `C:\Users\x`, errPathNotRelative},
+		{"repo dotdot", ScopeRepo, "../../etc/passwd", errPathDotDot},
+		{"empty scope dotdot", "", "../../etc/passwd", errPathDotDot},
+		{"repo relative", ScopeRepo, ".vscode/tasks.json", nil},
+		{"repo dot segment", ScopeRepo, "a/./b", nil},
+		{"user home", ScopeUser, "~/.claude/settings.json", nil},
+		{"user absolute", ScopeUser, "/home/dev/.claude/settings.json", errPathNotUserHome},
+		{"managed absolute", ScopeManaged, "/etc/cursor/hooks.json", nil},
+		{"managed drive", ScopeManaged, `C:\ProgramData\cursor\hooks.json`, nil},
+		{"managed relative", ScopeManaged, "cursor/hooks.json", errPathNotAbsolute},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var finding Finding
+			if err := json.Unmarshal(readTestdata(t, "finding.json"), &finding); err != nil {
+				t.Fatal(err)
+			}
+			finding.Location.Scope = tc.scope
+			finding.Location.Path = tc.path
+			if tc.want == nil {
+				fp, err := Fingerprint(finding.Rule, finding.Location, finding.Evidence)
+				if err != nil {
+					t.Fatal(err)
+				}
+				finding.Fingerprint = fp
+			}
+			err := finding.Validate()
+			if tc.want == nil {
+				if err != nil {
+					t.Fatal(err)
+				}
+				return
+			}
+			if !errors.Is(err, tc.want) {
+				t.Fatalf("Validate(%q) err = %v, want %v", tc.path, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestFindingValidateConfigID(t *testing.T) {
+	t.Parallel()
+	var finding Finding
+	if err := json.Unmarshal(readTestdata(t, "finding.json"), &finding); err != nil {
+		t.Fatal(err)
+	}
+	finding.Evidence = []Evidence{{Config: &ConfigRef{ID: "/abs/../junk"}}}
+	if err := finding.Validate(); err == nil {
+		t.Fatal("junk config id validated")
+	}
+	finding.Evidence = []Evidence{{Config: &ConfigRef{ID: "claude:repo:.claude/settings.json"}}}
+	fp, err := Fingerprint(finding.Rule, finding.Location, finding.Evidence)
+	if err != nil {
+		t.Fatal(err)
+	}
+	finding.Fingerprint = fp
+	if err := finding.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	finding.Fingerprint = "tcf_0000000000000000"
+	if err := finding.Validate(); err == nil {
+		t.Fatal("stored fingerprint did not have to match the computed one")
 	}
 }
 

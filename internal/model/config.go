@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"strings"
 )
 
 // Scope is where a config file lives.
@@ -49,7 +50,7 @@ var sha256Hex = regexp.MustCompile(`^[0-9a-f]{64}$`)
 // The spec describes the fields and does not publish a sample document,
 // so the JSON names are harness, scope, path, sha256, kind, and payload.
 // Path must match Scope: repo-relative for repo scope, rooted at "~/"
-// for user scope, and unrestricted for managed scope. See
+// for user scope, and absolute for managed scope. See
 // normalizeScopedPath.
 type ConfigItem struct {
 	Harness Harness         `json:"harness"`
@@ -122,6 +123,36 @@ func (c ConfigItem) ID() (string, error) {
 		return "", fmt.Errorf("config id: %w", err)
 	}
 	return string(c.Harness) + ":" + string(c.Scope) + ":" + path, nil
+}
+
+// parseConfigID splits id into harness, scope, and path. id is
+// "<harness>:<scope>:<normalized-path>", the form ConfigItem.ID returns.
+// The path may contain colons (a Windows drive), so only the first two
+// colons are separators. Each part is checked: harness and scope must be
+// known, and the path must already be normalizeScopedPath's result for
+// that scope.
+func parseConfigID(id string) (Harness, Scope, string, error) {
+	id = strings.TrimSpace(id)
+	parts := strings.SplitN(id, ":", 3)
+	if len(parts) != 3 || parts[0] == "" || parts[1] == "" || parts[2] == "" {
+		return "", "", "", fmt.Errorf("config id %q: want harness:scope:path", id)
+	}
+	h := Harness(parts[0])
+	if !h.Valid() {
+		return "", "", "", fmt.Errorf("config id: harness %q: unknown", parts[0])
+	}
+	scope := Scope(parts[1])
+	if !scope.Valid() {
+		return "", "", "", fmt.Errorf("config id: scope %q: unknown", parts[1])
+	}
+	normalized, err := normalizeScopedPath(scope, parts[2])
+	if err != nil {
+		return "", "", "", fmt.Errorf("config id: %w", err)
+	}
+	if normalized != parts[2] {
+		return "", "", "", fmt.Errorf("config id: path %q is not normalized", parts[2])
+	}
+	return h, scope, normalized, nil
 }
 
 // Validate checks the closed vocabularies and the sha256 shape.

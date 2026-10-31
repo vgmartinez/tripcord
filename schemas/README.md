@@ -72,11 +72,11 @@ Dropping a constraint such as `items` or `minLength` is treated as a
 relaxation and is allowed. Replacing `additionalProperties: false` with
 a schema is rejected, because that is not a plain relaxation.
 
-`oneOf` is compared byte-for-byte against the baseline: any change to
-it, including widening it with a new branch, is flagged as breaking.
-The differ does not reason about `oneOf` semantics the way it does for
-`enum` or a numeric bound; this is the conservative default for a
-keyword it does not specifically understand.
+`oneOf`, `if`, `then`, and `not` are compared byte-for-byte against the
+baseline: any change to them is flagged as breaking. The differ does
+not reason about their semantics the way it does for `enum` or a
+numeric bound; this is the conservative default for a keyword it does
+not specifically understand.
 
 ## Minimal required fields
 
@@ -107,4 +107,17 @@ enforces the same rule in Go, independently of the schema.
 The hand-written test validator
 (`internal/model/schema_validate_test.go`) supports `oneOf`: it runs the
 full check against each branch and requires exactly one to match. It
-does not support `anyOf`, `allOf`, or `not`.
+supports `if`/`then` (apply `then` only when `if` matches; no `else`)
+and `not`. It does not support `anyOf` or `allOf`.
+
+## Repo paths
+
+On `tripcord.finding/v1`'s `location`, `if`/`then` applies when `scope`
+is absent or `repo` (a missing `scope` validates the `if` schema,
+because `properties` does not require `scope`, and `scope: "repo"`
+matches its enum; `user` and `managed` do not). `then` rejects a `path`
+that starts with `/` or `~` or a drive letter, or that contains a `..`
+segment. `Finding.Validate` applies the same shape rules through
+`normalizeScopedPath`, which also runs `path.Clean` first, so a `..`
+that Clean can resolve (such as `a/../b` becoming `b`) passes Go and
+fails this schema check. The schema looks at the raw spelling.

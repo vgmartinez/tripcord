@@ -25,6 +25,10 @@ func TestNormalizeScopedPath(t *testing.T) {
 		{"root stays root", ScopeManaged, "/", "/"},
 		{"repo strips a leading dot slash", ScopeRepo, "./.vscode/tasks.json", ".vscode/tasks.json"},
 		{"repo strips repeated leading dot slash", ScopeRepo, "././.vscode/tasks.json", ".vscode/tasks.json"},
+		{"repo cleans a dot segment", ScopeRepo, "a/./b", "a/b"},
+		{"repo cleans a resolved dotdot", ScopeRepo, "a/../b", "b"},
+		{"repo nfc", ScopeRepo, "dir/cafe\u0301", "dir/caf\u00e9"},
+		{"user cleans inside home", ScopeUser, "~/.claude/../settings.json", "~/settings.json"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -57,8 +61,11 @@ func TestNormalizeScopedPathRejects(t *testing.T) {
 		{"repo home relative", ScopeRepo, "~/x", errPathNotRelative},
 		{"repo leading dotdot", ScopeRepo, "../etc/passwd", errPathDotDot},
 		{"repo dotdot after dot-slash strip", ScopeRepo, "./../etc/passwd", errPathDotDot},
-		{"repo mid-path dotdot", ScopeRepo, "a/../b", errPathDotDot},
-		{"repo trailing dotdot", ScopeRepo, "a/..", errPathDotDot},
+		{"repo unresolved dotdot", ScopeRepo, "foo/../../etc/passwd", errPathDotDot},
+		{"user dotdot escapes home", ScopeUser, "~/../../x", errPathDotDot},
+		{"managed relative dotdot", ScopeManaged, "../etc/cursor/hooks.json", errPathDotDot},
+		{"managed absolute dotdot remains", ScopeManaged, "foo/../../etc/passwd", errPathDotDot},
+		{"repo UNC", ScopeRepo, `\\server\share\hooks.json`, errPathNotRelative},
 		{"user absolute", ScopeUser, "/home/dev/x", errPathNotUserHome},
 		{"user repo relative", ScopeUser, "x/y", errPathNotUserHome},
 		{"managed repo relative", ScopeManaged, "cursor/hooks.json", errPathNotAbsolute},
