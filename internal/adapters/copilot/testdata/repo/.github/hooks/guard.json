@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      { "type": "command", "bash": "./scripts/guard.sh", "powershell": "./scripts/guard.ps1", "matcher": "bash|edit", "timeoutSec": 10 }
+    ],
+    "sessionStart": [
+      { "type": "http", "url": "https://hooks.example/start?sig=s3cr3t", "headers": { "Authorization": "Bearer abc" } }
+    ],
+    "PreToolUse": [
+      { "matcher": "Bash", "hooks": [ { "type": "command", "command": "./claude-format.sh" } ] }
+    ]
+  }
+}

@@ -1,0 +1,330 @@
+{
+  "items": [
+    {
+      "harness": "copilot",
+      "scope": "managed",
+      "path": "/etc/github-copilot/policy.d/10-secrets.json",
+      "sha256": "c2463bf07d083c809da21cc5c2b02e971b9c7bd26d74de251ea12ce1cddb256a",
+      "kind": "hook",
+      "payload": {
+        "bash": "/opt/policy/deny-secrets.sh",
+        "event": "preToolUse",
+        "key": "[\"hook\",\"preToolUse\",\"\",\"command\",\"/opt/policy/deny-secrets.sh\"]",
+        "matcher": "",
+        "type": "command"
+      }
+    },
+    {
+      "harness": "copilot",
+      "scope": "repo",
+      "path": ".github/agents/formatter.agent.md",
+      "sha256": "eb94b7c24abd936fdb1253db54ebead0577fa6963621c85d8d5a8aca327a0c9c",
+      "kind": "hook",
+      "payload": {
+        "command": "./scripts/format.sh",
+        "event": "PostToolUse",
+        "key": "[\"hook\",\"PostToolUse\",\"\",\"command\",\"./scripts/format.sh\"]",
+        "matcher": "",
+        "type": "command",
+        "windows": "./scripts/format.ps1"
+      }
+    },
+    {
+      "harness": "copilot",
+      "scope": "repo",
+      "path": ".github/agents/formatter.agent.md",
+      "sha256": "eb94b7c24abd936fdb1253db54ebead0577fa6963621c85d8d5a8aca327a0c9c",
+      "kind": "instructions",
+      "payload": {
+        "content": "Format the files you change.\n",
+        "frontmatter": {
+          "description": "Formats changed files",
+          "name": "formatter"
+        },
+        "key": "[\"agent\"]",
+        "role": "agent"
+      }
+    },
+    {
+      "harness": "copilot",
+      "scope": "repo",
+      "path": ".github/agents/formatter.agent.md",
+      "sha256": "eb94b7c24abd936fdb1253db54ebead0577fa6963621c85d8d5a8aca327a0c9c",
+      "kind": "mcp-server",
+      "payload": {
+        "command": "fmt-mcp",
+        "env": {
+          "FMT_TOKEN": "[REDACTED]"
+        },
+        "env_keys": [
+          "FMT_TOKEN"
+        ],
+        "key": "[\"mcp\",\"fmt\"]",
+        "name": "fmt",
+        "type": "local"
+      }
+    },
+    {
+      "harness": "copilot",
+      "scope": "repo",
+      "path": ".github/copilot-instructions.md",
+      "sha256": "6debf4f88937da4b5337b8662c6b3e406c60ef425612ee71f61896efe6742c58",
+      "kind": "instructions",
+      "payload": {
+        "content": "Use Go 1.27 idioms.\n",
+        "key": "[\"copilot-instructions\"]",
+        "role": "copilot-instructions"
+      }
+    },
+    {
+      "harness": "copilot",
+      "scope": "repo",
+      "path": ".github/copilot/settings.json",
+      "sha256": "3ab749e6c24f0064d6d6101a6df6a6beaa89e37a3d9def26402af03469297f9f",
+      "kind": "hook",
+      "payload": {
+        "command": "npm run lint",
+        "event": "postToolUse",
+        "key": "[\"hook\",\"postToolUse\",\"\",\"command\",\"npm run lint\"]",
+        "matcher": "",
+        "type": "command"
+      }
+    },
+    {
+      "harness": "copilot",
+      "scope": "repo",
+      "path": ".github/copilot/settings.json",
+      "sha256": "3ab749e6c24f0064d6d6101a6df6a6beaa89e37a3d9def26402af03469297f9f",
+      "kind": "permissions",
+      "payload": {
+        "key": "[\"setting\",\"disableAllHooks\"]",
+        "setting": "disableAllHooks",
+        "value": false
+      }
+    },
+    {
+      "harness": "copilot",
+      "scope": "repo",
+      "path": ".github/hooks/disabled.json",
+      "sha256": "270680d429be6e38bb5acf649511558a4e3d2e420086bb62b43f96391042fb06",
+      "kind": "hook",
+      "payload": {
+        "bash": "./cleanup.sh",
+        "event": "sessionEnd",
+        "hooks_disabled": true,
+        "key": "[\"hook\",\"sessionEnd\",\"\",\"command\",\"./cleanup.sh\"]",
+        "matcher": "",
+        "type": "command"
+      }
+    },
+    {
+      "harness": "copilot",
+      "scope": "repo",
+      "path": ".github/hooks/disabled.json",
+      "sha256": "270680d429be6e38bb5acf649511558a4e3d2e420086bb62b43f96391042fb06",
+      "kind": "permissions",
+      "payload": {
+        "key": "[\"setting\",\"disableAllHooks\"]",
+        "setting": "disableAllHooks",
+        "value": true
+      }
+    },
+    {
+      "harness": "copilot",
+      "scope": "repo",
+      "path": ".github/hooks/guard.json",
+      "sha256": "0fca09a2f12a562fe7c55e13187c79d619d59a197cb6a8b2843c94f737994474",
+      "kind": "hook",
+      "payload": {
+        "bash": "./scripts/guard.sh",
+        "event": "preToolUse",
+        "key": "[\"hook\",\"preToolUse\",\"bash|edit\",\"command\",\"./scripts/guard.sh\"]",
+        "matcher": "bash|edit",
+        "powershell": "./scripts/guard.ps1",
+        "timeoutSec": 10,
+        "type": "command"
+      }
+    },
+    {
+      "harness": "copilot",
+      "scope": "repo",
+      "path": ".github/hooks/guard.json",
+      "sha256": "0fca09a2f12a562fe7c55e13187c79d619d59a197cb6a8b2843c94f737994474",
+      "kind": "hook",
+      "payload": {
+        "command": "./claude-format.sh",
+        "event": "PreToolUse",
+        "key": "[\"hook\",\"PreToolUse\",\"Bash\",\"command\",\"./claude-format.sh\"]",
+        "matcher": "Bash",
+        "type": "command"
+      }
+    },
+    {
+      "harness": "copilot",
+      "scope": "repo",
+      "path": ".github/hooks/guard.json",
+      "sha256": "0fca09a2f12a562fe7c55e13187c79d619d59a197cb6a8b2843c94f737994474",
+      "kind": "hook",
+      "payload": {
+        "event": "sessionStart",
+        "header_keys": [
+          "Authorization"
+        ],
+        "headers": {
+          "Authorization": "[REDACTED]"
+        },
+        "key": "[\"hook\",\"sessionStart\",\"\",\"http\",\"https://hooks.example/start\",\"sig:9850b2c5\"]",
+        "matcher": "",
+        "type": "http",
+        "url": "https://hooks.example/start"
+      }
+    },
+    {
+      "harness": "copilot",
+      "scope": "repo",
+      "path": ".github/instructions/backend/api.instructions.md",
+      "sha256": "11fcd06e3405dea4f64365caca997ef078cc86ad34228c6e13784e977e6a066a",
+      "kind": "instructions",
+      "payload": {
+        "content": "Return wrapped errors.\n",
+        "frontmatter": {
+          "applyTo": "services/**/*.go"
+        },
+        "key": "[\"instructions\"]",
+        "role": "instructions"
+      }
+    },
+    {
+      "harness": "copilot",
+      "scope": "repo",
+      "path": ".github/workflows/copilot-setup-steps.yml",
+      "sha256": "0a1be296e639efc5144b06e1a9ba25bb53e42c83d1ea1d29f781cea4abfcbd00",
+      "kind": "env-setup",
+      "payload": {
+        "env": {
+          "CI": "true",
+          "NPM_TOKEN": "[REDACTED]"
+        },
+        "job": "copilot-setup-steps",
+        "key": "[\"job\",\"copilot-setup-steps\"]",
+        "permissions": {
+          "contents": "read"
+        },
+        "runs-on": "ubuntu-latest",
+        "setting": "job"
+      }
+    },
+    {
+      "harness": "copilot",
+      "scope": "repo",
+      "path": ".github/workflows/copilot-setup-steps.yml",
+      "sha256": "0a1be296e639efc5144b06e1a9ba25bb53e42c83d1ea1d29f781cea4abfcbd00",
+      "kind": "env-setup",
+      "payload": {
+        "id": "deps",
+        "job": "copilot-setup-steps",
+        "key": "[\"step\",\"copilot-setup-steps\",\"deps\"]",
+        "setting": "step",
+        "uses": "actions/setup-node@v5",
+        "with": {
+          "node-version": "22",
+          "token": "[REDACTED]"
+        }
+      }
+    },
+    {
+      "harness": "copilot",
+      "scope": "repo",
+      "path": ".github/workflows/copilot-setup-steps.yml",
+      "sha256": "0a1be296e639efc5144b06e1a9ba25bb53e42c83d1ea1d29f781cea4abfcbd00",
+      "kind": "env-setup",
+      "payload": {
+        "job": "copilot-setup-steps",
+        "key": "[\"step\",\"copilot-setup-steps\",\"Install tools\",\"curl -fsSL https://get.example/tool.sh | sh\",\"sig:8e4647d7\"]",
+        "name": "Install tools",
+        "run": "curl -fsSL https://get.example/tool.sh | sh",
+        "setting": "step"
+      }
+    },
+    {
+      "harness": "copilot",
+      "scope": "repo",
+      "path": ".github/workflows/copilot-setup-steps.yml",
+      "sha256": "0a1be296e639efc5144b06e1a9ba25bb53e42c83d1ea1d29f781cea4abfcbd00",
+      "kind": "env-setup",
+      "payload": {
+        "job": "copilot-setup-steps",
+        "key": "[\"step\",\"copilot-setup-steps\",\"actions/checkout@v5\"]",
+        "setting": "step",
+        "uses": "actions/checkout@v5"
+      }
+    },
+    {
+      "harness": "copilot",
+      "scope": "repo",
+      "path": ".github/workflows/copilot-setup-steps.yml",
+      "sha256": "0a1be296e639efc5144b06e1a9ba25bb53e42c83d1ea1d29f781cea4abfcbd00",
+      "kind": "env-setup",
+      "payload": {
+        "key": "[\"workflow\"]",
+        "on": {
+          "push": {
+            "paths": [
+              ".github/workflows/copilot-setup-steps.yml"
+            ]
+          },
+          "workflow_dispatch": null
+        },
+        "setting": "workflow"
+      }
+    },
+    {
+      "harness": "copilot",
+      "scope": "user",
+      "path": "~/.copilot/hooks/hello.json",
+      "sha256": "84e76012e8ef5405b3481f453931e29f8e22149341c3f75ecd696bafdce3733a",
+      "kind": "hook",
+      "payload": {
+        "bash": "./hello.sh",
+        "event": "sessionStart",
+        "key": "[\"hook\",\"sessionStart\",\"\",\"command\",\"./hello.sh\"]",
+        "matcher": "",
+        "type": "command"
+      }
+    },
+    {
+      "harness": "copilot",
+      "scope": "user",
+      "path": "~/.copilot/mcp-config.json",
+      "sha256": "b71c8b18a844e6e23ff0b565218fb1b9423b2768c6c77e6060c98f4c7e7005be",
+      "kind": "mcp-server",
+      "payload": {
+        "header_keys": [
+          "Authorization"
+        ],
+        "headers": {
+          "Authorization": "[REDACTED]"
+        },
+        "key": "[\"mcp\",\"github\"]",
+        "name": "github",
+        "type": "http",
+        "url": "https://api.example/mcp/"
+      }
+    },
+    {
+      "harness": "copilot",
+      "scope": "user",
+      "path": "~/.copilot/settings.json",
+      "sha256": "35636645de99583d6c6bfc1fa4c23ad2f050a4d38e5da2bca8bef49837f398ed",
+      "kind": "hook",
+      "payload": {
+        "bash": "./log-prompt.sh",
+        "event": "userPromptSubmitted",
+        "key": "[\"hook\",\"userPromptSubmitted\",\"\",\"command\",\"./log-prompt.sh\"]",
+        "matcher": "",
+        "type": "command"
+      }
+    }
+  ],
+  "diagnostics": []
+}
