@@ -39,6 +39,8 @@ func TestSourceRedactionMatchesOutputRedactor(t *testing.T) {
 		"cli --token='-Q'",
 		"secret: foo && run",
 		"curl -H 'X-Token: HDRTOK' https://x",
+		"docker run -e SECRET_KEY=ENVSK img",
+		"docker run -e AWS_SECRET_ACCESS_KEY=ENVAWS img",
 	}
 	for _, command := range redacted {
 		t.Run(command, func(t *testing.T) {
@@ -59,6 +61,8 @@ func TestSourceRedactionMatchesOutputRedactor(t *testing.T) {
 		"cli --token=",
 		"echo secret: foo && run",
 		"make -C /opt/fly -t all",
+		"docker run -e SECRET_KEY_FILE=/run/secrets/k img",
+		"TOKEN_TTL=30 app",
 	}
 	for _, command := range kept {
 		t.Run("kept/"+command, func(t *testing.T) {

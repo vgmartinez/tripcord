@@ -27,6 +27,9 @@ func TestSanitizeMatchesOutputRedactor(t *testing.T) {
 		"(cli --token PARENTOK)",
 		"cli --token='-Q'",
 		"secret: foo && run",
+		"docker run -e SECRET_KEY=ENVSK img",
+		"docker run -e AWS_SECRET_ACCESS_KEY=ENVAWS img",
+		"DB_PWD=ENVPWD psql",
 	}
 	for _, in := range redacted {
 		got := source(model.ScopeRepo, "a").Sanitize(in)
@@ -41,6 +44,8 @@ func TestSanitizeMatchesOutputRedactor(t *testing.T) {
 		"echo secret: foo && run",
 		"make -C /opt/fly -t all",
 		"security find-generic-password -w",
+		"docker run -e SECRET_KEY_FILE=/run/secrets/k img",
+		"TOKEN_TTL=30 app",
 	} {
 		if got := source(model.ScopeRepo, "a").Sanitize(in); got.Value != in || len(got.Removed) != 0 {
 			t.Errorf("Sanitize(%q) = %q, %q; want unchanged, nothing removed", in, got.Value, got.Removed)
