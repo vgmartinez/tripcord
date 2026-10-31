@@ -101,12 +101,12 @@ func (f *file) sanitizeRulesLiterals(raw []byte) string {
 func scanRulesLiterals(raw []byte) []rulesLiteral {
 	var out []rulesLiteral
 	for i := 0; i < len(raw); {
-		switch c := raw[i]; {
-		case c == '#':
+		switch raw[i] {
+		case '#':
 			for i < len(raw) && raw[i] != '\n' {
 				i++
 			}
-		case c == '\'' || c == '"':
+		case '\'', '"':
 			lit, ok := scanRulesLiteral(raw, i)
 			if !ok {
 				i++
