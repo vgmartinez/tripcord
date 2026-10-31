@@ -288,8 +288,7 @@ func TestScanScope(t *testing.T) {
 		t.Fatal(err)
 	}
 	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
+	setHome(t, home)
 
 	var stdout, stderr bytes.Buffer
 	if code := run([]string{"scan", "--scope", "user", "--format", "text", root}, &stdout, &stderr); code != int(exitcode.OK) || stderr.Len() != 0 {
@@ -314,8 +313,7 @@ func TestScanScope(t *testing.T) {
 // other diagnostic in this codebase redacts it (see pathx.TildeHome).
 func TestScanErrorsRedactHomeDirectory(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
+	setHome(t, home)
 	repo := outsideGit(t)
 
 	cases := []struct {
@@ -403,8 +401,7 @@ func TestHomeOverrideOutsideHomeFailsScan(t *testing.T) {
 			home := t.TempDir()
 			outside := t.TempDir()
 			tc.setup(outside)
-			t.Setenv("HOME", home)
-			t.Setenv("USERPROFILE", home)
+			setHome(t, home)
 			t.Setenv(tc.envName, outside)
 
 			var stdout, stderr bytes.Buffer
@@ -428,8 +425,7 @@ func TestLegacyNoteDoesNotFailScan(t *testing.T) {
 		t.Fatal(err)
 	}
 	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
+	setHome(t, home)
 	var stdout, stderr bytes.Buffer
 	code := run([]string{"scan", "--scope", "managed", "--format", "json", root}, &stdout, &stderr)
 	if code != int(exitcode.OK) {
@@ -557,6 +553,18 @@ func TestScanGeminiOpenCodeWindsurfDevcontainer(t *testing.T) {
 		if tc.implied == nil && strings.Contains(stderr.String(), "also scanned") {
 			t.Fatalf("%s stderr = %q", tc.harness, stderr.String())
 		}
+	}
+}
+
+// setHome points the home directory at home and clears the variables
+// that move user configuration elsewhere, so a runner's own
+// XDG_CONFIG_HOME (outside the temporary home) does not leak in.
+func setHome(t *testing.T, home string) {
+	t.Helper()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	for _, name := range []string{"XDG_CONFIG_HOME", "XDG_DATA_HOME", "OPENCODE_CONFIG", "OPENCODE_CONFIG_DIR", "GEMINI_CLI_HOME", "CODEX_HOME", "COPILOT_HOME", "CLAUDE_CONFIG_DIR"} {
+		t.Setenv(name, "")
 	}
 }
 
