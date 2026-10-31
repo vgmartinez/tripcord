@@ -16,6 +16,19 @@
     {
       "harness": "windsurf",
       "scope": "repo",
+      "path": ".devin/hooks.json",
+      "sha256": "03a29cbc88af96845e189e64179f79a695cf3bf17eb7399397485a183bc35981",
+      "kind": "hook",
+      "payload": {
+        "command": "devin-audit",
+        "event": "pre_read_code",
+        "key": "[\"hook\",\"pre_read_code\",\"\",\"\",\"devin-audit\",\"sig:faf1eba789c2c284\"]",
+        "matcher": ""
+      }
+    },
+    {
+      "harness": "windsurf",
+      "scope": "repo",
       "path": ".windsurf/global_rules.md",
       "sha256": "77183cae94fcb105274d5a1b5ab7d91140b30575a15fd4751c8f8ba4cc9dd2c1",
       "kind": "instructions",

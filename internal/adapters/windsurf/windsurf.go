@@ -1,9 +1,9 @@
 // Package windsurf discovers Windsurf (Cascade) and Devin Local hook
-// configuration without executing it: hooks (.devin/hooks.json, which
-// takes priority over .windsurf/hooks.json; the user's
+// configuration without executing it: hooks (.devin/hooks.json and
+// .windsurf/hooks.json, both reported; the user's
 // ~/.codeium/windsurf, windsurf-next and windsurf-insiders hooks; the
-// JetBrains plugin's ~/.codeium/hooks.json; and the system hooks, Devin's
-// directory with the Windsurf directory as fallback), MCP servers, and
+// JetBrains plugin's ~/.codeium/hooks.json; and the system hooks, both
+// the Devin and Windsurf directories), MCP servers, and
 // rules (.windsurf/rules/, .windsurf/global_rules.md, the legacy
 // .windsurfrules, and memories/global_rules.md). AGENTS.md is read by
 // the generic adapter.
@@ -33,15 +33,13 @@ type Options struct {
 	HomeDir string
 	// Getenv overrides os.Getenv (for ProgramData).
 	Getenv func(string) string
-	// ManagedDir overrides the Windsurf system hooks directory, which is
-	// the fallback when no Devin system hooks file is present:
+	// ManagedDir overrides the Windsurf system hooks directory:
 	// /Library/Application Support/Windsurf on macOS, /etc/windsurf on
 	// Linux, and %ProgramData%\Windsurf on Windows.
 	ManagedDir string
 	// DevinManagedDir overrides the Devin system hooks directory:
 	// /Library/Application Support/Devin on macOS, /etc/devin on Linux,
-	// and %ProgramData%\Devin on Windows. It takes priority over
-	// ManagedDir.
+	// and %ProgramData%\Devin on Windows.
 	DevinManagedDir string
 	Limits          *kit.Limits
 }
@@ -162,19 +160,13 @@ func classify(rel string) role {
 	return roleNone
 }
 
-// devinHooks reports whether rel is a Devin Local hooks file. When one
-// is present it takes priority over every .windsurf/hooks.json.
-func devinHooks(rel string) bool {
-	segments := kit.Segments(rel)
-	n := len(segments)
-	return n >= 2 && segments[n-2] == ".devin" && segments[n-1] == "hooks.json"
-}
-
 var matcher = kit.Matcher{
 	Candidate: func(rel string) bool { return classify(rel) != roleNone },
 	Relevant: func(rel string) bool {
 		segments := kit.Segments(rel)
-		return kit.HasSegment(segments, ".windsurf") || (len(segments) == 1 && segments[0] == ".windsurfrules")
+		return kit.HasSegment(segments, ".devin") ||
+			kit.HasSegment(segments, ".windsurf") ||
+			(len(segments) == 1 && segments[0] == ".windsurfrules")
 	},
 }
 
@@ -193,20 +185,9 @@ func (a *Adapter) discoverRepo(ctx context.Context, repoRoot string, c *kit.Coll
 		c.Warn(model.ScopeRepo, "", "cannot list repository: %v", err)
 		return nil
 	}
-	devin := false
-	for _, rel := range files {
-		if devinHooks(rel) {
-			devin = true
-			break
-		}
-	}
 	r := kit.NewRepoReader(reader, a.limits, c)
 	for _, rel := range files {
 		role := classify(rel)
-		if devin && role == roleHooks && !devinHooks(rel) {
-			c.Note(model.ScopeRepo, rel, true, ".devin/hooks.json takes priority over this file, so it was not loaded")
-			continue
-		}
 		raw, ok := r.Read(rel)
 		if !ok {
 			continue
@@ -273,8 +254,7 @@ func readProfile(c *kit.Collector, dir kit.UserDir) {
 	}
 }
 
-// devinManagedDir is the Devin Local system hooks directory. It takes
-// priority over defaultManagedDir; the Windsurf directory is the fallback.
+// devinManagedDir is the Devin Local system hooks directory.
 func devinManagedDir(goos string, getenv func(string) string) string {
 	switch goos {
 	case "darwin":
@@ -290,8 +270,7 @@ func devinManagedDir(goos string, getenv func(string) string) string {
 	}
 }
 
-// defaultManagedDir is the Windsurf system hooks directory, used when no
-// Devin system hooks file is present.
+// defaultManagedDir is the Windsurf system hooks directory.
 func defaultManagedDir(goos string, getenv func(string) string) string {
 	switch goos {
 	case "darwin":
@@ -307,10 +286,11 @@ func defaultManagedDir(goos string, getenv func(string) string) string {
 	}
 }
 
-// discoverManaged reads the system hooks.json an administrator deploys
-// for every user. Devin Local's file takes priority; the Windsurf file
-// is the fallback when it is absent. When ManagedDir is set and
-// DevinManagedDir is not (tests), only the Windsurf directory is
+// discoverManaged reads both system hooks.json files an administrator
+// can deploy for every user. Devin Local can override Windsurf at runtime,
+// but both configurations are reported: skipping the fallback would let
+// an empty Devin file hide executable Windsurf hooks. When ManagedDir is
+// set and DevinManagedDir is not (tests), only the Windsurf directory is
 // consulted, so a host's /etc/devin is never read by accident.
 func (a *Adapter) discoverManaged(c *kit.Collector) {
 	windsurfDir := a.options.ManagedDir
@@ -328,9 +308,8 @@ func (a *Adapter) discoverManaged(c *kit.Collector) {
 			(&file{Source: c.Source(model.ScopeManaged, logical, raw)}).hooks(raw)
 			fallback := filepath.Join(windsurfDir, "hooks.json")
 			if info, err := os.Lstat(fallback); err == nil && !info.IsDir() {
-				c.Note(model.ScopeManaged, path.Join(kit.ManagedPath(windsurfDir), "hooks.json"), true, "Devin system hooks take priority over this file, so it was not loaded")
+				c.Note(model.ScopeManaged, path.Join(kit.ManagedPath(windsurfDir), "hooks.json"), true, "Devin system hooks override this Windsurf file at runtime; it was also reported")
 			}
-			return
 		}
 	}
 	abs := filepath.Join(windsurfDir, "hooks.json")

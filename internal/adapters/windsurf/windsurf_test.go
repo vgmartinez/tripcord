@@ -47,25 +47,61 @@ func TestDiscoverGolden(t *testing.T) {
 	}
 }
 
-func TestDevinHooksTakePriority(t *testing.T) {
+func TestDevinAndWindsurfHooksAreBothReported(t *testing.T) {
 	t.Parallel()
-	root := t.TempDir()
-	kittest.WriteFile(t, filepath.Join(root, ".devin", "hooks.json"), `{"hooks":{"pre_run_command":[{"command":"devin-hook"}]}}`)
-	kittest.WriteFile(t, filepath.Join(root, ".windsurf", "hooks.json"), `{"hooks":{"pre_run_command":[{"command":"windsurf-hook"}]}}`)
-	kittest.WriteFile(t, filepath.Join(root, ".windsurf", "rules", "a.md"), "still read")
-	got := kittest.Discover(t, New(Options{}), root)
-	if len(got.Find(".devin/hooks.json", model.ConfigKindHook)) != 1 || len(got.Find(".windsurf/hooks.json", model.ConfigKindHook)) != 0 {
+	cases := map[string]map[string]string{
+		"same directory": {
+			".devin/hooks.json":    `{"hooks":{}}`,
+			".windsurf/hooks.json": `{"hooks":{"pre_run_command":[{"command":"windsurf-hook"}]}}`,
+		},
+		"separate directories": {
+			"pkg/.devin/hooks.json": `{"hooks":{}}`,
+			".windsurf/hooks.json":  `{"hooks":{"pre_run_command":[{"command":"windsurf-hook"}]}}`,
+		},
+	}
+	for name, files := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			for rel, content := range files {
+				kittest.WriteFile(t, filepath.Join(root, filepath.FromSlash(rel)), content)
+			}
+			got := kittest.Discover(t, New(Options{}), root)
+			if len(got.Find(".windsurf/hooks.json", model.ConfigKindHook)) != 1 {
+				t.Fatalf("Windsurf hooks were suppressed: %+v", got)
+			}
+			for _, item := range got.Items {
+				if strings.Contains(string(item.Payload), "windsurf-hook") {
+					return
+				}
+			}
+			t.Fatalf("Windsurf hook was not reported: %+v", got.Items)
+		})
+	}
+}
+
+func TestDevinSystemHooksAlsoReportsWindsurf(t *testing.T) {
+	t.Parallel()
+	hooks := func(command string) string {
+		return `{"hooks":{"pre_run_command":[{"command":"` + command + `"}]}}`
+	}
+	devin := t.TempDir()
+	windsurf := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(devin, "hooks.json"), hooks("from-devin"))
+	kittest.WriteFile(t, filepath.Join(windsurf, "hooks.json"), hooks("from-windsurf"))
+	opts := Options{SkipRepo: true, IncludeManaged: true, ManagedDir: windsurf, DevinManagedDir: devin}
+	got := kittest.Discover(t, New(opts), t.TempDir())
+	if len(got.Find(kit.ManagedPath(devin)+"/hooks.json", model.ConfigKindHook)) != 1 ||
+		len(got.Find(kit.ManagedPath(windsurf)+"/hooks.json", model.ConfigKindHook)) != 1 {
 		t.Fatalf("items = %+v", got.Items)
 	}
-	if len(got.Find(".windsurf/rules/a.md", model.ConfigKindInstructions)) != 1 || !got.HasDiag(".windsurf/hooks.json") || !got.HasDiag("takes priority") {
-		t.Fatalf("got %+v", got)
-	}
-	if kittest.Blocking(t, New(Options{}), root, "takes priority") {
-		t.Fatal("the priority note was blocking")
+	if !got.HasDiag("override this Windsurf file") || kittest.Blocking(t, New(opts), t.TempDir(), "override this Windsurf file") {
+		t.Fatalf("diagnostics = %v", got.Diagnostics)
 	}
 	for _, item := range got.Items {
-		if strings.Contains(string(item.Payload), "windsurf-hook") {
-			t.Fatalf("the lower-priority hooks were loaded: %s", item.Payload)
+		if !strings.Contains(string(item.Payload), "from-windsurf") &&
+			!strings.Contains(string(item.Payload), "from-devin") {
+			t.Fatalf("unexpected hooks item: %s", item.Payload)
 		}
 	}
 }
@@ -110,15 +146,16 @@ func TestDevinSystemHooksFallback(t *testing.T) {
 		kittest.WriteFile(t, filepath.Join(devin, "hooks.json"), hooks("from-devin"))
 		kittest.WriteFile(t, filepath.Join(windsurf, "hooks.json"), hooks("from-windsurf"))
 		got := kittest.Discover(t, New(Options{SkipRepo: true, IncludeManaged: true, ManagedDir: windsurf, DevinManagedDir: devin}), t.TempDir())
-		if len(got.Find(kit.ManagedPath(devin)+"/hooks.json", model.ConfigKindHook)) != 1 || len(got.Find(kit.ManagedPath(windsurf)+"/hooks.json", model.ConfigKindHook)) != 0 {
+		if len(got.Find(kit.ManagedPath(devin)+"/hooks.json", model.ConfigKindHook)) != 1 || len(got.Find(kit.ManagedPath(windsurf)+"/hooks.json", model.ConfigKindHook)) != 1 {
 			t.Fatalf("items = %+v", got.Items)
 		}
-		if !got.HasDiag("take priority") || kittest.Blocking(t, New(Options{SkipRepo: true, IncludeManaged: true, ManagedDir: windsurf, DevinManagedDir: devin}), t.TempDir(), "take priority") {
+		if !got.HasDiag("override this Windsurf file") || kittest.Blocking(t, New(Options{SkipRepo: true, IncludeManaged: true, ManagedDir: windsurf, DevinManagedDir: devin}), t.TempDir(), "override this Windsurf file") {
 			t.Fatalf("diagnostics = %v", got.Diagnostics)
 		}
 		for _, item := range got.Items {
-			if strings.Contains(string(item.Payload), "from-windsurf") {
-				t.Fatalf("fallback hooks were loaded: %s", item.Payload)
+			if !strings.Contains(string(item.Payload), "from-windsurf") &&
+				!strings.Contains(string(item.Payload), "from-devin") {
+				t.Fatalf("unexpected hooks item: %s", item.Payload)
 			}
 		}
 	})

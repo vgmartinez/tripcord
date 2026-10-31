@@ -14,8 +14,8 @@ Cascade also loads `AGENTS.md`, which is reported by the
 
 | Location | Normalized kinds |
 | --- | --- |
-| `.devin/hooks.json` (any depth) | `hook` |
-| `.windsurf/hooks.json` (any depth) | `hook`, unless a `.devin/hooks.json` is present, which takes priority; the file is then named in an informational note and not loaded |
+| `.devin/hooks.json` (any depth) | `hook` (legacy compatibility path; it does not suppress other hooks files) |
+| `.windsurf/hooks.json` (any depth) | `hook` |
 | `.windsurf/rules/**/*.md` (any depth) | `instructions` (role `rule`) |
 | `.windsurf/global_rules.md` (any depth) | `instructions` (role `global`) |
 | `.windsurfrules` (repository root) | `instructions` (role `rules`, legacy) |
@@ -39,11 +39,11 @@ Windsurf has no environment override for these paths.
 ### Managed (`--scope managed`)
 
 The system-level `hooks.json`, deployed by an administrator for every
-user of the machine. Devin Local's directory takes priority. The
-Windsurf directory is the fallback, and is not loaded when the Devin
-file is present; an informational note names it.
+user of the machine. Devin Local can override the Windsurf file at
+runtime, but both files are reported; an informational note marks the
+Windsurf file as overridden when both are present.
 
-| OS | Devin (priority) | Windsurf (fallback) |
+| OS | Devin | Windsurf |
 | --- | --- | --- |
 | macOS | `/Library/Application Support/Devin/hooks.json` | `/Library/Application Support/Windsurf/hooks.json` |
 | Linux | `/etc/devin/hooks.json` | `/etc/windsurf/hooks.json` |
@@ -97,9 +97,11 @@ adapter.
   and Cascade's auto-generated memories.
 - Team- and enterprise-managed rules and MCP allow lists set in the
   Windsurf admin dashboard, which live server-side.
-- The rest of the Devin Local configuration (rules, skills, MCP,
-  `~/.config/devin`, `.devin/config.json`). `.devin/hooks.json` and the
-  Devin system hooks are read here; a full `devin` harness is later work.
+- The documented Devin Local hook locations (`.devin/hooks.v1.json`,
+  hooks in `.devin/config.json` and `.devin/config.local.json`) and the
+  rest of the Devin Local configuration (rules, skills, MCP,
+  `~/.config/devin/config.json`). `.devin/hooks.json` is only a legacy
+  compatibility read; a full `devin` harness is later work.
 - Windsurf editor settings (`settings.json`, terminal auto-execution
   allow and deny lists).
 
