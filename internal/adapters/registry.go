@@ -24,6 +24,16 @@ type Adapter interface {
 	Discover(ctx context.Context, repoRoot string) ([]model.ConfigItem, error)
 }
 
+// SharedReader is implemented by an adapter whose harness also loads files
+// that another adapter owns: AGENTS.md and shared skills (generic), or
+// .claude/settings.json and .mcp.json (claude). Each file is reported
+// once, by its owner, so its fingerprint does not depend on which
+// harnesses were scanned. When such an adapter is requested explicitly,
+// Select adds the owners so no file the harness loads is skipped.
+type SharedReader interface {
+	SharedOwners() []model.Harness
+}
+
 // AdapterHarness reports whether h can name an installed adapter.
 // The seven product harnesses can. generic can: it is the shared adapter
 // for skill files that more than one product reads. vscode and
@@ -56,8 +66,9 @@ func NewRegistry(adapters ...Adapter) (*Registry, error) {
 	return r, nil
 }
 
-// Select returns explicitly named adapters, or every adapter whose Detect
-// hook recognizes the repository when requested is empty.
+// Select returns explicitly named adapters followed by the registered
+// owners of files they share (see SharedReader), or every adapter whose
+// Detect hook recognizes the repository when requested is empty.
 func (r *Registry) Select(repoRoot string, requested []model.Harness) ([]Adapter, error) {
 	if len(requested) > 0 {
 		out := make([]Adapter, 0, len(requested))
@@ -73,6 +84,9 @@ func (r *Registry) Select(repoRoot string, requested []model.Harness) ([]Adapter
 			}
 			out = append(out, adapter)
 		}
+		for _, owner := range r.ImpliedOwners(requested) {
+			out = append(out, r.adapters[owner])
+		}
 		return out, nil
 	}
 	var out []Adapter
@@ -83,4 +97,34 @@ func (r *Registry) Select(repoRoot string, requested []model.Harness) ([]Adapter
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Harness() < out[j].Harness() })
 	return out, nil
+}
+
+// ImpliedOwners returns, in harness order, the registered owner adapters
+// that requested harnesses share files with and that were not requested
+// themselves.
+func (r *Registry) ImpliedOwners(requested []model.Harness) []model.Harness {
+	named := map[model.Harness]bool{}
+	for _, h := range requested {
+		named[h] = true
+	}
+	added := map[model.Harness]bool{}
+	var out []model.Harness
+	for _, h := range requested {
+		shared, ok := r.adapters[h].(SharedReader)
+		if !ok {
+			continue
+		}
+		for _, owner := range shared.SharedOwners() {
+			if named[owner] || added[owner] {
+				continue
+			}
+			if _, registered := r.adapters[owner]; !registered {
+				continue
+			}
+			added[owner] = true
+			out = append(out, owner)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
 }

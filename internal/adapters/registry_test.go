@@ -63,6 +63,53 @@ func TestRegistrySelect(t *testing.T) {
 	}
 }
 
+type sharingAdapter struct {
+	fixtureAdapter
+	owners []model.Harness
+}
+
+func (a sharingAdapter) SharedOwners() []model.Harness { return a.owners }
+
+func TestRegistrySelectAddsSharedOwners(t *testing.T) {
+	t.Parallel()
+	registry, err := NewRegistry(
+		fixtureAdapter{harness: model.HarnessClaude},
+		fixtureAdapter{harness: model.SurfaceGeneric},
+		sharingAdapter{fixtureAdapter{harness: model.HarnessCopilot}, []model.Harness{model.SurfaceGeneric, model.HarnessClaude, model.HarnessGemini}},
+		sharingAdapter{fixtureAdapter{harness: model.HarnessCodex}, []model.Harness{model.SurfaceGeneric}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name      string
+		requested []model.Harness
+		want      []model.Harness
+	}{
+		{"owners appended in order", []model.Harness{model.HarnessCopilot}, []model.Harness{model.HarnessCopilot, model.HarnessClaude, model.SurfaceGeneric}},
+		{"owner requested", []model.Harness{model.HarnessCopilot, model.HarnessClaude}, []model.Harness{model.HarnessCopilot, model.HarnessClaude, model.SurfaceGeneric}},
+		{"owner shared twice", []model.Harness{model.HarnessCodex, model.HarnessCopilot}, []model.Harness{model.HarnessCodex, model.HarnessCopilot, model.HarnessClaude, model.SurfaceGeneric}},
+		{"no sharing", []model.Harness{model.HarnessClaude}, []model.Harness{model.HarnessClaude}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := registry.Select(t.TempDir(), tc.requested)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(got) != len(tc.want) {
+				t.Fatalf("adapters = %d, want %d", len(got), len(tc.want))
+			}
+			for i, adapter := range got {
+				if adapter.Harness() != tc.want[i] {
+					t.Fatalf("adapter %d = %s, want %s", i, adapter.Harness(), tc.want[i])
+				}
+			}
+		})
+	}
+}
+
 func TestGenericHarnessRegisters(t *testing.T) {
 	t.Parallel()
 	if _, err := NewRegistry(fixtureAdapter{harness: model.SurfaceGeneric}); err != nil {
