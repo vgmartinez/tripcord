@@ -148,14 +148,49 @@ func normalizeToolWord(raw string) string {
 	return name
 }
 
+// toolWordName is normalizeToolWord for a word that can name the command
+// being run, or "" for one that cannot. A flag ("-C=/opt/fly") never
+// names a command. A path right after a flag is usually that flag's
+// argument (make -C /opt/fly -t all), so it names a command only when it
+// looks like an executable: its parent directory is bin, sbin, or .bin,
+// or it ends in ".exe" (sudo -E /usr/local/bin/fly -t X). A bare name
+// after a flag still counts (npx --yes vercel), since wrappers take
+// boolean flags before the command.
+func toolWordName(prev, raw string) string {
+	w := strings.TrimLeft(strings.Trim(raw, `"'`), "$(){`")
+	if i := strings.LastIndexAny(w, "(`"); i >= 0 {
+		w = strings.TrimLeft(w[i+1:], `"'`)
+	}
+	if strings.HasPrefix(w, "-") {
+		return ""
+	}
+	if strings.ContainsAny(w, `/\`) && strings.HasPrefix(strings.Trim(prev, `"'`), "-") && !executablePath(w) {
+		return ""
+	}
+	return normalizeToolWord(raw)
+}
+
+func executablePath(w string) bool {
+	w = strings.ToLower(strings.TrimRight(strings.ReplaceAll(w, `\`, "/"), ")}`;"))
+	switch path.Base(path.Dir(w)) {
+	case "bin", "sbin", ".bin":
+		return true
+	}
+	return strings.HasSuffix(w, ".exe")
+}
+
 // toolActivations maps each tool name found in words to the byte offset
 // right after its first occurrence: a secret flag for that tool is only
 // recognized from that point on, so an unrelated command earlier in the
 // same segment cannot be mistaken for the tool invocation.
 func toolActivations(words []word) map[string]int {
 	activations := map[string]int{}
-	for _, w := range words {
-		name := normalizeToolWord(w.text)
+	for i, w := range words {
+		prev := ""
+		if i > 0 {
+			prev = words[i-1].text
+		}
+		name := toolWordName(prev, w.text)
 		if name == "" || !knownTools[name] {
 			continue
 		}
@@ -256,8 +291,12 @@ func RedactToolArgv(argv []string) ([]string, []string) {
 		}
 	}
 	activations := map[string]int{}
-	for _, w := range words {
-		name := normalizeToolWord(w.text)
+	for i, w := range words {
+		prev := ""
+		if i > 0 {
+			prev = words[i-1].text
+		}
+		name := toolWordName(prev, w.text)
 		if name == "" || !knownTools[name] {
 			continue
 		}
