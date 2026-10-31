@@ -104,6 +104,9 @@ func TestLiteralTextExemptionIsToolAndCommandSpecific(t *testing.T) {
 	if got := DefaultRedactor("docker run registry/token-svc:1.2"); got != "docker run registry/token-svc:1.2" {
 		t.Errorf("DefaultRedactor image tag = %q, want unchanged", got)
 	}
+	if got := DefaultRedactor("echo 'x; docker run password:S y'"); got != "echo 'x; docker run password:[REDACTED] y'" {
+		t.Errorf("DefaultRedactor quoted image-looking text = %q", got)
+	}
 	for in, want := range map[string]string{
 		"--proxy-header=X-Api-Key:S":         "--proxy-header=X-Api-Key:[REDACTED]",
 		"kubectl --from-literal=api-token:S": "kubectl --from-literal=api-token:[REDACTED]",

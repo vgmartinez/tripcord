@@ -660,10 +660,7 @@ func redactColonAssignments(value string, removed *[]string) string {
 func findContainerImageSpans(value string) literalSpans {
 	var refs literalSpans
 	for start := 0; start < len(value); {
-		end := start
-		for end < len(value) && !strings.ContainsRune(";&|\n", rune(value[end])) {
-			end++
-		}
+		end := commandSegmentEnd(value, start)
 		words := splitWords(value[start:end])
 		if len(words) >= 3 {
 			tool := normalizeToolWord(words[0].text)
@@ -685,6 +682,31 @@ func findContainerImageSpans(value string) literalSpans {
 		start = end + 1
 	}
 	return refs
+}
+
+// commandSegmentEnd finds an unquoted shell command separator. A semicolon
+// inside an argument such as echo 'x; docker run password:S y' cannot start
+// a container command.
+func commandSegmentEnd(value string, start int) int {
+	for i := start; i < len(value); i++ {
+		switch value[i] {
+		case '\'':
+			if end := strings.IndexByte(value[i+1:], '\''); end >= 0 {
+				i += end + 1
+			}
+		case '"':
+			i++
+			for i < len(value) && value[i] != '"' {
+				if value[i] == '\\' {
+					i++
+				}
+				i++
+			}
+		case ';', '&', '|', '\n':
+			return i
+		}
+	}
+	return len(value)
 }
 
 func imageTag(value string) bool {
