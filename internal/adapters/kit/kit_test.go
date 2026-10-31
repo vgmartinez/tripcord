@@ -220,6 +220,105 @@ func TestDecodeYAML(t *testing.T) {
 	}
 }
 
+func TestDecodeYAMLAliases(t *testing.T) {
+	t.Parallel()
+	t.Run("normal anchor and alias workflow parses and is scanned", func(t *testing.T) {
+		t.Parallel()
+		doc := `on: push
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+    env: &shared_env
+      NODE_ENV: production
+      CI: "true"
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+      - name: install
+        run: npm ci
+        env: *shared_env
+      - name: build
+        run: npm run build
+        env: *shared_env
+`
+		tree, warnings, err := DecodeYAMLAliases([]byte(doc), "GitHub Actions", AliasLimits{MaxAliases: 100, MaxNodes: 10_000})
+		if err != nil {
+			t.Fatalf("legitimate anchor/alias workflow was rejected: %v (warnings %v)", err, warnings)
+		}
+		workflow, ok := tree.(map[string]any)
+		if !ok {
+			t.Fatalf("tree = %T, want map", tree)
+		}
+		jobs, ok := workflow["jobs"].(map[string]any)
+		if !ok {
+			t.Fatalf("jobs = %T, want map", workflow["jobs"])
+		}
+		job, ok := jobs["copilot-setup-steps"].(map[string]any)
+		if !ok {
+			t.Fatalf("job = %T, want map", jobs["copilot-setup-steps"])
+		}
+		steps, ok := job["steps"].([]any)
+		if !ok || len(steps) != 3 {
+			t.Fatalf("steps = %+v", job["steps"])
+		}
+		install, ok := steps[1].(map[string]any)
+		if !ok {
+			t.Fatalf("step[1] = %T", steps[1])
+		}
+		env, ok := install["env"].(map[string]any)
+		if !ok || env["NODE_ENV"] != "production" || env["CI"] != "true" {
+			t.Fatalf("alias did not expand to the anchored env block: %+v", install["env"])
+		}
+	})
+	t.Run("billion laughs alias bomb is rejected", func(t *testing.T) {
+		t.Parallel()
+		// Nine levels of anchors, each a 9-element sequence of the
+		// previous level's alias, expand to 9^9 (> 387 million) leaf
+		// nodes if followed without a limit.
+		var b strings.Builder
+		letters := "abcdefghi"
+		for i, letter := range letters {
+			b.WriteString(string(letter))
+			b.WriteString(": &")
+			b.WriteString(string(letter))
+			b.WriteString(" [")
+			if i == 0 {
+				b.WriteString(`"lol","lol","lol","lol","lol","lol","lol","lol","lol"`)
+			} else {
+				prev := string(letters[i-1])
+				for j := 0; j < 9; j++ {
+					if j > 0 {
+						b.WriteString(",")
+					}
+					b.WriteString("*" + prev)
+				}
+			}
+			b.WriteString("]\n")
+		}
+		_, _, err := DecodeYAMLAliases([]byte(b.String()), "GitHub Actions", AliasLimits{MaxAliases: 100, MaxNodes: 10_000})
+		if err == nil {
+			t.Fatal("alias bomb was accepted")
+		}
+		if !strings.Contains(err.Error(), "aliases") && !strings.Contains(err.Error(), "nodes") {
+			t.Fatalf("err = %v, want an alias- or node-limit error", err)
+		}
+	})
+	t.Run("zero value rejects any alias, like DecodeYAML", func(t *testing.T) {
+		t.Parallel()
+		_, _, err := DecodeYAMLAliases([]byte("a: &x 1\nb: *x\n"), "GitHub Actions", AliasLimits{})
+		if err == nil || !strings.Contains(err.Error(), "aliases") {
+			t.Fatalf("err = %v, want an aliases-not-supported error", err)
+		}
+	})
+	t.Run("merge keys remain unsupported", func(t *testing.T) {
+		t.Parallel()
+		_, _, err := DecodeYAMLAliases([]byte("a: &x {k: 1}\nb:\n  <<: *x\n"), "GitHub Actions", AliasLimits{MaxAliases: 100, MaxNodes: 10_000})
+		if err == nil {
+			t.Fatal("merge key was accepted")
+		}
+	})
+}
+
 func TestSplitFrontmatter(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

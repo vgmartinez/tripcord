@@ -82,19 +82,26 @@ trailing commas are errors. A hook file without `"version": 1` is
 reported (Copilot rejects the whole file) and its hooks are still emitted.
 Agent frontmatter is strict YAML because it can register hooks and
 servers; instruction frontmatter (`applyTo`) is read leniently. The setup
-workflow is YAML without aliases or merge keys; a workflow that uses them
-is reported and not normalized. Nesting deeper than 64 levels fails
-closed.
+workflow's YAML aliases and anchors are followed, as GitHub Actions
+supports them, up to 100 aliases and 10,000 nodes after expansion; a
+workflow whose anchors expand past either limit (an "alias bomb") is
+reported and not normalized, as are merge keys, which remain unsupported.
+Nesting deeper than 64 levels fails closed.
 
 Reads, symlink handling, limits, and diagnostics are those of the
 [Claude adapter](claude.md#safe-reads).
 
-## Not read
+## Not scanned in v0
 
-Prompt files (`.github/prompts/*.prompt.md`), user agents
-(`~/.copilot/agents/`), plugin hooks under the plugin install directory,
-`~/.copilot/config.json` (no longer read for hooks), and VS Code user
-settings.
+- The Windows registry policy source
+  (`HKLM\Software\Policies\GitHub\Copilot`); only the `policy.d` file
+  drop-in is read (see [Managed](#managed---scope-managed)).
+- Prompt files (`.github/prompts/*.prompt.md`).
+- User-level agents (`~/.copilot/agents/`).
+- Plugin hooks under the plugin install directory.
+- `~/.copilot/config.json` (no longer read for hooks).
+- VS Code user settings, including `.vscode/settings.json`: see
+  [generic.md](generic.md#not-read).
 
 ## Sources
 

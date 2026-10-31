@@ -58,12 +58,37 @@ func splitFrontmatter(raw []byte) (front, body []byte, found bool, err error) {
 	return nil, nil, true, errors.New("frontmatter has no closing --- line")
 }
 
+// AliasLimits bounds anchor/alias expansion in DecodeYAMLAliases: the
+// number of alias nodes followed, and the number of nodes produced after
+// expanding every alias. Both guard against an "alias bomb" (a handful of
+// nested anchors that expand to an unbounded document, the "billion
+// laughs" attack), while still allowing ordinary YAML that reuses a block
+// with an anchor a few times. The zero value rejects any alias, the same
+// as DecodeYAML.
+type AliasLimits struct {
+	MaxAliases int
+	MaxNodes   int
+}
+
 // DecodeYAML converts one YAML document into the same tree shape as
 // DecodeJSON. Aliases and merge keys are rejected so an alias bomb fails
 // closed; nesting is bounded by MaxNesting. Duplicate and case-variant
 // keys are reported, with the last value used. A UTF-8 byte order mark
 // and CRLF line endings are accepted. folded is as for DecodeJSON.
 func DecodeYAML(raw []byte, product string, folded ...string) (any, []string, error) {
+	return decodeYAML(raw, product, AliasLimits{}, folded...)
+}
+
+// DecodeYAMLAliases is DecodeYAML, but permits anchors and aliases up to
+// limits instead of rejecting every alias outright. Merge keys remain
+// unsupported. A document whose alias count or expanded node count
+// exceeds limits returns an error, so a short, well-formed file that
+// expands exponentially still fails closed.
+func DecodeYAMLAliases(raw []byte, product string, limits AliasLimits, folded ...string) (any, []string, error) {
+	return decodeYAML(raw, product, limits, folded...)
+}
+
+func decodeYAML(raw []byte, product string, limits AliasLimits, folded ...string) (any, []string, error) {
 	raw = bytes.TrimPrefix(raw, utf8BOM)
 	var doc yaml.Node
 	if err := yaml.Unmarshal(raw, &doc); err != nil {
@@ -75,24 +100,38 @@ func DecodeYAML(raw []byte, product string, folded ...string) (any, []string, er
 	if doc.Kind != yaml.DocumentNode || len(doc.Content) != 1 {
 		return nil, nil, errors.New("not one YAML document")
 	}
-	d := &yamlDecoder{product: product, folded: folded}
+	d := &yamlDecoder{product: product, folded: folded, limits: limits}
 	value, err := d.value(doc.Content[0], 0, "")
 	return value, d.warnings, err
 }
 
 type yamlDecoder struct {
-	product  string
-	folded   []string
-	warnings []string
+	product    string
+	folded     []string
+	warnings   []string
+	limits     AliasLimits
+	aliasCount int
+	nodeCount  int
 }
 
 func (d *yamlDecoder) value(n *yaml.Node, depth int, where string) (any, error) {
 	if depth >= MaxNesting {
 		return nil, fmt.Errorf("YAML nesting exceeds %d levels", MaxNesting)
 	}
+	d.nodeCount++
+	if d.limits.MaxNodes > 0 && d.nodeCount > d.limits.MaxNodes {
+		return nil, fmt.Errorf("YAML aliases expand to more than %d nodes", d.limits.MaxNodes)
+	}
 	switch n.Kind {
 	case yaml.AliasNode:
-		return nil, errors.New("YAML aliases are not supported")
+		if d.limits.MaxAliases <= 0 {
+			return nil, errors.New("YAML aliases are not supported")
+		}
+		d.aliasCount++
+		if d.aliasCount > d.limits.MaxAliases {
+			return nil, fmt.Errorf("YAML document has more than %d aliases", d.limits.MaxAliases)
+		}
+		return d.value(n.Alias, depth+1, where)
 	case yaml.MappingNode:
 		obj := map[string]any{}
 		keys := NewKeySet(where, d.product)

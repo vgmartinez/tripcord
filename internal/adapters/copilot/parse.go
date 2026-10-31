@@ -127,8 +127,15 @@ func (f *file) agent(raw []byte) {
 // secrets and outside its firewall, before the session starts. The job
 // (without its steps) is one env-setup item and each step another; the
 // workflow's triggers, permissions, and env are one more.
+// setupStepsAliasLimits bounds anchor/alias expansion in
+// copilot-setup-steps.yml. GitHub Actions supports anchors, and a
+// legitimate workflow may reuse a handful of env or step blocks with
+// one; these limits are generous for that while still failing closed,
+// quickly, on a "billion laughs" style alias bomb.
+var setupStepsAliasLimits = kit.AliasLimits{MaxAliases: 100, MaxNodes: 10_000}
+
 func (f *file) setupSteps(raw []byte) {
-	tree, warnings, err := kit.DecodeYAML(raw, "GitHub Actions")
+	tree, warnings, err := kit.DecodeYAMLAliases(raw, "GitHub Actions", setupStepsAliasLimits)
 	f.WarnAll(warnings)
 	if err != nil {
 		f.Warn("invalid YAML: %v", err)

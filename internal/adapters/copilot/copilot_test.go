@@ -1,6 +1,7 @@
 package copilot
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -129,6 +130,81 @@ func TestHostileInputs(t *testing.T) {
 				t.Fatalf("diagnostics = %v, want %q", got.Diagnostics, tc.diag)
 			}
 		})
+	}
+}
+
+// TestSetupStepsAliasesExpand checks that copilot-setup-steps.yml, unlike
+// generic frontmatter, follows YAML anchors and aliases: GitHub Actions
+// supports them, and rejecting a workflow that uses one would break
+// legitimate CI.
+func TestSetupStepsAliasesExpand(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(root, ".github", "workflows", "copilot-setup-steps.yml"), `on: push
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+    env: &shared_env
+      NODE_ENV: production
+    steps:
+      - name: install
+        run: npm ci
+        env: *shared_env
+`)
+	got := kittest.Discover(t, New(Options{}), root)
+	if len(got.Diagnostics) != 0 {
+		t.Fatalf("diagnostics = %v", got.Diagnostics)
+	}
+	steps := got.Find(".github/workflows/copilot-setup-steps.yml", model.ConfigKindEnvSetup)
+	var install model.ConfigItem
+	found := false
+	for _, item := range steps {
+		if kittest.Payload(t, item)["name"] == "install" {
+			install, found = item, true
+		}
+	}
+	if !found {
+		t.Fatalf("install step not found in %+v", steps)
+	}
+	env, ok := kittest.Payload(t, install)["env"].(map[string]any)
+	if !ok || env["NODE_ENV"] != "production" {
+		t.Fatalf("alias did not expand to the anchored env block: %+v", install.Payload)
+	}
+}
+
+// TestSetupStepsAliasBombRejected checks that a "billion laughs" style
+// alias bomb in copilot-setup-steps.yml is rejected with a blocking
+// diagnostic and no items, instead of expanding without bound.
+func TestSetupStepsAliasBombRejected(t *testing.T) {
+	t.Parallel()
+	var b strings.Builder
+	letters := "abcdefghi"
+	for i, letter := range letters {
+		fmt.Fprintf(&b, "%c: &%c [", letter, letter)
+		if i == 0 {
+			b.WriteString(`"lol","lol","lol","lol","lol","lol","lol","lol","lol"`)
+		} else {
+			prev := letters[i-1]
+			for j := 0; j < 9; j++ {
+				if j > 0 {
+					b.WriteString(",")
+				}
+				fmt.Fprintf(&b, "*%c", prev)
+			}
+		}
+		b.WriteString("]\n")
+	}
+	b.WriteString("jobs:\n  copilot-setup-steps:\n    steps: []\n")
+	root := t.TempDir()
+	path := filepath.Join(".github", "workflows", "copilot-setup-steps.yml")
+	kittest.WriteFile(t, filepath.Join(root, path), b.String())
+	opts := Options{}
+	got := kittest.Discover(t, New(opts), root)
+	if len(got.Find(path, model.ConfigKindEnvSetup)) != 0 {
+		t.Fatalf("alias bomb produced items: %+v", got.Items)
+	}
+	if !kittest.Blocking(t, New(opts), root, path) {
+		t.Fatalf("alias bomb did not produce a blocking diagnostic: %v", got.Diagnostics)
 	}
 }
 
