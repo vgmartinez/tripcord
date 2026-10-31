@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/vgmartinez/tripcord/internal/model"
@@ -43,8 +44,27 @@ type Sanitized struct {
 // value, redacts secret CLI flag values and bearer tokens, rewrites the
 // home directory as "~" (user scope only), and finally redacts any
 // credential shape output.DefaultRedactor recognizes. What it removes is
-// also recorded for the next Add's key discriminator.
+// also recorded for the next Add's key discriminator. The result depends
+// only on value and the source's scope and home, so it is memoized per
+// source: an entry's signature re-sanitizes strings that earlier entries
+// or its own key already did.
 func (s *Source) Sanitize(value string) Sanitized {
+	if s.presanitized != nil && s.presanitized(value) {
+		return Sanitized{Value: value}
+	}
+	r, ok := s.sanitized[value]
+	if !ok {
+		r = s.sanitizeUncached(value)
+		if s.sanitized == nil {
+			s.sanitized = map[string]Sanitized{}
+		}
+		s.sanitized[value] = r
+	}
+	s.recordRemoved(r.Removed...)
+	return Sanitized{Value: r.Value, Removed: slices.Clone(r.Removed)}
+}
+
+func (s *Source) sanitizeUncached(value string) Sanitized {
 	value, removed := stripEmbeddedURLSecrets(value)
 	value, flags := redactCommandSecrets(value)
 	removed = append(removed, flags...)
@@ -53,7 +73,6 @@ func (s *Source) Sanitize(value string) Sanitized {
 		removed = append(removed, value)
 		value = redacted
 	}
-	s.recordRemoved(removed...)
 	return Sanitized{Value: value, Removed: removed}
 }
 

@@ -88,6 +88,13 @@ type src struct {
 	// sanitized memoizes sanitizeString, which is pure: an entry's key
 	// re-sanitizes strings its payload already did, such as a command.
 	sanitized map[string]sanitizeResult
+	// outputs is every string sanitizeString returned. kit's
+	// sanitization is the same pipeline, so signer trusts them rather
+	// than redacting each one a second time.
+	outputs map[string]bool
+	// signer computes every entry's kit.Source.EntrySignature, one
+	// source per file so its Sanitize memo spans the file's entries.
+	signer *kit.Source
 }
 
 func newSrc(c *collector, scope model.Scope, path string, raw []byte) *src {
@@ -114,9 +121,12 @@ func (s *src) warnAll(warnings []string) {
 // (and therefore never share a fingerprint): see kit.Source.Add, which
 // this mirrors.
 func (s *src) add(kind model.ConfigKind, key []string, payload map[string]any, removed []string) {
-	c := kit.NewCollector(s.c.harness, "Claude Code")
-	c.SetHome(s.c.home)
-	sig := c.SourceSHA(s.scope, s.path, s.sha).EntrySignature(payload, removed)
+	if s.signer == nil {
+		c := kit.NewCollector(s.c.harness, "Claude Code")
+		c.SetHome(s.c.home)
+		s.signer = c.SourceSHA(s.scope, s.path, s.sha).TrustSanitized(func(v string) bool { return s.outputs[v] })
+	}
+	sig := s.signer.EntrySignature(payload, removed)
 	payload["key"] = evidenceKey(append(s.safeKey(key), sig...))
 	raw, err := json.Marshal(payload)
 	if err != nil {
@@ -238,9 +248,10 @@ func (s *src) sanitizeString(value string) sanitizeResult {
 	}
 	r := s.sanitizeUncached(value)
 	if s.sanitized == nil {
-		s.sanitized = map[string]sanitizeResult{}
+		s.sanitized, s.outputs = map[string]sanitizeResult{}, map[string]bool{}
 	}
 	s.sanitized[value] = sanitizeResult{value: r.value, removed: slices.Clone(r.removed)}
+	s.outputs[r.value] = true
 	return r
 }
 

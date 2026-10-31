@@ -34,6 +34,9 @@ type literalSpans [][2]int
 // next word ("-m 'msg'"), the text after "=" ("--message=msg"), or the
 // text glued to a two-byte short flag ("-mmsg").
 func findLiteralSpans(value string) literalSpans {
+	if !mentionsLiteralTool(value) {
+		return nil
+	}
 	var spans literalSpans
 	tool, prev := "", ""
 	pending := false
@@ -64,6 +67,18 @@ func findLiteralSpans(value string) literalSpans {
 		prev = text
 	}
 	return spans
+}
+
+// mentionsLiteralTool reports whether value contains a literalTextFlags
+// tool name in any case, which every word naming one must.
+func mentionsLiteralTool(value string) bool {
+	lower := strings.ToLower(value)
+	for tool := range literalTextFlags {
+		if strings.Contains(lower, tool) {
+			return true
+		}
+	}
+	return false
 }
 
 // literalFlagArgument records the argument glued to text when text is a

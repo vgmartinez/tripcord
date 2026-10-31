@@ -111,6 +111,11 @@ type Source struct {
 	// removed is every raw value sanitization removed since the last
 	// Add, in the order it was removed; Add hashes it into the key.
 	removed []string
+	// sanitized memoizes Sanitize, keyed by its input.
+	sanitized map[string]Sanitized
+	// presanitized reports strings Sanitize may return as they are (see
+	// TrustSanitized).
+	presanitized func(string) bool
 }
 
 // recordRemoved rewrites the home directory in each value (user scope
@@ -154,6 +159,17 @@ func (c *Collector) Source(scope model.Scope, path string, raw []byte) *Source {
 // streaming it.
 func (c *Collector) SourceSHA(scope model.Scope, path, sha string) *Source {
 	return &Source{c: c, harness: c.harness, scope: scope, path: path, sha: sha}
+}
+
+// TrustSanitized makes Sanitize return a string f reports as already
+// sanitized as it is, with nothing removed. It is for an adapter that
+// runs the same string sanitization itself and signs its own output
+// (see EntrySignature): re-sanitizing that text protects nothing, since
+// it is already in the payload as written, while kit's key and array
+// rules still apply to the whole entry.
+func (s *Source) TrustSanitized(f func(string) bool) *Source {
+	s.presanitized = f
+	return s
 }
 
 // WithHarness attributes the source's items to harness instead of the
