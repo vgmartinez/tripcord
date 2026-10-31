@@ -21,15 +21,17 @@ the [Codex adapter](codex.md), since nothing else reads it.
 
 | File | Owner | Also loaded by |
 | --- | --- | --- |
-| `AGENTS.md` | generic | Codex, Cursor, Copilot (and Jules, OpenCode, ...) |
-| `.agents/skills`, `.github/skills` | generic | Codex, Copilot, Claude Code |
+| `AGENTS.md` | generic | Codex, Cursor, Copilot, OpenCode, Windsurf, Gemini CLI (via `context.fileName`), and Jules |
+| `.agents/skills`, `.github/skills` | generic | Codex, Copilot, Claude Code, OpenCode, Gemini CLI |
 | `~/.agents/skills` | generic | Codex |
 | `.vscode/tasks.json`, `.vscode/mcp.json` | generic (harness `vscode`) | VS Code with Copilot, Cursor, Windsurf |
 | `.mcp.json` | claude | Copilot CLI |
 | `.claude/settings.json`, `.claude/settings.local.json` | claude | Copilot CLI and Cursor (third-party hooks) |
+| `CLAUDE.md`, `.claude/skills` | claude | OpenCode (fallback) |
+| `.devcontainer/devcontainer.json` | devcontainer | Codespaces, Copilot cloud agents, VS Code, Cursor |
 | `AGENTS.override.md` | codex | none |
 
-`tripcord scan --harness codex|cursor|copilot` also runs the owners of the
+`tripcord scan --harness codex|cursor|copilot|gemini|opencode|windsurf` also runs the owners of the
 files that harness loads, and prints an informational note naming them.
 `AGENTS.md` therefore appears once, as `generic:repo:AGENTS.md`, in every
 scan that reads it.

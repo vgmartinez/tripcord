@@ -20,6 +20,12 @@ configuration adapter and its scope boundaries.
 [adapters/codex.md](adapters/codex.md), [adapters/cursor.md](adapters/cursor.md),
 and [adapters/copilot.md](adapters/copilot.md) document the Codex, Cursor,
 and GitHub Copilot adapters.
+[adapters/gemini.md](adapters/gemini.md),
+[adapters/opencode.md](adapters/opencode.md), and
+[adapters/windsurf.md](adapters/windsurf.md) document the Gemini CLI,
+OpenCode, and Windsurf adapters, and
+[adapters/devcontainer.md](adapters/devcontainer.md) the Dev Container
+adapter (`devcontainer`).
 [adapters/generic.md](adapters/generic.md) documents the shared-files
 adapter (`generic`) and which adapter owns a file several harnesses read.
 

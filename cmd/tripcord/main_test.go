@@ -484,6 +484,82 @@ func TestScanDedupesEscapingSymlinkAcrossAdapters(t *testing.T) {
 	}
 }
 
+func TestScanEscapingSymlinkReportedOnceByNewOwners(t *testing.T) {
+	cases := map[string]struct{ dir, owner string }{
+		"opencode agents":  {".opencode/agents", "opencode: .opencode/agents"},
+		"windsurf rules":   {".windsurf/rules", "windsurf: .windsurf/rules"},
+		"gemini dir":       {".gemini", "gemini: .gemini"},
+		"devcontainer dir": {".devcontainer", "devcontainer: .devcontainer"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			root := outsideGit(t)
+			link := filepath.Join(root, filepath.FromSlash(tc.dir))
+			if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(t.TempDir(), link); err != nil {
+				t.Skipf("symlinks unavailable: %v", err)
+			}
+			var stdout, stderr bytes.Buffer
+			if code := run([]string{"scan", "--scope", "repo", root}, &stdout, &stderr); code != int(exitcode.Config) {
+				t.Fatalf("exit code = %d, stderr = %q", code, stderr.String())
+			}
+			msg := stderr.String()
+			if n := strings.Count(msg, "symlink resolves outside"); n != 1 || !strings.Contains(msg, tc.owner) {
+				t.Fatalf("stderr = %q, want one report by %q", msg, tc.owner)
+			}
+		})
+	}
+}
+
+func TestScanGeminiOpenCodeWindsurfDevcontainer(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, ".git"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		".gemini/settings.json":           `{"mcpServers":{"a":{"command":"x"}}}`,
+		"opencode.jsonc":                  `{"plugin":["p",],}`,
+		".windsurf/hooks.json":            `{"hooks":{"pre_run_command":[{"command":"x"}]}}`,
+		".devcontainer/devcontainer.json": `{"postCreateCommand":"x"}`,
+		"AGENTS.md":                       "x\n",
+	}
+	for rel, content := range files {
+		path := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cases := []struct {
+		harness string
+		implied []string
+	}{
+		{"gemini", []string{"generic: also scanned"}},
+		{"opencode", []string{"claude: also scanned", "generic: also scanned"}},
+		{"windsurf", []string{"generic: also scanned"}},
+		{"devcontainer", nil},
+	}
+	for _, tc := range cases {
+		var stdout, stderr bytes.Buffer
+		if code := run([]string{"scan", "--harness", tc.harness, root}, &stdout, &stderr); code != int(exitcode.OK) {
+			t.Fatalf("%s exit %d stderr %q", tc.harness, code, stderr.String())
+		}
+		for _, want := range tc.implied {
+			if !strings.Contains(stderr.String(), want) {
+				t.Fatalf("%s stderr = %q, want %q", tc.harness, stderr.String(), want)
+			}
+		}
+		if tc.implied == nil && strings.Contains(stderr.String(), "also scanned") {
+			t.Fatalf("%s stderr = %q", tc.harness, stderr.String())
+		}
+	}
+}
+
 func outsideGit(t *testing.T) string {
 	t.Helper()
 	dir, err := os.MkdirTemp("/tmp", "tripcord-scan-")

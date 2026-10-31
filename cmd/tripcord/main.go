@@ -24,7 +24,11 @@ import (
 	"github.com/vgmartinez/tripcord/internal/adapters/codex"
 	"github.com/vgmartinez/tripcord/internal/adapters/copilot"
 	"github.com/vgmartinez/tripcord/internal/adapters/cursor"
+	"github.com/vgmartinez/tripcord/internal/adapters/devcontainer"
+	"github.com/vgmartinez/tripcord/internal/adapters/gemini"
 	"github.com/vgmartinez/tripcord/internal/adapters/generic"
+	"github.com/vgmartinez/tripcord/internal/adapters/opencode"
+	"github.com/vgmartinez/tripcord/internal/adapters/windsurf"
 	"github.com/vgmartinez/tripcord/internal/exitcode"
 	"github.com/vgmartinez/tripcord/internal/model"
 	"github.com/vgmartinez/tripcord/internal/output"
@@ -148,6 +152,10 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 		codex.New(codex.Options{SkipRepo: !repoScope, IncludeUser: userScope, IncludeManaged: managedScope}),
 		copilot.New(copilot.Options{SkipRepo: !repoScope, IncludeUser: userScope, IncludeManaged: managedScope}),
 		cursor.New(cursor.Options{SkipRepo: !repoScope, IncludeUser: userScope, IncludeManaged: managedScope}),
+		gemini.New(gemini.Options{SkipRepo: !repoScope, IncludeUser: userScope, IncludeManaged: managedScope}),
+		opencode.New(opencode.Options{SkipRepo: !repoScope, IncludeUser: userScope, IncludeManaged: managedScope}),
+		windsurf.New(windsurf.Options{SkipRepo: !repoScope, IncludeUser: userScope, IncludeManaged: managedScope}),
+		devcontainer.New(devcontainer.Options{SkipRepo: !repoScope}),
 		generic.New(generic.Options{SkipRepo: !repoScope, IncludeUser: userScope}),
 	)
 	if err != nil {
