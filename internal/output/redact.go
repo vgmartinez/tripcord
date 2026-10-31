@@ -60,8 +60,10 @@ func redactFinding(finding model.Finding, redact Redactor) model.Finding {
 		for i, evidence := range finding.Evidence {
 			out.Evidence[i] = model.Evidence{
 				Event:   redact(evidence.Event),
-				Config:  redact(evidence.Config),
 				Excerpt: redact(evidence.Excerpt),
+			}
+			if evidence.Config != nil {
+				out.Evidence[i].Config = &model.ConfigRef{ID: redact(evidence.Config.ID), Key: redact(evidence.Config.Key)}
 			}
 		}
 	}

@@ -66,6 +66,7 @@ func TestInjectionPayloadsAreInert(t *testing.T) {
 					switch format {
 					case FormatJSON, FormatJSONL:
 						assertJSONFaithful(t, got, finding, placementName)
+						validateFindingLines(t, got)
 					case FormatMD:
 						assertMarkdownInert(t, got)
 					case FormatSARIF:
@@ -297,7 +298,7 @@ func TestUnredactedSecretsNeverReachOutput(t *testing.T) {
 	finding.Location.Session = carrier
 	finding.Location.Path = "configs/" + awsID + ".json"
 	finding.Evidence = []model.Evidence{
-		{Config: "cursor:repo:" + githubToken, Excerpt: carrier},
+		{Config: &model.ConfigRef{ID: "cursor:repo:" + githubToken, Key: githubToken}, Excerpt: carrier},
 		{Event: "evt_" + awsID, Excerpt: "`" + githubToken + "`"},
 	}
 	finding.Refs = []string{"https://example.invalid/?t=" + githubToken}

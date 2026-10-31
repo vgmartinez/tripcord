@@ -29,8 +29,11 @@ func TestGoldenFormats(t *testing.T) {
 				return
 			}
 			assertGolden(t, string(format)+".golden", got)
-			if format == FormatSARIF {
+			switch format {
+			case FormatSARIF:
 				validateSARIF(t, got)
+			case FormatJSON:
+				validateFindingLines(t, got)
 			}
 		})
 	}
@@ -322,7 +325,7 @@ func findings() []model.Finding {
 			Decision:   model.DecisionDeny,
 			Confidence: 0.95,
 			Evidence: []model.Evidence{{
-				Config:  "cursor:repo:configs/hook.json",
+				Config:  &model.ConfigRef{ID: "cursor:repo:configs/hook.json"},
 				Excerpt: "plugin: ./plugins/unreviewed.js",
 			}},
 			Location:    model.Location{Harness: model.HarnessCursor, Scope: model.ScopeRepo, Path: "/work/repo/configs/hook.json", Line: &line},
@@ -382,6 +385,24 @@ func validateSARIF(t *testing.T, raw string) {
 	}
 }
 
+// validateFindingLines checks each JSONL line against tripcord.finding/v1.
+func validateFindingLines(t *testing.T, raw string) {
+	t.Helper()
+	schema, err := jsonschema.NewCompiler().Compile(filepath.Join(outputTestdataDir(t), "..", "..", "..", "schemas", "tripcord.finding.v1.schema.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range strings.Split(strings.TrimSuffix(raw, "\n"), "\n") {
+		instance, err := jsonschema.UnmarshalJSON(strings.NewReader(line))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := schema.Validate(instance); err != nil {
+			t.Fatalf("%s\n%v", line, err)
+		}
+	}
+}
+
 func outputTestdataDir(t *testing.T) string {
 	t.Helper()
 	_, file, _, ok := runtime.Caller(0)
@@ -413,7 +434,7 @@ func userFinding() model.Finding {
 		Decision:   model.DecisionDeny,
 		Confidence: 0.9,
 		Evidence: []model.Evidence{{
-			Config:  "claude:user:~/.claude/settings.json",
+			Config:  &model.ConfigRef{ID: "claude:user:~/.claude/settings.json"},
 			Excerpt: "SessionStart hook",
 		}},
 		Location: model.Location{
@@ -437,7 +458,7 @@ func managedFinding() model.Finding {
 		Decision:   model.DecisionAudit,
 		Confidence: 0.4,
 		Evidence: []model.Evidence{{
-			Config:  "cursor:managed:/etc/cursor/hooks.json",
+			Config:  &model.ConfigRef{ID: "cursor:managed:/etc/cursor/hooks.json"},
 			Excerpt: "managed hook",
 		}},
 		Location: model.Location{
