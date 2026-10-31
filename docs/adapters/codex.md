@@ -35,8 +35,10 @@ matching is case-insensitive.
 | `AGENTS.md`, `AGENTS.override.md` | `instructions` (roles `agents`, `agents-override`) |
 
 A relative `CODEX_HOME` is reported and not scanned. A `CODEX_HOME` outside
-the home directory is scanned; its paths are shown as `~/CODEX_HOME/...`
-and an informational note says so (no exit-code change).
+the home directory is scanned; its paths are shown as `~/CODEX_HOME/...`,
+but a blocking diagnostic is reported and the scan exits non-zero, the
+same as Claude's `CLAUDE_CONFIG_DIR` outside home (see
+[claude.md](claude.md)).
 
 ### Managed (`--scope managed`)
 
@@ -114,6 +116,13 @@ Reads, symlink handling, limits, and diagnostics are those of the
 [Claude adapter](claude.md#safe-reads): a `.codex` symlink that resolves
 outside the repository is reported ("Codex may load its target, which was
 not scanned").
+
+## Not scanned in v0
+
+- Codex session transcripts (`~/.codex/sessions`, `history.jsonl`).
+- Hook trust by content hash: Codex also trusts hooks by hash, but where
+  it stores those hashes is not documented, so this adapter cannot
+  determine hook trust by hash (see [Project trust](#project-trust)).
 
 ## Sources
 

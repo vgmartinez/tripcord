@@ -40,9 +40,18 @@ The enterprise (MDM) hooks file:
 | Linux, WSL | `/etc/cursor/hooks.json` |
 | Windows | `%ProgramData%\Cursor\hooks.json` (default `C:\ProgramData`) |
 
-Team hooks distributed from the dashboard are written by the desktop app
-as scripts under `~/.cursor/managed/team_*/hooks/`, not as a `hooks.json`;
-they are not read.
+Team hooks distributed from the dashboard are a separate mechanism; see
+[Not scanned in v0](#not-scanned-in-v0).
+
+## Not scanned in v0
+
+- Team hooks distributed from the Cursor dashboard
+  (`~/.cursor/managed/team_*/hooks/`): these are scripts, not a
+  `hooks.json`, and are not read.
+- Agent transcripts.
+- `.vscode/settings.json` (`task.allowAutomaticTasks`,
+  `chat.tools.autoApprove`), which several Cursor surfaces also honor:
+  see [generic.md](generic.md#not-read).
 
 ## Normalized payloads
 
