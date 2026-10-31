@@ -126,8 +126,11 @@ func (s *src) safeKey(parts []string) []string {
 // shared between commandSecretFlag (the flag and its value in one string,
 // "--token X" or "--token=X") and secretFlagName (the bare flag name,
 // used when a flag and its value are two separate argv elements, as in an
-// MCP server's "args" array).
-const secretFlagNamePattern = `--(?:api[-_]?key|token|secret|password)|-(?:k|t)`
+// MCP server's "args" array). It is built from output.SecretFlags, the
+// same list the second-line DefaultRedactor uses, so this first-line
+// adapter redaction and that second line recognize exactly the same
+// flags instead of the two lists drifting apart.
+var secretFlagNamePattern = output.SecretFlagAlternation()
 
 var (
 	commandSecretFlag = regexp.MustCompile(`(?i)(` + secretFlagNamePattern + `)(?:=|\s+)('[^']*'|"[^"]*"|\S+)`)
@@ -271,8 +274,8 @@ func (s *src) settingsObject(obj map[string]any) {
 		}
 		value := obj[name]
 		payload := map[string]any{"setting": name}
-		switch {
-		case name == "env":
+		switch name {
+		case "env":
 			envObj, ok := value.(map[string]any)
 			if !ok {
 				s.warn("env must be an object")
