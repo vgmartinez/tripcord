@@ -59,10 +59,11 @@ func TestSafeArgvDiscriminatesToolFlagSecrets(t *testing.T) {
 		}
 		return payload["key"].(string)
 	}
-	if key("one") == key("two") {
+	one, two, again := key("one"), key("two"), key("one")
+	if one == two {
 		t.Fatal("argv entries that differ only by a tool-flag secret share a key")
 	}
-	if key("one") != key("one") {
+	if one != again {
 		t.Fatal("key is not deterministic")
 	}
 }
