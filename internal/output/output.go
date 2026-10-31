@@ -70,8 +70,23 @@ type Options struct {
 	// The zero value uses DefaultSARIFNonRepoLocation.
 	NonRepoSARIF SARIFNonRepoLocation
 	// ToolVersion is the build version reported as the SARIF driver
-	// version. Empty means "dev".
+	// version. Empty means "dev", whose semanticVersion is 0.0.0-dev.
 	ToolVersion string
+	// Rules is optional catalog metadata keyed by rule id. Nil, and any
+	// rule absent from the map, falls back to the finding.
+	//
+	// TODO(PR 5): populate this from the rule catalog. fullDescription,
+	// help, and helpUri then come from the catalog, falling back to the
+	// finding when the rule is not in it.
+	Rules map[string]RuleText
+}
+
+// RuleText is catalog metadata for one rule. Empty fields fall back to
+// the finding. PR 5 fills Options.Rules; this PR only defines the seam.
+type RuleText struct {
+	FullDescription string
+	Help            string
+	HelpURI         string
 }
 
 // Sink receives findings and writes a complete result when flushed.

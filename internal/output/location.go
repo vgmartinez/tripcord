@@ -46,7 +46,10 @@ type locationRef struct {
 // Repository paths must be relative, or absolute and inside root; any
 // other absolute path, a "~" path, or one that climbs out with ".." is
 // omitted. User paths must stay under "~". Managed paths are system paths
-// by definition and are kept.
+// by definition and are kept. A managed path under a home directory is
+// displayed as "~/..." (see managedDisplayPath); that rewrite is
+// presentation only and does not change the stored finding or its
+// fingerprint.
 func locate(location model.Location, root string) locationRef {
 	p := normalizeDisplayPath(location.Path)
 	if p == "" {
@@ -69,9 +72,10 @@ func locate(location model.Location, root string) locationRef {
 		ref.baseID = URIBaseUserHome
 	case model.ScopeManaged:
 		clean := path.Clean(p)
+		display := managedDisplayPath(clean)
 		ref.kind = locManaged
-		ref.path = clean
-		ref.uri = relativeURI(strings.TrimPrefix(clean, "/"))
+		ref.path = display
+		ref.uri = managedURI(display, clean)
 		ref.baseID = URIBaseManaged
 	case model.ScopeRepo:
 		rel, ok := repoRelative(p, root)
@@ -150,6 +154,54 @@ func repoRelative(p, root string) (string, bool) {
 		return "", false
 	}
 	return rel, true
+}
+
+// managedDisplayPath rewrites a cleaned managed path for display.
+// /Users/<name>/, /home/<name>/, and <drive>:/Users/<name>/ (any case,
+// after backslashes have become "/") are shown as ~/... so a username
+// never reaches a sink. Any other managed path is returned unchanged.
+func managedDisplayPath(clean string) string {
+	rest, ok := homeRemainder(clean)
+	if !ok {
+		return clean
+	}
+	slash := strings.IndexByte(rest, '/')
+	if slash < 0 || slash == len(rest)-1 {
+		return "~"
+	}
+	return "~/" + rest[slash+1:]
+}
+
+// homeRemainder returns the path after a home-directory prefix, starting
+// at the username segment. clean uses forward slashes.
+func homeRemainder(clean string) (string, bool) {
+	lower := strings.ToLower(clean)
+	for _, prefix := range []string{"/users/", "/home/"} {
+		if strings.HasPrefix(lower, prefix) {
+			return clean[len(prefix):], true
+		}
+	}
+	if len(clean) > 3 && windowsDrive.MatchString(clean) {
+		rest := clean[3:]
+		const users = "Users/"
+		if len(rest) >= len(users) && strings.EqualFold(rest[:len(users)], users) {
+			return rest[len(users):], true
+		}
+	}
+	return "", false
+}
+
+// managedURI is a relative URI for a managed path. A home path uses the
+// rewritten display form, so the username is not part of the URI either.
+func managedURI(display, clean string) string {
+	switch {
+	case display == "~":
+		return "."
+	case strings.HasPrefix(display, "~/"):
+		return relativeURI(strings.TrimPrefix(display, "~/"))
+	default:
+		return relativeURI(strings.TrimPrefix(clean, "/"))
+	}
 }
 
 func userPath(p string) (string, bool) {

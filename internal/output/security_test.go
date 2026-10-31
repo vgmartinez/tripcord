@@ -409,6 +409,107 @@ func TestAbsolutePathsNeverLeak(t *testing.T) {
 	}
 }
 
+func TestManagedHomePathsDisplayAsTilde(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		path string
+		want string
+	}{
+		{name: "macOS", path: "/Users/alice/.cursor/hooks.json", want: "~/.cursor/hooks.json"},
+		{name: "linux", path: "/home/alice/.cursor/hooks.json", want: "~/.cursor/hooks.json"},
+		{name: "windows", path: `C:\Users\alice\.cursor\hooks.json`, want: "~/.cursor/hooks.json"},
+		{name: "windows-slash", path: "C:/Users/alice/.cursor/hooks.json", want: "~/.cursor/hooks.json"},
+		{name: "windows-case", path: `c:\USERS\alice\.cursor\hooks.json`, want: "~/.cursor/hooks.json"},
+		{name: "macOS-case", path: "/USERS/Alice/Library/Cursor/hooks.json", want: "~/Library/Cursor/hooks.json"},
+	}
+	for _, tc := range cases {
+		finding := managedFinding()
+		finding.Location.Path = tc.path
+		stored := finding.Location.Path
+		for _, format := range allFormats {
+			for _, mode := range []SARIFNonRepoLocation{SARIFNonRepoLogical, SARIFNonRepoURIBase} {
+				options := testOptions()
+				options.NonRepoSARIF = mode
+				got := renderWith(t, format, []model.Finding{finding}, options)
+				if finding.Location.Path != stored || finding.Fingerprint != "tcf_2222222222222222" {
+					t.Fatalf("render mutated the finding")
+				}
+				if !strings.Contains(got, tc.want) || strings.Contains(strings.ToLower(got), "alice") {
+					t.Fatalf("%s/%s/%s path = %q\n%s", tc.name, format, mode, tc.path, got)
+				}
+				if !strings.Contains(got, finding.Fingerprint) {
+					t.Fatalf("%s/%s dropped the fingerprint\n%s", format, mode, got)
+				}
+			}
+		}
+	}
+}
+
+func TestManagedHomeDisplayLeavesFingerprint(t *testing.T) {
+	t.Parallel()
+	for _, path := range []string{
+		"/Users/alice/.cursor/hooks.json",
+		"/home/alice/.cursor/hooks.json",
+		`C:\Users\alice\.cursor\hooks.json`,
+	} {
+		finding := managedFinding()
+		finding.Location.Path = path
+		want, err := model.Fingerprint(finding.Rule, finding.Location, finding.Evidence)
+		if err != nil {
+			t.Fatal(err)
+		}
+		finding.Fingerprint = want
+		display := managedDisplayPath(normalizeDisplayPath(path))
+		rewritten := finding.Location
+		rewritten.Path = display
+		if _, err := model.Fingerprint(finding.Rule, rewritten, finding.Evidence); err == nil {
+			t.Fatalf("display path %q was accepted as a managed path", display)
+		}
+		for _, format := range allFormats {
+			got := render(t, format, []model.Finding{finding})
+			if finding.Location.Path != path || finding.Fingerprint != want {
+				t.Fatal("render mutated the finding")
+			}
+			again, err := model.Fingerprint(finding.Rule, finding.Location, finding.Evidence)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if again != want || !strings.Contains(got, want) {
+				t.Fatalf("%s fingerprint changed for %s\n%s", format, path, got)
+			}
+		}
+	}
+}
+
+func TestSARIFRuleTextFallsBackToFinding(t *testing.T) {
+	t.Parallel()
+	options := testOptions()
+	options.Rules = map[string]RuleText{
+		"TC-CFG-010": {
+			FullDescription: "Catalog description",
+			Help:            "Catalog help",
+			HelpURI:         "https://example.invalid/catalog/TC-CFG-010",
+		},
+		"TC-CFG-002": {HelpURI: "javascript:alert(1)"},
+	}
+	got := renderWith(t, FormatSARIF, findings(), options)
+	validateSARIF(t, got)
+	for _, want := range []string{"Catalog description", "Catalog help", "https://example.invalid/catalog/TC-CFG-010"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("SARIF missing catalog text %q\n%s", want, got)
+		}
+	}
+	for _, want := range []string{"Task runs on folder open", "Remove runOn: folderOpen.", "https://example.invalid/rules/TC-CFG-002"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("SARIF missing finding fallback %q\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "javascript:") {
+		t.Fatalf("SARIF kept an unsafe catalog URI\n%s", got)
+	}
+}
+
 func TestWindowsRootRelativizes(t *testing.T) {
 	t.Parallel()
 	options := testOptions()

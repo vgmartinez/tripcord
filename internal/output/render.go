@@ -11,6 +11,10 @@ import (
 	"github.com/vgmartinez/tripcord/internal/model"
 )
 
+// renderJSONL writes one tripcord.finding/v1 document per line. Values
+// round-trip, except that encoding/json replaces each invalid UTF-8 byte
+// with U+FFFD. The location path is the display path from locate; the
+// fingerprint is the one stored on the finding. See docs/output.md.
 func renderJSONL(writer io.Writer, findings []model.Finding, options Options) error {
 	var buffer bytes.Buffer
 	encoder := json.NewEncoder(&buffer)

@@ -13,6 +13,11 @@ depends on the surface: scans fail on high, and the hook warns.
 [fingerprint.md](fingerprint.md) defines the canonical finding fingerprint.
 The digest is stable across versions. Golden tests lock it.
 
+## Output
+
+[output.md](output.md) defines how sinks display paths, the JSONL UTF-8
+contract, SARIF rule text, and Markdown table cells.
+
 ## Decisions
 
 A finding's `decision` is `allow`, `deny`, `warn`, `audit`, or `ask`.

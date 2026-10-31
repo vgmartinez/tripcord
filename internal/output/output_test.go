@@ -270,6 +270,12 @@ func TestRelativeLocationURIs(t *testing.T) {
 	if managed.kind != locManaged || managed.path != "/etc/cursor/hooks.json" || managed.uri != "etc/cursor/hooks.json" || managed.baseID != URIBaseManaged {
 		t.Fatalf("managed location = %+v", managed)
 	}
+	for _, path := range []string{"/Users/alice/.cursor/hooks.json", "/home/alice/.cursor/hooks.json", `C:\Users\alice\.cursor\hooks.json`} {
+		home := locate(model.Location{Scope: model.ScopeManaged, Path: path}, "")
+		if home.path != "~/.cursor/hooks.json" || home.uri != ".cursor/hooks.json" || home.baseID != URIBaseManaged {
+			t.Fatalf("managed home %q = %+v", path, home)
+		}
+	}
 	outside := locate(model.Location{Scope: model.ScopeRepo, Path: "/other/file"}, "/work/repo")
 	if outside.kind != locNone {
 		t.Fatalf("repo path outside the root = %+v", outside)

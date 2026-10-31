@@ -179,7 +179,7 @@ func renderSARIF(writer io.Writer, findings []model.Finding, options Options) er
 		results = append(results, result)
 	}
 
-	sarifRules, err := buildSARIFRules(rules)
+	sarifRules, err := buildSARIFRules(rules, options.Rules)
 	if err != nil {
 		return err
 	}
@@ -209,7 +209,7 @@ func renderSARIF(writer io.Writer, findings []model.Finding, options Options) er
 	return err
 }
 
-func buildSARIFRules(rules map[string]*sarifRuleInfo) ([]sarifRule, error) {
+func buildSARIFRules(rules map[string]*sarifRuleInfo, catalog map[string]RuleText) ([]sarifRule, error) {
 	ids := make([]string, 0, len(rules))
 	for id := range rules {
 		ids = append(ids, id)
@@ -226,17 +226,41 @@ func buildSARIFRules(rules map[string]*sarifRuleInfo) ([]sarifRule, error) {
 		if err != nil {
 			return nil, err
 		}
+		full, help, helpURI := catalogRuleText(id, info, catalog)
 		out = append(out, sarifRule{
 			ID:                   id,
 			ShortDescription:     sarifMessage{Text: escapeControls(info.title)},
-			FullDescription:      sarifMessage{Text: escapeControls(info.title)},
-			Help:                 sarifMessage{Text: escapeControls(info.fix)},
-			HelpURI:              info.helpURI,
+			FullDescription:      sarifMessage{Text: escapeControls(full)},
+			Help:                 sarifMessage{Text: escapeControls(help)},
+			HelpURI:              helpURI,
 			DefaultConfiguration: sarifRuleConfig{Level: level},
 			Properties:           sarifRuleProperties{Tags: []string{"security"}, SecuritySeverity: score},
 		})
 	}
 	return out, nil
+}
+
+// catalogRuleText uses the rule catalog for fullDescription, help, and
+// helpUri, and the finding for anything the catalog does not supply.
+// TODO(PR 5): the catalog is the rule pack; this fallback stays.
+func catalogRuleText(id string, info *sarifRuleInfo, catalog map[string]RuleText) (string, string, string) {
+	full, help, uri := info.title, info.fix, info.helpURI
+	extra, ok := catalog[id]
+	if !ok {
+		return full, help, uri
+	}
+	if extra.FullDescription != "" {
+		full = extra.FullDescription
+	}
+	if extra.Help != "" {
+		help = extra.Help
+	}
+	if extra.HelpURI != "" {
+		if safe := helpURI([]string{extra.HelpURI}); safe != "" {
+			uri = safe
+		}
+	}
+	return full, help, uri
 }
 
 // helpURI returns the first http or https ref with a host. Other schemes
@@ -257,6 +281,7 @@ func helpURI(refs []string) string {
 
 // toolVersions returns the driver version and a SemVer 2.0.0 form of it.
 // A build version that is not SemVer, such as "dev", reports 0.0.0-dev.
+// That dev form is the intended value, not a placeholder to be filled in.
 func toolVersions(version string) (string, string) {
 	version = strings.TrimSpace(version)
 	if version == "" {

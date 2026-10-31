@@ -12,6 +12,11 @@ import (
 // text only appears inside code spans or fenced code blocks, so links,
 // images, HTML, entities, autolinks, emphasis, and #123 references are
 // inert. Mentions are broken with U+200B, and every value is one line.
+//
+// Summary-table cells double every backslash. GFM reads "\\" as an escaped
+// backslash before it looks for "|", so a single backslash would not keep a
+// "|" inside the cell. The detail sections below the table show backslashes
+// literally. See docs/output.md.
 func renderMarkdown(writer io.Writer, findings []model.Finding, options Options) error {
 	var b strings.Builder
 	summary := Summarize(findings)
