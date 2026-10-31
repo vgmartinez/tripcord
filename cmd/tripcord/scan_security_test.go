@@ -232,6 +232,34 @@ func TestSinceErrorKeepsGitStderr(t *testing.T) {
 	}
 }
 
+// TestReplaceHomePrefix checks that a home directory is rewritten to "~"
+// only as a complete path prefix: an empty home and "/" are left alone,
+// and a shorter home does not rewrite a longer name.
+func TestReplaceHomePrefix(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		home string
+		in   string
+		want string
+	}{
+		{name: "empty home", home: "", in: "/home/vic/x", want: "/home/vic/x"},
+		{name: "root", home: "/", in: "/home/vic/x", want: "/home/vic/x"},
+		{name: "prefix of another user", home: "/home/vic", in: "/home/victor", want: "/home/victor"},
+		{name: "directory under home", home: "/home/vic", in: "/home/vic/x", want: "~/x"},
+		{name: "bare home", home: "/home/vic", in: "/home/vic", want: "~"},
+		{name: "non-path boundary", home: "/home/vic", in: "/home/vic: denied", want: "~: denied"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := replaceHomePrefix(tc.in, tc.home); got != tc.want {
+				t.Fatalf("replaceHomePrefix(%q, %q) = %q, want %q", tc.in, tc.home, got, tc.want)
+			}
+		})
+	}
+}
+
 // TestSanitizeGitStderrReplacesHome checks that sanitizeGitStderr hides
 // the local home directory while keeping the rest of git's message.
 func TestSanitizeGitStderrReplacesHome(t *testing.T) {

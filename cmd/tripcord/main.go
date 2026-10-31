@@ -450,17 +450,63 @@ func gitCommandEnv(root string) []string {
 }
 
 // sanitizeGitStderr trims git's diagnostic output for inclusion in an
-// error message, replacing the user's home directory with "~" so the
-// message does not leak the local account path.
+// error message. The user's home directory is rewritten to "~" only where
+// it is a full path prefix, so the message does not leak the local account
+// path and a shorter home does not rewrite a longer one.
 func sanitizeGitStderr(stderr []byte) string {
 	msg := strings.TrimSpace(string(stderr))
 	if msg == "" {
 		return ""
 	}
-	if home, err := os.UserHomeDir(); err == nil && home != "" {
-		msg = strings.ReplaceAll(msg, home, "~")
+	if home, err := os.UserHomeDir(); err == nil {
+		msg = replaceHomePrefix(msg, home)
 	}
 	return strings.ReplaceAll(msg, "\n", "; ")
+}
+
+// replaceHomePrefix rewrites home to "~" only where it is a complete path
+// prefix. An empty home and "/" are left alone, because "/" would rewrite
+// every absolute path. home matches only when the next byte is "/", the
+// end of the string, or a character that does not continue a path
+// component, so "/home/vic" does not rewrite "/home/victor".
+func replaceHomePrefix(msg, home string) string {
+	if home == "" || home == "/" || !strings.Contains(msg, home) {
+		return msg
+	}
+	var b strings.Builder
+	b.Grow(len(msg))
+	for {
+		i := strings.Index(msg, home)
+		if i < 0 {
+			b.WriteString(msg)
+			return b.String()
+		}
+		b.WriteString(msg[:i])
+		rest := msg[i+len(home):]
+		if rest == "" || !continuesPathComponent(rest[0]) {
+			b.WriteByte('~')
+		} else {
+			b.WriteString(home)
+		}
+		msg = rest
+	}
+}
+
+// continuesPathComponent reports whether c extends the path component
+// before it. A slash ends the component. Letters, digits, and the
+// characters commonly found inside one path segment do too, so a shorter
+// home is not substituted inside a longer name.
+func continuesPathComponent(c byte) bool {
+	switch {
+	case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
+		return true
+	case c == '.' || c == '_' || c == '-' || c == '+' || c == '@' || c == '~':
+		return true
+	case c >= 0x80:
+		return true
+	default:
+		return false
+	}
 }
 
 func decision(mode policy.Mode) model.Decision {
