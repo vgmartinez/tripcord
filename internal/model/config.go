@@ -108,7 +108,8 @@ func ParseConfigKind(s string) (ConfigKind, error) {
 // and the scope-normalized path, joined with ":". It does not include
 // the sha256, so the id names the same config entry (for example,
 // ".claude/settings.json" in the repo) across edits to its content.
-// Finding.Evidence.Config cites this id.
+// Finding.Evidence.Config.ID cites this id. A Key on that citation
+// names one entry inside the file; it is not part of this id.
 func (c ConfigItem) ID() (string, error) {
 	if !c.Harness.Valid() {
 		return "", fmt.Errorf("config id: harness %q: unknown", c.Harness)

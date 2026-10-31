@@ -115,9 +115,9 @@ func TestFingerprintGoldens(t *testing.T) {
 			name:     "config evidence, no excerpt",
 			rule:     "TC-CFG-003",
 			harness:  HarnessClaude,
-			evidence: []Evidence{{Config: "claude:repo:.claude/settings.json"}},
-			preimage: `{"v":1,"rule":"TC-CFG-003","location":{"harness":"claude","scope":"repo"},"evidence":[{"config":"claude:repo:.claude/settings.json"}]}`,
-			want:     "tcf_5ea48caca58af7bd",
+			evidence: []Evidence{{Config: &ConfigRef{ID: "claude:repo:.claude/settings.json"}}},
+			preimage: `{"v":1,"rule":"TC-CFG-003","location":{"harness":"claude","scope":"repo"},"evidence":[{"config":{"id":"claude:repo:.claude/settings.json"}}]}`,
+			want:     "tcf_301e4605a5ed0534",
 		},
 	}
 	for _, tc := range cases {
@@ -246,7 +246,7 @@ func TestFingerprintConfigIDIsHashed(t *testing.T) {
 	// has no sha256), so hashing it is safe, and it must change the
 	// fingerprint: the two citations are not interchangeable evidence.
 	fromConfig, err := Fingerprint("TC-SEC-018", loc, []Evidence{
-		{Config: "claude:repo:.claude/settings.json", Excerpt: "cat /proc/$PPID/environ"},
+		{Config: &ConfigRef{ID: "claude:repo:.claude/settings.json"}, Excerpt: "cat /proc/$PPID/environ"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -254,7 +254,7 @@ func TestFingerprintConfigIDIsHashed(t *testing.T) {
 	if fromConfig == fromEvent {
 		t.Fatalf("config id did not change the fingerprint: %s", fromConfig)
 	}
-	if fromConfig != "tcf_ac27273936e13b0d" {
+	if fromConfig != "tcf_d6e7076be31ef7c2" {
 		t.Fatalf("config-cited fingerprint = %s", fromConfig)
 	}
 }
@@ -267,13 +267,13 @@ func TestFingerprintDifferentConfigsHaveDifferentFingerprints(t *testing.T) {
 	// different config files collided onto the same fingerprint. These
 	// must now differ.
 	settings, err := Fingerprint("TC-CFG-003", Location{Harness: HarnessClaude}, []Evidence{
-		{Config: "claude:repo:.claude/settings.json"},
+		{Config: &ConfigRef{ID: "claude:repo:.claude/settings.json"}},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	other, err := Fingerprint("TC-CFG-003", Location{Harness: HarnessClaude}, []Evidence{
-		{Config: "claude:repo:other/settings.json"},
+		{Config: &ConfigRef{ID: "claude:repo:other/settings.json"}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -281,11 +281,87 @@ func TestFingerprintDifferentConfigsHaveDifferentFingerprints(t *testing.T) {
 	if settings == other {
 		t.Fatalf("different config ids collided: %s", settings)
 	}
-	if settings != "tcf_5ea48caca58af7bd" {
+	if settings != "tcf_301e4605a5ed0534" {
 		t.Fatalf("settings fingerprint = %s", settings)
 	}
-	if other != "tcf_6b381da69de9f6cd" {
+	if other != "tcf_27c7eaa6b414761d" {
 		t.Fatalf("other fingerprint = %s", other)
+	}
+}
+
+func TestFingerprintConfigKeyDistinguishesEntries(t *testing.T) {
+	t.Parallel()
+	// Two entries in the same config file. key is content-derived (an
+	// MCP server name, and a hook matcher+command), not an index, so
+	// the fingerprints differ even though the config id is the same.
+	loc := Location{Harness: HarnessClaude}
+	id := "claude:repo:.claude/settings.json"
+	server, err := Fingerprint("TC-CFG-003", loc, []Evidence{
+		{Config: &ConfigRef{ID: id, Key: "filesystem"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hook, err := Fingerprint("TC-CFG-003", loc, []Evidence{
+		{Config: &ConfigRef{ID: id, Key: "PreToolUse|curl"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if server == hook {
+		t.Fatalf("different keys collided: %s", server)
+	}
+	if server != "tcf_30f590ab0e43e08e" {
+		t.Fatalf("filesystem fingerprint = %s", server)
+	}
+	if hook != "tcf_fd9d1e862f831120" {
+		t.Fatalf("hook fingerprint = %s", hook)
+	}
+	// A missing key is a different citation from either entry.
+	wholeFile, err := Fingerprint("TC-CFG-003", loc, []Evidence{
+		{Config: &ConfigRef{ID: id}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if wholeFile == server || wholeFile == hook {
+		t.Fatalf("absent key collided with a keyed entry: %s", wholeFile)
+	}
+}
+
+func TestFingerprintConfigKeyOrderDoesNotMatter(t *testing.T) {
+	t.Parallel()
+	loc := Location{Harness: HarnessClaude}
+	id := "claude:repo:.claude/settings.json"
+	forward, err := Fingerprint("TC-CFG-003", loc, []Evidence{
+		{Config: &ConfigRef{ID: id, Key: "filesystem"}},
+		{Config: &ConfigRef{ID: id, Key: "PreToolUse|curl"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reversed, err := Fingerprint("TC-CFG-003", loc, []Evidence{
+		{Config: &ConfigRef{ID: id, Key: "PreToolUse|curl"}},
+		{Config: &ConfigRef{ID: id, Key: "filesystem"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if forward != reversed {
+		t.Fatalf("reordering entries changed the fingerprint: %s vs %s", forward, reversed)
+	}
+	if forward != "tcf_b88dd3cb84d5dde8" {
+		t.Fatalf("reordered fingerprint = %s", forward)
+	}
+	padded, err := Fingerprint("TC-CFG-003", loc, []Evidence{
+		{Config: &ConfigRef{ID: "  " + id + "  ", Key: "  filesystem  "}},
+		{Config: &ConfigRef{ID: id, Key: "PreToolUse|curl"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if padded != forward {
+		t.Fatalf("untrimmed key changed the fingerprint: %s vs %s", padded, forward)
 	}
 }
 
@@ -459,6 +535,9 @@ func TestFingerprintDocMatchesGoldens(t *testing.T) {
 		`{"v":1,"rule":"TC-CFG-002","location":{"harness":"vscode","scope":"repo","path":".vscode/tasks.json"},"evidence":[{"excerpt":"a && b < c"},{"excerpt":"runOn: folderOpen"}]}`,
 		`{"v":1,"rule":"TC-CFG-001","location":{"harness":"generic","scope":"repo"},"evidence":[]}`,
 		"tcf_0877dad3c1549226",
+		`{"v":1,"rule":"TC-CFG-003","location":{"harness":"claude","scope":"repo"},"evidence":[{"config":{"id":"claude:repo:.claude/settings.json","key":"filesystem"}}]}`,
+		"tcf_30f590ab0e43e08e",
+		"tcf_b88dd3cb84d5dde8",
 	} {
 		if !bytes.Contains(raw, []byte(fragment)) {
 			t.Fatalf("docs/fingerprint.md missing %s", fragment)

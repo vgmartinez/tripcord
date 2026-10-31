@@ -3,7 +3,7 @@
   "$id": "https://schemas.tripcord.invalid/tripcord.finding/v1",
   "$comment": "SPDX-License-Identifier: Apache-2.0",
   "title": "Tripcord finding",
-  "description": "One policy result. fingerprint is tcf_ plus exactly 16 lowercase hex digits. Each evidence item cites exactly one of event (an Event.id) or config (a ConfigItem.id), via oneOf; Finding.Validate in internal/model enforces the same rule independently. Objects are open (additionalProperties: true): a reader must ignore properties it does not recognize, so a v1.x addition never breaks it.",
+  "description": "One policy result. fingerprint is tcf_ plus exactly 16 lowercase hex digits. Each evidence item cites exactly one of event (an Event.id) or config (an object with id, a ConfigItem.id, and an optional key), via oneOf; Finding.Validate in internal/model enforces the same rule independently. Objects are open (additionalProperties: true): a reader must ignore properties it does not recognize, so a v1.x addition never breaks it.",
   "type": "object",
   "additionalProperties": true,
   "required": [
@@ -51,7 +51,16 @@
         "additionalProperties": true,
         "oneOf": [
           { "required": ["event"] },
-          { "required": ["config"] }
+          {
+            "required": ["config"],
+            "properties": {
+              "config": {
+                "type": "object",
+                "additionalProperties": true,
+                "required": ["id"]
+              }
+            }
+          }
         ],
         "properties": {
           "event": {
@@ -59,8 +68,19 @@
             "minLength": 1
           },
           "config": {
-            "type": "string",
-            "minLength": 1
+            "type": "object",
+            "additionalProperties": true,
+            "required": ["id"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "key": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
           },
           "excerpt": {
             "type": "string",

@@ -160,8 +160,20 @@ func TestSchemaRejectsInvalidDocuments(t *testing.T) {
 
 	finding = mustObject(t, readTestdata(t, "finding.json"))
 	evidenceBoth := finding["evidence"].([]any)[0].(map[string]any)
-	evidenceBoth["config"] = "claude:repo:.claude/settings.json"
+	evidenceBoth["config"] = map[string]any{"id": "claude:repo:.claude/settings.json"}
 	expectSchemaError(t, idx, schemaIDFinding, finding, "matches more than one oneOf branch")
+
+	finding = mustObject(t, readTestdata(t, "finding.json"))
+	evidenceNoID := finding["evidence"].([]any)[0].(map[string]any)
+	delete(evidenceNoID, "event")
+	evidenceNoID["config"] = map[string]any{"key": "filesystem"}
+	expectSchemaError(t, idx, schemaIDFinding, finding, "required property is missing")
+
+	finding = mustObject(t, readTestdata(t, "finding.json"))
+	evidenceString := finding["evidence"].([]any)[0].(map[string]any)
+	delete(evidenceString, "event")
+	evidenceString["config"] = "claude:repo:.claude/settings.json"
+	expectSchemaError(t, idx, schemaIDFinding, finding, "does not match type")
 
 	finding = mustObject(t, readTestdata(t, "finding.json"))
 	evidenceNeither := finding["evidence"].([]any)[0].(map[string]any)

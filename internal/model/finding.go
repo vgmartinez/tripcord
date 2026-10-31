@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"strings"
 )
 
 // fingerprintPattern is the wire shape: "tcf_" plus exactly 16 lowercase
@@ -13,14 +14,25 @@ import (
 // it later would be a breaking schema change.
 var fingerprintPattern = regexp.MustCompile(`^tcf_[0-9a-f]{16}$`)
 
+// ConfigRef cites one config file and, optionally, one stable entry
+// inside it. ID is a ConfigItem.ID (harness:scope:path). Key is a
+// content-derived sub-identifier, never a positional index: an MCP
+// server name, a task label, or matcher+command for a hook entry.
+// Fingerprint hashes both, so two entries in the same file get distinct
+// fingerprints, and reordering those entries does not change them.
+type ConfigRef struct {
+	ID  string `json:"id"`
+	Key string `json:"key,omitempty"`
+}
+
 // Evidence cites one event or one config item, never both. Event is an
-// Event.ID; Config is a ConfigItem.ID. Excerpt is optional either way
-// and, when set, must already be redacted. Fingerprint hashes the
-// normalized excerpt and Config, but never Event (see Fingerprint).
+// Event.ID. Config is a ConfigRef. Excerpt is optional either way and,
+// when set, must already be redacted. Fingerprint hashes the normalized
+// excerpt and Config (id and key), but never Event (see Fingerprint).
 type Evidence struct {
-	Event   string `json:"event,omitempty"`
-	Config  string `json:"config,omitempty"`
-	Excerpt string `json:"excerpt,omitempty"`
+	Event   string     `json:"event,omitempty"`
+	Config  *ConfigRef `json:"config,omitempty"`
+	Excerpt string     `json:"excerpt,omitempty"`
 }
 
 // Location is where a finding applies.
@@ -82,8 +94,13 @@ func (f Finding) Validate() error {
 		return fmt.Errorf("finding: confidence out of range")
 	}
 	for i, ev := range f.Evidence {
-		if (ev.Event == "") == (ev.Config == "") {
+		hasEvent := ev.Event != ""
+		hasConfig := ev.Config != nil
+		if hasEvent == hasConfig {
 			return fmt.Errorf("finding: evidence %d: exactly one of event or config is required", i)
+		}
+		if hasConfig && strings.TrimSpace(ev.Config.ID) == "" {
+			return fmt.Errorf("finding: evidence %d: config id is required", i)
 		}
 	}
 	if !f.Location.Harness.Valid() {

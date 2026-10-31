@@ -91,11 +91,18 @@ branch or actor to report — still validates.
 ## Evidence cites exactly one of event or config
 
 `tripcord.finding/v1`'s `evidence` items cite exactly one of `event` (an
-`Event.id`) or `config` (a `ConfigItem.id`), per the spec's "findings
-reference events or config by id." The schema expresses this with
-`oneOf: [{"required": ["event"]}, {"required": ["config"]}]` on each
-evidence item. `Finding.Validate` in `internal/model` enforces the same
-rule in Go, independently of the schema.
+`Event.id`) or `config`, per the spec's "findings reference events or
+config by id." `config` is an object, not a string: `id` (a
+`ConfigItem.id`) is required, and `key` is optional. `key` is a
+content-derived sub-identifier for one entry inside that file — an MCP
+server name, a task label, or matcher+command for a hook — never a
+positional index. The object stays open, so a later optional field on
+`config` is additive.
+
+The schema expresses the citation rule with `oneOf`. The event branch
+requires `event`. The config branch requires `config` and requires that
+object to be an object with `id`. `Finding.Validate` in `internal/model`
+enforces the same rule in Go, independently of the schema.
 
 The hand-written test validator
 (`internal/model/schema_validate_test.go`) supports `oneOf`: it runs the

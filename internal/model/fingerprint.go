@@ -64,15 +64,17 @@ var (
 // identifies. Line stays on Finding.Location for display.
 //
 // evidence is an array of items built from the non-empty normalized
-// fields of each Evidence: config (strings.TrimSpace of Evidence.Config)
-// and excerpt (strings.Fields-joined with single spaces: Unicode white
-// space collapsed, ends dropped). An item with neither is dropped (this
-// matters because Excerpt is optional on a config-only citation: a
-// finding evidenced only by {Config: "..."} with no excerpt must not
-// vanish from the hash the way an all-whitespace excerpt does). Items
-// are sorted by (config, excerpt) as raw strings for a deterministic
-// order; duplicates are kept. The array is [] when nothing remains,
-// never null.
+// fields of each Evidence. excerpt is strings.Fields-joined with single
+// spaces: Unicode white space collapsed, ends dropped. config, when
+// Evidence.Config is set, is an object {id, key?}: id is
+// strings.TrimSpace of Config.ID, key is strings.TrimSpace of
+// Config.Key and is omitted when empty. An item whose excerpt, id, and
+// key are all empty is dropped (this matters because Excerpt is
+// optional on a config-only citation: a finding evidenced only by a
+// config id with no excerpt must not vanish from the hash the way an
+// all-whitespace excerpt does). Items are sorted by (id, key, excerpt)
+// as raw strings for a deterministic order; duplicates are kept. The
+// array is [] when nothing remains, never null.
 //
 // Evidence.Event is NEVER hashed. Event ids are ULIDs minted at
 // ingest, so the same finding re-derived from a reimported transcript,
@@ -89,6 +91,13 @@ var (
 // (reducing the preimage to just rule, harness, and an empty evidence
 // list). Hashing the cited config id closes that collision without
 // reopening the reimport-instability problem Event's exclusion solves.
+//
+// Config.Key is hashed too. It names one entry inside the file (an MCP
+// server name, a task label, or matcher+command for a hook) and is
+// derived from that entry's content, never from its position. Two
+// matching entries in the same file therefore get distinct fingerprints,
+// and listing them in a different order does not, because items are
+// sorted by (id, key, excerpt) before hashing.
 //
 // Because occurrence-identifying fields (the event id) are excluded, a
 // command that recurs across a session — the same shell command run
@@ -130,9 +139,14 @@ type fingerprintLocation struct {
 	Path    string `json:"path,omitempty"`
 }
 
+type fingerprintConfig struct {
+	ID  string `json:"id"`
+	Key string `json:"key,omitempty"`
+}
+
 type fingerprintEvidence struct {
-	Config  string `json:"config,omitempty"`
-	Excerpt string `json:"excerpt,omitempty"`
+	Config  *fingerprintConfig `json:"config,omitempty"`
+	Excerpt string             `json:"excerpt,omitempty"`
 }
 
 func fingerprintPreimage(rule string, loc Location, evidence []Evidence) ([]byte, error) {
@@ -165,14 +179,17 @@ func fingerprintPreimage(rule string, loc Location, evidence []Evidence) ([]byte
 	items := make([]fingerprintEvidence, 0, len(evidence))
 	for _, ev := range evidence {
 		excerpt := strings.Join(strings.Fields(ev.Excerpt), " ")
-		config := strings.TrimSpace(ev.Config)
-		if excerpt == "" && config == "" {
+		config := fingerprintConfigOf(ev.Config)
+		if excerpt == "" && config == nil {
 			continue
 		}
 		items = append(items, fingerprintEvidence{Config: config, Excerpt: excerpt})
 	}
 	slices.SortFunc(items, func(a, b fingerprintEvidence) int {
-		if c := cmp.Compare(a.Config, b.Config); c != 0 {
+		if c := cmp.Compare(configID(a.Config), configID(b.Config)); c != 0 {
+			return c
+		}
+		if c := cmp.Compare(configKey(a.Config), configKey(b.Config)); c != 0 {
 			return c
 		}
 		return cmp.Compare(a.Excerpt, b.Excerpt)
@@ -184,6 +201,35 @@ func fingerprintPreimage(rule string, loc Location, evidence []Evidence) ([]byte
 		Location: canonicalLoc,
 		Evidence: items,
 	})
+}
+
+// fingerprintConfigOf returns the canonical config object for ref.
+// A nil ref, or one whose id and key are both empty after trimming,
+// returns nil so the field is omitted from the preimage.
+func fingerprintConfigOf(ref *ConfigRef) *fingerprintConfig {
+	if ref == nil {
+		return nil
+	}
+	id := strings.TrimSpace(ref.ID)
+	key := strings.TrimSpace(ref.Key)
+	if id == "" && key == "" {
+		return nil
+	}
+	return &fingerprintConfig{ID: id, Key: key}
+}
+
+func configID(c *fingerprintConfig) string {
+	if c == nil {
+		return ""
+	}
+	return c.ID
+}
+
+func configKey(c *fingerprintConfig) string {
+	if c == nil {
+		return ""
+	}
+	return c.Key
 }
 
 // canonicalFingerprintScope defaults an empty scope to repo and

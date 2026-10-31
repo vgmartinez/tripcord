@@ -15,7 +15,7 @@ The digest covers:
 - the normalized location: harness, and, when set, session and path;
   scope is always present (an unset scope defaults to `repo`)
 - the normalized evidence: for each item, the excerpt and/or the cited
-  config id
+  config id and, when set, its key
 
 Two things that might look like identity are deliberately **not**
 hashed, because each one can change without the underlying finding
@@ -42,14 +42,19 @@ Two things that do look like metadata, but **are** hashed:
   the rule simple: scope is always in the preimage, not only when a
   path happens to be ambiguous.
 - **`evidence[].config`.** Unlike `event`, a config id
-  (`ConfigItem.ID()`) is already content-stable: harness, scope, and
-  normalized path, with no `sha256`, so nothing mints a new one per
-  scan the way a ULID does. Leaving it unhashed let two findings that
-  cite different config files collapse onto the same fingerprint
-  whenever `Location.Path` was unset and the evidence carried no
-  excerpt (the preimage reduced to just rule, harness, and an empty
-  evidence array). Hashing the cited config id closes that collision
-  without reopening the problem excluding `event` solves. See
+  (`ConfigItem.ID()`, the `id` field) is already content-stable:
+  harness, scope, and normalized path, with no `sha256`, so nothing
+  mints a new one per scan the way a ULID does. Leaving it unhashed let
+  two findings that cite different config files collapse onto the same
+  fingerprint whenever `Location.Path` was unset and the evidence
+  carried no excerpt (the preimage reduced to just rule, harness, and
+  an empty evidence array). Hashing the cited config id closes that
+  collision without reopening the problem excluding `event` solves.
+  `config.key`, when set, is hashed too. It is a content-derived
+  sub-identifier for one entry inside the file — an MCP server name, a
+  task label, or matcher+command for a hook — never a positional index.
+  Two matching entries in the same file therefore get distinct
+  fingerprints, and reordering those entries does not change them. See
   "Repeated occurrences" below for why this does not reintroduce
   reimport instability.
 
@@ -134,14 +139,21 @@ An array of items built from each `Evidence`'s non-empty normalized
 
 - `excerpt`: `strings.Fields`-joined with a single `U+0020` (Unicode
   white space collapsed, ends dropped).
-- `config`: `strings.TrimSpace` of `Evidence.Config`.
+- `config`: an object, omitted when `Evidence.Config` is absent. `id`
+  is `strings.TrimSpace` of `Config.ID`. `key` is `strings.TrimSpace` of
+  `Config.Key` and is omitted when that is empty. The object itself is
+  omitted when both normalize to empty.
 
-An item is dropped only when **both** normalize to empty — not when
-just the excerpt does, since `Config` without an `Excerpt` is a valid,
-and common, config-only citation (see "Input" above). `Evidence.Event`
-is never part of an item. Items are sorted by `(config, excerpt)` as
-raw strings (byte order) for a deterministic order; duplicates are
-kept. The array is `[]` when nothing remains, never null.
+An item is dropped only when the excerpt, the config id, and the key
+all normalize to empty — not when just the excerpt does, since a config
+citation without an excerpt is valid and common (see "Input" above).
+`Evidence.Event` is never part of an item. Items are sorted by
+`(config.id, config.key, excerpt)` as raw strings (byte order), with a
+missing config sorting as empty id and empty key, for a deterministic
+order; duplicates are kept. The array is `[]` when nothing remains,
+never null. Because the sort key is the content-derived `key` and not
+the entry's position in the file, listing the same entries in a
+different order produces the same preimage.
 
 ## Digest
 
@@ -154,12 +166,18 @@ digest, which is exactly those 16 digits.
 ## Config item ids
 
 `ConfigItem.ID()` is a separate, non-cryptographic id used by
-`Evidence.Config`: `"<harness>:<scope>:<path>"`, where `path` is
+`Evidence.Config.ID`: `"<harness>:<scope>:<path>"`, where `path` is
 `normalizeScopedPath(scope, path)`. It excludes `sha256` on purpose, so
-the same config entry (for example, `.claude/settings.json` in the
+the same config file (for example, `.claude/settings.json` in the
 repo) keeps the same id across edits to its content. Unlike
 `Evidence.Event`, it IS part of the fingerprint preimage; see "Input"
 above for why that is safe.
+
+`Evidence.Config.Key` is not part of that id. The id names the file.
+The key names one entry inside it, derived from the entry's content
+(an MCP server name, a task label, or matcher+command for a hook),
+never from the entry's index. It is optional: a citation of the file
+as a whole leaves it unset. When set, it is part of the preimage.
 
 ## Repeated occurrences
 
@@ -171,13 +189,14 @@ repeated occurrences hash to the same fingerprint rather than minting a
 new one per repetition. A store can dedup on that fingerprint, both
 within one scan and across a reimport of the same transcript.
 
-This holds for a config citation too, as long as the cited config id
-and excerpt are themselves unchanged: a `ConfigItem.ID()` does not
+This holds for a config citation too, as long as the cited config id,
+key, and excerpt are themselves unchanged: a `ConfigItem.ID()` does not
 depend on `sha256`, so editing the file's body without moving it does
 not mint a new fingerprint for a finding that already pointed at it by
-id. Pointing at a *different* config file does change the fingerprint
-(see the "two different config paths" example below), which is the
-fix this hashes in for.
+id and key. Pointing at a different config file, or at a different key
+inside the same file, does change the fingerprint (see the examples
+below). Reordering the entries does not, because the preimage sorts by
+key rather than by position.
 
 ## Examples
 
@@ -244,16 +263,43 @@ different config file with no excerpt and no `location.path`. The cited
 config id is now part of the hash, so these do not collide:
 
 ```json
-{"v":1,"rule":"TC-CFG-003","location":{"harness":"claude","scope":"repo"},"evidence":[{"config":"claude:repo:.claude/settings.json"}]}
+{"v":1,"rule":"TC-CFG-003","location":{"harness":"claude","scope":"repo"},"evidence":[{"config":{"id":"claude:repo:.claude/settings.json"}}]}
 ```
 
-Fingerprint: `tcf_5ea48caca58af7bd`
+Fingerprint: `tcf_301e4605a5ed0534`
 
 ```json
-{"v":1,"rule":"TC-CFG-003","location":{"harness":"claude","scope":"repo"},"evidence":[{"config":"claude:repo:other/settings.json"}]}
+{"v":1,"rule":"TC-CFG-003","location":{"harness":"claude","scope":"repo"},"evidence":[{"config":{"id":"claude:repo:other/settings.json"}}]}
 ```
 
-Fingerprint: `tcf_6b381da69de9f6cd`
+Fingerprint: `tcf_27c7eaa6b414761d`
+
+Two findings for the same rule and the same config file, distinguished
+only by `key`. `filesystem` is an MCP server name; `PreToolUse|curl` is
+matcher+command for a hook entry. Neither key is an index, so the
+fingerprints stay put if those entries trade places in the file:
+
+```json
+{"v":1,"rule":"TC-CFG-003","location":{"harness":"claude","scope":"repo"},"evidence":[{"config":{"id":"claude:repo:.claude/settings.json","key":"filesystem"}}]}
+```
+
+Fingerprint: `tcf_30f590ab0e43e08e`
+
+```json
+{"v":1,"rule":"TC-CFG-003","location":{"harness":"claude","scope":"repo"},"evidence":[{"config":{"id":"claude:repo:.claude/settings.json","key":"PreToolUse|curl"}}]}
+```
+
+Fingerprint: `tcf_fd9d1e862f831120`
+
+One finding that cites both entries. Listing `filesystem` first or
+`PreToolUse|curl` first produces this same document, because items sort
+by `(id, key, excerpt)`:
+
+```json
+{"v":1,"rule":"TC-CFG-003","location":{"harness":"claude","scope":"repo"},"evidence":[{"config":{"id":"claude:repo:.claude/settings.json","key":"PreToolUse|curl"}},{"config":{"id":"claude:repo:.claude/settings.json","key":"filesystem"}}]}
+```
+
+Fingerprint: `tcf_b88dd3cb84d5dde8`
 
 A repo-scope path such as `/home/runner/work/acme/acme/.vscode/tasks.json`
 (an absolute, CI-runner-specific path), or one containing a `..`

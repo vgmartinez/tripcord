@@ -438,7 +438,7 @@ func TestEvidenceExactlyOneOfEventOrConfig(t *testing.T) {
 	}
 
 	configOnly := base()
-	configOnly.Evidence = []Evidence{{Config: "claude:repo:.claude/settings.json", Excerpt: "hooks.PreToolUse"}}
+	configOnly.Evidence = []Evidence{{Config: &ConfigRef{ID: "claude:repo:.claude/settings.json", Key: "filesystem"}, Excerpt: "hooks.PreToolUse"}}
 	if err := configOnly.Validate(); err != nil {
 		t.Fatal(err)
 	}
@@ -446,7 +446,7 @@ func TestEvidenceExactlyOneOfEventOrConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Contains(out, []byte(`"config":"claude:repo:.claude/settings.json"`)) || bytes.Contains(out, []byte(`"event"`)) {
+	if !bytes.Contains(out, []byte(`"config":{"id":"claude:repo:.claude/settings.json","key":"filesystem"}`)) || bytes.Contains(out, []byte(`"event"`)) {
 		t.Fatalf("marshal = %s", out)
 	}
 	if err := loadSchemaIndex(t).validate(schemaIDFinding, out); err != nil {
@@ -460,15 +460,21 @@ func TestEvidenceExactlyOneOfEventOrConfig(t *testing.T) {
 	}
 
 	both := base()
-	both.Evidence = []Evidence{{Event: "evt_1", Config: "claude:repo:.claude/settings.json"}}
+	both.Evidence = []Evidence{{Event: "evt_1", Config: &ConfigRef{ID: "claude:repo:.claude/settings.json"}}}
 	if err := both.Validate(); err == nil {
 		t.Fatal("evidence with both event and config validated")
 	}
 
 	noExcerpt := base()
-	noExcerpt.Evidence = []Evidence{{Config: "claude:repo:.claude/settings.json"}}
+	noExcerpt.Evidence = []Evidence{{Config: &ConfigRef{ID: "claude:repo:.claude/settings.json"}}}
 	if err := noExcerpt.Validate(); err != nil {
 		t.Fatalf("excerpt should be optional: %v", err)
+	}
+
+	missingID := base()
+	missingID.Evidence = []Evidence{{Config: &ConfigRef{Key: "filesystem"}}}
+	if err := missingID.Validate(); err == nil {
+		t.Fatal("config without an id validated")
 	}
 }
 
