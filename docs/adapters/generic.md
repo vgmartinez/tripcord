@@ -33,6 +33,12 @@ scan that reads it.
 
 ## Normalized payloads
 
+Every key below also carries a trailing content digest of the full
+sanitized entry, so two entries that match on the fields listed here but
+differ elsewhere (two tasks with the same label and command but
+different `args`, say) still get distinct keys and fingerprints; see
+[fingerprint.md](../fingerprint.md#input).
+
 - `AGENTS.md`: the Markdown body as `content` (URL userinfo, query, and
   fragment removed) and any frontmatter. Frontmatter that is not valid YAML
   is read as `key: value` lines without a diagnostic, because agents treat

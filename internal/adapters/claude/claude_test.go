@@ -341,13 +341,23 @@ func TestHookKeysIncludeEvent(t *testing.T) {
 	group := `[{"matcher":"Bash","hooks":[{"type":"command","command":"x"}]}]`
 	writeFile(t, filepath.Join(root, ".claude", "settings.json"), `{"hooks":{"PreToolUse":`+group+`,"PostToolUse":`+group+`}}`)
 	got := discover(t, New(Options{}), root)
-	keys := map[string]bool{}
+	var keys []string
 	for _, item := range got.Items {
 		var p map[string]any
 		_ = json.Unmarshal(item.Payload, &p)
-		keys[p["key"].(string)] = true
+		keys = append(keys, p["key"].(string))
 	}
-	if !keys[`["hook","PreToolUse","Bash","command","x"]`] || !keys[`["hook","PostToolUse","Bash","command","x"]`] {
+	hasPrefix := func(prefix string) bool {
+		for _, k := range keys {
+			if strings.HasPrefix(k, prefix) {
+				return true
+			}
+		}
+		return false
+	}
+	// The key always carries a trailing content-digest discriminator
+	// (see kit.PayloadDigest), so match on everything before it.
+	if !hasPrefix(`["hook","PreToolUse","Bash","command","x","sig:`) || !hasPrefix(`["hook","PostToolUse","Bash","command","x","sig:`) {
 		t.Fatalf("keys = %v", keys)
 	}
 }

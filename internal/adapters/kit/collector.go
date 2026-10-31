@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/vgmartinez/tripcord/internal/adapters"
 	"github.com/vgmartinez/tripcord/internal/model"
@@ -166,14 +167,24 @@ func (s *Source) WarnAll(warnings []string) {
 	}
 }
 
-// Add emits one item. key is sanitized and encoded as payload["key"]: the
-// content-derived evidence key, which never encodes a position in the
-// file. payload values must already be sanitized.
+// Add emits one item. key is sanitized, has a content digest of the full
+// payload appended (see PayloadDigest), and is encoded as payload["key"]:
+// the content-derived evidence key, which never encodes a position in the
+// file. The digest means two entries whose caller-supplied key parts
+// match, but whose other fields differ (a second "uses" step with a
+// different "with", a hook whose non-primary action field differs, an
+// env value, an "args" element, ...), never share a key or a fingerprint.
+// payload values must already be sanitized.
 func (s *Source) Add(kind model.ConfigKind, key []string, payload map[string]any) {
+	// The digest is computed before s.fields are merged in: those are
+	// file-level facts such as project_trust that can depend on which
+	// scopes this scan read, not on the file's own content, and must
+	// never affect the key (see WithField).
+	fullKey := append(s.SafeKey(key), "sig:"+PayloadDigest(payload))
 	for name, value := range s.fields {
 		payload[name] = value
 	}
-	payload["key"] = EvidenceKey(s.SafeKey(key))
+	payload["key"] = EvidenceKey(fullKey)
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		s.Warn("cannot encode %s entry: %v", kind, err)
@@ -192,6 +203,29 @@ func (s *Source) Add(kind model.ConfigKind, key []string, payload map[string]any
 func EvidenceKey(parts []string) string {
 	raw, _ := json.Marshal(parts)
 	return string(raw)
+}
+
+// PayloadDigest is a stable content hash of payload (computed before
+// payload["key"] is set): the first 16 hex characters of the SHA-256 of
+// its canonical JSON encoding. encoding/json sorts object keys at every
+// level of nesting, so the digest depends only on payload's content, not
+// on Go's randomized map iteration order. It is appended to every
+// evidence key (see Add) so two entries whose other key parts match but
+// whose full sanitized content differs still get distinct keys and
+// fingerprints: without it, a tool that merges findings by fingerprint
+// (for example GitHub's SARIF alert de-duplication) could let a benign
+// entry hide a hostile one that happened to share the same first fields.
+func PayloadDigest(payload map[string]any) string {
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		// payload holds only JSON-decoded values plus strings, bools,
+		// and sanitized copies of those, so Marshal cannot fail here in
+		// practice; the caller's own json.Marshal(payload) call just
+		// below would fail identically and is what reports the problem.
+		return strings.Repeat("0", 16)
+	}
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:])[:16]
 }
 
 // SortedKeys returns the keys of m in byte order.

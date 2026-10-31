@@ -65,6 +65,12 @@ documented, so hook trust is not determined.
 
 ## Normalized payloads
 
+Every key below also carries a trailing content digest of the full
+sanitized entry, so two entries that match on the fields listed here but
+differ elsewhere (a second hook with the same command but a different
+`commandWindows`, say) still get distinct keys and fingerprints; see
+[fingerprint.md](../fingerprint.md#input).
+
 - MCP servers (`[mcp_servers.<name>]`): every field, sanitized. Values of
   `env`, `http_headers`, and `env_http_headers` are redacted when they look
   secret; their names are kept in `<field>_keys`. `bearer_token_env_var`

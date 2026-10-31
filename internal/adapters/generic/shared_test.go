@@ -63,6 +63,29 @@ func TestFolderOpenTask(t *testing.T) {
 	}
 }
 
+// TestTasksSameLabelAndCommandGetDistinctKeys reproduces the collision a
+// reviewer found: two tasks with the same label and command but
+// different args shared a key, because the key only carried the label
+// and command.
+func TestTasksSameLabelAndCommandGetDistinctKeys(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(root, ".vscode", "tasks.json"), `{"tasks":[
+		{"label":"build","type":"shell","command":"go","args":["build","./..."]},
+		{"label":"build","type":"shell","command":"go","args":["build","./cmd/..."]}
+	]}`)
+	got := kittest.Discover(t, New(Options{}), root)
+	items := got.Find(".vscode/tasks.json", model.ConfigKindTask)
+	if len(items) != 2 {
+		t.Fatalf("items = %d, want 2: %+v", len(items), items)
+	}
+	k1, _ := kittest.Payload(t, items[0])["key"].(string)
+	k2, _ := kittest.Payload(t, items[1])["key"].(string)
+	if k1 == k2 {
+		t.Fatalf("two tasks with the same label/command but different args share a key: %s", k1)
+	}
+}
+
 func TestVSCodeHostileInputs(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

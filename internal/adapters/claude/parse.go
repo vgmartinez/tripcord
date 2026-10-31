@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/vgmartinez/tripcord/internal/adapters"
+	"github.com/vgmartinez/tripcord/internal/adapters/kit"
 	"github.com/vgmartinez/tripcord/internal/model"
 	"github.com/vgmartinez/tripcord/internal/output"
 	"github.com/vgmartinez/tripcord/internal/pathx"
@@ -99,9 +100,14 @@ func (s *src) warnAll(warnings []string) {
 }
 
 // add emits one item. payload["key"] is the content-derived evidence key;
-// it never encodes a position in the file.
+// it never encodes a position in the file. A kit.PayloadDigest of the
+// full payload is always appended, so two entries whose caller-supplied
+// key parts match, but whose other fields differ, never share a key (and
+// therefore never share a fingerprint): see kit.Source.Add, which this
+// mirrors.
 func (s *src) add(kind model.ConfigKind, key []string, payload map[string]any) {
-	payload["key"] = evidenceKey(s.safeKey(key))
+	fullKey := append(s.safeKey(key), "sig:"+kit.PayloadDigest(payload))
+	payload["key"] = evidenceKey(fullKey)
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		s.warn("cannot encode %s entry: %v", kind, err)

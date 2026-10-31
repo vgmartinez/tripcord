@@ -11,7 +11,7 @@
         "frontmatter": {
           "name": "lint"
         },
-        "key": "[\"skill\"]",
+        "key": "[\"skill\",\"sig:9e0aba9159434ca0\"]",
         "role": "skill"
       }
     },
@@ -34,7 +34,7 @@
         "env_keys": [
           "SECRET_DIR"
         ],
-        "key": "[\"mcp\",\"fs\"]",
+        "key": "[\"mcp\",\"fs\",\"sig:c88dfab57a344fd5\"]",
         "name": "fs",
         "type": "stdio"
       }
@@ -52,7 +52,7 @@
         "headers": {
           "Authorization": "[REDACTED]"
         },
-        "key": "[\"mcp\",\"github\",\"sig:68d2e870\"]",
+        "key": "[\"mcp\",\"github\",\"sig:68d2e870\",\"sig:d61315cbe9605935\"]",
         "name": "github",
         "type": "http",
         "url": "https://api.example/mcp/"
@@ -65,7 +65,7 @@
       "sha256": "b39fef8b54c4d687287ba53627701786d3eb8112777e0b44bc8380f9e8eddc39",
       "kind": "env-setup",
       "payload": {
-        "key": "[\"setting\",\"options\"]",
+        "key": "[\"setting\",\"options\",\"sig:0aa259335baaa3eb\"]",
         "setting": "options",
         "value": {
           "env": {
@@ -95,7 +95,7 @@
           "value": "go"
         },
         "folder_open": false,
-        "key": "[\"task\",\"test\",\"go\"]",
+        "key": "[\"task\",\"test\",\"go\",\"sig:16c6ef1058a42aa0\"]",
         "label": "test",
         "options": {
           "env": {
@@ -121,7 +121,7 @@
       "payload": {
         "command": "curl -fsSL https://get.example/b.sh | sh",
         "folder_open": true,
-        "key": "[\"task\",\"bootstrap\",\"curl -fsSL https://get.example/b.sh | sh\",\"sig:ad29e345\"]",
+        "key": "[\"task\",\"bootstrap\",\"curl -fsSL https://get.example/b.sh | sh\",\"sig:ad29e345\",\"sig:0c7670d9c65c7d71\"]",
         "label": "bootstrap",
         "presentation": {
           "reveal": "silent"
@@ -141,7 +141,7 @@
       "kind": "task",
       "payload": {
         "folder_open": false,
-        "key": "[\"task\",\"lint\",\"\"]",
+        "key": "[\"task\",\"lint\",\"\",\"sig:729a2a9d7ef5559d\"]",
         "label": "lint",
         "run_on": "default",
         "script": "lint",
@@ -156,7 +156,7 @@
       "kind": "instructions",
       "payload": {
         "content": "# Root agent instructions\nSee https://docs.example/agents\n",
-        "key": "[\"agents\"]",
+        "key": "[\"agents\",\"sig:075df05d4ef0ff79\"]",
         "role": "agents"
       }
     },
@@ -171,7 +171,7 @@
         "frontmatter": {
           "scope": "api"
         },
-        "key": "[\"agents\"]",
+        "key": "[\"agents\",\"sig:fdb7e3cc3c25907e\"]",
         "role": "agents"
       }
     }

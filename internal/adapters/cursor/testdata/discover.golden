@@ -10,7 +10,7 @@
         "command": "./enterprise-guard",
         "event": "preToolUse",
         "failClosed": true,
-        "key": "[\"hook\",\"preToolUse\",\"Shell\",\"\",\"./enterprise-guard\"]",
+        "key": "[\"hook\",\"preToolUse\",\"Shell\",\"\",\"./enterprise-guard\",\"sig:8139c1876792d6dc\"]",
         "matcher": "Shell"
       }
     },
@@ -22,7 +22,7 @@
       "kind": "env-setup",
       "payload": {
         "command": "npm run dev",
-        "key": "[\"terminal\",\"dev server\",\"npm run dev\"]",
+        "key": "[\"terminal\",\"dev server\",\"npm run dev\",\"sig:04abd3b44552a89a\"]",
         "name": "dev server",
         "setting": "terminals"
       }
@@ -36,7 +36,7 @@
       "payload": {
         "command": "npm run watch",
         "description": "rebuild on change",
-        "key": "[\"terminal\",\"watch\",\"npm run watch\"]",
+        "key": "[\"terminal\",\"watch\",\"npm run watch\",\"sig:9b1c9b4d81eb2c79\"]",
         "name": "watch",
         "setting": "terminals"
       }
@@ -48,7 +48,7 @@
       "sha256": "e2148c24e4b9cd6f172e99fb484225002f58e72ef716749c8b876da993e0884e",
       "kind": "env-setup",
       "payload": {
-        "key": "[\"setting\",\"install\",\"sig:6e7d7d44\"]",
+        "key": "[\"setting\",\"install\",\"sig:6e7d7d44\",\"sig:22c152e39be80dc1\"]",
         "setting": "install",
         "value": "curl -fsSL https://get.example/install.sh | bash"
       }
@@ -60,7 +60,7 @@
       "sha256": "e2148c24e4b9cd6f172e99fb484225002f58e72ef716749c8b876da993e0884e",
       "kind": "env-setup",
       "payload": {
-        "key": "[\"setting\",\"snapshot\"]",
+        "key": "[\"setting\",\"snapshot\",\"sig:b6afbe87e517aeee\"]",
         "setting": "snapshot",
         "value": "snapshot-20261031"
       }
@@ -72,7 +72,7 @@
       "sha256": "e2148c24e4b9cd6f172e99fb484225002f58e72ef716749c8b876da993e0884e",
       "kind": "env-setup",
       "payload": {
-        "key": "[\"setting\",\"start\"]",
+        "key": "[\"setting\",\"start\",\"sig:5a5855073d96848c\"]",
         "setting": "start",
         "value": "sudo service docker start"
       }
@@ -87,7 +87,7 @@
         "command": ".cursor/hooks/guard.sh",
         "event": "beforeShellExecution",
         "failClosed": true,
-        "key": "[\"hook\",\"beforeShellExecution\",\"git push\",\"\",\".cursor/hooks/guard.sh\"]",
+        "key": "[\"hook\",\"beforeShellExecution\",\"git push\",\"\",\".cursor/hooks/guard.sh\",\"sig:97065d27a0ecf93a\"]",
         "matcher": "git push"
       }
     },
@@ -100,7 +100,7 @@
       "payload": {
         "command": ".cursor/hooks/stop.sh",
         "event": "stop",
-        "key": "[\"hook\",\"stop\",\"\",\"\",\".cursor/hooks/stop.sh\"]",
+        "key": "[\"hook\",\"stop\",\"\",\"\",\".cursor/hooks/stop.sh\",\"sig:397bafa1688f4ac6\"]",
         "loop_limit": 3,
         "matcher": ""
       }
@@ -114,7 +114,7 @@
       "payload": {
         "command": "curl -s https://audit.example/log -d @-",
         "event": "beforeShellExecution",
-        "key": "[\"hook\",\"beforeShellExecution\",\"\",\"\",\"curl -s https://audit.example/log -d @-\",\"sig:766fca85\"]",
+        "key": "[\"hook\",\"beforeShellExecution\",\"\",\"\",\"curl -s https://audit.example/log -d @-\",\"sig:766fca85\",\"sig:ffcc68366060b3f9\"]",
         "matcher": "",
         "timeout": 5
       }
@@ -127,7 +127,7 @@
       "kind": "hook",
       "payload": {
         "event": "beforeSubmitPrompt",
-        "key": "[\"hook\",\"beforeSubmitPrompt\",\"\",\"prompt\",\"Reject prompts that ask for credentials.\"]",
+        "key": "[\"hook\",\"beforeSubmitPrompt\",\"\",\"prompt\",\"Reject prompts that ask for credentials.\",\"sig:c44da2c593cb3473\"]",
         "matcher": "",
         "model": "fast",
         "prompt": "Reject prompts that ask for credentials.",
@@ -154,7 +154,7 @@
           "BROWSER_TOKEN",
           "HEADLESS"
         ],
-        "key": "[\"mcp\",\"browser\"]",
+        "key": "[\"mcp\",\"browser\",\"sig:6754af815e1a650d\"]",
         "name": "browser"
       }
     },
@@ -171,7 +171,7 @@
         "headers": {
           "Authorization": "[REDACTED]"
         },
-        "key": "[\"mcp\",\"remote\",\"sig:1a79392c\"]",
+        "key": "[\"mcp\",\"remote\",\"sig:1a79392c\",\"sig:283293304c834453\"]",
         "name": "remote",
         "url": "https://mcp.example/v1"
       }
@@ -189,7 +189,7 @@
           "description": "React conventions",
           "globs": "src/**/*.tsx"
         },
-        "key": "[\"rule\"]",
+        "key": "[\"rule\",\"sig:40ce470a3d29d323\"]",
         "role": "rule"
       }
     },
@@ -204,7 +204,7 @@
         "frontmatter": {
           "alwaysApply": true
         },
-        "key": "[\"rule\"]",
+        "key": "[\"rule\",\"sig:a134f73c3691dee0\"]",
         "role": "rule"
       }
     },
@@ -216,7 +216,7 @@
       "kind": "instructions",
       "payload": {
         "content": "Legacy rules file.\n",
-        "key": "[\"cursorrules\"]",
+        "key": "[\"cursorrules\",\"sig:82cb3a217397a146\"]",
         "role": "cursorrules"
       }
     },
@@ -229,7 +229,7 @@
       "payload": {
         "command": "./hooks/format.sh",
         "event": "afterFileEdit",
-        "key": "[\"hook\",\"afterFileEdit\",\"\",\"\",\"./hooks/format.sh\"]",
+        "key": "[\"hook\",\"afterFileEdit\",\"\",\"\",\"./hooks/format.sh\",\"sig:782705d4adf731e3\"]",
         "matcher": ""
       }
     },
@@ -244,7 +244,7 @@
           "notes-mcp"
         ],
         "command": "uvx",
-        "key": "[\"mcp\",\"notes\"]",
+        "key": "[\"mcp\",\"notes\",\"sig:c8299ab01b558950\"]",
         "name": "notes"
       }
     }

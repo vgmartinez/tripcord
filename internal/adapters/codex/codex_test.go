@@ -203,6 +203,29 @@ func TestRepoScanDoesNotReadHome(t *testing.T) {
 	}
 }
 
+// TestHooksSameCommandDifferentCommandWindowsGetDistinctKeys reproduces
+// the collision a reviewer found: two hooks with the same primary action
+// field ("command") but a different "commandWindows" shared a key,
+// because the key only carries the first present action field.
+func TestHooksSameCommandDifferentCommandWindowsGetDistinctKeys(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(root, ".codex", "hooks.json"), `{"hooks":{"Stop":[
+		{"hooks":[{"type":"command","command":"./stop.sh","commandWindows":"stop1.bat"}]},
+		{"hooks":[{"type":"command","command":"./stop.sh","commandWindows":"stop2.bat"}]}
+	]}}`)
+	got := kittest.Discover(t, New(Options{}), root)
+	items := got.Find(".codex/hooks.json", model.ConfigKindHook)
+	if len(items) != 2 {
+		t.Fatalf("items = %d, want 2: %+v", len(items), items)
+	}
+	k1, _ := kittest.Payload(t, items[0])["key"].(string)
+	k2, _ := kittest.Payload(t, items[1])["key"].(string)
+	if k1 == k2 {
+		t.Fatalf("two hooks with the same command but different commandWindows share a key: %s", k1)
+	}
+}
+
 func TestCodexHomeOutsideHome(t *testing.T) {
 	t.Parallel()
 	home := t.TempDir()

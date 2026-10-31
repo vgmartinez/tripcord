@@ -9,7 +9,7 @@
       "payload": {
         "bash": "/opt/policy/deny-secrets.sh",
         "event": "preToolUse",
-        "key": "[\"hook\",\"preToolUse\",\"\",\"command\",\"/opt/policy/deny-secrets.sh\"]",
+        "key": "[\"hook\",\"preToolUse\",\"\",\"command\",\"/opt/policy/deny-secrets.sh\",\"sig:3476da5089cc53e4\"]",
         "matcher": "",
         "type": "command"
       }
@@ -23,7 +23,7 @@
       "payload": {
         "command": "./scripts/format.sh",
         "event": "PostToolUse",
-        "key": "[\"hook\",\"PostToolUse\",\"\",\"command\",\"./scripts/format.sh\"]",
+        "key": "[\"hook\",\"PostToolUse\",\"\",\"command\",\"./scripts/format.sh\",\"sig:aeb645091a35f468\"]",
         "matcher": "",
         "type": "command",
         "windows": "./scripts/format.ps1"
@@ -41,7 +41,7 @@
           "description": "Formats changed files",
           "name": "formatter"
         },
-        "key": "[\"agent\"]",
+        "key": "[\"agent\",\"sig:1e371301ce183f61\"]",
         "role": "agent"
       }
     },
@@ -59,7 +59,7 @@
         "env_keys": [
           "FMT_TOKEN"
         ],
-        "key": "[\"mcp\",\"fmt\"]",
+        "key": "[\"mcp\",\"fmt\",\"sig:b7aeb825cf7d4e42\"]",
         "name": "fmt",
         "type": "local"
       }
@@ -72,7 +72,7 @@
       "kind": "instructions",
       "payload": {
         "content": "Use Go 1.27 idioms.\n",
-        "key": "[\"copilot-instructions\"]",
+        "key": "[\"copilot-instructions\",\"sig:a780a365e4731fd6\"]",
         "role": "copilot-instructions"
       }
     },
@@ -85,7 +85,7 @@
       "payload": {
         "command": "npm run lint",
         "event": "postToolUse",
-        "key": "[\"hook\",\"postToolUse\",\"\",\"command\",\"npm run lint\"]",
+        "key": "[\"hook\",\"postToolUse\",\"\",\"command\",\"npm run lint\",\"sig:d5c1da1ef69930a7\"]",
         "matcher": "",
         "type": "command"
       }
@@ -97,7 +97,7 @@
       "sha256": "3ab749e6c24f0064d6d6101a6df6a6beaa89e37a3d9def26402af03469297f9f",
       "kind": "permissions",
       "payload": {
-        "key": "[\"setting\",\"disableAllHooks\"]",
+        "key": "[\"setting\",\"disableAllHooks\",\"sig:61fc7cfeae3dcaab\"]",
         "setting": "disableAllHooks",
         "value": false
       }
@@ -112,7 +112,7 @@
         "bash": "./cleanup.sh",
         "event": "sessionEnd",
         "hooks_disabled": true,
-        "key": "[\"hook\",\"sessionEnd\",\"\",\"command\",\"./cleanup.sh\"]",
+        "key": "[\"hook\",\"sessionEnd\",\"\",\"command\",\"./cleanup.sh\",\"sig:b640f98acd54f5e4\"]",
         "matcher": "",
         "type": "command"
       }
@@ -124,7 +124,7 @@
       "sha256": "270680d429be6e38bb5acf649511558a4e3d2e420086bb62b43f96391042fb06",
       "kind": "permissions",
       "payload": {
-        "key": "[\"setting\",\"disableAllHooks\"]",
+        "key": "[\"setting\",\"disableAllHooks\",\"sig:7ae5f9f8f89b5562\"]",
         "setting": "disableAllHooks",
         "value": true
       }
@@ -138,7 +138,7 @@
       "payload": {
         "bash": "./scripts/guard.sh",
         "event": "preToolUse",
-        "key": "[\"hook\",\"preToolUse\",\"bash|edit\",\"command\",\"./scripts/guard.sh\"]",
+        "key": "[\"hook\",\"preToolUse\",\"bash|edit\",\"command\",\"./scripts/guard.sh\",\"sig:75aa1f02dcad09ce\"]",
         "matcher": "bash|edit",
         "powershell": "./scripts/guard.ps1",
         "timeoutSec": 10,
@@ -154,7 +154,7 @@
       "payload": {
         "command": "./claude-format.sh",
         "event": "PreToolUse",
-        "key": "[\"hook\",\"PreToolUse\",\"Bash\",\"command\",\"./claude-format.sh\"]",
+        "key": "[\"hook\",\"PreToolUse\",\"Bash\",\"command\",\"./claude-format.sh\",\"sig:c80921056e3411ec\"]",
         "matcher": "Bash",
         "type": "command"
       }
@@ -173,7 +173,7 @@
         "headers": {
           "Authorization": "[REDACTED]"
         },
-        "key": "[\"hook\",\"sessionStart\",\"\",\"http\",\"https://hooks.example/start\",\"sig:9850b2c5\"]",
+        "key": "[\"hook\",\"sessionStart\",\"\",\"http\",\"https://hooks.example/start\",\"sig:9850b2c5\",\"sig:5d333f7b62025407\"]",
         "matcher": "",
         "type": "http",
         "url": "https://hooks.example/start"
@@ -190,7 +190,7 @@
         "frontmatter": {
           "applyTo": "services/**/*.go"
         },
-        "key": "[\"instructions\"]",
+        "key": "[\"instructions\",\"sig:01588d732f73243d\"]",
         "role": "instructions"
       }
     },
@@ -206,7 +206,7 @@
           "NPM_TOKEN": "[REDACTED]"
         },
         "job": "copilot-setup-steps",
-        "key": "[\"job\",\"copilot-setup-steps\"]",
+        "key": "[\"job\",\"copilot-setup-steps\",\"sig:7e11789393bb54ea\"]",
         "permissions": {
           "contents": "read"
         },
@@ -223,7 +223,7 @@
       "payload": {
         "id": "deps",
         "job": "copilot-setup-steps",
-        "key": "[\"step\",\"copilot-setup-steps\",\"deps\"]",
+        "key": "[\"step\",\"copilot-setup-steps\",\"deps\",\"sig:779dd4183ac69b00\"]",
         "setting": "step",
         "uses": "actions/setup-node@v5",
         "with": {
@@ -240,7 +240,7 @@
       "kind": "env-setup",
       "payload": {
         "job": "copilot-setup-steps",
-        "key": "[\"step\",\"copilot-setup-steps\",\"Install tools\",\"curl -fsSL https://get.example/tool.sh | sh\",\"sig:8e4647d7\"]",
+        "key": "[\"step\",\"copilot-setup-steps\",\"Install tools\",\"curl -fsSL https://get.example/tool.sh | sh\",\"sig:8e4647d7\",\"sig:558ee56f8148e9b8\"]",
         "name": "Install tools",
         "run": "curl -fsSL https://get.example/tool.sh | sh",
         "setting": "step"
@@ -254,7 +254,7 @@
       "kind": "env-setup",
       "payload": {
         "job": "copilot-setup-steps",
-        "key": "[\"step\",\"copilot-setup-steps\",\"actions/checkout@v5\"]",
+        "key": "[\"step\",\"copilot-setup-steps\",\"actions/checkout@v5\",\"sig:338510eb5e3e5d8a\"]",
         "setting": "step",
         "uses": "actions/checkout@v5"
       }
@@ -266,7 +266,7 @@
       "sha256": "0a1be296e639efc5144b06e1a9ba25bb53e42c83d1ea1d29f781cea4abfcbd00",
       "kind": "env-setup",
       "payload": {
-        "key": "[\"workflow\"]",
+        "key": "[\"workflow\",\"sig:9bdfc5935eac53bd\"]",
         "on": {
           "push": {
             "paths": [
@@ -287,7 +287,7 @@
       "payload": {
         "bash": "./hello.sh",
         "event": "sessionStart",
-        "key": "[\"hook\",\"sessionStart\",\"\",\"command\",\"./hello.sh\"]",
+        "key": "[\"hook\",\"sessionStart\",\"\",\"command\",\"./hello.sh\",\"sig:836228634fb54ef0\"]",
         "matcher": "",
         "type": "command"
       }
@@ -305,7 +305,7 @@
         "headers": {
           "Authorization": "[REDACTED]"
         },
-        "key": "[\"mcp\",\"github\"]",
+        "key": "[\"mcp\",\"github\",\"sig:d61315cbe9605935\"]",
         "name": "github",
         "type": "http",
         "url": "https://api.example/mcp/"
@@ -320,7 +320,7 @@
       "payload": {
         "bash": "./log-prompt.sh",
         "event": "userPromptSubmitted",
-        "key": "[\"hook\",\"userPromptSubmitted\",\"\",\"command\",\"./log-prompt.sh\"]",
+        "key": "[\"hook\",\"userPromptSubmitted\",\"\",\"command\",\"./log-prompt.sh\",\"sig:4d1489b4cbcf4b43\"]",
         "matcher": "",
         "type": "command"
       }

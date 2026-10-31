@@ -137,6 +137,67 @@ func TestHostileInputs(t *testing.T) {
 // generic frontmatter, follows YAML anchors and aliases: GitHub Actions
 // supports them, and rejecting a workflow that uses one would break
 // legitimate CI.
+// TestDistinctStepsGetDistinctKeys reproduces the collision a reviewer
+// found: two unnamed `uses: actions/github-script@v7` steps with
+// different `with.script` previously shared a key (and so a fingerprint)
+// because the key only carried "uses", not "with". A benign step could
+// then hide a hostile one in a tool that merges findings by fingerprint.
+func TestDistinctStepsGetDistinctKeys(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(root, ".github", "workflows", "copilot-setup-steps.yml"), `on: push
+jobs:
+  copilot-setup-steps:
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: console.log("one")
+      - uses: actions/github-script@v7
+        with:
+          script: console.log("two")
+`)
+	got := kittest.Discover(t, New(Options{}), root)
+	steps := got.Find(".github/workflows/copilot-setup-steps.yml", model.ConfigKindEnvSetup)
+	var scriptKeys []string
+	for _, item := range steps {
+		p := kittest.Payload(t, item)
+		if p["uses"] != "actions/github-script@v7" {
+			continue
+		}
+		key, _ := p["key"].(string)
+		scriptKeys = append(scriptKeys, key)
+	}
+	if len(scriptKeys) != 2 {
+		t.Fatalf("got %d github-script steps, want 2: %+v", len(scriptKeys), steps)
+	}
+	if scriptKeys[0] == scriptKeys[1] {
+		t.Fatalf("two steps with different with.script share a key: %s", scriptKeys[0])
+	}
+}
+
+// TestHooksSameActionDifferentSecondaryFieldGetDistinctKeys reproduces
+// the collision a reviewer found: two hooks with the same primary action
+// field ("bash") but a different secondary field ("powershell") shared a
+// key, because the key only carries the first present action field.
+func TestHooksSameActionDifferentSecondaryFieldGetDistinctKeys(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(root, ".github", "hooks", "a.json"), `{"version":1,"hooks":{"sessionStart":[
+		{"bash":"run.sh","powershell":"run1.ps1"},
+		{"bash":"run.sh","powershell":"run2.ps1"}
+	]}}`)
+	got := kittest.Discover(t, New(Options{}), root)
+	items := got.Find(".github/hooks/a.json", model.ConfigKindHook)
+	if len(items) != 2 {
+		t.Fatalf("items = %d, want 2: %+v", len(items), items)
+	}
+	k1, _ := kittest.Payload(t, items[0])["key"].(string)
+	k2, _ := kittest.Payload(t, items[1])["key"].(string)
+	if k1 == k2 {
+		t.Fatalf("two hooks with the same bash but different powershell share a key: %s", k1)
+	}
+}
+
 func TestSetupStepsAliasesExpand(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

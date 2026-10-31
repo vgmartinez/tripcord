@@ -48,6 +48,12 @@ The Windows registry policy source
 
 ## Normalized payloads
 
+Every key below also carries a trailing content digest of the full
+sanitized entry, so two entries that match on the fields listed here but
+differ elsewhere (two unnamed `uses: actions/github-script@v7` steps with
+a different `with.script`, say) still get distinct keys and
+fingerprints; see [fingerprint.md](../fingerprint.md#input).
+
 - Hooks (`{"version": 1, "disableAllHooks": false, "hooks": {...}}`): one
   item per handler with every field (`type`, `bash`, `powershell`,
   `command`, `exec`, `args`, `cwd`, `url`, `prompt`, `timeoutSec`,

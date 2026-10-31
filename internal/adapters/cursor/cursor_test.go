@@ -34,6 +34,36 @@ func TestDiscoverGolden(t *testing.T) {
 	}
 }
 
+// TestTerminalsSameNameAndCommandGetDistinctKeys reproduces the
+// collision a reviewer found: two terminals with the same name and
+// command but a different env.NODE_OPTIONS shared a key, because the key
+// only carried the name and command.
+func TestTerminalsSameNameAndCommandGetDistinctKeys(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(root, ".cursor", "environment.json"), `{"terminals":[
+		{"name":"dev","command":"npm run dev","env":{"NODE_OPTIONS":"--inspect=9229"}},
+		{"name":"dev","command":"npm run dev","env":{"NODE_OPTIONS":"--inspect=9230"}}
+	]}`)
+	got := kittest.Discover(t, New(Options{}), root)
+	items := got.Find(".cursor/environment.json", model.ConfigKindEnvSetup)
+	var terminals []map[string]any
+	for _, item := range items {
+		p := kittest.Payload(t, item)
+		if p["setting"] == "terminals" {
+			terminals = append(terminals, p)
+		}
+	}
+	if len(terminals) != 2 {
+		t.Fatalf("terminals = %d, want 2: %+v", len(terminals), items)
+	}
+	k1, _ := terminals[0]["key"].(string)
+	k2, _ := terminals[1]["key"].(string)
+	if k1 == k2 {
+		t.Fatalf("two terminals with the same name/command but different env share a key: %s", k1)
+	}
+}
+
 func TestDefaultManagedDir(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

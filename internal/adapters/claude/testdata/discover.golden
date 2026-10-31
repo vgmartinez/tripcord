@@ -7,7 +7,7 @@
       "sha256": "10f5458e3661ac7801619221203356e2035b033fa778ee3e693ed1aaf3df51cb",
       "kind": "mcp-server",
       "payload": {
-        "key": "[\"mcp\",\"corp\"]",
+        "key": "[\"mcp\",\"corp\",\"sig:8148f096c56e31ad\"]",
         "name": "corp",
         "type": "http",
         "url": "https://mcp.corp.example.test/mcp"
@@ -23,7 +23,7 @@
         "env_keys": [
           "OTEL_EXPORTER_OTLP_ENDPOINT"
         ],
-        "key": "[\"setting\",\"env\"]",
+        "key": "[\"setting\",\"env\",\"sig:8cbf693f442b9db8\"]",
         "setting": "env",
         "value": {
           "OTEL_EXPORTER_OTLP_ENDPOINT": "https://otel.corp.example.test"
@@ -39,7 +39,7 @@
       "payload": {
         "command": "tripcord hook --managed",
         "event": "PreToolUse",
-        "key": "[\"hook\",\"PreToolUse\",\"Write\",\"command\",\"tripcord hook --managed\"]",
+        "key": "[\"hook\",\"PreToolUse\",\"Write\",\"command\",\"tripcord hook --managed\",\"sig:364a6cb528b4e9b8\"]",
         "matcher": "Write",
         "type": "command"
       }
@@ -51,7 +51,7 @@
       "sha256": "2408892592a8317c70ad46f9cbd2f415affa0399c9f8cb9ca6a4f689c85bdad2",
       "kind": "permissions",
       "payload": {
-        "key": "[\"setting\",\"allowManagedHooksOnly\"]",
+        "key": "[\"setting\",\"allowManagedHooksOnly\",\"sig:104b65e8211bf992\"]",
         "setting": "allowManagedHooksOnly",
         "value": true
       }
@@ -63,7 +63,7 @@
       "sha256": "2408892592a8317c70ad46f9cbd2f415affa0399c9f8cb9ca6a4f689c85bdad2",
       "kind": "permissions",
       "payload": {
-        "key": "[\"setting\",\"permissions\"]",
+        "key": "[\"setting\",\"permissions\",\"sig:a0809b5c716a2e02\"]",
         "setting": "permissions",
         "value": {
           "deny": [
@@ -80,7 +80,7 @@
       "sha256": "434658506e054d7c3dd6900421afa51d627badda211890dd95dbc19deea86c50",
       "kind": "plugin",
       "payload": {
-        "key": "[\"plugin\",\"acme\"]",
+        "key": "[\"plugin\",\"acme\",\"sig:ba6aa7d661bb2acc\"]",
         "plugin_root": "plugins/acme",
         "setting": "marketplace",
         "value": {
@@ -97,7 +97,7 @@
       "sha256": "434658506e054d7c3dd6900421afa51d627badda211890dd95dbc19deea86c50",
       "kind": "plugin",
       "payload": {
-        "key": "[\"plugin\",\"remote\"]",
+        "key": "[\"plugin\",\"remote\",\"sig:8483b8b3aa682ee3\"]",
         "setting": "marketplace",
         "value": {
           "name": "remote",
@@ -116,7 +116,7 @@
       "kind": "instructions",
       "payload": {
         "content": "# Claude dir instructions\n",
-        "key": "[\"instructions\"]",
+        "key": "[\"instructions\",\"sig:28a84693a8874660\"]",
         "role": "instructions"
       }
     },
@@ -129,7 +129,7 @@
       "payload": {
         "command": "./scripts/agent-guard.sh",
         "event": "PreToolUse",
-        "key": "[\"hook\",\"PreToolUse\",\"Read\",\"command\",\"./scripts/agent-guard.sh\"]",
+        "key": "[\"hook\",\"PreToolUse\",\"Read\",\"command\",\"./scripts/agent-guard.sh\",\"sig:81d28d78316385c9\"]",
         "matcher": "Read",
         "type": "command"
       }
@@ -147,7 +147,7 @@
           "name": "reviewer",
           "tools": "Read, Grep"
         },
-        "key": "[\"agent\"]",
+        "key": "[\"agent\",\"sig:2176568ca2e62a8d\"]",
         "role": "agent"
       }
     },
@@ -165,7 +165,7 @@
         "env_keys": [
           "TRACKER_TOKEN"
         ],
-        "key": "[\"mcp\",\"tracker\"]",
+        "key": "[\"mcp\",\"tracker\",\"sig:1ed0dc9d7ad6659c\"]",
         "name": "tracker"
       }
     },
@@ -181,7 +181,7 @@
           "allowed-tools": "Bash(make deploy)",
           "description": "Deploy the service"
         },
-        "key": "[\"command\"]",
+        "key": "[\"command\",\"sig:3f8701e45161f4e6\"]",
         "role": "command"
       }
     },
@@ -193,7 +193,7 @@
       "kind": "instructions",
       "payload": {
         "content": "# Style\n\nPrefer small functions.\n",
-        "key": "[\"rule\"]",
+        "key": "[\"rule\",\"sig:03185ddf283b0037\"]",
         "role": "rule"
       }
     },
@@ -205,7 +205,7 @@
       "kind": "env-setup",
       "payload": {
         "command": "/usr/local/bin/otel-headers",
-        "key": "[\"setting\",\"otelHeadersHelper\"]",
+        "key": "[\"setting\",\"otelHeadersHelper\",\"sig:5cce6d118fab0691\"]",
         "setting": "otelHeadersHelper",
         "value": "/usr/local/bin/otel-headers"
       }
@@ -218,7 +218,7 @@
       "kind": "env-setup",
       "payload": {
         "command": "aws sso login",
-        "key": "[\"setting\",\"awsAuthRefresh\"]",
+        "key": "[\"setting\",\"awsAuthRefresh\",\"sig:2b7cad9589229ca5\"]",
         "setting": "awsAuthRefresh",
         "value": "aws sso login"
       }
@@ -231,7 +231,7 @@
       "kind": "env-setup",
       "payload": {
         "command": "security find-generic-password -w",
-        "key": "[\"setting\",\"apiKeyHelper\"]",
+        "key": "[\"setting\",\"apiKeyHelper\",\"sig:c642117fd56ee531\"]",
         "setting": "apiKeyHelper",
         "value": "security find-generic-password -w"
       }
@@ -244,7 +244,7 @@
       "kind": "env-setup",
       "payload": {
         "command": "~/.claude/statusline.sh",
-        "key": "[\"setting\",\"statusLine\"]",
+        "key": "[\"setting\",\"statusLine\",\"sig:d9489b6a50c84322\"]",
         "setting": "statusLine",
         "value": {
           "command": "~/.claude/statusline.sh",
@@ -263,7 +263,7 @@
           "ANTHROPIC_BASE_URL",
           "GITHUB_TOKEN"
         ],
-        "key": "[\"setting\",\"env\"]",
+        "key": "[\"setting\",\"env\",\"sig:021ea274b5f0899a\"]",
         "setting": "env",
         "value": {
           "ANTHROPIC_BASE_URL": "https://proxy.example.test",
@@ -280,7 +280,7 @@
       "payload": {
         "command": "./scripts/setup.sh",
         "event": "SessionStart",
-        "key": "[\"hook\",\"SessionStart\",\"\",\"command\",\"./scripts/setup.sh\"]",
+        "key": "[\"hook\",\"SessionStart\",\"\",\"command\",\"./scripts/setup.sh\",\"sig:c58ece7943193dd5\"]",
         "matcher": "",
         "type": "command"
       }
@@ -294,7 +294,7 @@
       "payload": {
         "command": "tripcord hook",
         "event": "PostToolUse",
-        "key": "[\"hook\",\"PostToolUse\",\"Bash\",\"command\",\"tripcord hook\"]",
+        "key": "[\"hook\",\"PostToolUse\",\"Bash\",\"command\",\"tripcord hook\",\"sig:465a7f6f09c3a5b1\"]",
         "matcher": "Bash",
         "type": "command"
       }
@@ -308,7 +308,7 @@
       "payload": {
         "command": "tripcord hook",
         "event": "PreToolUse",
-        "key": "[\"hook\",\"PreToolUse\",\"Bash\",\"command\",\"tripcord hook\"]",
+        "key": "[\"hook\",\"PreToolUse\",\"Bash\",\"command\",\"tripcord hook\",\"sig:71802c5814b10ffb\"]",
         "matcher": "Bash",
         "timeout": 30,
         "type": "command"
@@ -322,7 +322,7 @@
       "kind": "hook",
       "payload": {
         "event": "PostToolUse",
-        "key": "[\"hook\",\"PostToolUse\",\"Bash\",\"prompt\",\"Check the tool output for secrets.\"]",
+        "key": "[\"hook\",\"PostToolUse\",\"Bash\",\"prompt\",\"Check the tool output for secrets.\",\"sig:8a9776ed27b37a25\"]",
         "matcher": "Bash",
         "prompt": "Check the tool output for secrets.",
         "type": "prompt"
@@ -342,7 +342,7 @@
         "headers": {
           "Authorization": "[REDACTED]"
         },
-        "key": "[\"hook\",\"PreToolUse\",\"Bash\",\"http\",\"https://audit.example.test/hook\"]",
+        "key": "[\"hook\",\"PreToolUse\",\"Bash\",\"http\",\"https://audit.example.test/hook\",\"sig:7b0889ac23af6670\"]",
         "matcher": "Bash",
         "type": "http",
         "url": "https://audit.example.test/hook"
@@ -355,7 +355,7 @@
       "sha256": "1dde5ca595c39342e24177a08d97d81be4558a6a99a965b1f8a1879b462a333e",
       "kind": "permissions",
       "payload": {
-        "key": "[\"setting\",\"disableAllHooks\"]",
+        "key": "[\"setting\",\"disableAllHooks\",\"sig:61fc7cfeae3dcaab\"]",
         "setting": "disableAllHooks",
         "value": false
       }
@@ -367,7 +367,7 @@
       "sha256": "1dde5ca595c39342e24177a08d97d81be4558a6a99a965b1f8a1879b462a333e",
       "kind": "permissions",
       "payload": {
-        "key": "[\"setting\",\"enableAllProjectMcpServers\"]",
+        "key": "[\"setting\",\"enableAllProjectMcpServers\",\"sig:215622cbbae32529\"]",
         "setting": "enableAllProjectMcpServers",
         "value": true
       }
@@ -379,7 +379,7 @@
       "sha256": "1dde5ca595c39342e24177a08d97d81be4558a6a99a965b1f8a1879b462a333e",
       "kind": "permissions",
       "payload": {
-        "key": "[\"setting\",\"permissions\"]",
+        "key": "[\"setting\",\"permissions\",\"sig:61dc9e92689c8841\"]",
         "setting": "permissions",
         "value": {
           "allow": [
@@ -399,7 +399,7 @@
       "sha256": "1dde5ca595c39342e24177a08d97d81be4558a6a99a965b1f8a1879b462a333e",
       "kind": "plugin",
       "payload": {
-        "key": "[\"setting\",\"enabledPlugins\"]",
+        "key": "[\"setting\",\"enabledPlugins\",\"sig:a01f54a97ba2ae8b\"]",
         "setting": "enabledPlugins",
         "value": {
           "acme@acme-tools": true
@@ -413,7 +413,7 @@
       "sha256": "1dde5ca595c39342e24177a08d97d81be4558a6a99a965b1f8a1879b462a333e",
       "kind": "plugin",
       "payload": {
-        "key": "[\"setting\",\"extraKnownMarketplaces\"]",
+        "key": "[\"setting\",\"extraKnownMarketplaces\",\"sig:b8187bf288b5d0bd\"]",
         "setting": "extraKnownMarketplaces",
         "value": {
           "acme-tools": {
@@ -432,7 +432,7 @@
       "sha256": "fd682cd987ee57379cfa9a98eb1b9d7477e3c89a6d33ddfa7f88a5a19b9248f3",
       "kind": "permissions",
       "payload": {
-        "key": "[\"setting\",\"enabledMcpjsonServers\"]",
+        "key": "[\"setting\",\"enabledMcpjsonServers\",\"sig:8412d06f06db8e67\"]",
         "setting": "enabledMcpjsonServers",
         "value": [
           "filesystem"
@@ -446,7 +446,7 @@
       "sha256": "fd682cd987ee57379cfa9a98eb1b9d7477e3c89a6d33ddfa7f88a5a19b9248f3",
       "kind": "permissions",
       "payload": {
-        "key": "[\"setting\",\"permissions\"]",
+        "key": "[\"setting\",\"permissions\",\"sig:980ea5314da1945d\"]",
         "setting": "permissions",
         "value": {
           "allow": [
@@ -464,7 +464,7 @@
       "payload": {
         "command": "tripcord hook --event Stop",
         "event": "Stop",
-        "key": "[\"hook\",\"Stop\",\"\",\"command\",\"tripcord hook --event Stop\"]",
+        "key": "[\"hook\",\"Stop\",\"\",\"command\",\"tripcord hook --event Stop\",\"sig:41e807029ecabb15\"]",
         "matcher": "",
         "type": "command"
       }
@@ -480,7 +480,7 @@
         "frontmatter": {
           "name": "review"
         },
-        "key": "[\"skill\"]",
+        "key": "[\"skill\",\"sig:92af626e45dc2490\"]",
         "role": "skill"
       }
     },
@@ -505,7 +505,7 @@
           "API_TOKEN",
           "LOG_LEVEL"
         ],
-        "key": "[\"mcp\",\"filesystem\"]",
+        "key": "[\"mcp\",\"filesystem\",\"sig:16d52e70bafa60d9\"]",
         "name": "filesystem"
       }
     },
@@ -522,7 +522,7 @@
         "headers": {
           "Authorization": "[REDACTED]"
         },
-        "key": "[\"mcp\",\"remote\",\"sig:d535ec3e\"]",
+        "key": "[\"mcp\",\"remote\",\"sig:ffd4f9b691436fd0\"]",
         "name": "remote",
         "type": "http",
         "url": "https://mcp.example.test/mcp"
@@ -536,7 +536,7 @@
       "kind": "instructions",
       "payload": {
         "content": "# Local notes\n",
-        "key": "[\"instructions\"]",
+        "key": "[\"instructions\",\"sig:388de2c7265b1d89\"]",
         "role": "instructions"
       }
     },
@@ -548,7 +548,7 @@
       "kind": "instructions",
       "payload": {
         "content": "# Project\n\nUse go test before committing.\n",
-        "key": "[\"instructions\"]",
+        "key": "[\"instructions\",\"sig:839d56e2ecaf2551\"]",
         "role": "instructions"
       }
     },
@@ -559,7 +559,7 @@
       "sha256": "d15fdc8ebeb12e088eea1927acf694beeb8b4779a8b1f027f62932aa9c5de166",
       "kind": "plugin",
       "payload": {
-        "key": "[\"plugin\",\"acme\"]",
+        "key": "[\"plugin\",\"acme\",\"sig:c7fc362fa7cb85ad\"]",
         "plugin_root": "plugins/acme",
         "setting": "plugin",
         "value": {
@@ -576,7 +576,7 @@
       "kind": "mcp-server",
       "payload": {
         "command": "${CLAUDE_PLUGIN_ROOT}/bin/mcp",
-        "key": "[\"mcp\",\"acme\"]",
+        "key": "[\"mcp\",\"acme\",\"sig:030a3919a8ec3162\"]",
         "name": "acme"
       }
     },
@@ -589,7 +589,7 @@
       "payload": {
         "command": "${CLAUDE_PLUGIN_ROOT}/bin/start",
         "event": "SessionStart",
-        "key": "[\"hook\",\"SessionStart\",\"\",\"command\",\"${CLAUDE_PLUGIN_ROOT}/bin/start\"]",
+        "key": "[\"hook\",\"SessionStart\",\"\",\"command\",\"${CLAUDE_PLUGIN_ROOT}/bin/start\",\"sig:860d9041ca5df3a2\"]",
         "matcher": "",
         "type": "command"
       }
@@ -603,7 +603,7 @@
       "payload": {
         "command": "../../scripts/nested.sh",
         "event": "UserPromptSubmit",
-        "key": "[\"hook\",\"UserPromptSubmit\",\"\",\"command\",\"../../scripts/nested.sh\"]",
+        "key": "[\"hook\",\"UserPromptSubmit\",\"\",\"command\",\"../../scripts/nested.sh\",\"sig:512ba6b3cfacd5ba\"]",
         "matcher": "",
         "type": "command"
       }
@@ -616,7 +616,7 @@
       "kind": "instructions",
       "payload": {
         "content": "# API service\n",
-        "key": "[\"instructions\"]",
+        "key": "[\"instructions\",\"sig:272c78991b7ff5c0\"]",
         "role": "instructions"
       }
     },
@@ -634,7 +634,7 @@
         "env_keys": [
           "KEY"
         ],
-        "key": "[\"mcp\",\"/srv/app\",\"local\"]",
+        "key": "[\"mcp\",\"/srv/app\",\"local\",\"sig:7fc65e2761d608a0\"]",
         "name": "local",
         "project": "/srv/app"
       }
@@ -647,7 +647,7 @@
       "kind": "mcp-server",
       "payload": {
         "command": "user-mcp",
-        "key": "[\"mcp\",\"user\"]",
+        "key": "[\"mcp\",\"user\",\"sig:35c488a955238b76\"]",
         "name": "user"
       }
     },
@@ -660,7 +660,7 @@
       "payload": {
         "command": "notify-send done",
         "event": "Stop",
-        "key": "[\"hook\",\"Stop\",\"\",\"command\",\"notify-send done\"]",
+        "key": "[\"hook\",\"Stop\",\"\",\"command\",\"notify-send done\",\"sig:fdeecb0435476ae8\"]",
         "matcher": "",
         "type": "command"
       }
@@ -672,7 +672,7 @@
       "sha256": "830eaf36781d2b68356df41fbcff64d0e8c798a323e6b6f052f2faa456eb5e0c",
       "kind": "permissions",
       "payload": {
-        "key": "[\"setting\",\"permissions\"]",
+        "key": "[\"setting\",\"permissions\",\"sig:8e70bb0709f01e4a\"]",
         "setting": "permissions",
         "value": {
           "allow": [

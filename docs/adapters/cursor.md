@@ -55,6 +55,12 @@ Team hooks distributed from the dashboard are a separate mechanism; see
 
 ## Normalized payloads
 
+Every key below also carries a trailing content digest of the full
+sanitized entry, so two entries that match on the fields listed here but
+differ elsewhere (two terminals with the same name and command but a
+different `env.NODE_OPTIONS`, say) still get distinct keys and
+fingerprints; see [fingerprint.md](../fingerprint.md#input).
+
 - Hooks (`{"version": 1, "hooks": {"<event>": [{handler}, ...]}}`): one
   item per handler with every field (`command`, `type`, `prompt`, `model`,
   `matcher`, `timeout`, `failClosed`, `loop_limit`, ...) and `event`. The

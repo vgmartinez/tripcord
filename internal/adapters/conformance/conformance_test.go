@@ -203,6 +203,88 @@ func TestFingerprintsAcrossMachines(t *testing.T) {
 	}
 }
 
+// collisionRepo plants one file per adapter whose two entries would
+// previously have shared an evidence key: the key covered only a few
+// identifying fields (a step's "uses", a hook's first action field, a
+// terminal's name and command, a task's label and command), so two
+// entries that matched on those but differed elsewhere collided. See
+// kit.Source.Add and kit.PayloadDigest.
+func collisionRepo(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(root, ".github", "workflows", "copilot-setup-steps.yml"), `on: push
+jobs:
+  copilot-setup-steps:
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: console.log("one")
+      - uses: actions/github-script@v7
+        with:
+          script: console.log("two")
+`)
+	kittest.WriteFile(t, filepath.Join(root, ".github", "hooks", "collide.json"), `{"version":1,"hooks":{"sessionStart":[
+		{"bash":"run.sh","powershell":"run1.ps1"},
+		{"bash":"run.sh","powershell":"run2.ps1"}
+	]}}`)
+	kittest.WriteFile(t, filepath.Join(root, ".codex", "hooks.json"), `{"hooks":{"Stop":[
+		{"hooks":[{"type":"command","command":"./stop.sh","commandWindows":"stop1.bat"}]},
+		{"hooks":[{"type":"command","command":"./stop.sh","commandWindows":"stop2.bat"}]}
+	]}}`)
+	kittest.WriteFile(t, filepath.Join(root, ".cursor", "environment.json"), `{"terminals":[
+		{"name":"dev","command":"npm run dev","env":{"NODE_OPTIONS":"--inspect=9229"}},
+		{"name":"dev","command":"npm run dev","env":{"NODE_OPTIONS":"--inspect=9230"}}
+	]}`)
+	kittest.WriteFile(t, filepath.Join(root, ".vscode", "tasks.json"), `{"tasks":[
+		{"label":"build","type":"shell","command":"go","args":["build","./..."]},
+		{"label":"build","type":"shell","command":"go","args":["build","./cmd/..."]}
+	]}`)
+	return root
+}
+
+// TestNoDuplicateEvidenceKeysInAnyFile is the general form of the
+// fingerprint-collision bug a reviewer found: two entries from the same
+// file, scope, and harness must never produce the same evidence key, or
+// they get the same fingerprint, and a tool that merges findings by
+// fingerprint (for example GitHub's SARIF alert de-duplication) could let
+// a benign entry hide a hostile one. It runs across the adapters'
+// existing fixtures (merged, as TestEachFileHasOneOwner does) and across
+// a dedicated fixture planting the specific collisions a reviewer found.
+func TestNoDuplicateEvidenceKeysInAnyFile(t *testing.T) {
+	t.Parallel()
+	type fileKey struct {
+		harness model.Harness
+		scope   model.Scope
+		path    string
+	}
+	check := func(t *testing.T, root string) {
+		t.Helper()
+		got := discoverAll(t, root, allAdapters("", false))
+		seen := map[fileKey]map[string]bool{}
+		for _, items := range got.byAdapter {
+			for _, item := range items {
+				fk := fileKey{item.Harness, item.Scope, item.Path}
+				if seen[fk] == nil {
+					seen[fk] = map[string]bool{}
+				}
+				key, _ := kittest.Payload(t, item)["key"].(string)
+				if seen[fk][key] {
+					t.Errorf("%s %s %s: duplicate evidence key %s", fk.harness, fk.scope, fk.path, key)
+				}
+				seen[fk][key] = true
+			}
+		}
+	}
+	t.Run("merged adapter fixtures", func(t *testing.T) {
+		t.Parallel()
+		check(t, mergedRepo(t))
+	})
+	t.Run("known collisions", func(t *testing.T) {
+		t.Parallel()
+		check(t, collisionRepo(t))
+	})
+}
+
 // TestHomeOverrideOutsideHomeIsBlocking checks that CLAUDE_CONFIG_DIR,
 // CODEX_HOME, and COPILOT_HOME behave the same way when pointed outside
 // the home directory: the redirected configuration is still scanned, but

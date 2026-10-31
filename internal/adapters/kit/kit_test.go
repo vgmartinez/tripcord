@@ -376,6 +376,82 @@ func TestManagedPath(t *testing.T) {
 	}
 }
 
+// TestAddDistinguishesEntriesWithTheSameCallerKey checks that two items
+// whose caller-supplied key parts match, but whose payload otherwise
+// differs, still get distinct evidence keys: Add appends a digest of the
+// full payload (see PayloadDigest). Without it, the shorter of SARIF's
+// two keys would be free to hide the other by fingerprint, for example
+// when a tool de-duplicates alerts by fingerprint.
+func TestAddDistinguishesEntriesWithTheSameCallerKey(t *testing.T) {
+	t.Parallel()
+	c := NewCollector(model.HarnessCopilot, "Copilot")
+	src := c.Source(model.ScopeRepo, ".github/workflows/copilot-setup-steps.yml", nil)
+	src.Add(model.ConfigKindEnvSetup, []string{"step", "copilot-setup-steps", ""}, map[string]any{"uses": "actions/github-script@v7", "with": map[string]any{"script": "one()"}})
+	src.Add(model.ConfigKindEnvSetup, []string{"step", "copilot-setup-steps", ""}, map[string]any{"uses": "actions/github-script@v7", "with": map[string]any{"script": "two()"}})
+	items := c.Items()
+	if len(items) != 2 {
+		t.Fatalf("items = %d, want 2", len(items))
+	}
+	k1 := kittestKey(t, items[0])
+	k2 := kittestKey(t, items[1])
+	if k1 == k2 {
+		t.Fatalf("two steps with the same label but different content share a key: %s", k1)
+	}
+}
+
+// TestAddKeyIgnoresWithFieldFacts checks that a WithField fact (such as
+// Codex's project_trust, which depends on which scopes this scan read,
+// not on the file's own content) never affects the evidence key: folding
+// it into the digest would make a repository fingerprint depend on
+// whether the scanning machine also read user scope, which
+// docs/fingerprint.md forbids.
+func TestAddKeyIgnoresWithFieldFacts(t *testing.T) {
+	t.Parallel()
+	c := NewCollector(model.HarnessCodex, "Codex")
+	src := c.Source(model.ScopeRepo, ".codex/config.toml", nil)
+	src.WithField("project_trust", "unset").Add(model.ConfigKindPermissions, []string{"setting", "sandbox_mode"}, map[string]any{"setting": "sandbox_mode", "value": "read-only"})
+	c2 := NewCollector(model.HarnessCodex, "Codex")
+	src2 := c2.Source(model.ScopeRepo, ".codex/config.toml", nil)
+	src2.WithField("project_trust", "unknown").Add(model.ConfigKindPermissions, []string{"setting", "sandbox_mode"}, map[string]any{"setting": "sandbox_mode", "value": "read-only"})
+	if k1, k2 := kittestKey(t, c.Items()[0]), kittestKey(t, c2.Items()[0]); k1 != k2 {
+		t.Fatalf("key changed with project_trust: %q vs %q", k1, k2)
+	}
+}
+
+func kittestKey(t *testing.T, item model.ConfigItem) string {
+	t.Helper()
+	var payload map[string]any
+	if err := json.Unmarshal(item.Payload, &payload); err != nil {
+		t.Fatal(err)
+	}
+	key, _ := payload["key"].(string)
+	return key
+}
+
+// TestPayloadDigestDeterministic repeats the same Add call 200 times and
+// checks every resulting key is byte-identical: Go randomizes map
+// iteration order per run, so any code that built the digest by ranging
+// over a map without sorting first would be caught by this, sooner or
+// later, across repeats.
+func TestPayloadDigestDeterministic(t *testing.T) {
+	t.Parallel()
+	payload := func() map[string]any {
+		return map[string]any{
+			"a": 1, "b": "two", "c": []any{"x", "y", "z"},
+			"env": map[string]any{"A": "1", "B": "2", "C": "3"},
+			"nested": map[string]any{
+				"p": map[string]any{"q": 1, "r": 2}, "s": []any{1, 2, 3},
+			},
+		}
+	}
+	first := PayloadDigest(payload())
+	for i := 0; i < 200; i++ {
+		if got := PayloadDigest(payload()); got != first {
+			t.Fatalf("iteration %d: digest = %s, want %s", i, got, first)
+		}
+	}
+}
+
 func TestResolveUserDir(t *testing.T) {
 	t.Parallel()
 	c := NewCollector(model.HarnessCodex, "Codex")
