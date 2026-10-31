@@ -119,10 +119,12 @@ The documented shape is:
   emitted as a `permissions` setting named `hooks.<member>`.
 
 `hooksConfig` is its own `permissions` setting. `hooksConfig.enabled`
-set to false, or `hooksConfig.disabled` set to true, turns hooks off in
-that file, but the hook items are still reported: a higher-precedence
-settings file can re-enable them. An informational note says so. Hook
-items are not marked disabled and are not dropped.
+set to false turns hooks off in that file and produces an informational
+note while the hooks remain reported. `hooksConfig.disabled` is an array
+of event names: each matching hook event is still reported, with an
+informational note that names it. A higher-precedence settings file can
+re-enable either form, so hook items are not marked disabled and are not
+dropped.
 
 ## Parsing
 

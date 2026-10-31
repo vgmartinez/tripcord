@@ -74,11 +74,12 @@ func (f *file) settings(raw []byte) {
 	if servers, ok := obj["mcpServers"]; ok {
 		f.MCPServers(servers, "mcpServers")
 	}
-	if hc, ok := obj["hooksConfig"]; ok && hooksConfigDisables(hc) {
-		f.Note("hooksConfig disables hooks in this file; they are still reported, because a higher-precedence settings file can re-enable them")
-	}
 	if hooks, ok := obj["hooks"]; ok {
-		f.hooks(hooks)
+		disabled, allDisabled := hooksConfigDisabled(obj["hooksConfig"])
+		if allDisabled {
+			f.Note("hooksConfig.enabled is false; hooks in this file are still reported, because a higher-precedence settings file can re-enable them")
+		}
+		f.hooks(hooks, disabled)
 	}
 	for _, name := range kit.SortedKeys(obj) {
 		if kind, ok := settingKinds[name]; ok {
@@ -99,13 +100,16 @@ func (f *file) setting(kind model.ConfigKind, name string, value any) {
 // flag, say) is emitted as a setting, and an entry or handler of any
 // other shape is emitted whole as an opaque hook item and reported,
 // never dropped.
-func (f *file) hooks(value any) {
+func (f *file) hooks(value any, disabled map[string]bool) {
 	table, ok := value.(map[string]any)
 	if !ok {
 		f.opaque("", value)
 		return
 	}
 	for _, event := range kit.SortedKeys(table) {
+		if disabled[event] {
+			f.Note("hooks.%s is named in hooksConfig.disabled; it is still reported, because a higher-precedence settings file can re-enable it", event)
+		}
 		entries, isArray := table[event].([]any)
 		if !isArray {
 			f.setting(model.ConfigKindPermissions, "hooks."+event, table[event])
@@ -172,19 +176,26 @@ func (f *file) handler(event, matcher string, group map[string]any, h any) {
 	f.Hook(event, matcher, hook, hookActions)
 }
 
-// hooksConfigDisables reports whether hooksConfig turns hooks off in
-// this file. enabled: false and disabled: true are the two documented
-// switches. The hooks are still emitted either way.
-func hooksConfigDisables(value any) bool {
+// hooksConfig returns the hook event names that hooksConfig.disabled
+// disables, plus whether hooksConfig.enabled disables every event in this
+// file. disabled is an array of hook names, not a boolean; matching
+// events are still emitted and individually noted.
+func hooksConfigDisabled(value any) (map[string]bool, bool) {
+	disabled := map[string]bool{}
 	obj, ok := value.(map[string]any)
 	if !ok {
-		return false
+		return disabled, false
 	}
-	if enabled, ok := obj["enabled"].(bool); ok && !enabled {
-		return true
+	enabled, hasEnabled := obj["enabled"].(bool)
+	allDisabled := hasEnabled && !enabled
+	if names, ok := obj["disabled"].([]any); ok {
+		for _, name := range names {
+			if text, ok := name.(string); ok {
+				disabled[text] = true
+			}
+		}
 	}
-	disabled, _ := obj["disabled"].(bool)
-	return disabled
+	return disabled, allDisabled
 }
 
 // hasTrailingComma reports whether raw, read as JSONC, has a comma

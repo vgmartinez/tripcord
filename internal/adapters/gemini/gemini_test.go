@@ -93,27 +93,25 @@ func TestHooksShapes(t *testing.T) {
 
 func TestHooksConfigDisabledStillReportsHooks(t *testing.T) {
 	t.Parallel()
-	for _, config := range []string{`{"enabled":false}`, `{"disabled":true}`, `{"enabled":false,"disabled":true}`} {
-		t.Run(config, func(t *testing.T) {
-			t.Parallel()
-			root := t.TempDir()
-			kittest.WriteFile(t, filepath.Join(root, ".gemini", "settings.json"), `{"hooksConfig":`+config+`,"hooks":{"BeforeTool":[{"matcher":"x","hooks":[{"type":"command","command":"a"}]}]}}`)
-			got := kittest.Discover(t, New(Options{}), root)
-			if len(got.Find(".gemini/settings.json", model.ConfigKindHook)) != 1 || len(got.Find(".gemini/settings.json", model.ConfigKindPermissions)) != 1 {
-				t.Fatalf("items = %+v", got.Items)
-			}
-			if !got.HasDiag("still reported") {
-				t.Fatalf("diagnostics = %v", got.Diagnostics)
-			}
-			if kittest.Blocking(t, New(Options{}), root, "still reported") {
-				t.Fatal("a disabled hooksConfig was blocking")
-			}
-		})
-	}
 	root := t.TempDir()
-	kittest.WriteFile(t, filepath.Join(root, ".gemini", "settings.json"), `{"hooksConfig":{"enabled":true},"hooks":{"BeforeTool":[{"hooks":[{"type":"command","command":"a"}]}]}}`)
+	kittest.WriteFile(t, filepath.Join(root, ".gemini", "settings.json"), `{"hooksConfig":{"disabled":["BeforeTool","UnknownEvent"]},"hooks":{
+		"BeforeTool":[{"matcher":"x","hooks":[{"type":"command","command":"a"}]}],
+		"AfterTool":[{"matcher":"x","hooks":[{"type":"command","command":"b"}]}]
+	}}`)
 	got := kittest.Discover(t, New(Options{}), root)
-	if len(got.Find(".gemini/settings.json", model.ConfigKindHook)) != 1 || got.HasDiag("still reported") {
+	if len(got.Find(".gemini/settings.json", model.ConfigKindHook)) != 2 || len(got.Find(".gemini/settings.json", model.ConfigKindPermissions)) != 1 {
+		t.Fatalf("items = %+v", got.Items)
+	}
+	if !got.HasDiag("hooks.BeforeTool is named in hooksConfig.disabled") || got.HasDiag("hooks.AfterTool is named") || got.HasDiag("UnknownEvent") {
+		t.Fatalf("diagnostics = %v", got.Diagnostics)
+	}
+	if kittest.Blocking(t, New(Options{}), root, "hooks.BeforeTool is named") {
+		t.Fatal("a disabled hook was blocking")
+	}
+	root = t.TempDir()
+	kittest.WriteFile(t, filepath.Join(root, ".gemini", "settings.json"), `{"hooksConfig":{"enabled":false},"hooks":{"BeforeTool":[{"hooks":[{"type":"command","command":"a"}]}]}}`)
+	got = kittest.Discover(t, New(Options{}), root)
+	if len(got.Find(".gemini/settings.json", model.ConfigKindHook)) != 1 || !got.HasDiag("hooksConfig.enabled is false") {
 		t.Fatalf("got %+v", got)
 	}
 }
