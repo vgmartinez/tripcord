@@ -23,11 +23,19 @@ type toolFlag struct {
 	glued bool
 	// separated allows "-f value" and "-f=value".
 	separated bool
-	pattern   *regexp.Regexp
+	// valuePrefix, when set, must start the value and is kept visible;
+	// only the rest is the secret (openssl -passin pass:X, but not
+	// -passin env:VAR or file:path).
+	valuePrefix string
+	pattern     *regexp.Regexp
 }
 
 var toolSecretFlags = compileToolFlags([]toolFlag{
 	{tool: "openssl", flag: "-k", separated: true},
+	{tool: "openssl", flag: "-K", separated: true},
+	{tool: "openssl", flag: "-pass", separated: true, valuePrefix: "pass:"},
+	{tool: "openssl", flag: "-passin", separated: true, valuePrefix: "pass:"},
+	{tool: "openssl", flag: "-passout", separated: true, valuePrefix: "pass:"},
 	{tool: "vercel", flag: "-t", separated: true},
 	{tool: "vc", flag: "-t", separated: true},
 	{tool: "codecov", flag: "-t", separated: true},
@@ -35,8 +43,9 @@ var toolSecretFlags = compileToolFlags([]toolFlag{
 	{tool: "influx", flag: "-t", separated: true},
 	{tool: "flyctl", flag: "-t", separated: true},
 	{tool: "fly", flag: "-t", separated: true},
-	{tool: "sshpass", flag: "-p", separated: true},
+	{tool: "sshpass", flag: "-p", glued: true, separated: true},
 	{tool: "redis-cli", flag: "-a", separated: true},
+	{tool: "redis-cli", flag: "--pass", separated: true},
 	{tool: "mysql", flag: "-p", glued: true},
 	{tool: "docker", subcommand: "login", flag: "-p", separated: true},
 })
@@ -53,13 +62,33 @@ func toolNameSet(flags []toolFlag) map[string]bool {
 
 func compileToolFlags(flags []toolFlag) []toolFlag {
 	for i := range flags {
-		separator := `(=|\s+)`
-		if flags[i].glued {
+		var separator string
+		switch {
+		case flags[i].glued && flags[i].separated:
+			separator = `(=|\s+|)`
+		case flags[i].glued:
 			separator = `()`
+		default:
+			separator = `(=|\s+)`
 		}
 		flags[i].pattern = regexp.MustCompile(`(^|\s)(` + regexp.QuoteMeta(flags[i].flag) + `)` + separator + `('[^']*'|"[^"]*"|` + unquotedCommandValue + `+)`)
 	}
 	return flags
+}
+
+// secretPart splits a tool flag's raw value (possibly quoted) into the
+// visible prefix and the secret, or reports false when the value is not
+// a secret for flag: it lacks flag.valuePrefix or is a placeholder.
+func (flag toolFlag) secretPart(value string) (prefix, secret string, ok bool) {
+	inner := unquote(value)
+	if !strings.HasPrefix(inner, flag.valuePrefix) {
+		return "", "", false
+	}
+	secret = inner[len(flag.valuePrefix):]
+	if placeholderSecret(secret) {
+		return "", "", false
+	}
+	return flag.valuePrefix, secret, true
 }
 
 // word is one whitespace-separated token of a command string, with its
@@ -196,11 +225,12 @@ func redactToolFlagsInSegment(segment string) (string, []string) {
 		suffix := flag.pattern.ReplaceAllStringFunc(segment[offset:], func(match string) string {
 			g := flag.pattern.FindStringSubmatch(match)
 			value := g[4]
-			if placeholderSecret(value) {
+			prefix, secret, ok := flag.secretPart(value)
+			if !ok {
 				return match
 			}
-			removed = append(removed, strings.Trim(value, `"'`))
-			return g[1] + g[2] + g[3] + quoteLike(value, redactedMarker)
+			removed = append(removed, secret)
+			return g[1] + g[2] + g[3] + quoteLike(value, prefix+redactedMarker)
 		})
 		segment = segment[:offset] + suffix
 	}
@@ -260,20 +290,20 @@ func RedactToolArgv(argv []string) ([]string, []string) {
 			elem := out[i]
 			switch {
 			case flag.separated && elem == flag.flag && i+1 < len(out):
-				if !placeholderSecret(out[i+1]) {
-					removed = append(removed, out[i+1])
-					out[i+1] = redactedMarker
+				if prefix, secret, ok := flag.secretPart(out[i+1]); ok {
+					removed = append(removed, secret)
+					out[i+1] = prefix + redactedMarker
 				}
 				i++
 			case flag.separated && strings.HasPrefix(elem, flag.flag+"="):
-				if value := elem[len(flag.flag)+1:]; !placeholderSecret(value) {
-					removed = append(removed, value)
-					out[i] = flag.flag + "=" + redactedMarker
+				if prefix, secret, ok := flag.secretPart(elem[len(flag.flag)+1:]); ok {
+					removed = append(removed, secret)
+					out[i] = flag.flag + "=" + prefix + redactedMarker
 				}
 			case flag.glued && strings.HasPrefix(elem, flag.flag) && len(elem) > len(flag.flag):
-				if value := elem[len(flag.flag):]; !placeholderSecret(value) {
-					removed = append(removed, value)
-					out[i] = flag.flag + redactedMarker
+				if prefix, secret, ok := flag.secretPart(elem[len(flag.flag):]); ok {
+					removed = append(removed, secret)
+					out[i] = flag.flag + prefix + redactedMarker
 				}
 			}
 		}

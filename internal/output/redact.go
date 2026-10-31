@@ -50,6 +50,14 @@ var secretPatterns = []*regexp.Regexp{
 // net/url splits userinfo, so "https://user:p@ss@host" does not leak "ss".
 var urlUserinfoPattern = regexp.MustCompile(`(://)([^/\s:@]+:[^/?#\s]*)(@)`)
 
+// urlUserinfoSlashPattern is urlUserinfoPattern for a password that
+// contains "/" ("https://user:pa/ss@host"), which net/url cannot parse
+// and urlUserinfoPattern stops short of. The password runs to the first
+// "@". RedactURLUserinfo skips a match whose text before the first "/"
+// is all digits: that is a port and a path ("https://host:8080/x@y"),
+// not a password.
+var urlUserinfoSlashPattern = regexp.MustCompile(`(://)([^/\s:@]+:([^\s@?#]*/[^\s@?#]*))(@)`)
+
 // quotedOrBareValue is one assignment value: a double-quoted string that
 // correctly skips an escaped quote (\"), so {"password":"a\"b"} redacts
 // the whole "a\"b" instead of stopping at the \" and leaking the b that
@@ -105,6 +113,7 @@ var SecretFlags = []string{
 	"token", "secret", "password", "api-key", "apikey", "api_key",
 	"client-secret", "client_secret", "access-token", "access_token",
 	"auth-token", "auth_token", "http-password",
+	"secret-access-key", "secret_access_key",
 }
 
 // secretFlagWordAlternation is SecretFlags as a regexp alternation of
@@ -130,7 +139,7 @@ func SecretFlagAlternation() string {
 // it accepts. The longer spellings come first: with leftmost-first
 // alternation, "-u" listed first would match the start of "-user" and
 // read "ser" as a glued value, leaking "-user alice:s3cret".
-const UserFlagAlternation = `--user|-user|-u`
+const UserFlagAlternation = `--proxy-user|--user|-user|-u`
 
 // LooksLikeUserPass reports whether value has curl's "user:pass" shape:
 // a non-empty name, a literal ":", and a (possibly empty) password. It
@@ -317,6 +326,14 @@ func RedactURLUserinfo(value string) (string, []string) {
 		g := urlUserinfoPattern.FindStringSubmatch(match)
 		removed = append(removed, g[2])
 		return g[1] + redactedMarker + g[3]
+	})
+	value = urlUserinfoSlashPattern.ReplaceAllStringFunc(value, func(match string) string {
+		g := urlUserinfoSlashPattern.FindStringSubmatch(match)
+		if port := g[3][:strings.IndexByte(g[3], '/')]; port != "" && strings.Trim(port, "0123456789") == "" {
+			return match
+		}
+		removed = append(removed, g[2])
+		return g[1] + redactedMarker + g[4]
 	})
 	return value, removed
 }
