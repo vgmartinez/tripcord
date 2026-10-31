@@ -1,6 +1,7 @@
 package opencode
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -108,6 +109,30 @@ func TestUserNestedPluginIsNoted(t *testing.T) {
 	}
 	if got.HasDiag("node_modules") {
 		t.Fatalf("diagnostics = %v", got.Diagnostics)
+	}
+}
+
+func TestRepoNestedPluginNotesAreCapped(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	for i := 0; i < maxNestedNotes+3; i++ {
+		kittest.WriteFile(t, filepath.Join(root, ".opencode", "plugins", "helpers", fmt.Sprintf("p%02d.ts", i)), "nested-secret")
+	}
+	got := kittest.Discover(t, New(Options{}), root)
+	var nested, summaries int
+	for _, diag := range got.Diagnostics {
+		switch {
+		case strings.Contains(diag, nestedNote):
+			nested++
+		case strings.Contains(diag, "further 3 nested plugin or tool files"):
+			summaries++
+		}
+	}
+	if nested != maxNestedNotes || summaries != 1 {
+		t.Fatalf("nested notes = %d, summaries = %d: %v", nested, summaries, got.Diagnostics)
+	}
+	if kittest.Blocking(t, New(Options{}), root, "nested plugin or tool") {
+		t.Fatal("nested plugin notes were blocking")
 	}
 }
 

@@ -246,12 +246,13 @@ func (a *Adapter) discoverRepo(ctx context.Context, repoRoot string, c *kit.Coll
 		return nil
 	}
 	r := kit.NewRepoReader(reader, a.limits, c)
+	var nested []string
 	for _, rel := range files {
 		role := classify(rel)
 		if role == roleNested {
 			// The file is not read: OpenCode does not load it, and its
 			// contents must not count against the byte budget.
-			c.Note(model.ScopeRepo, rel, true, "%s", nestedNote)
+			nested = append(nested, rel)
 			continue
 		}
 		raw, ok := r.Read(rel)
@@ -260,6 +261,7 @@ func (a *Adapter) discoverRepo(ctx context.Context, repoRoot string, c *kit.Coll
 		}
 		normalize(c.Source(model.ScopeRepo, rel, raw), role, rel, raw)
 	}
+	noteNestedRepo(c, nested)
 	return nil
 }
 
@@ -369,8 +371,21 @@ func (a *Adapter) configDir(ctx context.Context, c *kit.Collector, dir kit.UserD
 }
 
 // maxNestedNotes caps the nested plugin and tool files noted in one
-// user-scope directory, so a dependency tree cannot flood the scan.
+// scan, so a dependency tree cannot flood the scan.
 const maxNestedNotes = 32
+
+// noteNestedRepo records at most maxNestedNotes nested code-file notes,
+// then one deterministic summary naming the number omitted. The nested
+// files are not read.
+func noteNestedRepo(c *kit.Collector, files []string) {
+	for i, rel := range files {
+		if i == maxNestedNotes {
+			c.Note(model.ScopeRepo, "", true, "further %d nested plugin or tool files were not listed", len(files)-i)
+			return
+		}
+		c.Note(model.ScopeRepo, rel, true, "%s", nestedNote)
+	}
+}
 
 // noteNestedCode notes code files below a user-scope plugin or tool
 // directory. node_modules and dot directories are skipped, and symlinks
