@@ -61,6 +61,84 @@ func TestSARIFUsesRepoRelativeURIs(t *testing.T) {
 	}
 }
 
+func TestBackslashIsNotDoubled(t *testing.T) {
+	t.Parallel()
+	finding := findings()[0]
+	finding.Title = `C:\dir`
+	for _, format := range []Format{FormatText, FormatGHA, FormatMD} {
+		t.Run(string(format), func(t *testing.T) {
+			t.Parallel()
+			got := render(t, format, []model.Finding{finding})
+			if !strings.Contains(got, `C:\dir`) || strings.Contains(got, `C:\\dir`) {
+				t.Fatalf("%s doubled a backslash: %q", format, got)
+			}
+		})
+	}
+}
+
+func TestOutputRejectsSymlinkAndDoesNotTruncateEarly(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	victim := filepath.Join(dir, "victim")
+	if err := os.WriteFile(victim, []byte("keep"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "tripcord.sarif")
+	if err := os.Symlink(victim, link); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := SelectSink("sarif", link, &bytes.Buffer{}, testOptions()); err == nil {
+		t.Fatal("symlink output was accepted")
+	}
+	got, err := os.ReadFile(victim)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "keep" {
+		t.Fatalf("victim = %q", got)
+	}
+	info, err := os.Stat(victim)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o644 {
+		t.Fatalf("victim mode = %o", info.Mode().Perm())
+	}
+
+	path := filepath.Join(dir, "out.json")
+	if err := os.WriteFile(path, []byte("original"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	handle, err := SelectSink("json", path, &bytes.Buffer{}, testOptions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := os.ReadFile(path); err != nil || string(got) != "original" {
+		t.Fatalf("file changed before the result existed: %q %v", got, err)
+	}
+	writeFindings(t, handle, findings())
+	if got, err := os.ReadFile(path); err != nil || string(got) != "original" {
+		t.Fatalf("file changed before publish: %q %v", got, err)
+	}
+	if err := handle.Close(); err != nil {
+		t.Fatal(err)
+	}
+	got, err = os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) == "original" || !strings.Contains(string(got), "TC-CFG-010") {
+		t.Fatalf("published file = %s", got)
+	}
+	info, err = os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("published mode = %o", info.Mode().Perm())
+	}
+}
+
 func TestGHAEscaping(t *testing.T) {
 	t.Parallel()
 	finding := findings()[0]

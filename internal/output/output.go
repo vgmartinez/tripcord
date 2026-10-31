@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -113,8 +114,10 @@ func ParseFormat(value string) (Format, error) {
 // SelectSink routes formatName and an optional output path to a local sink.
 // json and jsonl both write newline-delimited tripcord.finding/v1 documents.
 // An empty outputPath or "-" selects stdout. Any other path selects that file.
-// text, sarif, gha, and md use the same path rule. There is no network sink.
-// Close the returned handle when outputPath names a file.
+// A symlink is rejected. The file is created privately in the same directory
+// and replaces the destination only when the handle is closed after a
+// successful flush. text, sarif, gha, and md use the same path rule. There
+// is no network sink. Close the returned handle when outputPath names a file.
 func SelectSink(formatName, outputPath string, stdout io.Writer, options Options) (*Handle, error) {
 	format, err := ParseFormat(formatName)
 	if err != nil {
@@ -130,16 +133,100 @@ func SelectSink(formatName, outputPath string, stdout io.Writer, options Options
 	if err := validateOptions(options); err != nil {
 		return nil, err
 	}
-	file, err := os.OpenFile(outputPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	file, err := newAtomicOutput(outputPath)
 	if err != nil {
-		return nil, fmt.Errorf("open output file: %w", err)
+		return nil, err
 	}
 	sink, err := NewFileSink(format, file, options)
 	if err != nil {
-		_ = file.Close()
+		_ = file.discard()
 		return nil, err
 	}
-	return &Handle{Sink: sink, close: file.Close}, nil
+	published := &publishSink{inner: sink, file: file}
+	return &Handle{Sink: published, close: published.Close}, nil
+}
+
+// publishSink writes the finished result to a temporary file and publishes
+// it only after Flush succeeds. Close before that removes the temporary
+// file and leaves the destination untouched.
+type publishSink struct {
+	inner Sink
+	file  *atomicOutput
+}
+
+func (p *publishSink) Write(finding model.Finding) error { return p.inner.Write(finding) }
+
+func (p *publishSink) Flush() error {
+	if err := p.inner.Flush(); err != nil {
+		return err
+	}
+	if err := p.file.Sync(); err != nil {
+		return fmt.Errorf("write output file: %w", err)
+	}
+	p.file.ready = true
+	return nil
+}
+
+func (p *publishSink) Close() error { return p.file.Close() }
+
+// atomicOutput is a 0600 temporary file in the destination directory.
+// Close renames it onto dest only after a successful flush.
+type atomicOutput struct {
+	*os.File
+	dest  string
+	ready bool
+}
+
+func newAtomicOutput(dest string) (*atomicOutput, error) {
+	info, err := os.Lstat(dest)
+	switch {
+	case err == nil && info.Mode()&os.ModeSymlink != 0:
+		return nil, fmt.Errorf("output path %s is a symlink", dest)
+	case err == nil && !info.Mode().IsRegular():
+		return nil, fmt.Errorf("output path %s is not a regular file", dest)
+	case err != nil && !os.IsNotExist(err):
+		return nil, fmt.Errorf("output path: %w", err)
+	}
+	dir := filepath.Dir(dest)
+	if dir == "" {
+		dir = "."
+	}
+	file, err := os.CreateTemp(dir, ".tripcord-*.partial")
+	if err != nil {
+		return nil, fmt.Errorf("create output file: %w", err)
+	}
+	if err := file.Chmod(0o600); err != nil {
+		name := file.Name()
+		_ = file.Close()
+		_ = os.Remove(name)
+		return nil, fmt.Errorf("create output file: %w", err)
+	}
+	return &atomicOutput{File: file, dest: dest}, nil
+}
+
+func (a *atomicOutput) discard() error {
+	a.ready = false
+	return a.Close()
+}
+
+func (a *atomicOutput) Close() error {
+	name := a.Name()
+	err := a.File.Close()
+	if !a.ready {
+		if removeErr := os.Remove(name); err == nil {
+			err = removeErr
+		}
+		return err
+	}
+	if err != nil {
+		_ = os.Remove(name)
+		return err
+	}
+	if err := os.Rename(name, a.dest); err != nil {
+		_ = os.Remove(name)
+		return fmt.Errorf("publish output file: %w", err)
+	}
+	return nil
 }
 
 // Handle is a sink and, for a path opened by SelectSink, its file.

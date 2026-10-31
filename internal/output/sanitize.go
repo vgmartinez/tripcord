@@ -125,7 +125,7 @@ func jsonRuneEscape(r rune) string {
 
 // present sanitizes value and caps it. Sinks use it for every field.
 func present(value string) string {
-	return truncateSanitized(escapeControls(value), MaxFieldBytes)
+	return truncateSanitized(escapeControlsKeepBackslash(value), MaxFieldBytes)
 }
 
 // truncateSanitized caps value, which is already sanitized or is raw text

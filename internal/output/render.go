@@ -180,13 +180,13 @@ func ghaProperties(properties []string) string {
 // ghaData applies GitHub's workflow command data escaping, then removes
 // every remaining control and bidi character.
 func ghaData(value string) string {
-	return truncateGHA(escapeControls(strings.NewReplacer("%", "%25", "\r", "%0D", "\n", "%0A").Replace(value)), MaxFieldBytes)
+	return truncateGHA(escapeControlsKeepBackslash(strings.NewReplacer("%", "%25", "\r", "%0D", "\n", "%0A").Replace(value)), MaxFieldBytes)
 }
 
 // ghaProperty applies GitHub's property escaping, which adds ":" and ",",
 // then removes every remaining control and bidi character.
 func ghaProperty(value string) string {
-	return truncateGHA(escapeControls(strings.NewReplacer("%", "%25", "\r", "%0D", "\n", "%0A", ":", "%3A", ",", "%2C").Replace(value)), MaxFieldBytes)
+	return truncateGHA(escapeControlsKeepBackslash(strings.NewReplacer("%", "%25", "\r", "%0D", "\n", "%0A", ":", "%3A", ",", "%2C").Replace(value)), MaxFieldBytes)
 }
 
 // truncateGHA keeps workflow-command %XX sequences whole. GitHub decodes

@@ -2,6 +2,7 @@ package output
 
 import (
 	"regexp"
+	"strings"
 
 	"github.com/vgmartinez/tripcord/internal/model"
 )
@@ -27,25 +28,60 @@ var secretPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?:\b|_)sk-(?:ant-|proj-)?[A-Za-z0-9_-]{20,}`),
 	regexp.MustCompile(`[sr]k_live_[0-9A-Za-z]{20,}`),
 	regexp.MustCompile(`xox[abprs]-[A-Za-z0-9-]{10,}`),
-	regexp.MustCompile(`xapp-[0-9]+-[0-9]+-[A-Za-z0-9-]{10,}`),
+	regexp.MustCompile(`xapp-[0-9]+-[A-Za-z0-9-]{8,}`),
 	regexp.MustCompile(`npm_[A-Za-z0-9]{20,}`),
 	regexp.MustCompile(`hf_[A-Za-z0-9]{20,}`),
 	regexp.MustCompile(`ya29\.[A-Za-z0-9._-]{20,}`),
 	regexp.MustCompile(`AIza[0-9A-Za-z_-]{35}`),
 	regexp.MustCompile(`\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}`),
 	regexp.MustCompile(`(?i)\bbearer\s+[A-Za-z0-9._~+/-]{20,}=*`),
-	regexp.MustCompile(`https://hooks\.slack\.com/services/[A-Za-z0-9/_-]+`),
-	regexp.MustCompile(`(?i)\b(?:password|api[_-]?key|token)\b["']?\s*(?:=|:)\s*(?:["'][A-Za-z0-9][^"']*["']|[A-Za-z0-9][^\s,}\]]*)`),
+	regexp.MustCompile(`https://hooks\.slack\.com/(?:services|workflows)/[A-Za-z0-9/_-]+`),
 	regexp.MustCompile(`://[^/\s:@]+:[^/\s@]+@`),
 }
+
+// assignmentPattern matches a credential key and its value. The key may
+// carry a prefix, as in GITHUB_TOKEN or OPENAI_API_KEY. The value runs to
+// the closing quote or the end of the line. Only the value is replaced.
+var assignmentPattern = regexp.MustCompile(`(?i)((?:^|[^A-Za-z0-9])(?:[A-Za-z0-9]*[_-])*(?:password|api[_-]?key|token|secret)\b["']?\s*[=:]\s*)("[^"\n]*"|'[^'\n]*'|[^\n]*)`)
+
+var authorizationPattern = regexp.MustCompile(`(?i)(authorization\s*:\s*(?:bearer|token)\s+)\S+`)
 
 // DefaultRedactor replaces well-known credential shapes with [REDACTED].
 // Already-redacted text, such as "sk-***REDACTED***abcd", is unchanged.
 func DefaultRedactor(value string) string {
+	value = authorizationPattern.ReplaceAllString(value, "${1}"+redactedMarker)
 	for _, pattern := range secretPatterns {
 		value = pattern.ReplaceAllString(value, redactedMarker)
 	}
-	return value
+	return assignmentPattern.ReplaceAllStringFunc(value, redactAssignment)
+}
+
+func redactAssignment(match string) string {
+	parts := assignmentPattern.FindStringSubmatch(match)
+	if len(parts) != 3 || placeholderSecret(parts[2]) {
+		return match
+	}
+	value := parts[2]
+	if len(value) >= 2 {
+		quote := value[0]
+		if (quote == '"' || quote == '\'') && value[len(value)-1] == quote {
+			return parts[1] + string(quote) + redactedMarker + string(quote)
+		}
+	}
+	return parts[1] + redactedMarker
+}
+
+func placeholderSecret(value string) bool {
+	inner := strings.Trim(strings.TrimSpace(value), `"'`)
+	if inner == "" || strings.HasPrefix(inner, "$") || strings.HasPrefix(inner, "<") || strings.HasPrefix(strings.ToLower(inner), "your-") {
+		return true
+	}
+	switch strings.ToLower(inner) {
+	case "changeme", "example", "placeholder", "todo", "xxx", "redacted", "[redacted]":
+		return true
+	default:
+		return false
+	}
 }
 
 // redactFinding returns a deep copy of finding with redact applied to every

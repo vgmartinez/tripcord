@@ -13,10 +13,9 @@ import (
 // images, HTML, entities, autolinks, emphasis, and #123 references are
 // inert. Mentions are broken with U+200B, and every value is one line.
 //
-// Summary-table cells double every backslash. GFM reads "\\" as an escaped
-// backslash before it looks for "|", so a single backslash would not keep a
-// "|" inside the cell. The detail sections below the table show backslashes
-// literally. See docs/output.md.
+// Summary-table cells keep backslashes as written, including Windows paths.
+// A literal "|" is escaped so it cannot end the cell. Detail sections show
+// the same backslashes. See docs/output.md.
 //
 // The comment stays within MaxMarkdownBytes, under GitHub's 65536-character
 // limit. Findings that do not fit are omitted whole, and the comment ends
@@ -118,12 +117,10 @@ func inlineCode(value string) string {
 	return codeSpan(markdownValue(value))
 }
 
-// tableCode is inlineCode for a GFM table cell. The cell scanner reads "\\"
-// as an escaped backslash before it looks for "|", so backslashes are
-// doubled first; every "|" then follows an odd run of backslashes and stays
-// inside the cell.
+// tableCode is inlineCode for a GFM table cell. Backslashes stay literal.
+// "|" is escaped so the table parser does not treat it as a cell boundary.
 func tableCode(value string) string {
-	sanitized := truncateSanitized(breakMentions(escapeControls(value)), MaxFieldBytes)
+	sanitized := truncateSanitized(breakMentions(escapeControlsKeepBackslash(value)), MaxFieldBytes)
 	return strings.ReplaceAll(codeSpan(sanitized), "|", `\|`)
 }
 

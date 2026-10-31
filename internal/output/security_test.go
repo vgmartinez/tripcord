@@ -340,7 +340,6 @@ func TestUnredactedSecretsNeverReachOutput(t *testing.T) {
 	carrier := "token " + githubToken + " key " + awsID + " aws_secret_access_key=" + awsSecret
 
 	finding := findings()[0]
-	finding.Title = "token in title: " + githubToken
 	finding.Title = carrier
 	finding.Fix = carrier
 	finding.Location.Session = carrier
@@ -427,10 +426,17 @@ func TestDefaultRedactorCredentialPatterns(t *testing.T) {
 		{"hugging-face", "hf_abcdefghijklmnopqrstuvwxyz123456", "[REDACTED]"},
 		{"google-oauth", "ya29.abcdefghijklmnopqrstuvwxyz123456", "[REDACTED]"},
 		{"slack-app", "xapp-1-1234567890-abcdefghijklmnopqrstuvwxyz", "[REDACTED]"},
+		{"slack-app-alphanumeric", "xapp-1-A01234567890-abcdefghijklmnopqrstuvwxyz", "[REDACTED]"},
 		{"slack-webhook", "https://hooks.slack.com/services/T000/B000/abcdefghijklmnopqrstuvwxyz", "[REDACTED]"},
-		{"json-assignment", `{"api_key":"not-a-placeholder-value"}`, `{"[REDACTED]}`},
-		{"yaml-assignment", "password: correct-horse-battery-staple", "[REDACTED]"},
-		{"env-assignment", "TOKEN=correct-horse-battery-staple", "[REDACTED]"},
+		{"slack-workflow", "https://hooks.slack.com/workflows/T000/A000/123/abcdefghijklmnopqrstuvwxyz", "[REDACTED]"},
+		{"json-assignment", `{"api_key":"not-a-placeholder-value"}`, `{"api_key":"[REDACTED]"}`},
+		{"yaml-assignment", "password: correct-horse-battery-staple", "password: [REDACTED]"},
+		{"yaml-words", "password: correct horse battery staple", "password: [REDACTED]"},
+		{"env-assignment", "TOKEN=correct-horse-battery-staple", "TOKEN=[REDACTED]"},
+		{"github-token-assignment", "GITHUB_TOKEN=ghp_abcdefghijklmnopqrstuvwxyz0123456789", "GITHUB_TOKEN=[REDACTED]"},
+		{"openai-key-assignment", "OPENAI_API_KEY=sk-abcdefghijklmnopqrstuvwxyz012345", "OPENAI_API_KEY=[REDACTED]"},
+		{"authorization-bearer", "Authorization: Bearer correct-horse-battery-staple", "Authorization: Bearer [REDACTED]"},
+		{"authorization-token", "Authorization: token correct-horse-battery-staple", "Authorization: token [REDACTED]"},
 		{"placeholder", "token=${TOKEN}", "token=${TOKEN}"},
 	}
 	for _, tc := range cases {
