@@ -35,6 +35,17 @@ func TestSanitizeMatchesOutputRedactor(t *testing.T) {
 		"printf 'api_key: PXC8'",
 		"http example.com X-Api-Key:PXC7",
 		"http example.com 'X-API-Token:PXC7B'",
+		`echo "db password: PXC9" > .env`,
+		`echo "my token: PXC10"`,
+		"echo 'user: a password: PXC11'",
+		`echo "export A=1; token: PXC12"`,
+		"http h x-api-key:PXC13",
+		"http h api_key:PXC14",
+		"echo -e 'token: PXC15'",
+		"sh -c 'echo token: PXC16'",
+		"echo password: PXC17 > f",
+		"echo secret: foo && run",
+		"echo -e --token PXC21",
 	}
 	for _, in := range redacted {
 		got := source(model.ScopeRepo, "a").Sanitize(in)
@@ -46,7 +57,7 @@ func TestSanitizeMatchesOutputRedactor(t *testing.T) {
 		"git commit -m 'fix token: handling'",
 		"grep -e --token file",
 		"cli --token=",
-		"echo secret: foo && run",
+		"grep -e 'token: x' file",
 		"make -C /opt/fly -t all",
 		"security find-generic-password -w",
 		"docker run -e SECRET_KEY_FILE=/run/secrets/k img",

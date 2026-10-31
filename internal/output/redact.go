@@ -303,9 +303,9 @@ const unquotedCommandValue = "[^\\s;&|\"'\\n)`]"
 // form, there is no shell word boundary to preserve and an unquoted
 // value runs to the end of the line (or to one of ;&|"', in case the
 // line is itself embedded in a larger shell command); trailing
-// whitespace is not part of it. A head only counts in a header or
-// assignment context (see colonAssignmentContext), so free text such as
-// git commit -m 'fix token: handling' is left alone.
+// whitespace is not part of it. A head counts anywhere except inside the
+// argument of a literalTextFlags flag, so git commit -m 'fix token:
+// handling' is left alone (see redactColonAssignments).
 // assignmentQuotedValue reads a quoted value, anchored.
 var assignmentQuotedValue = regexp.MustCompile(`^(?:` + quotedValue + `)`)
 
@@ -401,20 +401,17 @@ var (
 	secretFlagSpaceValue = regexp.MustCompile(`^(?:` + quotedValue + `|[^-\s;&|"'\n)` + "`" + `]` + unquotedCommandValue + `*)`)
 )
 
-// literalArgFlags are flags whose argument is literal text (a commit
-// message, a grep pattern), not a command line: a secret flag name
-// right after one is that text, as in grep -e --token file.
-var literalArgFlags = map[string]bool{"-e": true, "--regexp": true, "-m": true, "--message": true, "--grep": true}
-
 // RedactSecretFlags replaces the value of every SecretFlags flag in
 // value ("--token X", "--token=X", "--token 'X'") with [REDACTED], kept
 // in the value's own quotes, and returns the raw values it removed, with
 // those quotes stripped. An empty or placeholder value ("--token=",
-// "--token $TOKEN") is left alone, as is a flag name that is the
-// argument of a literalArgFlags flag.
+// "--token $TOKEN") is left alone, as is a flag name inside the argument
+// of a literalTextFlags flag (grep -e --token file).
 func RedactSecretFlags(value string) (string, []string) {
 	var removed []string
 	var b strings.Builder
+	var spans literalSpans
+	spansFound := false
 	pos, written := 0, 0
 	for pos < len(value) {
 		dash := strings.IndexByte(value[pos:], '-')
@@ -444,7 +441,10 @@ func RedactSecretFlags(value string) (string, []string) {
 		}
 		var body string
 		var loc []int
-		if (closeQuote == "" || closeQuote == openQuote) && !literalArgFlags[previousWord(value, start)] {
+		if !spansFound {
+			spans, spansFound = findLiteralSpans(value), true
+		}
+		if (closeQuote == "" || closeQuote == openQuote) && !spans.contains(start) {
 			loc = valuePattern.FindStringIndex(value[sepEnd:])
 		}
 		if loc != nil {
@@ -470,16 +470,6 @@ func RedactSecretFlags(value string) (string, []string) {
 // inside a compound word such as "find-generic-password".
 func wordBoundaryBefore(value string, offset int) bool {
 	return offset == 0 || isCommandSpace(value[offset-1])
-}
-
-// previousWord returns the whitespace-separated word ending before
-// offset, without surrounding quotes.
-func previousWord(value string, offset int) string {
-	before := strings.TrimRight(value[:offset], " \t\r\n")
-	if i := strings.LastIndexAny(before, " \t\r\n"); i >= 0 {
-		before = before[i+1:]
-	}
-	return strings.Trim(before, `"'`)
 }
 
 // unquote strips one layer of matching single or double quotes.
@@ -623,13 +613,17 @@ func RedactAssignments(value string) (string, []string) {
 	return value, removed
 }
 
-// redactColonAssignments redacts each "key:" head (nextAssignmentHead) where
-// colonAssignmentContext accepts the match. A rejected head is skipped
-// whole: a candidate starting inside it would follow a key byte or a
-// quote, which no context accepts.
+// redactColonAssignments redacts each credential-named "key:" head
+// (nextAssignmentHead) anywhere in value, except inside the argument of
+// a literalTextFlags flag (git commit -m 'fix token: handling'). Free
+// text such as echo secret: foo is redacted too: over-redacting a
+// scanner's output is safe, leaking a secret is not. A rejected head is
+// skipped whole: a candidate starting inside it would follow a key byte.
 func redactColonAssignments(value string, removed *[]string) string {
 	scan := newStemScanner(value)
 	var b strings.Builder
+	var spans literalSpans
+	spansFound := false
 	pos := 0
 	for {
 		h, found := nextAssignmentHead(value, scan, pos, ':')
@@ -638,11 +632,11 @@ func redactColonAssignments(value string, removed *[]string) string {
 		}
 		body := ""
 		ok := (h.start == 0 || !isAlnum(value[h.start-1])) && CredentialName(h.name)
-		if ok {
-			var stop string
-			if ok, stop = colonAssignmentContext(value, h.start, h.openQuote, h.closeQuote, h.name, h.sep); ok {
-				body = colonValue(value[h.valStart:], stop)
-			}
+		if ok && !spansFound {
+			spans, spansFound = findLiteralSpans(value), true
+		}
+		if ok = ok && !spans.contains(h.start); ok {
+			body = colonValue(value[h.valStart:], colonValueStop(value, h.start, h.openQuote, h.closeQuote, h.sep))
 		}
 		b.WriteString(value[pos:h.valStart])
 		pos = h.valStart
@@ -670,62 +664,26 @@ func colonValue(rest, stop string) string {
 	return strings.TrimRight(rest, " \t\r")
 }
 
-// colonAssignmentContext reports whether a "key: value" match starting at
-// offset is a header or assignment rather than free text: a quoted key
-// ("token": ...), a key at the start of a line (YAML, an env file, or a
-// whole header string, optionally as a "- " list item), a key right
-// after "{" or "," (a flow mapping), a curl -H/--header argument, a key
-// opening a quoted word (echo "token: X" > .env, printf 'api_key: X'),
-// or a whole word in httpie's Header:value form with a capitalized
-// header name (X-Api-Key:X). The last two do not apply to the argument
-// of a literalArgFlags flag (git commit -m 'token: ...', grep -e), and
-// the capital keeps a lowercase reference such as the image
-// my-secret:latest intact. stop lists the bytes that end an unquoted
-// value in that context: "," and "}" in a mapping, whitespace in an
-// unquoted header argument, and nothing extra on a line of its own or
-// inside quotes.
-//
-// It looks back only across blanks and the adjacent word, never to the
-// start of the line, so checking every candidate stays linear.
-func colonAssignmentContext(value string, offset int, openQuote, closeQuote, key, sep string) (ok bool, stop string) {
+// colonValueStop returns the bytes that end an unquoted "key: value"
+// value starting at offset, beyond colonValueEnd: "," and "}" in a
+// mapping (a quoted key, or a key right after "{" or ","), whitespace in
+// a glued Name:value word that does not start a line (an httpie or
+// curl header), and nothing extra otherwise, so a YAML or env line, an
+// echo argument, or a free-text value runs to the end of its line or
+// quote. It looks back only across blanks, so checking every candidate
+// stays linear.
+func colonValueStop(value string, offset int, openQuote, closeQuote, sep string) string {
 	i := skipBlanksBack(value, offset)
 	switch {
 	case openQuote != "" && openQuote == closeQuote,
 		i > 0 && (value[i-1] == '{' || value[i-1] == ','):
-		return true, ",}"
+		return ",}"
 	case i == 0 || value[i-1] == '\n':
-		return true, ""
-	case value[i-1] == '-':
-		if j := skipBlanksBack(value, i-1); j == 0 || value[j-1] == '\n' {
-			return true, ""
-		}
+		return ""
+	case sep == ":":
+		return " \t"
 	}
-	header := false
-	if offset == 0 || isCommandSpace(value[offset-1]) {
-		word := previousWord(value, offset)
-		header = word == "-H" || word == "--header"
-		switch {
-		case header, literalArgFlags[word]:
-		case openQuote != "" && closeQuote == "":
-			return true, ""
-		case openQuote == "" && sep == ":" && key[0] >= 'A' && key[0] <= 'Z':
-			return true, " \t"
-		}
-	} else {
-		before := value[:offset]
-		for _, flag := range []string{"-H", "-H=", "--header="} {
-			if strings.HasSuffix(before, flag) && (len(before) == len(flag) || isCommandSpace(before[len(before)-len(flag)-1])) {
-				header = true
-			}
-		}
-	}
-	if !header {
-		return false, ""
-	}
-	if openQuote == "" {
-		return true, " \t"
-	}
-	return true, ""
+	return ""
 }
 
 // skipBlanksBack returns the offset before the run of spaces, tabs, and

@@ -5,13 +5,13 @@ import (
 	"testing"
 )
 
-// A secret flag name that is the argument of grep -e or git commit -m is
-// that literal text, not a flag.
+// A secret flag name that is the argument of a literal-text flag of a
+// specific tool (grep -e, git commit -m) is that text, not a flag; the
+// same flag of another tool is not exempt.
 func TestRedactCommandLeavesLiteralFlagArgumentsAlone(t *testing.T) {
 	t.Parallel()
 	for _, in := range []string{
 		"grep -e --token file",
-		"grep --regexp --password src/",
 		`git commit -m "--token handling"`,
 		"git log --grep --secret",
 		"git commit -m 'fix token: handling'",
@@ -21,6 +21,14 @@ func TestRedactCommandLeavesLiteralFlagArgumentsAlone(t *testing.T) {
 		}
 		if got, removed := RedactCommand(in); got != in || len(removed) != 0 {
 			t.Errorf("RedactCommand(%q) = %q, %q; want unchanged", in, got, removed)
+		}
+	}
+	for in, want := range map[string]string{
+		"echo -e --token PXC21":          "echo -e --token [REDACTED]",
+		"grep --regexp --password PXC22": "grep --regexp --password [REDACTED]",
+	} {
+		if got := DefaultRedactor(in); got != want {
+			t.Errorf("DefaultRedactor(%q) = %q, want %q", in, got, want)
 		}
 	}
 	if got := DefaultRedactor("grep -e x --token REALTOKEN"); got != "grep -e x --token [REDACTED]" {

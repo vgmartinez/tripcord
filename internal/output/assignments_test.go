@@ -5,20 +5,25 @@ import (
 	"testing"
 )
 
-// "key: value" redaction applies in header and assignment contexts
-// (curl -H, YAML or env lines, JSON keys, flow mappings), not to free
-// text such as a commit message.
-func TestColonAssignmentsOnlyInHeaderOrAssignmentContext(t *testing.T) {
+// A credential-named "key: value" is redacted anywhere; the only
+// exception is the argument of a literal-text flag of git, grep, rg,
+// sed, awk, or gh.
+func TestColonAssignmentsRedactedExceptToolLiteralText(t *testing.T) {
 	t.Parallel()
 	for _, in := range []string{
 		"git commit -m 'fix token: handling'",
 		`git commit -m "fix secret: rotation" && git push`,
-		"echo secret: foo && run",
 		`git commit -m "token: rotate weekly"`,
 		"git commit -m 'password: hashing'",
+		"git commit --message='token: rotate'",
+		"/usr/bin/git commit -m 'token: x'",
+		"sudo git commit -m 'token: x'",
+		"git log --grep 'secret: x'",
 		"grep -e 'token: x' file",
-		"docker pull my-secret:latest",
-		"ssh token-host:22",
+		"rg -e 'api_key: x' src",
+		"sed -e 's/token: x/token: y/' f",
+		"awk -F 'password: ' '{print $2}' f",
+		`gh pr create --title "fix token: leak" --body "password: rotated"`,
 	} {
 		if got := DefaultRedactor(in); got != in {
 			t.Errorf("DefaultRedactor(%q) = %q, want unchanged", in, got)
@@ -40,10 +45,26 @@ func TestColonAssignmentsOnlyInHeaderOrAssignmentContext(t *testing.T) {
 		"printf 'api_key: PXC8'":                      "printf 'api_key: [REDACTED]'",
 		"http example.com X-Api-Key:PXC7":             "http example.com X-Api-Key:[REDACTED]",
 		"http example.com 'X-API-Token:PXC7B' a=1":    "http example.com 'X-API-Token:[REDACTED]' a=1",
+		`echo "db password: PXC9" > .env`:             `echo "db password: [REDACTED]" > .env`,
+		`echo "my token: PXC10"`:                      `echo "my token: [REDACTED]"`,
+		"echo 'user: a password: PXC11'":              "echo 'user: a password: [REDACTED]'",
+		`echo "export A=1; token: PXC12"`:             `echo "export A=1; token: [REDACTED]"`,
+		"http h x-api-key:PXC13":                      "http h x-api-key:[REDACTED]",
+		"http h api_key:PXC14 a=1":                    "http h api_key:[REDACTED] a=1",
+		"echo -e 'token: PXC15'":                      "echo -e 'token: [REDACTED]'",
+		"sh -c 'echo token: PXC16'":                   "sh -c 'echo token: [REDACTED]'",
+		"echo password: PXC17 > f":                    "echo password: [REDACTED]",
+		"echo secret: foo && run":                     "echo secret: [REDACTED] && run",
+		"echo -m 'token: PXC18'":                      "echo -m 'token: [REDACTED]'",
+		"git commit -m ok; echo 'token: PXC19'":       "git commit -m ok; echo 'token: [REDACTED]'",
+		"grep -e x 'token: PXC20'":                    "grep -e x 'token: [REDACTED]'",
 	}
 	for in, want := range redacted {
 		if got := DefaultRedactor(in); got != want {
 			t.Errorf("DefaultRedactor(%q) = %q, want %q", in, got, want)
+		}
+		if got, _ := RedactAssignments(in); got != want {
+			t.Errorf("RedactAssignments(%q) = %q, want %q", in, got, want)
 		}
 	}
 }
