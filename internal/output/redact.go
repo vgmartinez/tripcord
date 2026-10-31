@@ -68,13 +68,16 @@ const quotedValue = `"(?:[^"\\\n]|\\.)*"|'[^'\n]*'`
 // value is replaced.
 var assignmentPatternEquals = regexp.MustCompile(`(?i)((?:^|[^A-Za-z0-9])(?:[A-Za-z0-9]*[_-])*(?:password|passwd|pgpassword|api[_-]?key|auth[_-]?token|token|secret)\b["']?\s*=\s*)(` + quotedValue + `|[^\s;&|"'\n]*)`)
 
-// assignmentPatternColon matches a "key: value" credential line, as
-// opposed to shell-style KEY=value: a line such as "token: abc def" is
-// not shell syntax, so, unlike the "=" form, there is no shell word
-// boundary to preserve and an unquoted value runs to the end of the
-// line (or to one of ;&|"', in case the line is itself embedded in a
-// larger shell command).
-var assignmentPatternColon = regexp.MustCompile(`(?i)((?:^|[^A-Za-z0-9])(?:[A-Za-z0-9]*[_-])*(?:password|passwd|pgpassword|api[_-]?key|auth[_-]?token|token|secret)\b["']?\s*:\s*)(` + quotedValue + `|[^;&|"'\n]*)`)
+// assignmentPatternColon matches a "key: value" credential, as opposed
+// to shell-style KEY=value: a line such as "token: abc def" is not shell
+// syntax, so, unlike the "=" form, there is no shell word boundary to
+// preserve and an unquoted value runs to the end of the line (or to one
+// of ;&|"', in case the line is itself embedded in a larger shell
+// command); trailing whitespace is not part of it. Groups: open quote,
+// key, close quote, separator, value. A match only counts in a header
+// or assignment context (see colonAssignmentContext), so free text such
+// as git commit -m 'fix token: handling' is left alone.
+var assignmentPatternColon = regexp.MustCompile(`(?i)(["']?)((?:[A-Za-z0-9]*[_-])*(?:password|passwd|pgpassword|api[_-]?key|auth[_-]?token|token|secret))\b(["']?)(\s*:\s*)(` + quotedValue + `|[^;&|"'\n]*)`)
 
 // authorizationPattern matches an Authorization header or JSON field with a
 // Bearer, Basic, or token scheme, in both header ("Authorization: Bearer x")
@@ -209,8 +212,95 @@ func DefaultRedactor(value string) string {
 func RedactAssignments(value string) (string, []string) {
 	var removed []string
 	value = assignmentPatternEquals.ReplaceAllStringFunc(value, redactAssignment(assignmentPatternEquals, &removed))
-	value = assignmentPatternColon.ReplaceAllStringFunc(value, redactAssignment(assignmentPatternColon, &removed))
+	value = redactColonAssignments(value, &removed)
 	return value, removed
+}
+
+// redactColonAssignments applies assignmentPatternColon where
+// colonAssignmentContext accepts the match.
+func redactColonAssignments(value string, removed *[]string) string {
+	var b strings.Builder
+	pos := 0
+	for pos < len(value) {
+		m := assignmentPatternColon.FindStringSubmatchIndex(value[pos:])
+		if m == nil {
+			break
+		}
+		for i := range m {
+			if m[i] >= 0 {
+				m[i] += pos
+			}
+		}
+		start := m[0]
+		openQuote, closeQuote := value[m[2]:m[3]], value[m[6]:m[7]]
+		raw := value[m[10]:m[11]]
+		ok, stop := colonAssignmentContext(value, start, openQuote, closeQuote)
+		if i := strings.IndexAny(raw, stop); stop != "" && i >= 0 && raw[0] != '"' && raw[0] != '\'' {
+			raw = raw[:i]
+		}
+		body := strings.TrimRight(raw, " \t\r")
+		if !ok || (start > 0 && isAlnum(value[start-1])) || placeholderSecret(body) {
+			b.WriteString(value[pos : start+1])
+			pos = start + 1
+			continue
+		}
+		*removed = append(*removed, strings.Trim(body, `"'`))
+		b.WriteString(value[pos:m[10]])
+		b.WriteString(quoteLike(body, redactedMarker))
+		pos = m[10] + len(body)
+	}
+	b.WriteString(value[pos:])
+	return b.String()
+}
+
+// colonAssignmentContext reports whether a "key: value" match starting at
+// offset is a header or assignment rather than free text: a quoted key
+// ("token": ...), a key at the start of a line (YAML, an env file, or a
+// whole header string, optionally as a "- " list item), a key right
+// after "{" or "," (a flow mapping), or a curl -H/--header argument.
+// stop lists the bytes that end an unquoted value in that context: ","
+// and "}" in a mapping, whitespace in an unquoted header argument, and
+// nothing extra on a line of its own.
+func colonAssignmentContext(value string, offset int, openQuote, closeQuote string) (ok bool, stop string) {
+	before := value[:offset]
+	line := before[strings.LastIndexByte(before, '\n')+1:]
+	trimmedBefore := strings.TrimRight(before, " \t")
+	switch {
+	case openQuote != "" && openQuote == closeQuote,
+		strings.HasSuffix(trimmedBefore, "{"), strings.HasSuffix(trimmedBefore, ","):
+		return true, ",}"
+	case strings.TrimSpace(line) == "", strings.TrimSpace(line) == "-":
+		return true, ""
+	}
+	header := false
+	switch prefix := before[strings.LastIndexAny(before, " \t\r\n")+1:]; prefix {
+	case "":
+		word := previousWord(value, offset)
+		header = word == "-H" || word == "--header"
+	case "-H", "-H=", "--header=":
+		header = true
+	}
+	if !header {
+		return false, ""
+	}
+	if openQuote == "" {
+		return true, " \t"
+	}
+	return true, ""
+}
+
+func isAlnum(c byte) bool {
+	return c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
+}
+
+// previousWord returns the whitespace-separated word ending before
+// offset, without surrounding quotes.
+func previousWord(value string, offset int) string {
+	before := strings.TrimRight(value[:offset], " \t\r\n")
+	if i := strings.LastIndexAny(before, " \t\r\n"); i >= 0 {
+		before = before[i+1:]
+	}
+	return strings.Trim(before, `"'`)
 }
 
 func redactAssignment(pattern *regexp.Regexp, removed *[]string) func(string) string {
