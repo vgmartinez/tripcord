@@ -33,10 +33,12 @@ Every key below also carries a trailing content digest of the full
 sanitized entry, and, when sanitizing removed anything, a discriminator
 over the removed text; see [fingerprint.md](../fingerprint.md#input).
 
-- Lifecycle commands: `initializeCommand` (runs on the host, before the
-  container exists), `onCreateCommand`, `updateContentCommand`,
-  `postCreateCommand`, `postStartCommand`, and `postAttachCommand` (run
-  in the container). One item per command:
+- Lifecycle commands. **`initializeCommand` runs on the host**, before
+  the container exists, so it executes with the developer's privileges
+  and outside any container isolation; rules will treat it at high
+  severity. `onCreateCommand`, `updateContentCommand`,
+  `postCreateCommand`, `postStartCommand`, and `postAttachCommand` run
+  in the container. One item per command:
   `{"setting", "form", "name", "command", "runs_on"}`, key
   `["lifecycle", setting, name]`.
   - A string (`"form": "string"`) runs through a shell; `command` is the
