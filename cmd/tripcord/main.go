@@ -84,6 +84,9 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 	if errors.Is(err, errHelp) {
 		return int(exitcode.OK)
 	}
+	if errors.Is(err, errHelpWrite) {
+		return int(exitcode.Internal)
+	}
 	if err != nil {
 		return scanConfigError(stderr, err)
 	}
@@ -206,7 +209,10 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 	return int(exitcode.OK)
 }
 
-var errHelp = errors.New("help")
+var (
+	errHelp      = errors.New("help")
+	errHelpWrite = errors.New("write scan help")
+)
 
 func parseScanFlags(args []string, stdout io.Writer) (scanOptions, error) {
 	normalized, err := normalizeScanArgs(args)
@@ -229,9 +235,15 @@ func parseScanFlags(args []string, stdout io.Writer) (scanOptions, error) {
 	flags.StringVar(&opts.orgPolicy, "org-policy", "", "organization policy file")
 	if err := flags.Parse(normalized); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
-			fmt.Fprint(stdout, "tripcord scan [PATH]\n\n")
-			flags.SetOutput(stdout)
+			var buf bytes.Buffer
+			if _, werr := fmt.Fprint(&buf, "tripcord scan [PATH]\n\n"); werr != nil {
+				return scanOptions{}, fmt.Errorf("%w: %w", errHelpWrite, werr)
+			}
+			flags.SetOutput(&buf)
 			flags.PrintDefaults()
+			if writeString(stdout, buf.String()) != int(exitcode.OK) {
+				return scanOptions{}, errHelpWrite
+			}
 			return scanOptions{}, errHelp
 		}
 		return scanOptions{}, err

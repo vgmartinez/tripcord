@@ -77,6 +77,14 @@ func TestVersionWriteError(t *testing.T) {
 	}
 }
 
+func TestScanHelpWriteError(t *testing.T) {
+	t.Parallel()
+	var stderr bytes.Buffer
+	if code := run([]string{"scan", "--help"}, failWriter{}, &stderr); code != int(exitcode.Internal) {
+		t.Fatalf("exit code = %d, want %d (internal or I/O error)", code, exitcode.Internal)
+	}
+}
+
 func TestUnknownCommand(t *testing.T) {
 	t.Parallel()
 	var stdout, stderr bytes.Buffer
