@@ -1,0 +1,133 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: vet and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test -race ./...
+
+  lint:
+    name: golangci-lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.15.0
+          install-mode: binary
+          args: --timeout=5m
+
+  zizmor:
+    name: zizmor
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Audit workflows
+        uses: zizmorcore/zizmor-action@53290badfa369cb0bf7ad16342cb62c2fa47ac7b # v0.8.0
+        with:
+          advanced-security: false
+          annotations: true
+          inputs: .github/workflows
+
+  dco:
+    name: DCO
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Require Signed-off-by
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo "DCO is checked on pull requests; this event is ${EVENT_NAME}."
+            exit 0
+          fi
+          if [ -z "$BASE_SHA" ] || [ -z "$HEAD_SHA" ]; then
+            echo "Pull request is missing a base or head SHA." >&2
+            exit 1
+          fi
+          if ! commits_raw=$(git rev-list --reverse --no-merges "${BASE_SHA}..${HEAD_SHA}"); then
+            echo "git rev-list failed for ${BASE_SHA}..${HEAD_SHA}." >&2
+            exit 1
+          fi
+          commits=()
+          if [ -n "$commits_raw" ]; then
+            mapfile -t commits <<< "$commits_raw"
+          fi
+          if [ "${#commits[@]}" -eq 0 ]; then
+            echo "No commits found between ${BASE_SHA} and ${HEAD_SHA}." >&2
+            exit 1
+          fi
+          failed=0
+          for commit in "${commits[@]}"; do
+            author_name=$(git show -s --format='%an' "$commit")
+            author_email=$(git show -s --format='%ae' "$commit")
+            expected="${author_name} <${author_email}>"
+            signoffs=$(git show -s --format='%(trailers:key=Signed-off-by,valueonly)' "$commit")
+            if ! printf '%s\n' "$signoffs" | grep -Fxq -- "$expected"; then
+              echo "::error::commit ${commit} is missing Signed-off-by: ${expected}"
+              failed=1
+            fi
+          done
+          if [ "$failed" -ne 0 ]; then
+            echo "Sign off with: git commit -s" >&2
+            exit 1
+          fi
+          echo "DCO sign-off present on ${#commits[@]} commit(s)."
