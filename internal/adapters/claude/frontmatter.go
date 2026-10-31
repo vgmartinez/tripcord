@@ -13,17 +13,26 @@ import (
 // splitFrontmatter returns the YAML frontmatter of a Markdown file. A UTF-8
 // byte order mark is dropped and CRLF line endings are treated as LF, as
 // Claude Code does, so neither can hide frontmatter hooks. The opening and
-// closing delimiters must be lines of exactly "---"; "----" is not a
-// delimiter. An opening delimiter with no closing one is an error, so a
-// truncated block fails closed.
+// opening delimiter may have trailing whitespace, matching Claude Code's
+// /^---\s*\n/ parser. The close remains exact: Claude's lazy, non-line-
+// anchored close can only make us emit extra findings, not miss hooks.
+// An opening delimiter with no closing one is an error, so a truncated block
+// fails closed.
 func splitFrontmatter(raw []byte) (front []byte, found bool, err error) {
 	text := bytes.TrimPrefix(raw, utf8BOM)
 	text = bytes.ReplaceAll(text, []byte("\r\n"), []byte("\n"))
-	if !bytes.Equal(text, []byte("---")) && !bytes.HasPrefix(text, []byte("---\n")) {
+	firstEnd := bytes.IndexByte(text, '\n')
+	first := text
+	if firstEnd >= 0 {
+		first = text[:firstEnd]
+	}
+	if !bytes.Equal(bytes.TrimRight(first, " \t"), []byte("---")) {
 		return nil, false, nil
 	}
-	rest := bytes.TrimPrefix(text, []byte("---"))
-	rest = bytes.TrimPrefix(rest, []byte("\n"))
+	if firstEnd < 0 {
+		return nil, true, errors.New("frontmatter has no closing --- line")
+	}
+	rest := text[firstEnd+1:]
 	offset := 0
 	for offset <= len(rest) {
 		end := bytes.IndexByte(rest[offset:], '\n')

@@ -55,9 +55,9 @@ var skillRoots = [][]string{{".claude", "skills"}}
 // cheap superset of the files classify can accept.
 func candidateName(rel string) bool {
 	segments := strings.Split(rel, "/")
-	base := segments[len(segments)-1]
+	base := strings.ToLower(segments[len(segments)-1])
 	switch base {
-	case "CLAUDE.md", "CLAUDE.local.md", ".mcp.json", "SKILL.md", "hooks.json", "marketplace.json", "plugin.json", "settings.json", "settings.local.json":
+	case "claude.md", "claude.local.md", ".mcp.json", "skill.md", "hooks.json", "marketplace.json", "plugin.json", "settings.json", "settings.local.json":
 		return true
 	}
 	return strings.HasSuffix(base, ".md") && (hasSegment(segments, "rules") || hasSegment(segments, "agents") || hasSegment(segments, "commands"))
@@ -68,13 +68,13 @@ func candidateName(rel string) bool {
 func classify(rel string, pluginRoots map[string]bool) fileRole {
 	segments := strings.Split(rel, "/")
 	n := len(segments)
-	base := segments[n-1]
+	base := strings.ToLower(segments[n-1])
 	parent := ""
 	if n >= 2 {
-		parent = segments[n-2]
+		parent = strings.ToLower(segments[n-2])
 	}
 	switch {
-	case base == "CLAUDE.md" || base == "CLAUDE.local.md":
+	case base == "claude.md" || base == "claude.local.md":
 		return roleInstructions
 	case parent == ".claude" && (base == "settings.json" || base == "settings.local.json"):
 		return roleSettings
@@ -85,7 +85,7 @@ func classify(rel string, pluginRoots map[string]bool) fileRole {
 	case parent == ".claude-plugin" && base == "plugin.json":
 		return rolePluginManifest
 	}
-	if base == "SKILL.md" {
+	if base == "skill.md" {
 		for _, root := range skillRoots {
 			if containsSequence(segments[:n-1], root) {
 				return roleSkill
@@ -270,6 +270,7 @@ type repoRead struct {
 	done   map[string]bool
 
 	warnedFiles bool
+	warnedBytes bool
 }
 
 func (r *repoRead) read(rel string) ([]byte, bool) {
@@ -292,7 +293,10 @@ func (r *repoRead) read(rel string) ([]byte, bool) {
 	raw, err := r.reader.ReadFile(rel, limit)
 	if err != nil {
 		if errors.Is(err, adapters.ErrFileTooBig) && limit < r.limits.MaxFile {
-			r.c.warn(model.ScopeRepo, rel, "repository walk truncated: total configuration bytes exceed %d; not scanned", r.limits.MaxBytes)
+			if !r.warnedBytes {
+				r.warnedBytes = true
+				r.c.warn(model.ScopeRepo, "", "repository walk truncated: total configuration bytes exceed %d; the rest were not scanned", r.limits.MaxBytes)
+			}
 		} else {
 			r.c.warn(model.ScopeRepo, rel, "cannot read: %v", err)
 		}
@@ -442,7 +446,7 @@ func (s *src) marketplace(raw []byte, base string) []string {
 			continue
 		}
 		name, _ := entry["name"].(string)
-		payload := map[string]any{"setting": "marketplace", "value": entry}
+		payload := map[string]any{"setting": "marketplace", "value": s.safePayloadValue("marketplace", entry)}
 		if source, ok := entry["source"].(string); ok {
 			if root, ok := s.joinRef(pluginBase, source); ok {
 				roots = append(roots, root)
@@ -476,7 +480,7 @@ func (s *src) pluginManifest(raw []byte) []fileRef {
 	}
 	root := pluginRootOf(s.path)
 	name, _ := obj["name"].(string)
-	s.add(model.ConfigKindPlugin, []string{"plugin", name}, map[string]any{"setting": "plugin", "value": obj, "plugin_root": root})
+	s.add(model.ConfigKindPlugin, []string{"plugin", name}, map[string]any{"setting": "plugin", "value": s.safePayloadValue("plugin", obj), "plugin_root": root})
 	var refs []fileRef
 	collect := func(value any, role fileRole, inline func(any)) {
 		switch v := value.(type) {
@@ -570,7 +574,7 @@ func containsSequence(segments, want []string) bool {
 	for i := 0; i+len(want) <= len(segments); i++ {
 		match := true
 		for j := range want {
-			if segments[i+j] != want[j] {
+			if !strings.EqualFold(segments[i+j], want[j]) {
 				match = false
 				break
 			}

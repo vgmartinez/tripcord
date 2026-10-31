@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"os"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -51,6 +53,7 @@ var settingKinds = map[string]model.ConfigKind{
 // collector accumulates items and diagnostics for one Discover call.
 type collector struct {
 	harness model.Harness
+	home    string
 	items   []model.ConfigItem
 	diags   []adapters.Diagnostic
 }
@@ -97,7 +100,7 @@ func (s *src) warnAll(warnings []string) {
 // add emits one item. payload["key"] is the content-derived evidence key;
 // it never encodes a position in the file.
 func (s *src) add(kind model.ConfigKind, key []string, payload map[string]any) {
-	payload["key"] = evidenceKey(key)
+	payload["key"] = evidenceKey(s.safeKey(key))
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		s.warn("cannot encode %s entry: %v", kind, err)
@@ -109,6 +112,28 @@ func (s *src) add(kind model.ConfigKind, key []string, payload map[string]any) {
 		return
 	}
 	s.c.items = append(s.c.items, item)
+}
+
+func (s *src) safeKey(parts []string) []string {
+	out := make([]string, len(parts))
+	for i, part := range parts {
+		out[i] = s.safeString(part)
+	}
+	return out
+}
+
+var commandSecretFlag = regexp.MustCompile(`(?i)(--(?:api[-_]?key|token|secret|password)|-(?:k|t))\s+(?:'[^']*'|"[^"]*"|\S+)`)
+
+func (s *src) safeString(value string) string {
+	if stripped, ok := stripURLSecrets(value); ok {
+		value = stripped
+	}
+	value = commandSecretFlag.ReplaceAllString(value, "$1 "+redacted)
+	home := s.c.home
+	if home == "" {
+		home, _ = os.UserHomeDir()
+	}
+	return strings.ReplaceAll(strings.ReplaceAll(value, `\`, "/"), strings.ReplaceAll(home, `\`, "/"), "~")
 }
 
 // evidenceKey encodes parts as a compact JSON array, so no choice of
@@ -158,7 +183,7 @@ func (s *src) settingsObject(obj map[string]any) {
 		}
 		payload["value"] = value
 		if command := commandOf(value); command != "" {
-			payload["command"] = command
+			payload["command"] = s.safeString(command)
 		}
 		s.add(kind, []string{"setting", name}, payload)
 	}
@@ -227,7 +252,7 @@ func (s *src) hooks(value any) {
 func (s *src) hook(event, matcher string, hook map[string]any) {
 	payload := map[string]any{}
 	for k, v := range hook {
-		payload[k] = v
+		payload[k] = s.safePayloadValue(k, v)
 	}
 	if headers, ok := hook["headers"].(map[string]any); ok {
 		payload["headers"] = redactValues(headers)
@@ -237,6 +262,27 @@ func (s *src) hook(event, matcher string, hook map[string]any) {
 	payload["matcher"] = matcher
 	hookType, _ := hook["type"].(string)
 	s.add(model.ConfigKindHook, []string{"hook", event, matcher, hookType, hookAction(payload)}, payload)
+}
+
+func (s *src) safePayloadValue(key string, value any) any {
+	switch v := value.(type) {
+	case string:
+		return s.safeString(v)
+	case []any:
+		out := make([]any, len(v))
+		for i, item := range v {
+			out[i] = s.safePayloadValue(key, item)
+		}
+		return out
+	case map[string]any:
+		out := make(map[string]any, len(v))
+		for name, item := range v {
+			out[name] = s.safePayloadValue(name, item)
+		}
+		return out
+	default:
+		return value
+	}
 }
 
 // hookAction is the part of a hook that says what it does. It falls back to
@@ -300,7 +346,7 @@ func (s *src) mcpServers(value any, project string) {
 		}
 		payload := map[string]any{}
 		for k, v := range server {
-			payload[k] = v
+			payload[k] = s.safePayloadValue(k, v)
 		}
 		if env, ok := server["env"].(map[string]any); ok {
 			payload["env"] = redactValues(env)

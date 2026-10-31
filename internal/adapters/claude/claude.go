@@ -97,12 +97,7 @@ func (a *Adapter) Detect(repoRoot string) bool {
 			return true
 		}
 	}
-	for _, d := range c.diags {
-		if d.Path != "" {
-			return true
-		}
-	}
-	return false
+	return len(c.diags) > 0
 }
 
 // Discover reads every supported config file in the enabled scopes. It
@@ -204,6 +199,7 @@ func (a *Adapter) discoverUser(c *collector) {
 	if !ok {
 		return
 	}
+	c.home = home
 	settings, claudeJSON := files[0], files[1]
 	raw, err := adapters.ReadLocal(settings[0], adapters.MaxConfigFileBytes)
 	switch {

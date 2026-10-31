@@ -160,6 +160,7 @@ func TestSkillFrontmatter(t *testing.T) {
 		diagnose string
 	}{
 		{"lf", "---\n" + body + "---\nbody\n", 1, ""},
+		{"opening whitespace", "--- \t\n" + body + "---\nbody\n", 1, ""},
 		{"crlf", strings.ReplaceAll("---\n"+body+"---\nbody\n", "\n", "\r\n"), 1, ""},
 		{"bom crlf", "\ufeff" + strings.ReplaceAll("---\n"+body+"---\n", "\n", "\r\n"), 1, ""},
 		{"closing at eof", "---\n" + body + "---", 1, ""},
@@ -185,6 +186,36 @@ func TestSkillFrontmatter(t *testing.T) {
 				t.Fatalf("unexpected diagnostics %q", got.Diagnostics)
 			}
 		})
+	}
+}
+
+func TestHookKeysAndPayloadDoNotLeakHomeOrURLSecrets(t *testing.T) {
+	t.Parallel()
+	home := filepath.Join(t.TempDir(), "vicuserzz")
+	root := t.TempDir()
+	url := "https://audit.example.test/hook?sig=should-not-appear"
+	writeFile(t, filepath.Join(home, ".claude", "settings.json"), `{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"`+filepath.ToSlash(filepath.Join(home, "bin", "x.sh"))+` --token nope"},{"type":"http","url":"`+url+`"}]}]}}`)
+	got := discover(t, New(Options{IncludeUser: true, HomeDir: home, Getenv: noEnv}), root)
+	raw := mustJSON(t, got.Items)
+	for _, forbidden := range []string{home, "?sig=", "should-not-appear", "nope"} {
+		if bytes.Contains(raw, []byte(forbidden)) {
+			t.Errorf("payload leaks %q: %s", forbidden, raw)
+		}
+	}
+	for _, want := range []string{"~/bin/x.sh", "https://audit.example.test/hook", "--token [REDACTED]"} {
+		if !bytes.Contains(raw, []byte(want)) {
+			t.Errorf("payload misses %q: %s", want, raw)
+		}
+	}
+}
+
+func TestCaseInsensitiveClaudePaths(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, ".Claude", "Settings.json"), `{"disableAllHooks":true}`)
+	got := discover(t, New(Options{}), root)
+	if len(got.Items) != 1 || got.Items[0].Kind != model.ConfigKindPermissions {
+		t.Fatalf("items %+v diagnostics %q", got.Items, got.Diagnostics)
 	}
 }
 
@@ -349,6 +380,7 @@ func TestRepoLimits(t *testing.T) {
 		{"bytes", Limits{MaxDepth: 32, MaxEntries: 1000, MaxFiles: 100, MaxBytes: 10, MaxFile: 1 << 20}, func(t *testing.T, root string) {
 			writeFile(t, filepath.Join(root, "a", "CLAUDE.md"), "12345678")
 			writeFile(t, filepath.Join(root, "b", "CLAUDE.md"), "12345678")
+			writeFile(t, filepath.Join(root, "c", "CLAUDE.md"), "12345678")
 		}, "total configuration bytes exceed 10"},
 		{"depth", Limits{MaxDepth: 3, MaxEntries: 1000, MaxFiles: 100, MaxBytes: 1 << 20, MaxFile: 1 << 20}, func(t *testing.T, root string) {
 			writeFile(t, filepath.Join(root, "1", "2", "3", "4", "CLAUDE.md"), "x")
@@ -368,6 +400,17 @@ func TestRepoLimits(t *testing.T) {
 			got := discover(t, New(Options{Limits: &limits}), root)
 			if !containsDiag(got, tc.want) {
 				t.Fatalf("diagnostics = %q, want %q", got.Diagnostics, tc.want)
+			}
+			if tc.name == "bytes" {
+				n := 0
+				for _, d := range got.Diagnostics {
+					if strings.Contains(d, "total configuration bytes exceed") {
+						n++
+					}
+				}
+				if n != 1 {
+					t.Fatalf("byte budget diagnostics = %d: %q", n, got.Diagnostics)
+				}
 			}
 		})
 	}
