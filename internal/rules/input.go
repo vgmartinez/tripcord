@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math"
 	"slices"
 	"strings"
 
@@ -28,9 +29,12 @@ func ConfigInput(item model.ConfigItem, limits Limits) (*Input, error) {
 	}
 	var payload any = map[string]any{}
 	if len(bytes.TrimSpace(item.Payload)) > 0 {
-		if err := json.Unmarshal(item.Payload, &payload); err != nil {
+		dec := json.NewDecoder(bytes.NewReader(item.Payload))
+		dec.UseNumber()
+		if err := dec.Decode(&payload); err != nil {
 			return nil, fmt.Errorf("config %s: payload: %w", item.Path, err)
 		}
+		payload = normalizeNumbers(payload)
 	}
 	task := any(map[string]any{})
 	if item.Kind == model.ConfigKindTask {
@@ -42,6 +46,38 @@ func ConfigInput(item model.ConfigItem, limits Limits) (*Input, error) {
 		VarTask:    task,
 		VarEvent:   emptyEvent(),
 	}}, nil
+}
+
+// normalizeNumbers walks a decoded JSON tree and turns each json.Number
+// leaf (produced by UseNumber, which never errors on an out-of-range
+// literal) into the float64 a plain json.Unmarshal would have produced,
+// matching the type payload rules have always compared against. A
+// literal float64 cannot represent, such as 1e999, falls back to its
+// original text instead of failing the whole decode: the same
+// fall-back-to-string rule kit/yaml.go applies to an out-of-range YAML
+// float. Without this, planting an extreme number anywhere in a scanned
+// file would make ConfigInput error, which silences every finding for
+// the whole scan, not just the one offending item.
+func normalizeNumbers(v any) any {
+	switch t := v.(type) {
+	case map[string]any:
+		for k, val := range t {
+			t[k] = normalizeNumbers(val)
+		}
+		return t
+	case []any:
+		for i, val := range t {
+			t[i] = normalizeNumbers(val)
+		}
+		return t
+	case json.Number:
+		if f, err := t.Float64(); err == nil && !math.IsInf(f, 0) && !math.IsNaN(f) {
+			return f
+		}
+		return t.String()
+	default:
+		return v
+	}
 }
 
 // emptyEvent and emptyConfig bind every always-present field, so the

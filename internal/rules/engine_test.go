@@ -197,6 +197,25 @@ func TestScanConfigErrorsAreNotMatches(t *testing.T) {
 	}
 }
 
+// TestScanConfigExtremeNumberIsNotAnError is the engine-level half of
+// the scanner-blinding repro: a payload with a number too large for
+// float64 anywhere in it must not turn into a ConfigInput error, since
+// cmd/tripcord treats any accumulated engine error as fatal for the
+// whole scan and drops every finding, not just the offending item's.
+func TestScanConfigExtremeNumberIsNotAnError(t *testing.T) {
+	engine, _ := fixtureEngine(t)
+	items := []model.ConfigItem{
+		item(model.HarnessClaude, ".mcp.json", model.ConfigKindMCPServer, `{"command":"sh","huge":1e999}`),
+	}
+	res := engine.ScanConfig(context.Background(), items)
+	if len(res.Errors) != 0 {
+		t.Fatalf("errors = %v, want none", res.Errors)
+	}
+	if len(res.Matches) == 0 {
+		t.Fatalf("matches = %v, want at least one: the item still has to be evaluated, not just decoded without error", res.Matches)
+	}
+}
+
 func TestScanConfigInputLimit(t *testing.T) {
 	limits := DefaultLimits()
 	limits.MaxInputBytes = 32
