@@ -331,7 +331,7 @@ func normalizeScanArgs(args []string) ([]string, error) {
 			flags = append(flags, args[i])
 		}
 	}
-	return append(flags, positionals...), nil
+	return append(append(flags, "--"), positionals...), nil
 }
 
 func validateSinceRef(ref string) error {

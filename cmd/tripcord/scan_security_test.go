@@ -139,6 +139,56 @@ func TestSinceRejectsOptionInjection(t *testing.T) {
 	}
 }
 
+// TestArgsAfterDashDashAreNotReparsedAsFlags checks that a positional
+// argument after "--" is never treated as a flag. normalizeScanArgs must
+// keep the "--" terminator in the argument list it hands to flag.Parse,
+// or everything after a literal "--" is re-parsed as flags.
+func TestArgsAfterDashDashAreNotReparsedAsFlags(t *testing.T) {
+	t.Parallel()
+	probe := filepath.Join(t.TempDir(), "probe")
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"scan", "--", "--output=" + probe}, &stdout, &stderr)
+	if code != int(exitcode.Config) {
+		t.Fatalf("exit code = %d, stdout = %q, stderr = %q", code, stdout.String(), stderr.String())
+	}
+	if _, err := os.Stat(probe); !os.IsNotExist(err) {
+		t.Fatalf("argument after -- was parsed as --output: %v", err)
+	}
+}
+
+// TestDashPrefixedPathRequiresDashDash checks that a path starting with
+// "-" is rejected as an unknown flag unless it follows "--", matching
+// ordinary flag-parsing conventions. It changes the process's working
+// directory, so unlike its neighbors it does not run in parallel: other
+// tests in this package read relative paths (e.g. testdata/ for golden
+// files) and run only once every non-parallel test, including this one
+// and its deferred os.Chdir cleanup, has finished.
+func TestDashPrefixedPathRequiresDashDash(t *testing.T) {
+	parent := t.TempDir()
+	weird := filepath.Join(parent, "-weird")
+	if err := os.Mkdir(weird, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+	if err := os.Chdir(parent); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"scan", "-weird"}, &stdout, &stderr); code != int(exitcode.Config) {
+		t.Fatalf("without --: exit code = %d, stderr = %q", code, stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"scan", "--", "-weird"}, &stdout, &stderr); code != int(exitcode.OK) {
+		t.Fatalf("with --: exit code = %d, stderr = %q", code, stderr.String())
+	}
+}
+
 func TestSinceKeepsNonASCIIAndSkipsUntracked(t *testing.T) {
 	repo := gitRepo(t)
 	name := "caf\u00e9.txt"
