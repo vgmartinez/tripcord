@@ -21,15 +21,15 @@ var (
 	errEmptyRule      = errors.New("fingerprint: empty rule")
 	errEmptyHarness   = errors.New("fingerprint: empty location harness")
 	errUnknownHarness = errors.New("fingerprint: unknown location harness")
-	errLocationLine   = errors.New("fingerprint: location line must be >= 1")
 )
 
 // Fingerprint returns the stable id for rule, loc, and evidence.
 //
 // The result is "tcf_" plus the first 16 lowercase hex characters of
 // SHA-256 over a canonical UTF-8 JSON document. The same inputs always
-// produce the same id. Golden tests lock the digest. The full write-up
-// is docs/fingerprint.md.
+// produce the same id across Tripcord versions. Golden tests lock the
+// digest. The full write-up, including why line, event ids, and config
+// ids are excluded, is docs/fingerprint.md.
 //
 // Canonical document, encoding/json compact form, HTML escaping
 // disabled, trailing encoder newline removed, keys in this order:
@@ -44,19 +44,29 @@ var (
 // location is an object. harness is required. It is trimmed with
 // strings.TrimSpace and must be a known harness or surface. There is
 // no case folding. session is strings.TrimSpace and omitted when empty.
-// path is omitted when empty after this normalization: trim space,
-// replace "\" with "/", collapse repeated "/" into one "/", and strip
-// a trailing "/" except when the path is "/". Dot segments are not
-// resolved. line is included only for a non-nil pointer to an integer
-// >= 1. A non-nil line below 1 is an error. No other location field
-// is hashed.
+// path is normalizeScopedPath(loc.Scope, loc.Path) (an empty scope is
+// repo scope) and is omitted when loc.Path is empty; an absolute path
+// for repo scope, or a path not rooted at "~/" for user scope, is an
+// error. loc.Line is NOT hashed: a line number is volatile (an edit
+// above the finding's line shifts it) and is not part of what a finding
+// identifies. Line stays on Finding.Location for display. loc.Scope is
+// also not hashed; it is already implied by the normalized path's shape
+// (relative, "~/"-rooted, or managed-absolute), so including it would
+// not disambiguate anything further.
 //
-// evidence is an array sorted by event, then excerpt, compared as raw
-// strings (byte order). Each item keeps only event and excerpt. event
-// is strings.TrimSpace. excerpt is strings.Fields (Unicode white space
-// collapsed to one U+0020, ends dropped). Empty keys are omitted. An
-// item whose event and excerpt are both empty is dropped. Duplicates
-// are kept. The array is [] when nothing remains, never null.
+// evidence is an array of the normalized, non-empty excerpts, sorted as
+// raw strings (byte order); duplicates are kept. Each evidence excerpt
+// is strings.Fields-joined with single spaces (Unicode white space
+// collapsed, ends dropped); an item that normalizes to "" is dropped.
+// Evidence.Event and Evidence.Config are NOT hashed. Event ids are
+// ULIDs minted at ingest, so the same finding re-derived from a
+// reimported transcript, or from a hook event deduped against its
+// transcript copy, would otherwise get a different id for the same
+// occurrence; config ids are comparatively stable (see ConfigItem.ID)
+// but are left out too, for the same one-input-shape rule: a finding's
+// identity is the rule, the location, and what the evidence says, not
+// which record happens to cite it. The array is [] when nothing
+// remains, never null.
 //
 // Credential values, secret values, network URLs, and any other fields
 // are not inputs. Excerpts must already be redacted. This function does
@@ -81,11 +91,9 @@ type fingerprintLocation struct {
 	Harness string `json:"harness"`
 	Session string `json:"session,omitempty"`
 	Path    string `json:"path,omitempty"`
-	Line    *int   `json:"line,omitempty"`
 }
 
 type fingerprintEvidence struct {
-	Event   string `json:"event,omitempty"`
 	Excerpt string `json:"excerpt,omitempty"`
 }
 
@@ -104,32 +112,23 @@ func fingerprintPreimage(rule string, loc Location, evidence []Evidence) ([]byte
 	if session := strings.TrimSpace(loc.Session); session != "" {
 		canonicalLoc.Session = session
 	}
-	if path := normalizeFingerprintPath(loc.Path); path != "" {
-		canonicalLoc.Path = path
-	}
-	if loc.Line != nil {
-		if *loc.Line < 1 {
-			return nil, fmt.Errorf("%w (%d)", errLocationLine, *loc.Line)
+	if loc.Path != "" {
+		path, err := normalizeScopedPath(loc.Scope, loc.Path)
+		if err != nil {
+			return nil, fmt.Errorf("fingerprint: location %w", err)
 		}
-		line := *loc.Line
-		canonicalLoc.Line = &line
+		canonicalLoc.Path = path
 	}
 
 	items := make([]fingerprintEvidence, 0, len(evidence))
 	for _, ev := range evidence {
-		item := fingerprintEvidence{
-			Event:   strings.TrimSpace(ev.Event),
-			Excerpt: strings.Join(strings.Fields(ev.Excerpt), " "),
-		}
-		if item.Event == "" && item.Excerpt == "" {
+		excerpt := strings.Join(strings.Fields(ev.Excerpt), " ")
+		if excerpt == "" {
 			continue
 		}
-		items = append(items, item)
+		items = append(items, fingerprintEvidence{Excerpt: excerpt})
 	}
 	slices.SortFunc(items, func(a, b fingerprintEvidence) int {
-		if c := cmp.Compare(a.Event, b.Event); c != 0 {
-			return c
-		}
 		return cmp.Compare(a.Excerpt, b.Excerpt)
 	})
 
@@ -139,21 +138,6 @@ func fingerprintPreimage(rule string, loc Location, evidence []Evidence) ([]byte
 		Location: canonicalLoc,
 		Evidence: items,
 	})
-}
-
-func normalizeFingerprintPath(path string) string {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return ""
-	}
-	path = strings.ReplaceAll(path, `\`, "/")
-	for strings.Contains(path, "//") {
-		path = strings.ReplaceAll(path, "//", "/")
-	}
-	if len(path) > 1 {
-		path = strings.TrimRight(path, "/")
-	}
-	return path
 }
 
 func canonicalJSON(v any) ([]byte, error) {

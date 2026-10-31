@@ -19,6 +19,7 @@ func TestFingerprintGoldens(t *testing.T) {
 		name     string
 		rule     string
 		harness  Harness
+		scope    Scope
 		session  string
 		path     string
 		line     int
@@ -35,11 +36,14 @@ func TestFingerprintGoldens(t *testing.T) {
 				Event:   "evt_01JD7Q2M9X",
 				Excerpt: "cat /proc/$PPID/environ",
 			}},
-			preimage: `{"v":1,"rule":"TC-SEC-018","location":{"harness":"claude","session":"00893aaf-19fa-41d2"},"evidence":[{"event":"evt_01JD7Q2M9X","excerpt":"cat /proc/$PPID/environ"}]}`,
-			want:     "tcf_c95f982d5479e942",
+			preimage: `{"v":1,"rule":"TC-SEC-018","location":{"harness":"claude","session":"00893aaf-19fa-41d2"},"evidence":[{"excerpt":"cat /proc/$PPID/environ"}]}`,
+			want:     "tcf_bf8994fdb9dc73ed",
 		},
 		{
-			name:    "path line and excerpt",
+			// Default (unset) scope is repo scope: the path is already
+			// repo-relative. line is NOT hashed (see Fingerprint): it is
+			// set here to prove it has no effect on the digest.
+			name:    "repo scope path",
 			rule:    "TC-CFG-002",
 			harness: SurfaceVSCode,
 			path:    ".vscode/tasks.json",
@@ -48,8 +52,8 @@ func TestFingerprintGoldens(t *testing.T) {
 				{Event: "evt_a", Excerpt: "a && b < c"},
 				{Event: "evt_b", Excerpt: "runOn: folderOpen"},
 			},
-			preimage: `{"v":1,"rule":"TC-CFG-002","location":{"harness":"vscode","path":".vscode/tasks.json","line":12},"evidence":[{"event":"evt_a","excerpt":"a && b < c"},{"event":"evt_b","excerpt":"runOn: folderOpen"}]}`,
-			want:     "tcf_420dd950a238d29b",
+			preimage: `{"v":1,"rule":"TC-CFG-002","location":{"harness":"vscode","path":".vscode/tasks.json"},"evidence":[{"excerpt":"a && b < c"},{"excerpt":"runOn: folderOpen"}]}`,
+			want:     "tcf_4dbb91737d62173a",
 		},
 		{
 			name:     "empty evidence",
@@ -67,14 +71,38 @@ func TestFingerprintGoldens(t *testing.T) {
 				{Event: "evt_01JD7Q2M9X", Excerpt: "cat /proc/$PPID/environ"},
 				{Event: "evt_01JD7Q2M9X", Excerpt: "cat /proc/$PPID/environ"},
 			},
-			preimage: `{"v":1,"rule":"TC-SEC-018","location":{"harness":"claude","session":"00893aaf-19fa-41d2"},"evidence":[{"event":"evt_01JD7Q2M9X","excerpt":"cat /proc/$PPID/environ"},{"event":"evt_01JD7Q2M9X","excerpt":"cat /proc/$PPID/environ"}]}`,
-			want:     "tcf_0191a7ba1321eda7",
+			preimage: `{"v":1,"rule":"TC-SEC-018","location":{"harness":"claude","session":"00893aaf-19fa-41d2"},"evidence":[{"excerpt":"cat /proc/$PPID/environ"},{"excerpt":"cat /proc/$PPID/environ"}]}`,
+			want:     "tcf_eaaf73b622312f0e",
+		},
+		{
+			name:    "user scope path",
+			rule:    "TC-CFG-007",
+			harness: HarnessClaude,
+			scope:   ScopeUser,
+			path:    "~/.claude/settings.json",
+			evidence: []Evidence{
+				{Event: "evt_x", Excerpt: "hooks: SessionStart -> curl | bash"},
+			},
+			preimage: `{"v":1,"rule":"TC-CFG-007","location":{"harness":"claude","path":"~/.claude/settings.json"},"evidence":[{"excerpt":"hooks: SessionStart -> curl | bash"}]}`,
+			want:     "tcf_1a124c7ffb40127b",
+		},
+		{
+			// Managed scope is not restricted to a relative shape: the
+			// managed config files in the adapter table are fixed
+			// absolute system paths.
+			name:     "managed scope path",
+			rule:     "TC-CFG-016",
+			harness:  HarnessCursor,
+			scope:    ScopeManaged,
+			path:     "/etc/cursor/hooks.json",
+			preimage: `{"v":1,"rule":"TC-CFG-016","location":{"harness":"cursor","path":"/etc/cursor/hooks.json"},"evidence":[]}`,
+			want:     "tcf_de048560c3426d6c",
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			loc := Location{Harness: tc.harness, Session: tc.session, Path: tc.path}
+			loc := Location{Harness: tc.harness, Scope: tc.scope, Session: tc.session, Path: tc.path}
 			if tc.line > 0 {
 				line := tc.line
 				loc.Line = &line
@@ -101,7 +129,58 @@ func TestFingerprintGoldens(t *testing.T) {
 			if strings.Contains(tc.preimage, "secret") || strings.Contains(tc.preimage, "password") || strings.Contains(tc.preimage, "token") {
 				t.Fatalf("preimage contains a secret-shaped key: %s", tc.preimage)
 			}
+			if strings.Contains(tc.preimage, `"event"`) || strings.Contains(tc.preimage, `"line"`) {
+				t.Fatalf("preimage hashes an excluded field: %s", tc.preimage)
+			}
 		})
+	}
+}
+
+func TestFingerprintLineIsNotHashed(t *testing.T) {
+	t.Parallel()
+	withLine := 12
+	without, err := Fingerprint("TC-CFG-002", Location{Harness: SurfaceVSCode, Path: ".vscode/tasks.json"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	with, err := Fingerprint("TC-CFG-002", Location{Harness: SurfaceVSCode, Path: ".vscode/tasks.json", Line: &withLine}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if with != without {
+		t.Fatalf("line changed the fingerprint: with=%s without=%s", with, without)
+	}
+}
+
+func TestFingerprintEventIDIsNotHashed(t *testing.T) {
+	t.Parallel()
+	loc := Location{Harness: HarnessClaude, Session: "00893aaf-19fa-41d2"}
+	fromHookEvent, err := Fingerprint("TC-SEC-018", loc, []Evidence{
+		{Event: "evt_01JD7Q2M9X", Excerpt: "cat /proc/$PPID/environ"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Same occurrence, reimported with a new ULID minted at ingest.
+	fromReimport, err := Fingerprint("TC-SEC-018", loc, []Evidence{
+		{Event: "evt_09ZZZZZZZZ", Excerpt: "cat /proc/$PPID/environ"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fromHookEvent != fromReimport {
+		t.Fatalf("event id changed the fingerprint: hook=%s reimport=%s", fromHookEvent, fromReimport)
+	}
+	// Cited by a config item instead of an event: still the same text,
+	// so still the same fingerprint.
+	fromConfig, err := Fingerprint("TC-SEC-018", loc, []Evidence{
+		{Config: "claude:repo:.claude/settings.json", Excerpt: "cat /proc/$PPID/environ"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fromConfig != fromHookEvent {
+		t.Fatalf("evidence kind changed the fingerprint: config=%s event=%s", fromConfig, fromHookEvent)
 	}
 }
 
@@ -117,11 +196,17 @@ func TestFingerprintNormalization(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if spec != "tcf_c95f982d5479e942" {
-		t.Fatalf("normalized spec = %s", spec)
+	want, err := Fingerprint("TC-SEC-018", Location{
+		Harness: HarnessClaude,
+		Session: "00893aaf-19fa-41d2",
+	}, []Evidence{{Event: "evt_01JD7Q2M9X", Excerpt: "cat /proc/$PPID/environ"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if spec != want {
+		t.Fatalf("normalized spec = %s, want %s", spec, want)
 	}
 
-	line := 12
 	messy := []Evidence{
 		{Event: "evt_b", Excerpt: "runOn:\u00a0  folderOpen"},
 		{Event: "evt_a", Excerpt: "a   &&  b < c"},
@@ -130,13 +215,22 @@ func TestFingerprintNormalization(t *testing.T) {
 	got, err := Fingerprint("TC-CFG-002", Location{
 		Harness: SurfaceVSCode,
 		Path:    ` .vscode\tasks.json/ `,
-		Line:    &line,
 	}, messy)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != "tcf_420dd950a238d29b" {
-		t.Fatalf("normalized path = %s", got)
+	clean, err := Fingerprint("TC-CFG-002", Location{
+		Harness: SurfaceVSCode,
+		Path:    ".vscode/tasks.json",
+	}, []Evidence{
+		{Excerpt: "a && b < c"},
+		{Excerpt: "runOn: folderOpen"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != clean {
+		t.Fatalf("normalized path/evidence = %s, want %s", got, clean)
 	}
 	if !reflect.DeepEqual(messy, before) {
 		t.Fatalf("evidence mutated: %+v", messy)
@@ -144,10 +238,9 @@ func TestFingerprintNormalization(t *testing.T) {
 	slashy, err := Fingerprint("TC-CFG-002", Location{
 		Harness: SurfaceVSCode,
 		Path:    ".vscode//tasks.json",
-		Line:    &line,
 	}, []Evidence{
-		{Event: "evt_a", Excerpt: "a && b < c"},
-		{Event: "evt_b", Excerpt: "runOn: folderOpen"},
+		{Excerpt: "a && b < c"},
+		{Excerpt: "runOn: folderOpen"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -157,13 +250,17 @@ func TestFingerprintNormalization(t *testing.T) {
 	}
 
 	dropped, err := Fingerprint("TC-CFG-001", Location{Harness: SurfaceGeneric}, []Evidence{
-		{Event: "  ", Excerpt: " \n\t "},
+		{Event: "evt_a", Excerpt: " \n\t "},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if dropped != "tcf_6dcfe79827b07f1b" {
-		t.Fatalf("dropped evidence = %s", dropped)
+	empty, err := Fingerprint("TC-CFG-001", Location{Harness: SurfaceGeneric}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dropped != empty {
+		t.Fatalf("dropped evidence = %s, want %s", dropped, empty)
 	}
 }
 
@@ -181,10 +278,31 @@ func TestFingerprintRejectsBadInput(t *testing.T) {
 	if !errors.Is(err, errUnknownHarness) {
 		t.Fatalf("devin: %v", err)
 	}
-	line := 0
-	_, err = Fingerprint("TC-SEC-018", Location{Harness: HarnessClaude, Line: &line}, nil)
-	if !errors.Is(err, errLocationLine) {
-		t.Fatalf("line 0: %v", err)
+}
+
+func TestFingerprintRejectsAbsolutePaths(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name  string
+		scope Scope
+		path  string
+		want  error
+	}{
+		{"repo scope, unix absolute", ScopeRepo, "/home/runner/work/acme/acme/.vscode/tasks.json", errPathNotRelative},
+		{"default scope, unix absolute", "", "/home/runner/work/acme/acme/.vscode/tasks.json", errPathNotRelative},
+		{"repo scope, windows drive", ScopeRepo, `C:\Users\runner\acme\.vscode\tasks.json`, errPathNotRelative},
+		{"repo scope, home-relative", ScopeRepo, "~/.claude/settings.json", errPathNotRelative},
+		{"user scope, absolute (no tilde)", ScopeUser, "/home/dev/.claude/settings.json", errPathNotUserHome},
+		{"user scope, repo-relative", ScopeUser, ".claude/settings.json", errPathNotUserHome},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := Fingerprint("TC-CFG-002", Location{Harness: HarnessClaude, Scope: tc.scope, Path: tc.path}, nil)
+			if !errors.Is(err, tc.want) {
+				t.Fatalf("path %q, scope %q: err = %v, want %v", tc.path, tc.scope, err, tc.want)
+			}
+		})
 	}
 }
 
@@ -215,7 +333,7 @@ func TestFingerprintPreimageKeys(t *testing.T) {
 	if !ok {
 		t.Fatalf("item %T", evidence[0])
 	}
-	assertKeys(t, item, "event", "excerpt")
+	assertKeys(t, item, "excerpt")
 }
 
 func TestFingerprintDocMatchesGoldens(t *testing.T) {
@@ -225,10 +343,8 @@ func TestFingerprintDocMatchesGoldens(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, fragment := range []string{
-		`{"v":1,"rule":"TC-SEC-018","location":{"harness":"claude","session":"00893aaf-19fa-41d2"},"evidence":[{"event":"evt_01JD7Q2M9X","excerpt":"cat /proc/$PPID/environ"}]}`,
-		"tcf_c95f982d5479e942",
-		`{"v":1,"rule":"TC-CFG-002","location":{"harness":"vscode","path":".vscode/tasks.json","line":12},"evidence":[{"event":"evt_a","excerpt":"a && b < c"},{"event":"evt_b","excerpt":"runOn: folderOpen"}]}`,
-		"tcf_420dd950a238d29b",
+		`{"v":1,"rule":"TC-SEC-018","location":{"harness":"claude","session":"00893aaf-19fa-41d2"},"evidence":[{"excerpt":"cat /proc/$PPID/environ"}]}`,
+		`{"v":1,"rule":"TC-CFG-002","location":{"harness":"vscode","path":".vscode/tasks.json"},"evidence":[{"excerpt":"a && b < c"},{"excerpt":"runOn: folderOpen"}]}`,
 		`{"v":1,"rule":"TC-CFG-001","location":{"harness":"generic"},"evidence":[]}`,
 		"tcf_6dcfe79827b07f1b",
 	} {
