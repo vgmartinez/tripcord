@@ -1,6 +1,7 @@
 package devcontainer
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,8 @@ import (
 	"github.com/vgmartinez/tripcord/internal/adapters/kit"
 	"github.com/vgmartinez/tripcord/internal/adapters/kit/kittest"
 	"github.com/vgmartinez/tripcord/internal/model"
+	"github.com/vgmartinez/tripcord/internal/output"
+	"github.com/vgmartinez/tripcord/internal/rules"
 )
 
 // fixtureSecrets are the values planted in testdata that no item may
@@ -125,6 +128,56 @@ func TestRunArgsKeepsNonSecretAssignments(t *testing.T) {
 	for i := range want {
 		if value[i] != want[i] {
 			t.Fatalf("value = %v, want %v", value, want)
+		}
+	}
+}
+
+func TestRunArgsPasswordFlagKeepsNextElementRedacted(t *testing.T) {
+	t.Parallel()
+	const leaked = "-eX=v"
+	root := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(root, ".devcontainer.json"), `{"runArgs":["--password","-eX=v"]}`)
+	got := kittest.Discover(t, New(Options{}), root)
+	if len(got.Items) != 1 {
+		t.Fatalf("items = %+v", got.Items)
+	}
+	item := got.Items[0]
+	payload := kittest.Payload(t, item)
+	value, _ := payload["value"].([]any)
+	want := []any{"--password", kit.Redacted}
+	if len(value) != len(want) || value[0] != want[0] || value[1] != want[1] {
+		t.Fatalf("value = %v, want %v", value, want)
+	}
+	raw := string(item.Payload)
+	if strings.Contains(raw, leaked) {
+		t.Fatalf("payload contains %q: %s", leaked, raw)
+	}
+	key, _ := payload["key"].(string)
+	if key == "" || strings.Contains(key, leaked) || strings.Contains(rules.ConfigEvidenceKey(item), leaked) {
+		t.Fatalf("key leaks %q: item %q evidence %q", leaked, key, rules.ConfigEvidenceKey(item))
+	}
+	finding, err := rules.Match{Rule: &rules.Rule{ID: "TC-TEST-003", Title: "runArgs", Fix: "none", Severity: model.SeverityHigh}, Item: item}.Finding(model.SeverityHigh, model.DecisionWarn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, format := range []string{"json", "md", "sarif", "text", "gha"} {
+		var buf bytes.Buffer
+		handle, err := output.SelectSink(format, "", &buf, output.Options{Redactor: output.DefaultRedactor, RepoRoot: root, ToolVersion: "test"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := handle.Write(finding); err != nil {
+			t.Fatal(err)
+		}
+		if err := handle.Flush(); err != nil {
+			t.Fatal(err)
+		}
+		report := buf.String()
+		if !strings.Contains(report, "TC-TEST-003") {
+			t.Fatalf("%s report has no finding:\n%s", format, report)
+		}
+		if strings.Contains(report, leaked) {
+			t.Fatalf("%s output contains %q:\n%s", format, leaked, report)
 		}
 	}
 }

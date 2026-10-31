@@ -167,8 +167,15 @@ func (f *file) runArgs(value any) any {
 	}
 	out, _ := f.SafeValue("", f.SafeToolArgv(args)).([]any)
 	for i, arg := range args {
-		text, _ := arg.(string)
-		if assignment, glued := strings.CutPrefix(text, "-e"); glued && strings.Contains(assignment, "=") {
+		text, isString := arg.(string)
+		// Skip an element the shared rules already changed. "--password"
+		// redacts the next argv element, and rewriting it from the raw
+		// text would put that secret back.
+		if !isString || out[i] != arg {
+			continue
+		}
+		assignment, glued := strings.CutPrefix(text, "-e")
+		if glued && strings.Contains(assignment, "=") {
 			out[i] = "-e" + f.SafeString(assignment)
 		}
 	}
