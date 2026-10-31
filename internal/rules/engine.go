@@ -30,15 +30,17 @@ const ConfigConfidence = 1.0
 
 // Finding builds the tripcord.finding/v1 record for m. Severity and
 // decision come from the caller because policy overrides and mode
-// decide them. The evidence cites the config item by ConfigItem.ID and
-// carries no excerpt, so no file content reaches the finding.
+// decide them. The evidence cites the config item by ConfigItem.ID.
+// When the payload carries a stable entry name, that name is the
+// evidence key, so two matches in one file get distinct fingerprints.
+// The evidence carries no excerpt, so no file content reaches the finding.
 func (m Match) Finding(severity model.Severity, decision model.Decision) (model.Finding, error) {
 	id, err := m.Item.ID()
 	if err != nil {
 		return model.Finding{}, err
 	}
 	loc := model.Location{Harness: m.Item.Harness, Scope: m.Item.Scope, Path: m.Item.Path}
-	evidence := []model.Evidence{{Config: id}}
+	evidence := []model.Evidence{{Config: &model.ConfigRef{ID: id, Key: configEvidenceKey(m.Item)}}}
 	fp, err := model.Fingerprint(m.Rule.ID, loc, evidence)
 	if err != nil {
 		return model.Finding{}, err

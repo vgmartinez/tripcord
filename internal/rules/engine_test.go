@@ -65,7 +65,7 @@ func TestMatchFinding(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(f.Evidence) != 1 || f.Evidence[0].Config != "vscode:repo:.vscode/tasks.json" || f.Evidence[0].Event != "" || f.Evidence[0].Excerpt != "" {
+	if len(f.Evidence) != 1 || f.Evidence[0].Config == nil || f.Evidence[0].Config.ID != "vscode:repo:.vscode/tasks.json" || f.Evidence[0].Config.Key != "" || f.Evidence[0].Event != "" || f.Evidence[0].Excerpt != "" {
 		t.Fatalf("evidence = %+v", f.Evidence)
 	}
 	if f.Rule != "TEST-CFG-001" || f.Location.Path != ".vscode/tasks.json" || f.Location.Scope != model.ScopeRepo || len(f.Refs) != 1 || f.Fix == "" {
@@ -75,7 +75,7 @@ func TestMatchFinding(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(raw), `"evidence":[{"config":"vscode:repo:.vscode/tasks.json"}]`) {
+	if !strings.Contains(string(raw), `"evidence":[{"config":{"id":"vscode:repo:.vscode/tasks.json"}}]`) {
 		t.Fatalf("json = %s", raw)
 	}
 	if len(f.Fingerprint) != len("tcf_")+16 {
@@ -91,6 +91,63 @@ func TestMatchFinding(t *testing.T) {
 	}
 	if _, err := res.Matches[0].Finding("urgent", model.DecisionDeny); err == nil {
 		t.Fatal("invalid severity accepted")
+	}
+}
+
+func TestEvidenceKey(t *testing.T) {
+	_, cat := fixtureEngine(t)
+	rule, ok := cat.Rule("TEST-CFG-001")
+	if !ok {
+		t.Fatal("missing fixture rule")
+	}
+	find := func(payload string, kind model.ConfigKind) model.Finding {
+		t.Helper()
+		it := item(model.SurfaceVSCode, ".vscode/tasks.json", kind, payload)
+		f, err := (Match{Rule: rule, Item: it}).Finding(model.SeverityHigh, model.DecisionDeny)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return f
+	}
+	setup := find(`{"label":" setup ","runOptions":{"runOn":"folderOpen"}}`, model.ConfigKindTask)
+	build := find(`{"label":"build","runOptions":{"runOn":"folderOpen"}}`, model.ConfigKindTask)
+	plain := find(`{"runOptions":{"runOn":"folderOpen"}}`, model.ConfigKindTask)
+	if setup.Evidence[0].Config.Key != "setup" || build.Evidence[0].Config.Key != "build" || plain.Evidence[0].Config.Key != "" {
+		t.Fatalf("task keys: %q %q %q", setup.Evidence[0].Config.Key, build.Evidence[0].Config.Key, plain.Evidence[0].Config.Key)
+	}
+	if setup.Fingerprint == build.Fingerprint || setup.Fingerprint == plain.Fingerprint {
+		t.Fatal("entries in one file share a fingerprint")
+	}
+	numbered := find(`{"label":1,"runOptions":{"runOn":"folderOpen"}}`, model.ConfigKindTask)
+	if numbered.Evidence[0].Config.Key != "" || numbered.Fingerprint != plain.Fingerprint {
+		t.Fatalf("non-string label became a key: %q", numbered.Evidence[0].Config.Key)
+	}
+
+	server := find(`{"name":"filesystem","command":"npx"}`, model.ConfigKindMCPServer)
+	if server.Evidence[0].Config.Key != "filesystem" {
+		t.Fatalf("mcp key %q", server.Evidence[0].Config.Key)
+	}
+	unnamed := find(`{"command":"sh"}`, model.ConfigKindMCPServer)
+	if unnamed.Evidence[0].Config.Key != "" {
+		t.Fatalf("command used as mcp name: %q", unnamed.Evidence[0].Config.Key)
+	}
+
+	hook := item(model.HarnessClaude, ".claude/settings.json", model.ConfigKindHook, `{"matcher":"PreToolUse","command":"curl"}`)
+	hf, err := (Match{Rule: rule, Item: hook}).Finding(model.SeverityHigh, model.DecisionDeny)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hf.Evidence[0].Config.Key != "PreToolUse|curl" {
+		t.Fatalf("hook key %q", hf.Evidence[0].Config.Key)
+	}
+	matcherOnly := item(model.HarnessClaude, ".claude/settings.json", model.ConfigKindHook, `{"matcher":"PreToolUse"}`)
+	mf, err := (Match{Rule: rule, Item: matcherOnly}).Finding(model.SeverityHigh, model.DecisionDeny)
+	if err != nil || mf.Evidence[0].Config.Key != "PreToolUse|" {
+		t.Fatalf("matcher-only key %q (%v)", mf.Evidence[0].Config.Key, err)
+	}
+	note := find(`{"label":"setup"}`, model.ConfigKindInstructions)
+	if note.Evidence[0].Config.Key != "" {
+		t.Fatalf("instructions key %q", note.Evidence[0].Config.Key)
 	}
 }
 

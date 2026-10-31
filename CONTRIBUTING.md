@@ -65,6 +65,10 @@ reused.
 
 A missing key is false, so `task.runOptions.runOn == "folderOpen"` is
 false for a task without `runOptions`. Use `has()` to test presence.
+A match cites the config file by id. When the payload has a stable
+entry name, that name is the evidence key: `label` for a task, `name`
+for an MCP server, and `matcher|command` for a hook. Two entries in
+one file then get different fingerprints. Other kinds have no key.
 `matches()` uses RE2: no backreferences or lookaround. Each evaluation
 has a cost limit and a 10 ms timeout.
 
