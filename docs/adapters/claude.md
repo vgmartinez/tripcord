@@ -84,6 +84,33 @@ user. The adapter does not merge scopes or nested directories: every file is
 emitted as its own items, with the scope and path in the `ConfigRef` ID, so
 rules see every source that Claude Code might load.
 
+## Not scanned in v0
+
+Claude Code can load configuration from places this adapter does not read.
+A clean scan says nothing about them:
+
+- User-scope files other than `~/.claude/settings.json` and
+  `~/.claude.json`: `~/.claude/CLAUDE.md`, and `~/.claude/agents`,
+  `commands`, `skills`, `rules`, and `output-styles`.
+- Installed plugins and marketplaces under `~/.claude/plugins`, and any
+  remote marketplace or plugin source (recorded, never fetched).
+- In `~/.claude.json`, everything except `mcpServers` and
+  `projects.<path>.mcpServers`, such as a project's `allowedTools` or its
+  accepted-trust flag.
+- Session-only configuration: the `--settings`, `--mcp-config`,
+  `--agents`, `--allowedTools`, and `--permission-mode` command-line flags,
+  and environment variables other than `CLAUDE_CONFIG_DIR` (for example
+  `ANTHROPIC_BASE_URL` or `CLAUDE_CODE_*`).
+- Settings keys outside the curated list in
+  [Normalized payloads](#normalized-payloads).
+- What a configuration entry points at: the script a hook or
+  `apiKeyHelper` runs, a file pulled into `CLAUDE.md` with an `@path`
+  import, or the code of an MCP server. Only the entry itself is reported.
+- Values that only exist after expansion: `${VAR}` in `.mcp.json` and
+  `$VAR` in a hook command are kept as written, never expanded.
+- The legacy managed directory `C:\ProgramData\ClaudeCode` (see
+  [Managed](#managed)).
+
 ## Normalized payloads
 
 Hooks keep every field (`type`, `command`, `url`, `headers`, `mcp_tool`,
