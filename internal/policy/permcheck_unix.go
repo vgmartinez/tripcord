@@ -56,3 +56,36 @@ func checkManagedPolicyParent(path string, info os.FileInfo) error {
 	}
 	return nil
 }
+
+// checkManagedPolicyAncestor applies the same ownership rule as
+// checkManagedPolicyParent to a directory above the immediate parent, but
+// treats a world- or group-writable directory as safe when its sticky bit
+// is set. The sticky bit stops any other user from renaming or deleting
+// the already-validated child entry beneath it, which is the only attack
+// a shared ancestor directory such as /tmp (mode 1777) would otherwise
+// enable; it does not let another user plant a new entry with the exact
+// name of the policy file the way an unprotected world-writable immediate
+// parent would.
+func checkManagedPolicyAncestor(path string, info os.FileInfo) error {
+	if !info.IsDir() {
+		return fmt.Errorf("managed policy ancestor for %s: not a directory", path)
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return fmt.Errorf("managed policy ancestor for %s: owner is unknown", path)
+	}
+	uid := os.Getuid()
+	owner := int(stat.Uid)
+	if owner != 0 && owner != uid {
+		return fmt.Errorf("managed policy ancestor for %s: owned by uid %d, want root or the current user (uid %d)", path, owner, uid)
+	}
+	perm := info.Mode().Perm()
+	sticky := info.Mode()&os.ModeSticky != 0
+	if perm&0o002 != 0 && !sticky {
+		return fmt.Errorf("managed policy ancestor for %s: %w", path, errWorldWritable)
+	}
+	if perm&0o020 != 0 && !sticky && (owner != uid || int(stat.Gid) != os.Getgid()) {
+		return fmt.Errorf("managed policy ancestor for %s: group-writable and not owned by the current user", path)
+	}
+	return nil
+}
