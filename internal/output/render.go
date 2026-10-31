@@ -180,11 +180,41 @@ func ghaProperties(properties []string) string {
 // ghaData applies GitHub's workflow command data escaping, then removes
 // every remaining control and bidi character.
 func ghaData(value string) string {
-	return truncateSanitized(escapeControls(strings.NewReplacer("%", "%25", "\r", "%0D", "\n", "%0A").Replace(value)), MaxFieldBytes)
+	return truncateGHA(escapeControls(strings.NewReplacer("%", "%25", "\r", "%0D", "\n", "%0A").Replace(value)), MaxFieldBytes)
 }
 
 // ghaProperty applies GitHub's property escaping, which adds ":" and ",",
 // then removes every remaining control and bidi character.
 func ghaProperty(value string) string {
-	return truncateSanitized(escapeControls(strings.NewReplacer("%", "%25", "\r", "%0D", "\n", "%0A", ":", "%3A", ",", "%2C").Replace(value)), MaxFieldBytes)
+	return truncateGHA(escapeControls(strings.NewReplacer("%", "%25", "\r", "%0D", "\n", "%0A", ":", "%3A", ",", "%2C").Replace(value)), MaxFieldBytes)
+}
+
+// truncateGHA keeps workflow-command %XX sequences whole. GitHub decodes
+// these escapes, so emitting a partial one would make a capped annotation
+// ambiguous and can change how its tail is displayed.
+func truncateGHA(value string, limit int) string {
+	if len(value) <= limit {
+		return value
+	}
+	best := 0
+	for i := 0; i < len(value); {
+		next := i + ghaTokenLen(value, i)
+		marker := truncationMarker(len(value) - next)
+		if next+len(marker) > limit {
+			break
+		}
+		best = next
+		i = next
+	}
+	if best == 0 {
+		return truncationMarker(len(value))
+	}
+	return value[:best] + truncationMarker(len(value)-best)
+}
+
+func ghaTokenLen(value string, i int) int {
+	if i+3 <= len(value) && value[i] == '%' && isHex(value[i+1]) && isHex(value[i+2]) {
+		return 3
+	}
+	return nextToken(value, i)
 }

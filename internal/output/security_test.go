@@ -3,6 +3,7 @@ package output
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"regexp"
 	"strings"
 	"testing"
@@ -15,7 +16,7 @@ import (
 var allFormats = []Format{FormatJSON, FormatJSONL, FormatSARIF, FormatText, FormatGHA, FormatMD}
 
 // injectionPayloads are attacker-controlled strings a repository can put in
-// a title, fix, excerpt, rule, or path.
+// a title, fix, excerpt, or path. Rule IDs are a closed model vocabulary.
 var injectionPayloads = map[string]string{
 	"stop-commands":   "\n::stop-commands::tok",
 	"add-mask":        "x\n::add-mask::secret\n::error::forged",
@@ -44,7 +45,6 @@ var injectionPayloads = map[string]string{
 }
 
 var placements = map[string]func(*model.Finding, string){
-	"rule":    func(f *model.Finding, v string) { f.Rule = v },
 	"title":   func(f *model.Finding, v string) { f.Title = v },
 	"fix":     func(f *model.Finding, v string) { f.Fix = v },
 	"excerpt": func(f *model.Finding, v string) { f.Evidence[0].Excerpt = v },
@@ -130,7 +130,6 @@ func TestInjectionGoldens(t *testing.T) {
 
 func injectionFinding() model.Finding {
 	finding := findings()[0]
-	finding.Rule = "TC-CFG-010\n::stop-commands::tok"
 	finding.Title = "Run \x1b[2K\rforged [x](https://evil) @org/team"
 	finding.Fix = "See\n\n## Pwned <img src=x> `tick` a|b \u202eevil"
 	finding.Evidence[0].Excerpt = "\n::stop-commands::tok\n``` [x](https://evil) @org/team \\d"
@@ -341,7 +340,7 @@ func TestUnredactedSecretsNeverReachOutput(t *testing.T) {
 	carrier := "token " + githubToken + " key " + awsID + " aws_secret_access_key=" + awsSecret
 
 	finding := findings()[0]
-	finding.Rule = "TC-" + githubToken
+	finding.Title = "token in title: " + githubToken
 	finding.Title = carrier
 	finding.Fix = carrier
 	finding.Location.Session = carrier
@@ -414,6 +413,33 @@ func TestDefaultRedactorKeepsRedactedText(t *testing.T) {
 		if got := DefaultRedactor(value); got != value {
 			t.Fatalf("DefaultRedactor(%q) = %q", value, got)
 		}
+	}
+}
+
+func TestDefaultRedactorCredentialPatterns(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name  string
+		value string
+		want  string
+	}{
+		{"npm", "npm_abcdefghijklmnopqrstuvwxyz123456", "[REDACTED]"},
+		{"hugging-face", "hf_abcdefghijklmnopqrstuvwxyz123456", "[REDACTED]"},
+		{"google-oauth", "ya29.abcdefghijklmnopqrstuvwxyz123456", "[REDACTED]"},
+		{"slack-app", "xapp-1-1234567890-abcdefghijklmnopqrstuvwxyz", "[REDACTED]"},
+		{"slack-webhook", "https://hooks.slack.com/services/T000/B000/abcdefghijklmnopqrstuvwxyz", "[REDACTED]"},
+		{"json-assignment", `{"api_key":"not-a-placeholder-value"}`, `{"[REDACTED]}`},
+		{"yaml-assignment", "password: correct-horse-battery-staple", "[REDACTED]"},
+		{"env-assignment", "TOKEN=correct-horse-battery-staple", "[REDACTED]"},
+		{"placeholder", "token=${TOKEN}", "token=${TOKEN}"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := DefaultRedactor(tc.value); got != tc.want {
+				t.Fatalf("DefaultRedactor(%q) = %q, want %q", tc.value, got, tc.want)
+			}
+		})
 	}
 }
 
@@ -744,7 +770,7 @@ func TestSARIFRuleMetadata(t *testing.T) {
 	var input []model.Finding
 	for i, severity := range []model.Severity{model.SeverityCritical, model.SeverityHigh, model.SeverityMedium, model.SeverityLow} {
 		finding := findings()[1]
-		finding.Rule = "TC-SEV-" + string(severity)
+		finding.Rule = fmt.Sprintf("TC-SEV-%03d", i+1)
 		finding.Severity = severity
 		finding.Fingerprint = "tcf_000000000000000" + string(rune('0'+i))
 		finding.Refs = []string{"javascript:alert(1)", "file:///etc/passwd", "https://example.invalid/rules/" + string(severity)}
@@ -787,11 +813,11 @@ func TestSARIFRuleMetadata(t *testing.T) {
 		t.Fatalf("driver version = %q %q", driver.Version, driver.SemanticVersion)
 	}
 	want := map[string][3]string{
-		"TC-SEV-critical": {"9.5", "error", "https://example.invalid/rules/critical"},
-		"TC-SEV-high":     {"8.0", "error", "https://example.invalid/rules/high"},
-		"TC-SEV-medium":   {"5.5", "warning", "https://example.invalid/rules/medium"},
-		"TC-SEV-low":      {"3.0", "note", "https://example.invalid/rules/low"},
-		"TC-CFG-002":      {"9.5", "error", "https://example.invalid/rules/TC-CFG-002"},
+		"TC-SEV-001": {"9.5", "error", "https://example.invalid/rules/critical"},
+		"TC-SEV-002": {"8.0", "error", "https://example.invalid/rules/high"},
+		"TC-SEV-003": {"5.5", "warning", "https://example.invalid/rules/medium"},
+		"TC-SEV-004": {"3.0", "note", "https://example.invalid/rules/low"},
+		"TC-CFG-002": {"9.5", "error", "https://example.invalid/rules/TC-CFG-002"},
 	}
 	if len(driver.Rules) != len(want) {
 		t.Fatalf("rules = %d", len(driver.Rules))

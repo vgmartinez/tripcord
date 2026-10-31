@@ -38,6 +38,24 @@ func TestTruncateKeepsRunesAndEscapesIntact(t *testing.T) {
 	}
 }
 
+func TestTruncateGHADoesNotSplitPercentEscapes(t *testing.T) {
+	t.Parallel()
+	value := strings.Repeat("prefix%0A", 300)
+	got := truncateGHA(value, MaxFieldBytes)
+	if len(got) > MaxFieldBytes {
+		t.Fatalf("len %d > %d", len(got), MaxFieldBytes)
+	}
+	for i := 0; i < len(got); i++ {
+		if got[i] != '%' {
+			continue
+		}
+		if i+2 >= len(got) || !isHex(got[i+1]) || !isHex(got[i+2]) {
+			t.Fatalf("split GHA escape at byte %d: %q", i, got[i:])
+		}
+		i += 2
+	}
+}
+
 func assertCompleteEscapes(t *testing.T, value string) {
 	t.Helper()
 	for i := 0; i < len(value); {
@@ -91,7 +109,7 @@ func TestMarkdownOmitsFindingsPastTheCap(t *testing.T) {
 	input := make([]model.Finding, n)
 	for i := range input {
 		finding := findings()[0]
-		finding.Rule = fmt.Sprintf("R%03d", i)
+		finding.Rule = fmt.Sprintf("TC-TST-%03d", i)
 		finding.Title = fmt.Sprintf("title-%03d", i)
 		finding.Evidence[0].Excerpt = excerpt
 		input[i] = finding

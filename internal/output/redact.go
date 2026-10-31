@@ -27,9 +27,15 @@ var secretPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?:\b|_)sk-(?:ant-|proj-)?[A-Za-z0-9_-]{20,}`),
 	regexp.MustCompile(`[sr]k_live_[0-9A-Za-z]{20,}`),
 	regexp.MustCompile(`xox[abprs]-[A-Za-z0-9-]{10,}`),
+	regexp.MustCompile(`xapp-[0-9]+-[0-9]+-[A-Za-z0-9-]{10,}`),
+	regexp.MustCompile(`npm_[A-Za-z0-9]{20,}`),
+	regexp.MustCompile(`hf_[A-Za-z0-9]{20,}`),
+	regexp.MustCompile(`ya29\.[A-Za-z0-9._-]{20,}`),
 	regexp.MustCompile(`AIza[0-9A-Za-z_-]{35}`),
 	regexp.MustCompile(`\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}`),
 	regexp.MustCompile(`(?i)\bbearer\s+[A-Za-z0-9._~+/-]{20,}=*`),
+	regexp.MustCompile(`https://hooks\.slack\.com/services/[A-Za-z0-9/_-]+`),
+	regexp.MustCompile(`(?i)\b(?:password|api[_-]?key|token)\b["']?\s*(?:=|:)\s*(?:["'][A-Za-z0-9][^"']*["']|[A-Za-z0-9][^\s,}\]]*)`),
 	regexp.MustCompile(`://[^/\s:@]+:[^/\s@]+@`),
 }
 
