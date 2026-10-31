@@ -136,6 +136,17 @@ the scan root with `os.Root`:
   may load its target, which was not scanned"), never silently skipped.
   Symlinked skill directories inside the repository are followed. Symlink
   cycles terminate.
+- Each adapter's notion of "config-relevant" is deliberately broader than
+  what it actually reads wherever its own location is not fully known in
+  advance: Claude cannot tell a plugin's root directory name without
+  following the symlink, which it does not do, so it also flags `skills`,
+  `agents`, `commands`, and `hooks` directories outside `.claude`. When
+  more than one requested adapter is run over the same repository and more
+  than one independently flags the exact same escaping symlink, `tripcord
+  scan` reports it once, keeping the report from the adapter whose own
+  location it names, and dropping Claude's broader one (see
+  `adapters.DedupeEscapingSymlinkDiagnostics`). A symlink only Claude
+  flags is unaffected.
 - Files are opened non-blocking and checked with `fstat` on the opened
   descriptor, so FIFOs, devices, and sockets are never read, even if a file is
   swapped after it was listed.

@@ -216,9 +216,12 @@ func isSkillDir(segments []string) bool {
 var matcher = kit.Matcher{
 	Candidate: func(rel string) bool { return classify(rel) != roleNone },
 	Relevant: func(rel string) bool {
-		for _, segment := range strings.Split(rel, "/") {
-			switch strings.ToLower(segment) {
-			case ".agents", ".github", "skills", ".vscode":
+		segments := strings.Split(rel, "/")
+		if segments[0] == ".vscode" {
+			return true
+		}
+		for _, root := range skillRoots {
+			if kit.HasSequence(segments, root) {
 				return true
 			}
 		}

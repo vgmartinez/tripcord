@@ -284,6 +284,75 @@ func TestSymlinkedSkillDirectory(t *testing.T) {
 	}
 }
 
+// TestSymlinkEscapeInSharedSkillRootNotReported is Follow-up 6's Claude
+// half: .agents/skills and .github/skills are shared skill roots the
+// generic adapter reads (see sharedSkillRoots), not an arbitrarily-named
+// Claude plugin root, so an escaping symlink there is not Claude's
+// diagnostic to report, even though "skills" alone would otherwise match
+// configSegments for an unknown plugin root.
+func TestSymlinkEscapeInSharedSkillRootNotReported(t *testing.T) {
+	t.Parallel()
+	for _, root := range [][]string{{".agents", "skills"}, {".github", "skills"}} {
+		t.Run(strings.Join(root, "/"), func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			outside := t.TempDir()
+			if err := os.MkdirAll(filepath.Join(dir, root[0]), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(outside, filepath.Join(dir, root[0], root[1])); err != nil {
+				t.Skipf("symlinks unavailable: %v", err)
+			}
+			got := discover(t, New(Options{}), dir)
+			if len(got.Diagnostics) != 0 {
+				t.Fatalf("diagnostics = %q, want none: %s is generic's shared skill root, not Claude's", got.Diagnostics, strings.Join(root, "/"))
+			}
+		})
+	}
+}
+
+// TestSymlinkEscapeInBareRulesDirNotReported is Follow-up 6's other
+// Claude half: classify's roleRule only ever matches the exact
+// .claude/rules sequence (there is no plugin-root form for rules, unlike
+// skills, agents, commands, and hooks), so a bare "rules" directory
+// elsewhere, such as another harness's own rules/ location, must not be
+// reported as if it might hide Claude configuration.
+func TestSymlinkEscapeInBareRulesDirNotReported(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	outside := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".codex"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(dir, ".codex", "rules")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	got := discover(t, New(Options{}), dir)
+	if len(got.Diagnostics) != 0 {
+		t.Fatalf("diagnostics = %q, want none: .codex/rules has nothing to do with .claude/rules", got.Diagnostics)
+	}
+}
+
+// TestSymlinkEscapeInClaudeRulesDirStillReported guards the narrowing
+// above against over-correction: Claude's own .claude/rules/*.md files
+// are real configuration (roleRule), so an escaping symlink there must
+// still be reported.
+func TestSymlinkEscapeInClaudeRulesDirStillReported(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	outside := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".claude"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(dir, ".claude", "rules")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	got := discover(t, New(Options{}), dir)
+	if !containsDiag(got, ".claude/rules: symlink resolves outside the repository") {
+		t.Fatalf("diagnostics = %q, want a report for .claude/rules", got.Diagnostics)
+	}
+}
+
 // B4: every executable or network-reaching setting is emitted, and hooks
 // keep their full shape.
 func TestExecutableSettings(t *testing.T) {

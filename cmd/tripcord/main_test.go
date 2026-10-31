@@ -455,6 +455,35 @@ func TestPartitionDiagnostics(t *testing.T) {
 	}
 }
 
+// TestScanDedupesEscapingSymlinkAcrossAdapters is Follow-up 6
+// end-to-end: Claude's plugin-root discovery and Codex's own .codex
+// matcher both flag an escaping symlink at .codex/skills (Claude cannot
+// know a plugin root's name without following the symlink, which it
+// does not do), but the scan must report it once, naming the adapter
+// that actually owns the location, not twice.
+func TestScanDedupesEscapingSymlinkAcrossAdapters(t *testing.T) {
+	root := outsideGit(t)
+	if err := os.MkdirAll(filepath.Join(root, ".codex"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(root, ".codex", "skills")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"scan", "--scope", "repo", root}, &stdout, &stderr)
+	if code != int(exitcode.Config) {
+		t.Fatalf("exit code = %d, stdout = %q, stderr = %q", code, stdout.String(), stderr.String())
+	}
+	msg := stderr.String()
+	if n := strings.Count(msg, "symlink resolves outside"); n != 1 {
+		t.Fatalf("stderr contains %d escaping-symlink reports, want 1: %q", n, msg)
+	}
+	if !strings.Contains(msg, "codex: .codex/skills") {
+		t.Fatalf("stderr = %q, want the kept report to name codex, the actual owner of .codex/skills", msg)
+	}
+}
+
 func outsideGit(t *testing.T) string {
 	t.Helper()
 	dir, err := os.MkdirTemp("/tmp", "tripcord-scan-")

@@ -139,6 +139,26 @@ func TestCaseInsensitiveSharedPaths(t *testing.T) {
 	}
 }
 
+// TestSymlinkEscapeOutsideSharedPathsNotReported is Follow-up 6's generic
+// half: an escaping symlink at .github/hooks is Copilot's own location,
+// not a shared one generic reads, so generic must not duplicate
+// Copilot's diagnostic for it.
+func TestSymlinkEscapeOutsideSharedPathsNotReported(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	outside := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".github"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, ".github", "hooks")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	got := kittest.Discover(t, New(Options{}), root)
+	if len(got.Diagnostics) != 0 {
+		t.Fatalf("diagnostics = %+v, want none: .github/hooks is Copilot's location, not a shared one", got.Diagnostics)
+	}
+}
+
 func TestEscapingVSCodeSymlink(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

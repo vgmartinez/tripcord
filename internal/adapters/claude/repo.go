@@ -126,14 +126,38 @@ func classify(rel string, pluginRoots map[string]bool) fileRole {
 }
 
 // configSegments mark directories where an escaping symlink would hide
-// configuration Claude Code loads.
-var configSegments = map[string]bool{".claude": true, ".claude-plugin": true, "skills": true, "agents": true, "commands": true, "hooks": true, "rules": true}
+// configuration Claude Code loads: Claude's own repository directories,
+// plus skills, agents, commands, and hooks, which a Claude plugin can
+// also use at an arbitrary, not-yet-known plugin root (pluginRoots is
+// only known once this walk has already finished, from a plugin.json or
+// marketplace.json it found along the way). rules has no plugin-root
+// form — classify's roleRule only ever matches the exact .claude/rules
+// sequence — so it is matched by that sequence below instead of
+// appearing here, where a bare match would also flag an unrelated
+// directory such as another harness's own rules/ location.
+var configSegments = map[string]bool{".claude": true, ".claude-plugin": true, "skills": true, "agents": true, "commands": true, "hooks": true}
+
+// sharedSkillRoots are skillRoots' counterpart one level up: the shared
+// skill directories the generic adapter reads, not Claude. "skills" is
+// otherwise in configSegments for an arbitrarily-named Claude plugin
+// root, but an escaping symlink under one of these two is generic's
+// diagnostic to report, not a second, duplicate one from Claude.
+var sharedSkillRoots = [][]string{{".agents", "skills"}, {".github", "skills"}}
 
 func configRelevant(rel string) bool {
 	if candidateName(rel) {
 		return true
 	}
-	for _, segment := range strings.Split(rel, "/") {
+	segments := strings.Split(rel, "/")
+	if containsSequence(segments, []string{".claude", "rules"}) {
+		return true
+	}
+	for _, root := range sharedSkillRoots {
+		if containsSequence(segments, root) {
+			return false
+		}
+	}
+	for _, segment := range segments {
 		if configSegments[segment] {
 			return true
 		}

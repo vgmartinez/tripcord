@@ -286,6 +286,28 @@ func TestSymlinkEscape(t *testing.T) {
 	}
 }
 
+// TestSymlinkEscapeOutsideCopilotDirsNotReported is Follow-up 6's
+// Copilot half: an escaping symlink at .github/skills is generic's
+// shared skill root, not Copilot's, so Copilot's own diagnostic should
+// not duplicate generic's (see internal/adapters.
+// DedupeEscapingSymlinkDiagnostics for the remaining Claude overlap this
+// narrower Relevant does not need to cover).
+func TestSymlinkEscapeOutsideCopilotDirsNotReported(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	outside := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".github"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, ".github", "skills")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	got := kittest.Discover(t, New(Options{}), root)
+	if len(got.Diagnostics) != 0 {
+		t.Fatalf("diagnostics = %+v, want none: .github/skills is generic's shared skill root, not Copilot's", got.Diagnostics)
+	}
+}
+
 func TestCaseInsensitivePaths(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

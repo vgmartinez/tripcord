@@ -177,6 +177,7 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 		}
 		items = append(items, discovered...)
 	}
+	diagnostics = adapters.DedupeEscapingSymlinkDiagnostics(diagnostics)
 	if opts.since != "" {
 		changed, err := changedFiles(root, opts.since)
 		if err != nil {

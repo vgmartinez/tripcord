@@ -154,11 +154,21 @@ func classify(rel string) role {
 	return roleNone
 }
 
+// copilotDirs are the .github subdirectories Copilot reads from (see
+// classify): hooks, copilot, agents, workflows, and instructions. An
+// escaping symlink under any other .github subdirectory, such as
+// .github/skills (generic's shared skill root) or .github/ISSUE_TEMPLATE,
+// is not Copilot's to report.
+var copilotDirs = map[string]bool{"hooks": true, "copilot": true, "agents": true, "workflows": true, "instructions": true}
+
 var matcher = kit.Matcher{
 	Candidate: func(rel string) bool { return classify(rel) != roleNone },
 	Relevant: func(rel string) bool {
 		segments := kit.Segments(rel)
-		return segments[0] == ".github"
+		if segments[0] != ".github" {
+			return false
+		}
+		return len(segments) == 1 || copilotDirs[segments[1]]
 	},
 }
 
