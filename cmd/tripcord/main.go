@@ -182,6 +182,10 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 		Rules:       sarifRuleText(catalog),
 	})
 	if err != nil {
+		var pathErr *output.PathError
+		if errors.As(err, &pathErr) {
+			return scanConfigError(stderr, err)
+		}
 		return scanInternalError(stderr, err)
 	}
 	for _, finding := range findings {

@@ -169,6 +169,20 @@ func (p *publishSink) Flush() error {
 
 func (p *publishSink) Close() error { return p.file.Close() }
 
+// PathError marks a failure to validate or open the --output destination
+// itself: a symlink, a non-regular file, a missing or unwritable parent
+// directory, or a permission error reading or creating it. The caller
+// should treat it as an invalid flag (an exit-3 configuration error), not
+// an internal failure, because it is diagnosed before any finding is
+// written.
+type PathError struct {
+	err error
+}
+
+func (e *PathError) Error() string { return e.err.Error() }
+
+func (e *PathError) Unwrap() error { return e.err }
+
 // atomicOutput is a 0600 temporary file in the destination directory.
 // Close renames it onto dest only after a successful flush.
 type atomicOutput struct {
@@ -181,11 +195,11 @@ func newAtomicOutput(dest string) (*atomicOutput, error) {
 	info, err := os.Lstat(dest)
 	switch {
 	case err == nil && info.Mode()&os.ModeSymlink != 0:
-		return nil, fmt.Errorf("output path %s is a symlink", dest)
+		return nil, &PathError{err: fmt.Errorf("output path %s is a symlink", dest)}
 	case err == nil && !info.Mode().IsRegular():
-		return nil, fmt.Errorf("output path %s is not a regular file", dest)
+		return nil, &PathError{err: fmt.Errorf("output path %s is not a regular file", dest)}
 	case err != nil && !os.IsNotExist(err):
-		return nil, fmt.Errorf("output path: %w", err)
+		return nil, &PathError{err: fmt.Errorf("output path: %w", err)}
 	}
 	dir := filepath.Dir(dest)
 	if dir == "" {
@@ -193,13 +207,13 @@ func newAtomicOutput(dest string) (*atomicOutput, error) {
 	}
 	file, err := os.CreateTemp(dir, ".tripcord-*.partial")
 	if err != nil {
-		return nil, fmt.Errorf("create output file: %w", err)
+		return nil, &PathError{err: fmt.Errorf("create output file: %w", err)}
 	}
 	if err := file.Chmod(0o600); err != nil {
 		name := file.Name()
 		_ = file.Close()
 		_ = os.Remove(name)
-		return nil, fmt.Errorf("create output file: %w", err)
+		return nil, &PathError{err: fmt.Errorf("create output file: %w", err)}
 	}
 	return &atomicOutput{File: file, dest: dest}, nil
 }

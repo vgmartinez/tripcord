@@ -33,8 +33,8 @@ ceiling. See [policy.md](policy.md).
 | --- | --- |
 | 0 | No finding meets the effective threshold. |
 | 1 | At least one finding meets the effective threshold. |
-| 3 | Invalid flags or format, configuration/policy error, a Git ref `--since` cannot use, unavailable v0 secret scan, or unknown command. `--help` exits 0. |
-| 4 | Internal error, or a failure to start Git or write the output file. |
+| 3 | Invalid flags or format, configuration/policy error, a Git ref `--since` cannot use, an invalid `--output` or `--policy` path, unavailable v0 secret scan, or unknown command. `--help` exits 0. |
+| 4 | Internal error, or a failure to start Git or finish writing the output file. |
 
 ## Examples
 

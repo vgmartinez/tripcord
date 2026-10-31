@@ -273,6 +273,40 @@ func TestScanOutsideGit(t *testing.T) {
 	}
 }
 
+// TestOutputPathErrorsAreConfigErrors checks that an invalid --output
+// destination is a configuration error (exit 3), diagnosed before any
+// finding is written, rather than an internal error (exit 4).
+func TestOutputPathErrorsAreConfigErrors(t *testing.T) {
+	t.Parallel()
+	t.Run("symlink", func(t *testing.T) {
+		t.Parallel()
+		dir := outsideGit(t)
+		target := filepath.Join(t.TempDir(), "target")
+		if err := os.WriteFile(target, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		link := filepath.Join(t.TempDir(), "link")
+		if err := os.Symlink(target, link); err != nil {
+			t.Fatal(err)
+		}
+		var stdout, stderr bytes.Buffer
+		code := run([]string{"scan", "--output", link, dir}, &stdout, &stderr)
+		if code != int(exitcode.Config) {
+			t.Fatalf("exit code = %d, stderr = %q", code, stderr.String())
+		}
+	})
+	t.Run("missing directory", func(t *testing.T) {
+		t.Parallel()
+		dir := outsideGit(t)
+		missingDir := filepath.Join(t.TempDir(), "no-such-dir", "out.txt")
+		var stdout, stderr bytes.Buffer
+		code := run([]string{"scan", "--output", missingDir, dir}, &stdout, &stderr)
+		if code != int(exitcode.Config) {
+			t.Fatalf("exit code = %d, stderr = %q", code, stderr.String())
+		}
+	})
+}
+
 // TestMissingPolicyFileIsConfigError checks that an explicit --policy
 // path that does not exist is a configuration error, not silently
 // ignored. Unlike the default .tripcord/policy.yaml, an explicit path is
