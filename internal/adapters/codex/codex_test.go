@@ -156,7 +156,7 @@ func TestHostileInputs(t *testing.T) {
 				}
 				return
 			}
-			if !got.HasDiag(tc.path + ": ") || !got.HasDiag(tc.diag) {
+			if !got.HasDiag(tc.path+": ") || !got.HasDiag(tc.diag) {
 				t.Fatalf("diagnostics = %v, want %q at %s", got.Diagnostics, tc.diag, tc.path)
 			}
 		})

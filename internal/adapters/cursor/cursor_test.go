@@ -143,10 +143,11 @@ func TestHookKeysSeparateSecrets(t *testing.T) {
 		}
 		return kittest.Fingerprint(t, got.Items[0])
 	}
-	if fingerprint("one") == fingerprint("two") {
+	one, again := fingerprint("one"), fingerprint("one")
+	if one == fingerprint("two") {
 		t.Fatal("hooks that differ only by a secret share a fingerprint")
 	}
-	if fingerprint("one") != fingerprint("one") {
+	if one != again {
 		t.Fatal("fingerprint is not stable")
 	}
 }
