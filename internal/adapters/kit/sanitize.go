@@ -18,11 +18,10 @@ import (
 const Redacted = "[REDACTED]"
 
 var (
-	commandSecretFlag = regexp.MustCompile(`(?i)(` + output.SecretFlagAlternation() + `)(?:=|\s+)('[^']*'|"[^"]*"|\S+)`)
-	secretFlagName    = regexp.MustCompile(`(?i)^(?:` + output.SecretFlagAlternation() + `)$`)
-	bearerToken       = regexp.MustCompile(`(?i)\b(bearer)\s+([^\s'"]+)`)
-	bearerSchemeWord  = regexp.MustCompile(`(?i)^bearer$`)
-	userFlagName      = regexp.MustCompile(`(?i)^(?:` + output.UserFlagAlternation + `)$`)
+	secretFlagName   = regexp.MustCompile(`(?i)^(?:` + output.SecretFlagAlternation() + `)$`)
+	bearerToken      = regexp.MustCompile(`(?i)\b(bearer)\s+([^\s'"]+)`)
+	bearerSchemeWord = regexp.MustCompile(`(?i)^bearer$`)
+	userFlagName     = regexp.MustCompile(`(?i)^(?:` + output.UserFlagAlternation + `)$`)
 	// embeddedURL finds an absolute URL inside a larger string, such as a
 	// curl command. It stops at whitespace and quotes so a trailing shell
 	// quote or the rest of a pipeline is not swallowed.
@@ -243,19 +242,18 @@ func namesEnvVar(name string) bool {
 	return strings.HasSuffix(strings.ToLower(name), "_env_var")
 }
 
+// redactCommandSecrets redacts "Bearer <token>" and then everything
+// output.RedactCommand covers, the same table the output-side
+// DefaultRedactor and the Claude Code adapter use.
 func redactCommandSecrets(value string) (string, []string) {
 	var removed []string
-	value = commandSecretFlag.ReplaceAllStringFunc(value, func(m string) string {
-		g := commandSecretFlag.FindStringSubmatch(m)
-		removed = append(removed, g[2])
-		return g[1] + " " + Redacted
-	})
 	value = bearerToken.ReplaceAllStringFunc(value, func(m string) string {
 		g := bearerToken.FindStringSubmatch(m)
 		removed = append(removed, g[2])
 		return g[1] + " " + Redacted
 	})
-	return value, removed
+	value, commandRemoved := output.RedactCommand(value)
+	return value, append(removed, commandRemoved...)
 }
 
 func stripEmbeddedURLSecrets(value string) (string, []string) {

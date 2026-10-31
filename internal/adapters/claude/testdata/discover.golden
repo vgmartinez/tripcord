@@ -147,7 +147,7 @@
           "name": "reviewer",
           "tools": "Read, Grep"
         },
-        "key": "[\"agent\",\"sig:59592a1d8694c9ce\",\"sig:152fd978\"]",
+        "key": "[\"agent\",\"sig:59592a1d8694c9ce\",\"sig:0cdb93f6\"]",
         "role": "agent"
       }
     },
@@ -231,7 +231,7 @@
       "kind": "env-setup",
       "payload": {
         "command": "security find-generic-password -w",
-        "key": "[\"setting\",\"apiKeyHelper\",\"sig:c5c27b78526eff38\",\"sig:72d32e3e\"]",
+        "key": "[\"setting\",\"apiKeyHelper\",\"sig:c642117fd56ee531\"]",
         "setting": "apiKeyHelper",
         "value": "security find-generic-password -w"
       }

@@ -146,21 +146,7 @@ func (s *src) safeKey(parts []string) []string {
 var secretFlagNamePattern = output.SecretFlagAlternation()
 
 var (
-	// commandSecretFlag matches a secretFlagNamePattern flag and its
-	// value within a larger command string. The leading (^|\s), kept in
-	// group 1 and restored by redactCommandSecrets, is a left word
-	// boundary: without it, SecretFlagAlternation's optional single
-	// dash would also match a hyphen buried inside an unrelated
-	// compound word, such as the "-password" inside "find-generic-
-	// password -w" (not a flag at all, but a literal binary name),
-	// wrongly treating the "-w" that happens to follow it as the
-	// flag's value. An unquoted SPACE-separated value never starts with
-	// "-", so "--token --verbose" does not eat the next flag; an "="
-	// value has no such restriction, since a token can itself start
-	// with "-" (base64url, for example), and "--token=" unambiguously
-	// ends the flag name regardless of what follows.
-	commandSecretFlag = regexp.MustCompile(`(?i)(^|\s)(` + secretFlagNamePattern + `)(?:=('[^']*'|"[^"]*"|\S*)|\s+('[^']*'|"[^"]*"|[^-\s]\S*))`)
-	secretFlagName    = regexp.MustCompile(`(?i)^(?:` + secretFlagNamePattern + `)$`)
+	secretFlagName = regexp.MustCompile(`(?i)^(?:` + secretFlagNamePattern + `)$`)
 	// userFlagName matches a bare curl user/password flag name
 	// (output.UserFlagAlternation), used the same way secretFlagName is:
 	// to recognize the flag in its own MCP "args" array element, so the
@@ -186,41 +172,21 @@ var (
 	embeddedURL = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://[^\s'"<>]+`)
 )
 
-// redactCommandSecrets redacts CLI secret flags ("--token X", "--token=X"),
-// "Bearer <token>", curl-style "-u user:pass" (output.RedactUserFlags),
-// tool-specific short flags such as "openssl -k X" or "vercel -t X"
-// (output.RedactToolFlags), and credential-named assignments such as
-// PGPASSWORD=X or npm's :_authToken=X (output.RedactAssignments) inside
-// value. It returns the redacted text and the raw secret substrings it
-// removed, for kit.KeyDiscriminator.
+// redactCommandSecrets redacts "Bearer <token>" and then everything
+// output.RedactCommand covers (secret flags, curl user flags,
+// tool-specific flags, URL userinfo, credential assignments) inside
+// value, using the same table as the output-side DefaultRedactor. It
+// returns the redacted text and the raw secret substrings it removed,
+// for kit.KeyDiscriminator.
 func redactCommandSecrets(value string) (string, []string) {
 	var removed []string
-	value = commandSecretFlag.ReplaceAllStringFunc(value, func(m string) string {
-		g := commandSecretFlag.FindStringSubmatch(m)
-		// g[3] is the "=" form's value, g[4] the space form's. Which
-		// branch matched is read from the separator that actually
-		// follows the flag name in m, not from whether g[3] is empty:
-		// an "=" with an empty value ("--token=") is itself a valid,
-		// if degenerate, match of the "=" branch. "--password=X" keeps
-		// its "=" on redaction; the space form keeps its single space.
-		if m[len(g[1])+len(g[2])] == '=' {
-			removed = append(removed, g[3])
-			return g[1] + g[2] + "=" + redacted
-		}
-		removed = append(removed, g[4])
-		return g[1] + g[2] + " " + redacted
-	})
 	value = bearerToken.ReplaceAllStringFunc(value, func(m string) string {
 		g := bearerToken.FindStringSubmatch(m)
 		removed = append(removed, g[2])
 		return g[1] + " " + redacted
 	})
-	value, userRemoved := output.RedactUserFlags(value)
-	value, toolRemoved := output.RedactToolFlags(value)
-	value, assignRemoved := output.RedactAssignments(value)
-	removed = append(removed, userRemoved...)
-	removed = append(removed, toolRemoved...)
-	return value, append(removed, assignRemoved...)
+	value, commandRemoved := output.RedactCommand(value)
+	return value, append(removed, commandRemoved...)
 }
 
 // stripEmbeddedURLSecrets applies stripURLSecrets to every URL found

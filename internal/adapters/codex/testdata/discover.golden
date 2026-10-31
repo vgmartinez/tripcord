@@ -278,7 +278,7 @@
       "kind": "permissions",
       "payload": {
         "decision": "allow",
-        "key": "[\"rule\",\"allow\",\"[\\\"env\\\",\\\"PGPASSWORD=[REDACTED]\\\",\\\"psql\\\"]\",\"sig:1c7d47872b02ddb3\",\"sig:2e661b48\"]",
+        "key": "[\"rule\",\"allow\",\"[\\\"env\\\",\\\"PGPASSWORD=[REDACTED]\\\",\\\"psql\\\"]\",\"sig:1c7d47872b02ddb3\",\"sig:4e738ca5\"]",
         "pattern": [
           "env",
           "PGPASSWORD=[REDACTED]",
