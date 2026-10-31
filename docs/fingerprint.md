@@ -102,27 +102,33 @@ names a config entry. An empty scope defaults to repo scope.
 
 Normalization, in order: trim space; Unicode NFC (a decomposed and a
 composed spelling of the same path are one path; ASCII is unchanged);
-replace `\` with `/`; `path.Clean`, which removes `.` segments
-(`a/./b` becomes `a/b`), collapses repeated `/`, and resolves a `..`
-that has a parent segment (`a/../b` becomes `b`); reject any `..` that
-remains, in every scope; then, if the result is a Windows drive path,
+replace `\` with `/`; reject any `..` segment, in every scope, before
+`path.Clean` (so `a/../b` is rejected rather than collapsed to `b`,
+matching the finding schema); `path.Clean`, which removes `.` segments
+(`a/./b` becomes `a/b`), collapses repeated `/`, and strips a trailing
+`/` other than the root; then, if the result is a Windows drive path,
 case-fold it (see below).
 
 Windows paths are case-insensitive. A Windows drive path — one matching
-`^[a-zA-Z]:` once `\` has become `/` — is absolute in every scope. It
-is lowercased in full and then has just its drive letter uppercased, so
-`C:\ProgramData\x` and `c:/programdata/x` both normalize to the same
-`C:/programdata/x`. This project does not fold case anywhere else; a
-POSIX absolute path such as `/etc/Cursor/Hooks.json` is left exactly as
-given.
+`^[a-zA-Z]:($|/)` once `\` has become `/`, so `C:`, `C:/...`, or
+`C:\...` — is absolute in every scope. It is lowercased in full and
+then has just its drive letter uppercased, so `C:\ProgramData\x` and
+`c:/programdata/x` both normalize to the same `C:/programdata/x`. This
+project does not fold case anywhere else; a POSIX absolute path such as
+`/etc/Cursor/Hooks.json` is left exactly as given.
+
+A colon that is not that drive prefix is accepted. `a:b.json` is a
+repo-relative path, and so is the same shape `C:foo` (a Windows
+drive-relative path with no separator). That is a known limitation:
+those two spellings cannot be told apart, so neither is rejected.
 
 Scope rules, checked after that normalization:
 
 | Scope | Rule | Rejected example |
 | --- | --- | --- |
-| `repo` (default) | Must be repo-relative: no leading `/`, no leading `~`, no Windows drive letter, and no `..` that `path.Clean` could not resolve. | `/work/repo/.vscode/tasks.json`, `C:/Users/runner/x.json`, `C:\Users\x`, `\\server\share\hooks.json`, `~/.claude/settings.json`, `../../etc/passwd` |
-| `user` | Must be rooted at the user's home: exactly `~`, or starting with `~/`. A remaining `..` is rejected. | `/home/dev/.claude/settings.json`, `.claude/settings.json`, `~/../../x` |
-| `managed` | Must be absolute: a leading `/`, or a Windows drive letter. A remaining `..` is rejected. | `cursor/hooks.json`, `~/cursor/hooks.json`, `../etc/cursor/hooks.json` |
+| `repo` (default) | Must be repo-relative: no leading `/`, no leading `~`, no Windows drive letter, and no `..` segment. | `/work/repo/.vscode/tasks.json`, `C:/Users/runner/x.json`, `C:\Users\x`, `\\server\share\hooks.json`, `~/.claude/settings.json`, `a/../b`, `../../etc/passwd` |
+| `user` | Must be rooted at the user's home: exactly `~`, or starting with `~/`. A `..` segment is rejected. | `/home/dev/.claude/settings.json`, `.claude/settings.json`, `a/../b`, `~/../../x` |
+| `managed` | Must be absolute: a leading `/`, or a Windows drive letter. A `..` segment is rejected. | `cursor/hooks.json`, `~/cursor/hooks.json`, `a/../b`, `../etc/cursor/hooks.json` |
 
 Requiring an absolute shape for managed scope, on top of the
 repo-relative and `~/`-rooted shapes for the other two, keeps the three
@@ -176,6 +182,12 @@ and each evidence excerpt and config id/key. `location.line` and
 `evidence[].event` are also on the document, and they are not inputs,
 so omitting them from the hash does not leave a gap that Validate would
 have to fill from somewhere else.
+
+`location.path` must already be `normalizeScopedPath`'s result, the
+same rule a config id's path follows. `a/./b`, `./x`, and `a//b` fail
+Validate. `Fingerprint` still canonicalizes those spellings, so hashing
+`a/./b` produces the digest of `a/b`. `a:b.json` is already canonical
+and is accepted; see "Path scope" above.
 
 ## Config item ids
 

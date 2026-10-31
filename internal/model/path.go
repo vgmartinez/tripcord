@@ -11,23 +11,26 @@ import (
 )
 
 var (
-	errPathEmpty       = errors.New("path: empty")
-	errPathNotRelative = errors.New("path: repo scope requires a repo-relative path")
-	errPathDotDot      = errors.New(`path: rejects a ".." segment`)
-	errPathNotUserHome = errors.New("path: user scope requires a path rooted at ~/")
-	errPathNotAbsolute = errors.New("path: managed scope requires an absolute path")
-	errPathScope       = errors.New("path: unknown scope")
+	errPathEmpty         = errors.New("path: empty")
+	errPathNotRelative   = errors.New("path: repo scope requires a repo-relative path")
+	errPathDotDot        = errors.New(`path: rejects a ".." segment`)
+	errPathNotUserHome   = errors.New("path: user scope requires a path rooted at ~/")
+	errPathNotAbsolute   = errors.New("path: managed scope requires an absolute path")
+	errPathScope         = errors.New("path: unknown scope")
+	errPathNotNormalized = errors.New("path: not normalized")
 )
 
 // windowsDriveLetter matches a leading Windows drive once "\" has already
-// been normalized to "/", such as "C:/" or "C:". A drive letter makes
-// the path absolute in every scope.
-var windowsDriveLetter = regexp.MustCompile(`^[a-zA-Z]:`)
+// been normalized to "/". A drive is a letter, a colon, and then either
+// the end of the path ("C:") or a slash ("C:/..."). A colon followed by
+// more text ("a:b.json", and the same shape "C:foo") is not a drive.
+// See docs/fingerprint.md.
+var windowsDriveLetter = regexp.MustCompile(`^[a-zA-Z]:($|/)`)
 
 // normalizeScopedPath normalizes path and checks its shape against scope.
-// ConfigItem.ID, Finding.Validate, and the fingerprint's location.path
-// all call this, so a path is validated and hashed the same way wherever
-// it names a config entry.
+// ConfigItem.ID and Fingerprint call it and use the canonical result.
+// Finding.Validate calls it and requires location.path to already be
+// that result.
 //
 // Normalization, in order:
 //
@@ -35,18 +38,21 @@ var windowsDriveLetter = regexp.MustCompile(`^[a-zA-Z]:`)
 //  2. Unicode NFC, so a decomposed and a composed spelling of the same
 //     path hash to one fingerprint. ASCII paths are unchanged.
 //  3. Replace "\" with "/".
-//  4. path.Clean, which removes "." segments (so "a/./b" is "a/b"),
+//  4. Reject any ".." segment, in every scope, before path.Clean. A
+//     segment Clean could otherwise resolve ("a/../b" would become "b")
+//     is rejected the same way a segment that escapes the path is
+//     ("../../etc/passwd"). This matches the finding schema, which
+//     rejects a raw ".." segment.
+//  5. path.Clean, which removes "." segments (so "a/./b" is "a/b"),
 //     collapses repeated "/", and strips a trailing "/" other than the
-//     root. Clean also resolves a ".." that has a real parent segment
-//     ("a/../b" is "b"). A ".." that remains after Clean, including one
-//     that escapes the path ("../../etc/passwd"), is rejected in every
-//     scope.
-//  5. If the path is now a Windows drive path, case-fold it: lowercase
+//     root.
+//  6. If the path is now a Windows drive path, case-fold it: lowercase
 //     the whole path, then uppercase just the drive letter. Windows
 //     paths are case-insensitive, so "C:\ProgramData\x" and
 //     "c:/programdata/x" must normalize to the same ConfigItem.ID and
 //     fingerprint location.path ("C:/programdata/x"); this project does
-//     not fold case anywhere else.
+//     not fold case anywhere else. "a:b.json" is not a drive path, so
+//     it is left unchanged.
 //
 // Scope rules, checked after that normalization. A drive-letter path is
 // absolute in every scope.
@@ -72,12 +78,12 @@ func normalizeScopedPath(scope Scope, p string) (string, error) {
 	}
 	p = norm.NFC.String(p)
 	p = strings.ReplaceAll(p, `\`, "/")
+	if pathHasDotDot(p) {
+		return "", fmt.Errorf("%w: %q", errPathDotDot, p)
+	}
 	p = path.Clean(p)
 	if windowsDriveLetter.MatchString(p) {
 		p = canonicalWindowsDrivePath(p)
-	}
-	if pathHasDotDot(p) {
-		return "", fmt.Errorf("%w: %q", errPathDotDot, p)
 	}
 
 	switch scope {

@@ -82,6 +82,11 @@ func (f Finding) MarshalJSON() ([]byte, error) {
 // document too, and Fingerprint ignores them, so they do not have to be
 // supplied from anywhere else. Validate recomputes Fingerprint and
 // requires the stored value to match.
+//
+// location.path must already be normalizeScopedPath's result, the same
+// rule parseConfigID applies to a config id. Fingerprint still
+// canonicalizes a non-canonical path internally, so a caller can hash
+// "a/./b" and get the digest of "a/b"; a stored finding may not.
 func (f Finding) Validate() error {
 	if f.Schema != SchemaFinding {
 		return fmt.Errorf("finding: schema %q", f.Schema)
@@ -120,8 +125,12 @@ func (f Finding) Validate() error {
 		return fmt.Errorf("finding: location scope %q: unknown", f.Location.Scope)
 	}
 	if f.Location.Path != "" {
-		if _, err := normalizeScopedPath(f.Location.Scope, f.Location.Path); err != nil {
+		normalized, err := normalizeScopedPath(f.Location.Scope, f.Location.Path)
+		if err != nil {
 			return fmt.Errorf("finding: location %w", err)
+		}
+		if normalized != f.Location.Path {
+			return fmt.Errorf("finding: location %w: %q", errPathNotNormalized, f.Location.Path)
 		}
 	}
 	if f.Location.Line != nil && *f.Location.Line < 1 {

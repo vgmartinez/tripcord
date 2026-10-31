@@ -116,8 +116,12 @@ On `tripcord.finding/v1`'s `location`, `if`/`then` applies when `scope`
 is absent or `repo` (a missing `scope` validates the `if` schema,
 because `properties` does not require `scope`, and `scope: "repo"`
 matches its enum; `user` and `managed` do not). `then` rejects a `path`
-that starts with `/` or `~` or a drive letter, or that contains a `..`
-segment. `Finding.Validate` applies the same shape rules through
-`normalizeScopedPath`, which also runs `path.Clean` first, so a `..`
-that Clean can resolve (such as `a/../b` becoming `b`) passes Go and
-fails this schema check. The schema looks at the raw spelling.
+that starts with `/` or `\`, `~`, or a drive letter followed by `/`,
+`\`, or the end of the path, or that contains a `..` segment.
+`\Windows\x` and `\\srv\share\x` fail here. A colon that is not that
+drive prefix (`a:b.json`) does not. `normalizeScopedPath` rejects a raw
+`..` segment in every scope before `path.Clean`, so `a/../b` and `x/..`
+fail Go and this schema check. `Finding.Validate` also requires
+`location.path` to already be the normalized spelling, so `a/./b`,
+`./x`, and `a//b` fail Validate. This schema does not reject those
+spellings. `Fingerprint` still canonicalizes them.

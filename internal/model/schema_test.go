@@ -163,6 +163,8 @@ func TestSchemaRejectsInvalidDocuments(t *testing.T) {
 		"C:/Users/runner/x.json",
 		`C:\Users\x`,
 		"../../etc/passwd",
+		`\Windows\x`,
+		`\\srv\share\x`,
 	} {
 		finding = mustObject(t, readTestdata(t, "finding.json"))
 		location = finding["location"].(map[string]any)
@@ -185,6 +187,12 @@ func TestSchemaRejectsInvalidDocuments(t *testing.T) {
 		t.Fatal(err)
 	} else if err := idx.validate(schemaIDFinding, raw); err != nil {
 		t.Fatalf("repo-relative path: %v", err)
+	}
+	location["path"] = "a:b.json"
+	if raw, err := json.Marshal(finding); err != nil {
+		t.Fatal(err)
+	} else if err := idx.validate(schemaIDFinding, raw); err != nil {
+		t.Fatalf("colon filename: %v", err)
 	}
 	location["scope"] = "managed"
 	location["path"] = "/etc/cursor/hooks.json"

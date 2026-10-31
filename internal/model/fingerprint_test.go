@@ -480,6 +480,12 @@ func TestFingerprintRejectsBadPaths(t *testing.T) {
 		{"repo scope, windows drive", ScopeRepo, `C:\Users\runner\acme\.vscode\tasks.json`, errPathNotRelative},
 		{"repo scope, home-relative", ScopeRepo, "~/.claude/settings.json", errPathNotRelative},
 		{"repo scope, dotdot segment", ScopeRepo, "../etc/passwd", errPathDotDot},
+		{"repo scope, raw dotdot", ScopeRepo, "a/../b", errPathDotDot},
+		{"repo scope, trailing dotdot", ScopeRepo, "x/..", errPathDotDot},
+		{"user scope, raw dotdot", ScopeUser, "a/../b", errPathDotDot},
+		{"user scope, trailing dotdot", ScopeUser, "x/..", errPathDotDot},
+		{"managed scope, raw dotdot", ScopeManaged, "a/../b", errPathDotDot},
+		{"managed scope, trailing dotdot", ScopeManaged, "x/..", errPathDotDot},
 		{"repo scope, unresolved dotdot", ScopeRepo, "foo/../../etc/passwd", errPathDotDot},
 		{"user scope, absolute (no tilde)", ScopeUser, "/home/dev/.claude/settings.json", errPathNotUserHome},
 		{"user scope, repo-relative", ScopeUser, ".claude/settings.json", errPathNotUserHome},
@@ -491,6 +497,37 @@ func TestFingerprintRejectsBadPaths(t *testing.T) {
 			_, err := Fingerprint("TC-CFG-002", Location{Harness: HarnessClaude, Scope: tc.scope, Path: tc.path}, nil)
 			if !errors.Is(err, tc.want) {
 				t.Fatalf("path %q, scope %q: err = %v, want %v", tc.path, tc.scope, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestFingerprintCanonicalizesNonCanonicalPaths(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		canonical string
+		raw       string
+	}{
+		{"a/b", "a/./b"},
+		{"x", "./x"},
+		{"a/b", "a//b"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.raw, func(t *testing.T) {
+			t.Parallel()
+			loc := Location{Harness: HarnessClaude, Scope: ScopeRepo}
+			loc.Path = tc.canonical
+			want, err := Fingerprint("TC-CFG-002", loc, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			loc.Path = tc.raw
+			got, err := Fingerprint("TC-CFG-002", loc, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != want {
+				t.Fatalf("Fingerprint(%q) = %s, Fingerprint(%q) = %s", tc.raw, got, tc.canonical, want)
 			}
 		})
 	}
