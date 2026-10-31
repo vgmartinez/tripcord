@@ -646,7 +646,13 @@ func (s *src) markdown(kind model.ConfigKind, role string, raw []byte) {
 // standalone key KEY; it does not match BASE_URL.
 var secretKeyFragments = []string{"token", "key", "secret", "password", "authorization", "cookie"}
 
+// secretKey also accepts an env-style credential name such as DB_PASS
+// or DB_PWD (output.CredentialName), the rule command-string
+// assignments use.
 func secretKey(name string) bool {
+	if output.CredentialName(name) {
+		return true
+	}
 	n := strings.ToLower(name)
 	for _, fragment := range secretKeyFragments {
 		if strings.Contains(n, fragment) {
