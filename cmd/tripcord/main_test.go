@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/vgmartinez/tripcord/internal/adapters"
+	"github.com/vgmartinez/tripcord/internal/adapters/claude"
 	"github.com/vgmartinez/tripcord/internal/exitcode"
 )
 
@@ -154,13 +156,40 @@ func TestScanReportsIncompleteDiscovery(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "settings.json"), []byte(`{"hooks":{},"Hooks":{}}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	var stdout, stderr bytes.Buffer
-	if code := run([]string{"scan", "--format", "json", root}, &stdout, &stderr); code != int(exitcode.Config) {
-		t.Fatalf("exit code = %d, stderr = %q", code, stderr.String())
-	}
-	msg := stderr.String()
-	if !strings.Contains(msg, "case-variant keys") || !strings.Contains(msg, "scan is incomplete") || strings.Contains(msg, "\x1b") || strings.Contains(msg, root) {
-		t.Fatalf("stderr = %q", msg)
+	for _, format := range []string{"json", "md", "sarif", "text"} {
+		t.Run(format, func(t *testing.T) {
+			t.Parallel()
+			var stdout, stderr bytes.Buffer
+			if code := run([]string{"scan", "--format", format, root}, &stdout, &stderr); code != int(exitcode.Config) {
+				t.Fatalf("exit code = %d, stderr = %q", code, stderr.String())
+			}
+			msg := stderr.String()
+			report := stdout.String()
+			if !strings.Contains(msg, "case-variant keys") || !strings.Contains(msg, "scan is incomplete") || strings.Contains(msg, "\x1b") || strings.Contains(msg, root) {
+				t.Fatalf("stderr = %q", msg)
+			}
+			if strings.Contains(report, "\x1b") || strings.Contains(report, root) || !strings.Contains(report, "case-variant keys") {
+				t.Fatalf("report = %s", report)
+			}
+			switch format {
+			case "json":
+				if !strings.Contains(report, `"schema":"tripcord.diagnostic/v1"`) || !strings.Contains(report, `"incomplete":true`) {
+					t.Fatalf("json = %s", report)
+				}
+			case "md":
+				if !strings.Contains(report, "The scan is incomplete.") {
+					t.Fatalf("markdown = %s", report)
+				}
+			case "sarif":
+				if !strings.Contains(report, `"executionSuccessful": false`) || !strings.Contains(report, `"toolExecutionNotifications"`) {
+					t.Fatalf("sarif = %s", report)
+				}
+			case "text":
+				if !strings.Contains(report, "scan incomplete") {
+					t.Fatalf("text = %s", report)
+				}
+			}
+		})
 	}
 }
 
@@ -218,6 +247,8 @@ func TestScanFlagErrors(t *testing.T) {
 		{"config and secrets", []string{"scan", "--config", "--secrets", dir}, "mutually exclusive"},
 		{"config and all", []string{"scan", "--config", "--all", dir}, "mutually exclusive"},
 		{"secrets and all", []string{"scan", "--secrets", "--all", dir}, "mutually exclusive"},
+		{"scope", []string{"scan", "--scope", "workspace", dir}, "--scope"},
+		{"harness", []string{"scan", "--harness", "vscode", dir}, "not a supported harness"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -242,6 +273,73 @@ func TestScanFlagsAfterPath(t *testing.T) {
 	}
 	if stderr.Len() != 0 || !strings.Contains(stdout.String(), "0 finding(s)") {
 		t.Fatalf("stdout = %q, stderr = %q", stdout.String(), stderr.String())
+	}
+}
+
+func TestScanScope(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, ".git"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, ".claude"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".claude", "settings.json"), []byte(`{`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"scan", "--scope", "user", "--format", "text", root}, &stdout, &stderr); code != int(exitcode.OK) || stderr.Len() != 0 {
+		t.Fatalf("user scope exit %d stdout %q stderr %q", code, stdout.String(), stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"scan", root, "--scope", "repo"}, &stdout, &stderr); code != int(exitcode.Config) || !strings.Contains(stderr.String(), "incomplete") {
+		t.Fatalf("repo scope exit %d stderr %q", code, stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"scan", "--scope", "repo", "--harness", "generic", root}, &stdout, &stderr); code != int(exitcode.OK) {
+		t.Fatalf("generic scope exit %d stderr %q", code, stderr.String())
+	}
+}
+
+func TestLegacyNoteDoesNotFailScan(t *testing.T) {
+	legacy := t.TempDir()
+	restore := claude.SetLegacyManagedDirForTest(legacy)
+	t.Cleanup(restore)
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, ".git"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"scan", "--scope", "managed", "--format", "json", root}, &stdout, &stderr)
+	if code != int(exitcode.OK) {
+		t.Fatalf("exit %d stderr %q stdout %q", code, stderr.String(), stdout.String())
+	}
+	msg := stderr.String()
+	if !strings.Contains(msg, "not scanned") || strings.Contains(msg, "incomplete") || strings.Contains(msg, legacy) {
+		t.Fatalf("stderr = %q", msg)
+	}
+	if strings.Contains(stdout.String(), "tripcord.diagnostic") || strings.Contains(stdout.String(), "incomplete") {
+		t.Fatalf("report = %s", stdout.String())
+	}
+}
+
+func TestPartitionDiagnostics(t *testing.T) {
+	t.Parallel()
+	blocking, notes := partitionDiagnostics([]adapters.Diagnostic{
+		{Message: "note", Informational: true},
+		{Message: "bad"},
+	})
+	if len(notes) != 1 || notes[0].Message != "note" || len(blocking) != 1 || blocking[0].Message != "bad" {
+		t.Fatalf("blocking %+v notes %+v", blocking, notes)
 	}
 }
 

@@ -20,6 +20,7 @@ import (
 
 	"github.com/vgmartinez/tripcord/internal/adapters"
 	"github.com/vgmartinez/tripcord/internal/adapters/claude"
+	"github.com/vgmartinez/tripcord/internal/adapters/generic"
 	"github.com/vgmartinez/tripcord/internal/exitcode"
 	"github.com/vgmartinez/tripcord/internal/model"
 	"github.com/vgmartinez/tripcord/internal/output"
@@ -39,8 +40,9 @@ Usage:
   tripcord version
   tripcord scan [PATH] [flags]
 
-scan performs static configuration scanning only. It reads repository-scoped
-configuration; it does not read the home directory or system settings.
+scan performs static configuration scanning only. --scope selects repository
+(the default), user, managed, or all. The default does not read the home
+directory or system settings.
 --secrets (v1) and --all (v1) are not available.
 `
 
@@ -71,6 +73,7 @@ type scanOptions struct {
 	secrets   bool
 	all       bool
 	harnesses string
+	scope     string
 	format    string
 	output    string
 	since     string
@@ -131,7 +134,14 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return scanConfigError(stderr, err)
 	}
-	registry, err := adapters.NewRegistry(claude.New(claude.Options{}))
+	repoScope, userScope, managedScope, err := parseScope(opts.scope)
+	if err != nil {
+		return scanConfigError(stderr, err)
+	}
+	registry, err := adapters.NewRegistry(
+		claude.New(claude.Options{SkipRepo: !repoScope, IncludeUser: userScope, IncludeManaged: managedScope}),
+		generic.New(generic.Options{SkipRepo: !repoScope}),
+	)
 	if err != nil {
 		return scanInternalError(stderr, err)
 	}
@@ -197,6 +207,11 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 		}
 		return scanInternalError(stderr, err)
 	}
+	blocking, notes := partitionDiagnostics(diagnostics)
+	if err := handle.SetDiagnostics(outputDiagnostics(blocking)); err != nil {
+		_ = handle.Close()
+		return scanInternalError(stderr, err)
+	}
 	for _, finding := range findings {
 		if err := handle.Write(finding); err != nil {
 			_ = handle.Close()
@@ -210,11 +225,17 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 	if err := handle.Close(); err != nil {
 		return scanInternalError(stderr, err)
 	}
-	if len(diagnostics) > 0 {
-		for _, d := range diagnostics {
-			writeString(stderr, "tripcord scan: "+output.TerminalLine(d.String())+"\n")
+	// Exit 3 wins over exit 1: an incomplete scan is not a clean result.
+	// Informational diagnostics are printed and do not change the exit code.
+	for _, d := range append(append([]adapters.Diagnostic{}, blocking...), notes...) {
+		if writeString(stderr, "tripcord scan: "+output.TerminalLine(d.String())+"\n") != int(exitcode.OK) {
+			return int(exitcode.Internal)
 		}
-		writeString(stderr, "tripcord scan: configuration could not be fully read; the scan is incomplete\n")
+	}
+	if len(blocking) > 0 {
+		if writeString(stderr, "tripcord scan: configuration could not be fully read; the scan is incomplete\n") != int(exitcode.OK) {
+			return int(exitcode.Internal)
+		}
 		return int(exitcode.Config)
 	}
 	for _, finding := range findings {
@@ -247,6 +268,7 @@ func parseScanFlags(args []string, stdout io.Writer) (scanOptions, error) {
 	flags.BoolVar(&opts.secrets, "secrets", false, "(v1) not available")
 	flags.BoolVar(&opts.all, "all", false, "(v1) not available")
 	flags.StringVar(&opts.harnesses, "harness", "", "comma-separated harnesses; default autodetect")
+	flags.StringVar(&opts.scope, "scope", "repo", "repo, user, managed, or all")
 	flags.StringVar(&opts.format, "format", "text", "text, json, sarif, md, or gha")
 	flags.StringVar(&opts.output, "output", "-", "output path or - for stdout")
 	flags.StringVar(&opts.since, "since", "", "files changed between the ref and HEAD; requires git")
@@ -269,6 +291,9 @@ func parseScanFlags(args []string, stdout io.Writer) (scanOptions, error) {
 		return scanOptions{}, err
 	}
 	if _, err := output.ParseFormat(opts.format); err != nil {
+		return scanOptions{}, err
+	}
+	if _, _, _, err := parseScope(opts.scope); err != nil {
 		return scanOptions{}, err
 	}
 	if opts.since != "" {
@@ -327,7 +352,7 @@ func gitRoot(dir string) string {
 func normalizeScanArgs(args []string) ([]string, error) {
 	valueFlags := map[string]bool{
 		"harness": true, "format": true, "output": true, "since": true,
-		"fail-on": true, "policy": true, "org-policy": true,
+		"fail-on": true, "policy": true, "org-policy": true, "scope": true,
 	}
 	var flags []string
 	var positionals []string
@@ -368,7 +393,7 @@ func parseHarnesses(value string) ([]model.Harness, error) {
 	var out []model.Harness
 	for _, raw := range strings.Split(value, ",") {
 		harness := model.Harness(strings.TrimSpace(raw))
-		if !harness.IsProduct() {
+		if !adapters.AdapterHarness(harness) {
 			return nil, fmt.Errorf("--harness: %q is not a supported harness", raw)
 		}
 		out = append(out, harness)
@@ -523,6 +548,45 @@ func continuesPathComponent(c byte) bool {
 	default:
 		return false
 	}
+}
+
+func parseScope(value string) (repo, user, managed bool, err error) {
+	switch value {
+	case "repo":
+		return true, false, false, nil
+	case "user":
+		return false, true, false, nil
+	case "managed":
+		return false, false, true, nil
+	case "all":
+		return true, true, true, nil
+	default:
+		return false, false, false, fmt.Errorf("--scope %q: want repo, user, managed, or all", value)
+	}
+}
+
+func partitionDiagnostics(in []adapters.Diagnostic) (blocking, notes []adapters.Diagnostic) {
+	for _, d := range in {
+		if d.Informational {
+			notes = append(notes, d)
+		} else {
+			blocking = append(blocking, d)
+		}
+	}
+	return blocking, notes
+}
+
+func outputDiagnostics(in []adapters.Diagnostic) []output.Diagnostic {
+	out := make([]output.Diagnostic, len(in))
+	for i, d := range in {
+		out[i] = output.Diagnostic{
+			Harness: string(d.Harness),
+			Scope:   string(d.Scope),
+			Path:    d.Path,
+			Message: d.Message,
+		}
+	}
+	return out
 }
 
 func decision(mode policy.Mode) model.Decision {
