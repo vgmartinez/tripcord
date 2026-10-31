@@ -310,7 +310,7 @@ const unquotedCommandValue = "[^\\s;&|\"'\\n)`]"
 var assignmentQuotedValue = regexp.MustCompile(`^(?:` + quotedValue + `)`)
 
 // colonValueEnd lists the bytes that end an unquoted "key: value" value.
-const colonValueEnd = ";&|\"'\n"
+const colonValueEnd = ";&|\"'\n)"
 
 // authorizationPattern matches an Authorization header or JSON field with a
 // Bearer, Basic, or token scheme, in both header ("Authorization: Bearer x")
@@ -631,7 +631,8 @@ func redactColonAssignments(value string, removed *[]string) string {
 			break
 		}
 		body := ""
-		ok := (h.start == 0 || !isAlnum(value[h.start-1])) && CredentialName(h.name)
+		ok := (h.start == 0 || !isAlnum(value[h.start-1])) && CredentialName(h.name) &&
+			!colonPathOrIdentifier(value, h.start, h.openQuote, h.sep)
 		if ok && !spansFound {
 			spans, spansFound = findLiteralSpans(value), true
 		}
@@ -649,6 +650,33 @@ func redactColonAssignments(value string, removed *[]string) string {
 	}
 	b.WriteString(value[pos:])
 	return b.String()
+}
+
+// colonPathOrIdentifier rejects an unquoted, glued credential-looking
+// fragment that is part of an image name, hostname, or path rather than
+// an assignment. httpie's Header:value form is the intentional exception:
+// it has an http command word and is handled as a header.
+func colonPathOrIdentifier(value string, offset int, quote, sep string) bool {
+	if quote != "" || sep != ":" {
+		return false
+	}
+	start := offset
+	for start > 0 && !isCommandSpace(value[start-1]) {
+		start--
+	}
+	word := value[start:offset]
+	if strings.HasPrefix(word, "--header=") || strings.HasPrefix(word, "-H=") {
+		return false
+	}
+	if !strings.ContainsAny(word, "/-") {
+		return false
+	}
+	segment := value[:start]
+	if i := strings.LastIndexAny(segment, ";&|\n"); i >= 0 {
+		segment = segment[i+1:]
+	}
+	words := splitWords(segment)
+	return len(words) == 0 || normalizeToolWord(words[0].text) != "http"
 }
 
 // colonValue returns the "key: value" value at the start of rest: a

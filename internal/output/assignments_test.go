@@ -86,3 +86,21 @@ func TestRedactAssignmentsKeepsSpaceBeforeOperator(t *testing.T) {
 		}
 	}
 }
+
+func TestLiteralTextExemptionIsToolAndCommandSpecific(t *testing.T) {
+	t.Parallel()
+	for in, want := range map[string]string{
+		"grep -F --password QN18X f":                 "grep -F --password [REDACTED] f",
+		"rg -F --password QN18Y f":                   "rg -F --password [REDACTED] f",
+		"gh secret set CFG --body 'password: QN06X'": "gh secret set CFG --body 'password: [REDACTED]'",
+		`git commit -m "$(echo token: QN04X)"`:       `git commit -m "$(echo token: [REDACTED])"`,
+		"echo git -m 'token: QN05X'":                 "echo git -m 'token: [REDACTED]'",
+	} {
+		if got := DefaultRedactor(in); got != want {
+			t.Errorf("DefaultRedactor(%q) = %q, want %q", in, got, want)
+		}
+	}
+	if got := DefaultRedactor("docker run registry/token-svc:1.2"); got != "docker run registry/token-svc:1.2" {
+		t.Errorf("DefaultRedactor image tag = %q, want unchanged", got)
+	}
+}

@@ -14,9 +14,9 @@ import (
 // it is per tool: echo -e 'token: X' is redacted.
 var literalTextFlags = map[string][]string{
 	"git":  {"-m", "--message", "--grep"},
-	"grep": {"-e", "-F"},
-	"rg":   {"-e", "-F"},
-	"sed":  {"-e", "-F"},
+	"grep": {"-e"},
+	"rg":   {"-e"},
+	"sed":  {"-e"},
 	"awk":  {"-e", "-F"},
 	"gh":   {"--title", "--body"},
 }
@@ -39,12 +39,14 @@ func findLiteralSpans(value string) literalSpans {
 	}
 	var spans literalSpans
 	tool, prev := "", ""
+	commandWord := true
 	pending := false
 	for i := 0; i < len(value); {
 		c := value[i]
 		switch {
 		case c == ';' || c == '|' || c == '&' || c == '\n':
 			tool, prev, pending = "", "", false
+			commandWord = true
 			i++
 			continue
 		case isCommandSpace(c):
@@ -56,14 +58,36 @@ func findLiteralSpans(value string) literalSpans {
 		text := value[start:i]
 		switch {
 		case pending:
-			spans = append(spans, [2]int{start, i})
+			// Shell substitutions execute a new command; they are not
+			// literal message or pattern text and must still be scanned.
+			if !strings.ContainsAny(text, "`") && !strings.Contains(text, "$(") {
+				spans = append(spans, [2]int{start, i})
+			}
 			pending = false
 		case tool != "":
 			pending = literalFlagArgument(&spans, tool, text, start, i)
 		}
-		if !pending && mentionsLiteralTool(text) {
-			if name := toolWordName(prev, text); literalTextFlags[name] != nil {
+		if commandWord {
+			name := toolWordName(prev, text)
+			switch name {
+			case "sudo", "env", "command":
+				// These wrappers leave the next executable in command
+				// position. env assignments do too.
+			case "git", "grep", "rg", "sed", "awk":
 				tool = name
+				commandWord = false
+			case "gh":
+				tool = "gh-subcommand"
+				commandWord = false
+			default:
+				commandWord = false
+			}
+		} else if tool == "gh-subcommand" {
+			switch strings.Trim(text, `"'`) {
+			case "pr", "issue", "release":
+				tool = "gh"
+			default:
+				tool = ""
 			}
 		}
 		prev = text
