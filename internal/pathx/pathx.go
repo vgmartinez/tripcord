@@ -7,6 +7,7 @@ package pathx
 
 import (
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -32,15 +33,34 @@ import (
 // characters common inside one segment (".", "_", "-", "+", "@", "~",
 // and any non-ASCII byte), and ends at everything else, in particular at
 // "/" and "\\".
+//
+// On Windows (runtime.GOOS == "windows"), matching is case-insensitive
+// and treats "/" and "\\" as equivalent, since Windows paths are
+// case-insensitive and both separators are valid and commonly mixed
+// (an error message built with filepath.Join uses "\\", while config
+// content or a user-typed path often uses "/"); on every other OS,
+// matching stays byte-exact.
 func TildeHome(home, text string) string {
+	return tildeHome(home, text, runtime.GOOS == "windows")
+}
+
+// tildeHome is TildeHome with the Windows-matching decision passed in
+// explicitly, rather than read from runtime.GOOS, so a test can exercise
+// Windows-mode matching deterministically on any OS the test suite
+// itself runs on (CI's "go test -race" step runs only on ubuntu-latest).
+func tildeHome(home, text string, windowsMatching bool) string {
 	home = filepath.Clean(home)
 	if tooShortToRewrite(home) {
 		return text
 	}
+	byteEqual := byteEqualExact
+	if windowsMatching {
+		byteEqual = byteEqualWindows
+	}
 	var b strings.Builder
 	start := 0
 	for {
-		i := strings.Index(text[start:], home)
+		i := indexHome(text[start:], home, byteEqual)
 		if i < 0 {
 			b.WriteString(text[start:])
 			return b.String()
@@ -61,6 +81,52 @@ func TildeHome(home, text string) string {
 		b.WriteString(text[start : matchStart+1])
 		start = matchStart + 1
 	}
+}
+
+// indexHome returns the index of the first byte range in text that
+// equals home under byteEqual, or -1 if there is none. It is strings.Index
+// generalized to a per-byte equality function, so Windows-mode matching
+// can reuse the same boundary-scanning loop above as the exact-match case.
+func indexHome(text, home string, byteEqual func(a, b byte) bool) int {
+	n := len(home)
+	for i := 0; i+n <= len(text); i++ {
+		if regionEqual(text[i:i+n], home, byteEqual) {
+			return i
+		}
+	}
+	return -1
+}
+
+func regionEqual(a, b string, byteEqual func(x, y byte) bool) bool {
+	for i := 0; i < len(a); i++ {
+		if !byteEqual(a[i], b[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func byteEqualExact(a, b byte) bool { return a == b }
+
+// byteEqualWindows is byteEqual for Windows-mode matching: "/" and "\\"
+// are the same separator, and ASCII letters compare case-insensitively
+// (Windows paths are case-insensitive; non-ASCII bytes compare exactly,
+// since case-folding them correctly would need full Unicode decoding
+// this byte-at-a-time comparison does not have, and home directories
+// are a narrow enough case that over-matching non-ASCII text is not
+// worth that cost).
+func byteEqualWindows(a, b byte) bool {
+	if (a == '/' || a == '\\') && (b == '/' || b == '\\') {
+		return true
+	}
+	return lowerASCII(a) == lowerASCII(b)
+}
+
+func lowerASCII(c byte) byte {
+	if c >= 'A' && c <= 'Z' {
+		return c + ('a' - 'A')
+	}
+	return c
 }
 
 // tooShortToRewrite reports whether home is too short, or too close to a
