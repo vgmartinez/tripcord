@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/vgmartinez/tripcord/internal/model"
 )
 
 func TestDiagnosticsAreReportedAndRedacted(t *testing.T) {
@@ -60,6 +62,28 @@ func TestDiagnosticsAreReportedAndRedacted(t *testing.T) {
 				}
 			default:
 				t.Fatalf("unhandled format %s", format)
+			}
+		})
+	}
+}
+
+func TestConfigKeyDoesNotLeakAcrossFormats(t *testing.T) {
+	t.Parallel()
+	finding := findings()[0]
+	finding.Evidence = []model.Evidence{{
+		Config: &model.ConfigRef{ID: "claude:user:~/.claude/settings.json", Key: `["hook","Stop","","command","~/bin/x.sh"]`},
+	}}
+	for _, format := range []Format{FormatJSON, FormatMD, FormatSARIF, FormatText, FormatGHA} {
+		t.Run(string(format), func(t *testing.T) {
+			t.Parallel()
+			got := render(t, format, []model.Finding{finding})
+			for _, forbidden := range []string{"/Users/vicuserzz", "?sig=", "secret-query"} {
+				if strings.Contains(got, forbidden) {
+					t.Fatalf("%s leaked %q: %s", format, forbidden, got)
+				}
+			}
+			if strings.Contains(got, "\x1b") {
+				t.Fatalf("%s leaked control: %s", format, got)
 			}
 		})
 	}
