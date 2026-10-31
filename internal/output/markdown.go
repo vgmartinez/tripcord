@@ -17,44 +17,94 @@ import (
 // backslash before it looks for "|", so a single backslash would not keep a
 // "|" inside the cell. The detail sections below the table show backslashes
 // literally. See docs/output.md.
+//
+// The comment stays within MaxMarkdownBytes, under GitHub's 65536-character
+// limit. Findings that do not fit are omitted whole, and the comment ends
+// with "N more findings omitted".
 func renderMarkdown(writer io.Writer, findings []model.Finding, options Options) error {
-	var b strings.Builder
 	summary := Summarize(findings)
-	fmt.Fprintf(&b, "## Tripcord findings\n\nTotal: %d. Critical: %d, high: %d, medium: %d, low: %d.\n", summary.Findings, summary.Critical, summary.High, summary.Medium, summary.Low)
+	var head strings.Builder
+	fmt.Fprintf(&head, "## Tripcord findings\n\nTotal: %d. Critical: %d, high: %d, medium: %d, low: %d.\n", summary.Findings, summary.Critical, summary.High, summary.Medium, summary.Low)
 	if len(findings) == 0 {
-		b.WriteString("\nNo findings.\n")
+		head.WriteString("\nNo findings.\n")
+		_, err := io.WriteString(writer, head.String())
+		return err
+	}
+	const tableHead = "\n| Severity | Rule | Location | Finding |\n| --- | --- | --- | --- |\n"
+	rows := make([]string, len(findings))
+	bodies := make([]string, len(findings))
+	for i, finding := range findings {
+		ref := locate(finding.Location, options.RepoRoot)
+		rows[i] = markdownRow(finding, ref)
+		bodies[i] = markdownBody(finding, ref)
+	}
+	included := 0
+	used := head.Len() + len(tableHead)
+	for i := range findings {
+		piece := len(rows[i]) + len(bodies[i])
+		extra := 0
+		if omitted := len(findings) - (i + 1); omitted > 0 {
+			extra = len(omissionLine(omitted))
+		}
+		if used+piece+extra > MaxMarkdownBytes {
+			break
+		}
+		used += piece
+		included++
+	}
+	var b strings.Builder
+	b.WriteString(head.String())
+	if included == 0 {
+		b.WriteString(omissionLine(len(findings)))
 		_, err := io.WriteString(writer, b.String())
 		return err
 	}
-	refs := make([]locationRef, len(findings))
-	b.WriteString("\n| Severity | Rule | Location | Finding |\n| --- | --- | --- | --- |\n")
-	for i, finding := range findings {
-		refs[i] = locate(finding.Location, options.RepoRoot)
-		location := "—"
-		if refs[i].kind != locNone {
-			location = tableCode(refs[i].display())
-		}
-		fmt.Fprintf(&b, "| %s | %s | %s | %s |\n", tableCode(finding.Severity.String()), tableCode(finding.Rule), location, tableCode(finding.Title))
+	b.WriteString(tableHead)
+	for i := 0; i < included; i++ {
+		b.WriteString(rows[i])
 	}
-	for i, finding := range findings {
-		fmt.Fprintf(&b, "\n### %s — %s\n\nFix: %s\n", inlineCode(finding.Rule), inlineCode(finding.Title), inlineCode(finding.Fix))
-		if refs[i].kind != locNone {
-			fmt.Fprintf(&b, "\nLocation: %s\n", inlineCode(refs[i].display()))
-		}
-		for _, evidence := range finding.Evidence {
-			if evidence.Excerpt != "" {
-				fmt.Fprintf(&b, "\nEvidence:\n\n%s\n", fencedCode(evidence.Excerpt))
-			}
-		}
-		fmt.Fprintf(&b, "\nFingerprint: %s\n", inlineCode(finding.Fingerprint))
+	for i := 0; i < included; i++ {
+		b.WriteString(bodies[i])
+	}
+	if included < len(findings) {
+		b.WriteString(omissionLine(len(findings) - included))
 	}
 	_, err := io.WriteString(writer, b.String())
 	return err
 }
 
-// markdownValue collapses value to one line and breaks @mentions.
+func omissionLine(n int) string {
+	return fmt.Sprintf("\n%d more findings omitted\n", n)
+}
+
+func markdownRow(finding model.Finding, ref locationRef) string {
+	location := "—"
+	if ref.kind != locNone {
+		location = tableCode(ref.display())
+	}
+	return fmt.Sprintf("| %s | %s | %s | %s |\n", tableCode(finding.Severity.String()), tableCode(finding.Rule), location, tableCode(finding.Title))
+}
+
+func markdownBody(finding model.Finding, ref locationRef) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "\n### %s — %s\n\nFix: %s\n", inlineCode(finding.Rule), inlineCode(finding.Title), inlineCode(finding.Fix))
+	if ref.kind != locNone {
+		fmt.Fprintf(&b, "\nLocation: %s\n", inlineCode(ref.display()))
+	}
+	for _, evidence := range finding.Evidence {
+		if evidence.Excerpt != "" {
+			fmt.Fprintf(&b, "\nEvidence:\n\n%s\n", fencedCode(evidence.Excerpt))
+		}
+	}
+	fmt.Fprintf(&b, "\nFingerprint: %s\n", inlineCode(finding.Fingerprint))
+	return b.String()
+}
+
+// markdownValue sanitizes, caps, then breaks @mentions. The U+200B inserted
+// by breakMentions is this sink's mention breaker. It is added after
+// sanitization, so the format-character escape does not remove it.
 func markdownValue(value string) string {
-	return breakMentions(escapeControlsKeepBackslash(value))
+	return breakMentions(truncateSanitized(escapeControlsKeepBackslash(value), MaxFieldBytes))
 }
 
 func breakMentions(value string) string {
@@ -72,7 +122,8 @@ func inlineCode(value string) string {
 // doubled first; every "|" then follows an odd run of backslashes and stays
 // inside the cell.
 func tableCode(value string) string {
-	return strings.ReplaceAll(codeSpan(breakMentions(escapeControls(value))), "|", `\|`)
+	sanitized := truncateSanitized(escapeControls(value), MaxFieldBytes)
+	return strings.ReplaceAll(codeSpan(breakMentions(sanitized)), "|", `\|`)
 }
 
 func codeSpan(value string) string {

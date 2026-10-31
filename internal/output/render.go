@@ -20,12 +20,45 @@ func renderJSONL(writer io.Writer, findings []model.Finding, options Options) er
 	encoder := json.NewEncoder(&buffer)
 	encoder.SetEscapeHTML(true)
 	for _, finding := range findings {
-		if err := encoder.Encode(publishedFinding(finding, options.RepoRoot)); err != nil {
+		if err := encoder.Encode(capFinding(publishedFinding(finding, options.RepoRoot))); err != nil {
 			return err
 		}
 	}
 	_, err := writer.Write(escapeJSONUnsafe(buffer.Bytes()))
 	return err
+}
+
+// capFinding limits every attacker-controlled string. The fingerprint is
+// kept intact. Evidence and refs are copied, so the stored finding is not.
+func capFinding(finding model.Finding) model.Finding {
+	finding.Rule = truncateSanitized(finding.Rule, MaxFieldBytes)
+	finding.Title = truncateSanitized(finding.Title, MaxFieldBytes)
+	finding.Fix = truncateSanitized(finding.Fix, MaxFieldBytes)
+	finding.Location.Session = truncateSanitized(finding.Location.Session, MaxFieldBytes)
+	finding.Location.Path = truncateSanitized(finding.Location.Path, MaxFieldBytes)
+	if finding.Evidence != nil {
+		evidence := make([]model.Evidence, len(finding.Evidence))
+		for i, item := range finding.Evidence {
+			item.Event = truncateSanitized(item.Event, MaxFieldBytes)
+			item.Excerpt = truncateSanitized(item.Excerpt, MaxFieldBytes)
+			if item.Config != nil {
+				cfg := *item.Config
+				cfg.ID = truncateSanitized(cfg.ID, MaxFieldBytes)
+				cfg.Key = truncateSanitized(cfg.Key, MaxFieldBytes)
+				item.Config = &cfg
+			}
+			evidence[i] = item
+		}
+		finding.Evidence = evidence
+	}
+	if finding.Refs != nil {
+		refs := make([]string, len(finding.Refs))
+		for i, ref := range finding.Refs {
+			refs[i] = truncateSanitized(ref, MaxFieldBytes)
+		}
+		finding.Refs = refs
+	}
+	return finding
 }
 
 // publishedFinding returns a copy whose location path is the one locate
@@ -50,15 +83,15 @@ func renderText(writer io.Writer, findings []model.Finding, options Options) err
 		}
 		parts := []string{fmt.Sprintf("%s %s %s: %s",
 			strings.ToUpper(finding.Severity.String()),
-			escapeControls(finding.Rule),
-			escapeControls(location),
-			escapeControls(finding.Title))}
+			present(finding.Rule),
+			present(location),
+			present(finding.Title))}
 		for _, evidence := range finding.Evidence {
 			if evidence.Excerpt != "" {
-				parts = append(parts, "evidence: "+escapeControls(evidence.Excerpt))
+				parts = append(parts, "evidence: "+present(evidence.Excerpt))
 			}
 		}
-		parts = append(parts, "fix: "+escapeControls(finding.Fix), "fingerprint: "+escapeControls(finding.Fingerprint))
+		parts = append(parts, "fix: "+present(finding.Fix), "fingerprint: "+present(finding.Fingerprint))
 		b.WriteString(strings.Join(parts, " | "))
 		b.WriteString("\n")
 	}
@@ -77,7 +110,7 @@ func renderGHA(writer io.Writer, findings []model.Finding, options Options) erro
 		}
 		ref := locate(finding.Location, options.RepoRoot)
 		properties := []string{}
-		message := fmt.Sprintf("%s [%s] %s (%s)", finding.Title, finding.Rule, finding.Fix, finding.Fingerprint)
+		message := fmt.Sprintf("%s [%s] %s (%s)", ghaData(finding.Title), ghaData(finding.Rule), ghaData(finding.Fix), ghaData(finding.Fingerprint))
 		switch ref.kind {
 		case locNone:
 		case locRepo:
@@ -87,11 +120,11 @@ func renderGHA(writer io.Writer, findings []model.Finding, options Options) erro
 			}
 		case locUser, locManaged:
 			properties = append(properties, "title="+ghaProperty(ref.display()))
-			message += " " + ref.display()
+			message += " " + ghaData(ref.display())
 		default:
 			return fmt.Errorf("output: unhandled location kind %d", ref.kind)
 		}
-		fmt.Fprintf(&b, "::%s%s::%s\n", command, ghaProperties(properties), ghaData(message))
+		fmt.Fprintf(&b, "::%s%s::%s\n", command, ghaProperties(properties), message)
 	}
 	_, err := io.WriteString(writer, b.String())
 	return err
@@ -122,11 +155,11 @@ func ghaProperties(properties []string) string {
 // ghaData applies GitHub's workflow command data escaping, then removes
 // every remaining control and bidi character.
 func ghaData(value string) string {
-	return escapeControls(strings.NewReplacer("%", "%25", "\r", "%0D", "\n", "%0A").Replace(value))
+	return truncateSanitized(escapeControls(strings.NewReplacer("%", "%25", "\r", "%0D", "\n", "%0A").Replace(value)), MaxFieldBytes)
 }
 
 // ghaProperty applies GitHub's property escaping, which adds ":" and ",",
 // then removes every remaining control and bidi character.
 func ghaProperty(value string) string {
-	return escapeControls(strings.NewReplacer("%", "%25", "\r", "%0D", "\n", "%0A", ":", "%3A", ",", "%2C").Replace(value))
+	return truncateSanitized(escapeControls(strings.NewReplacer("%", "%25", "\r", "%0D", "\n", "%0A", ":", "%3A", ",", "%2C").Replace(value)), MaxFieldBytes)
 }

@@ -229,9 +229,9 @@ func buildSARIFRules(rules map[string]*sarifRuleInfo, catalog map[string]RuleTex
 		full, help, helpURI := catalogRuleText(id, info, catalog)
 		out = append(out, sarifRule{
 			ID:                   id,
-			ShortDescription:     sarifMessage{Text: escapeControls(info.title)},
-			FullDescription:      sarifMessage{Text: escapeControls(full)},
-			Help:                 sarifMessage{Text: escapeControls(help)},
+			ShortDescription:     sarifMessage{Text: sarifText(info.title)},
+			FullDescription:      sarifMessage{Text: sarifText(full)},
+			Help:                 sarifMessage{Text: sarifText(help)},
 			HelpURI:              helpURI,
 			DefaultConfiguration: sarifRuleConfig{Level: level},
 			Properties:           sarifRuleProperties{Tags: []string{"security"}, SecuritySeverity: score},
@@ -305,12 +305,22 @@ func sarifNonRepoMode(options Options) (SARIFNonRepoLocation, error) {
 	}
 }
 
+// sarifText escapes controls and format characters, then "[" and "]" so a
+// SARIF viewer cannot render an embedded Markdown link, then caps the field.
+func sarifText(value string) string {
+	return truncateSanitized(escapeBrackets(escapeControls(value)), MaxFieldBytes)
+}
+
+func escapeBrackets(value string) string {
+	return strings.NewReplacer(`[`, `\[`, `]`, `\]`).Replace(value)
+}
+
 func resultMessage(finding model.Finding, location string) string {
-	text := escapeControls(finding.Title) + ": " + escapeControls(finding.Fix)
+	text := sarifText(finding.Title) + ": " + sarifText(finding.Fix)
 	if location == "" {
 		return text
 	}
-	return text + " (" + escapeControls(location) + ")"
+	return text + " (" + sarifText(location) + ")"
 }
 
 func physicalLocation(ref locationRef, withBase bool) *sarifPhysicalLocation {

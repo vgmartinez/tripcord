@@ -23,13 +23,43 @@ also rewrites the other slash and case spellings when it is handed them.
 `/etc/cursor/hooks.json` and `C:/ProgramData/...` are unchanged. This is
 presentation only.
 
+`c:x.json` and a bare `C:` are absolute, the same as `C:/...`. A
+repository path in that form is omitted.
+
+## Limits
+
+Each displayed field is capped at 1024 bytes (`MaxFieldBytes`) after
+redaction and after that sink's escaping. The marker is
+`…[truncated N bytes]`, where N is the number of bytes dropped. The cut
+is on a UTF-8 boundary and does not split an escape such as `\n`,
+`\xNN`, `\uXXXX`, or `\UXXXXXXXX`.
+
+A Markdown comment is also capped at 60000 bytes (`MaxMarkdownBytes`),
+under GitHub's 65536-character limit. Findings that do not fit are
+omitted whole. The comment then ends with `N more findings omitted`.
+
+## Format characters
+
+Unicode format characters (category Cf, including U+00AD, U+200B–U+200D,
+U+2060, and U+FEFF) and tag characters U+E0000–U+E007F are escaped in
+every sink. The Markdown mention breaker U+200B is inserted after that
+escape, so `@org/team` still cannot notify.
+
+## SARIF text
+
+`message`, `shortDescription`, `fullDescription`, and `help` escape `[`
+and `]` after the control escape, so a finding cannot embed a Markdown
+link.
+
 ## JSONL
 
 `json` and `jsonl` write one `tripcord.finding/v1` document per line.
-`encoding/json` replaces each invalid UTF-8 byte with U+FFFD. Every
-other value round-trips: controls and bidi characters are escaped and
-decode back to the same string. The location path is the display path
-above, not a second copy of the stored path.
+`encoding/json` replaces each invalid UTF-8 byte with U+FFFD. Controls,
+bidi characters, and format characters are escaped and decode back to
+the same string. A field longer than `MaxFieldBytes` is truncated, so
+that field does not round-trip. The location path is the display path
+above, not a second copy of the stored path. The fingerprint is the one
+stored on the finding.
 
 ## SARIF
 

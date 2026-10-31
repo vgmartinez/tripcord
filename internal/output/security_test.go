@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/vgmartinez/tripcord/internal/model"
 )
@@ -139,10 +140,23 @@ func injectionFinding() model.Finding {
 
 func assertNoRawControls(t *testing.T, got string) {
 	t.Helper()
-	for i, r := range got {
+	for i := 0; i < len(got); {
+		r, size := utf8.DecodeRuneInString(got[i:])
+		if r == '\u200b' {
+			// The markdown sink inserts U+200B after sanitization: after "@"
+			// to break a mention, and before a leading "::" in a fence.
+			afterAt := i > 0 && got[i-1] == '@'
+			beforeCmd := strings.HasPrefix(got[i+size:], "::")
+			if !afterAt && !beforeCmd {
+				t.Fatalf("raw U+200B at byte %d:\n%q", i, got)
+			}
+			i += size
+			continue
+		}
 		if (r < 0x20 && r != '\n') || isUnsafeRune(r) {
 			t.Fatalf("raw control %U at byte %d:\n%q", r, i, got)
 		}
+		i += size
 	}
 }
 

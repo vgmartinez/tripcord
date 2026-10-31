@@ -19,7 +19,8 @@ const (
 )
 
 // windowsDrive matches a drive-letter path after backslashes become "/".
-var windowsDrive = regexp.MustCompile(`(?i)^[a-z]:/`)
+// "C:", "c:x.json", and "C:/..." are all absolute.
+var windowsDrive = regexp.MustCompile(`^[A-Za-z]:`)
 
 type locationKind int
 
@@ -181,7 +182,8 @@ func homeRemainder(clean string) (string, bool) {
 			return clean[len(prefix):], true
 		}
 	}
-	if len(clean) > 3 && windowsDrive.MatchString(clean) {
+	// A home path is "<drive>:/Users/...", not the drive-relative "c:x.json".
+	if len(clean) > 3 && clean[1] == ':' && clean[2] == '/' {
 		rest := clean[3:]
 		const users = "Users/"
 		if len(rest) >= len(users) && strings.EqualFold(rest[:len(users)], users) {
