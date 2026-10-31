@@ -46,7 +46,10 @@ const (
 )
 
 // skillRoots are the directories whose */SKILL.md files are skills.
-var skillRoots = [][]string{{".claude", "skills"}, {".agents", "skills"}, {".github", "skills"}}
+// skillRoots are Claude Code's own skill directories. .agents/skills and
+// .github/skills are read by the generic adapter so their harness stays
+// generic when another product scans the same files.
+var skillRoots = [][]string{{".claude", "skills"}}
 
 // candidateName reports whether a walk should remember rel at all. It is a
 // cheap superset of the files classify can accept.
@@ -124,7 +127,7 @@ func classify(rel string, pluginRoots map[string]bool) fileRole {
 
 // configSegments mark directories where an escaping symlink would hide
 // configuration Claude Code loads.
-var configSegments = map[string]bool{".claude": true, ".agents": true, ".claude-plugin": true, "skills": true, "agents": true, "commands": true, "hooks": true, "rules": true}
+var configSegments = map[string]bool{".claude": true, ".claude-plugin": true, "skills": true, "agents": true, "commands": true, "hooks": true, "rules": true}
 
 func configRelevant(rel string) bool {
 	if candidateName(rel) {
@@ -511,12 +514,16 @@ func (s *src) pluginHooks(raw []byte) {
 	}
 	obj, ok := tree.(map[string]any)
 	if !ok {
-		s.warn("plugin hooks must be a JSON object")
+		s.warn("plugin hooks.json is not a JSON object")
 		return
 	}
 	hooks, ok := obj["hooks"]
 	if !ok {
-		s.warn("plugin hooks file has no hooks object")
+		s.warn("plugin hooks.json has no hooks object")
+		return
+	}
+	if _, ok := hooks.(map[string]any); !ok {
+		s.warn("plugin hooks.json hooks member is not an object")
 		return
 	}
 	s.hooks(hooks)

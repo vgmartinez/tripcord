@@ -11,11 +11,16 @@ import (
 // configuration written to evade a scanner (such as case-variant keys).
 // Path is the logical, scope-shaped path (repo-relative, "~/"-rooted, or a
 // managed absolute path) and never a user's absolute home directory.
+//
+// Informational diagnostics are notes, such as a legacy directory that is
+// not scanned. They are printed to stderr and do not make the scan
+// incomplete, so they do not change the exit code.
 type Diagnostic struct {
-	Harness model.Harness
-	Scope   model.Scope
-	Path    string
-	Message string
+	Harness       model.Harness
+	Scope         model.Scope
+	Path          string
+	Message       string
+	Informational bool
 }
 
 func (d Diagnostic) String() string {

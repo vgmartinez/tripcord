@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -69,7 +70,7 @@ func TestDetect(t *testing.T) {
 	if a.Detect(empty) {
 		t.Fatal("Detect reported a repository without Claude Code files")
 	}
-	for _, rel := range []string{"CLAUDE.md", "sub/dir/CLAUDE.md", ".claude/settings.json", ".mcp.json", ".claude/agents/a.md", ".agents/skills/x/SKILL.md", ".claude-plugin/plugin.json"} {
+	for _, rel := range []string{"CLAUDE.md", "sub/dir/CLAUDE.md", ".claude/settings.json", ".mcp.json", ".claude/agents/a.md", ".claude/skills/x/SKILL.md", ".claude-plugin/plugin.json"} {
 		root := t.TempDir()
 		writeFile(t, filepath.Join(root, filepath.FromSlash(rel)), "{}")
 		if !a.Detect(root) {
@@ -402,6 +403,130 @@ func TestPluginReferencesStayInRepo(t *testing.T) {
 	}
 }
 
+func TestCuratedSettingKeys(t *testing.T) {
+	t.Parallel()
+	want := []string{
+		"allowManagedHooksOnly",
+		"allowManagedMcpServersOnly",
+		"allowedMcpServers",
+		"apiKeyHelper",
+		"awsAuthRefresh",
+		"awsCredentialExport",
+		"deniedMcpServers",
+		"disableAllHooks",
+		"disabledMcpjsonServers",
+		"enableAllProjectMcpServers",
+		"enabledMcpjsonServers",
+		"enabledPlugins",
+		"env",
+		"extraKnownMarketplaces",
+		"fileSuggestion",
+		"gcpAuthRefresh",
+		"otelHeadersHelper",
+		"permissions",
+		"sandbox",
+		"statusLine",
+		"strictKnownMarketplaces",
+		"subagentStatusLine",
+	}
+	var got []string
+	for name := range settingKinds {
+		got = append(got, name)
+	}
+	sort.Strings(got)
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("setting keys = %q", got)
+	}
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, ".claude", "settings.json"), `{"model":"opus","totallyUnknown":{"command":"curl evil"}}`)
+	gotItems := discover(t, New(Options{}), root)
+	if len(gotItems.Items) != 0 || len(gotItems.Diagnostics) != 0 {
+		t.Fatalf("unknown keys were emitted: %+v diagnostics %q", gotItems.Items, gotItems.Diagnostics)
+	}
+}
+
+func TestKeepsNonSecretValues(t *testing.T) {
+	t.Parallel()
+	token := "ghp_" + strings.Repeat("a", 36)
+	root := t.TempDir()
+	body := `{
+	  "env": {
+	    "ANTHROPIC_BASE_URL": "https://user:pass@proxy.example.test/v1?token=` + token + `",
+	    "HTTPS_PROXY": "http://proxy.example.test:8080",
+	    "NO_PROXY": "localhost",
+	    "DEBUG": true,
+	    "RETRIES": 2,
+	    "GITHUB_TOKEN": "fixture-github-token",
+	    "NOTES": "` + token + `"
+	  }
+	}`
+	writeFile(t, filepath.Join(root, ".claude", "settings.json"), body)
+	got := discover(t, New(Options{}), root)
+	if len(got.Diagnostics) != 0 || len(got.Items) != 1 {
+		t.Fatalf("items %+v diagnostics %q", got.Items, got.Diagnostics)
+	}
+	payload := string(got.Items[0].Payload)
+	for _, want := range []string{"https://proxy.example.test/v1", "http://proxy.example.test:8080", "localhost", `"DEBUG":true`, `"RETRIES":2`} {
+		if !strings.Contains(payload, want) {
+			t.Errorf("payload missing %s: %s", want, payload)
+		}
+	}
+	for _, secret := range []string{"user:pass", token, "fixture-github-token", "token="} {
+		if strings.Contains(payload, secret) {
+			t.Errorf("payload contains %s: %s", secret, payload)
+		}
+	}
+}
+
+func TestPluginHooksRequireWrapper(t *testing.T) {
+	t.Parallel()
+	cases := []string{
+		`{"PreToolUse":[{"hooks":[{"type":"command","command":"nope"}]}]}`,
+		`[]`,
+		`{"hooks":[]}`,
+		`{"hooks":"run"}`,
+	}
+	for _, body := range cases {
+		t.Run(body, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			writeFile(t, filepath.Join(root, "p", ".claude-plugin", "plugin.json"), `{"name":"p"}`)
+			writeFile(t, filepath.Join(root, "p", "hooks", "hooks.json"), body)
+			got := discover(t, New(Options{}), root)
+			if !containsDiag(got, "plugin hooks.json") {
+				t.Fatalf("diagnostics = %q", got.Diagnostics)
+			}
+			if cmds := hookCommands(got.Items); len(cmds) != 0 {
+				t.Fatalf("hooks = %q", cmds)
+			}
+		})
+	}
+}
+
+func TestLegacyManagedDirIsInformational(t *testing.T) {
+	t.Parallel()
+	legacy := t.TempDir()
+	managed := t.TempDir()
+	writeFile(t, filepath.Join(managed, "managed-settings.json"), `{"disableAllHooks":true}`)
+	items, err := New(Options{IncludeManaged: true, ManagedDir: managed, LegacyDir: legacy}).Discover(context.Background(), t.TempDir())
+	var diag *adapters.DiagnosticError
+	if !errors.As(err, &diag) {
+		t.Fatalf("err = %v", err)
+	}
+	if len(items) != 1 || len(diag.Diagnostics) != 1 || !diag.Diagnostics[0].Informational {
+		t.Fatalf("items %+v diags %+v", items, diag.Diagnostics)
+	}
+	d := diag.Diagnostics[0]
+	if d.Path != "C:/ProgramData/ClaudeCode" || !strings.Contains(d.Message, "not scanned") || strings.Contains(d.String(), legacy) {
+		t.Fatalf("diagnostic = %+v", d)
+	}
+	absent := filepath.Join(t.TempDir(), "missing")
+	items, err = New(Options{IncludeManaged: true, ManagedDir: filepath.Join(t.TempDir(), "also-missing"), LegacyDir: absent}).Discover(context.Background(), t.TempDir())
+	if err != nil || len(items) != 0 {
+		t.Fatalf("missing legacy dir: %d items, %v", len(items), err)
+	}
+}
+
 func TestRedactsEnvAndHeaderValues(t *testing.T) {
 	t.Parallel()
 	got := discover(t, New(Options{}), copyTree(t, filepath.Join("testdata", "repo")))
@@ -417,6 +542,9 @@ func TestRedactsEnvAndHeaderValues(t *testing.T) {
 				t.Errorf("%s %s payload contains a secret: %s", item.Kind, item.Path, item.Payload)
 			}
 		}
+	}
+	if !bytes.Contains(raw, []byte("https://proxy.example.test")) || !bytes.Contains(raw, []byte(`"LOG_LEVEL":"info"`)) {
+		t.Fatalf("non-secret values were dropped: %s", raw)
 	}
 }
 
@@ -441,9 +569,23 @@ func TestUserScope(t *testing.T) {
 	})
 	t.Run("config dir outside home", func(t *testing.T) {
 		t.Parallel()
-		a := New(Options{IncludeUser: true, HomeDir: t.TempDir(), Getenv: envOf("CLAUDE_CONFIG_DIR", t.TempDir())})
-		if got := discover(t, a, t.TempDir()); !containsDiag(got, "outside the home directory") {
-			t.Fatalf("diagnostics = %q", got.Diagnostics)
+		home := t.TempDir()
+		outside := t.TempDir()
+		writeFile(t, filepath.Join(outside, "settings.json"), `{"apiKeyHelper":"helper"}`)
+		got := discover(t, New(Options{IncludeUser: true, HomeDir: home, Getenv: envOf("CLAUDE_CONFIG_DIR", outside)}), t.TempDir())
+		raw := mustJSON(t, got)
+		if !containsDiag(got, "outside the home directory") || bytes.Contains(raw, []byte(outside)) || bytes.Contains(raw, []byte(home)) {
+			t.Fatalf("discovery leaked a path or missed the diagnostic: %s", raw)
+		}
+		if len(got.Items) != 1 || got.Items[0].Path != "~/CLAUDE_CONFIG_DIR/settings.json" || !bytes.Contains(got.Items[0].Payload, []byte("helper")) {
+			t.Fatalf("items %+v", got.Items)
+		}
+	})
+	t.Run("config dir relative", func(t *testing.T) {
+		t.Parallel()
+		got := discover(t, New(Options{IncludeUser: true, HomeDir: t.TempDir(), Getenv: envOf("CLAUDE_CONFIG_DIR", "relative/claude")}), t.TempDir())
+		if len(got.Items) != 0 || !containsDiag(got, "not an absolute path") {
+			t.Fatalf("items %+v diagnostics %q", got.Items, got.Diagnostics)
 		}
 	})
 	t.Run("stow symlink", func(t *testing.T) {
@@ -522,7 +664,7 @@ func FuzzParseConfig(f *testing.F) {
 	}
 	f.Add("claudejson", []byte(`{"mcpServers":{"a":{"command":"a"}},"projects":{"/p":{"mcpServers":{"b":{"url":"u"}}}}}`))
 	f.Fuzz(func(t *testing.T, kind string, data []byte) {
-		c := &collector{}
+		c := newCollector()
 		s := newSrc(c, model.ScopeRepo, "plugins/p/.claude-plugin/plugin.json", data)
 		switch kind {
 		case "settings":

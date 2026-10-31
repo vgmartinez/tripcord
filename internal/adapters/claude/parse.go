@@ -5,19 +5,24 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"sort"
 	"strings"
 
 	"github.com/vgmartinez/tripcord/internal/adapters"
 	"github.com/vgmartinez/tripcord/internal/model"
+	"github.com/vgmartinez/tripcord/internal/output"
 )
 
 // redacted replaces env and header values. They commonly hold credentials,
 // and config payloads reach rule excerpts and output sinks.
 const redacted = "[REDACTED]"
 
-// settingKinds lists the settings keys that run a program, reach the network,
-// or gate what does. Each present key becomes one item.
+// settingKinds is the curated set of Claude Code settings that run a
+// program, reach the network, or decide which of those run. Each present
+// key becomes one item. Unknown keys are not emitted.
+//
+// Reviewed against https://code.claude.com/docs/en/settings on 2026-10-31.
 var settingKinds = map[string]model.ConfigKind{
 	"permissions":                model.ConfigKindPermissions,
 	"sandbox":                    model.ConfigKindPermissions,
@@ -45,16 +50,26 @@ var settingKinds = map[string]model.ConfigKind{
 
 // collector accumulates items and diagnostics for one Discover call.
 type collector struct {
-	items []model.ConfigItem
-	diags []adapters.Diagnostic
+	harness model.Harness
+	items   []model.ConfigItem
+	diags   []adapters.Diagnostic
+}
+
+func newCollector() *collector {
+	return &collector{harness: model.HarnessClaude}
 }
 
 func (c *collector) warn(scope model.Scope, path, format string, args ...any) {
+	c.note(scope, path, false, format, args...)
+}
+
+func (c *collector) note(scope model.Scope, path string, informational bool, format string, args ...any) {
 	c.diags = append(c.diags, adapters.Diagnostic{
-		Harness: model.HarnessClaude,
-		Scope:   scope,
-		Path:    path,
-		Message: fmt.Sprintf(format, args...),
+		Harness:       c.harness,
+		Scope:         scope,
+		Path:          path,
+		Message:       fmt.Sprintf(format, args...),
+		Informational: informational,
 	})
 }
 
@@ -88,7 +103,7 @@ func (s *src) add(kind model.ConfigKind, key []string, payload map[string]any) {
 		s.warn("cannot encode %s entry: %v", kind, err)
 		return
 	}
-	item := model.ConfigItem{Harness: model.HarnessClaude, Scope: s.scope, Path: s.path, SHA256: s.sha, Kind: kind, Payload: raw}
+	item := model.ConfigItem{Harness: s.c.harness, Scope: s.scope, Path: s.path, SHA256: s.sha, Kind: kind, Payload: raw}
 	if err := item.Validate(); err != nil {
 		s.warn("cannot represent entry: %v", err)
 		return
@@ -350,12 +365,92 @@ func (s *src) markdown(kind model.ConfigKind, role string, raw []byte) {
 	}
 }
 
+// secretKeyFragments are case-insensitive substrings of an env or header
+// name whose value is always redacted. "key" matches API_KEY and also the
+// standalone key KEY; it does not match BASE_URL.
+var secretKeyFragments = []string{"token", "key", "secret", "password", "authorization", "cookie"}
+
+func secretKey(name string) bool {
+	n := strings.ToLower(name)
+	for _, fragment := range secretKeyFragments {
+		if strings.Contains(n, fragment) {
+			return true
+		}
+	}
+	return false
+}
+
+// redactValues keeps values rules need to see: URLs (userinfo and query
+// removed), hosts, booleans, numbers, and other non-secrets. A value is
+// replaced with [REDACTED] when its name looks like a secret or the value
+// matches output.DefaultRedactor. Sinks redact again.
 func redactValues(m map[string]any) map[string]any {
 	out := make(map[string]any, len(m))
-	for k := range m {
-		out[k] = redacted
+	for _, k := range sortedKeys(m) {
+		out[k] = redactValue(k, m[k])
 	}
 	return out
+}
+
+func redactValue(key string, value any) any {
+	if key != "" && secretKey(key) {
+		return redacted
+	}
+	switch v := value.(type) {
+	case map[string]any:
+		return redactValues(v)
+	case []any:
+		out := make([]any, len(v))
+		for i, item := range v {
+			out[i] = redactValue("", item)
+		}
+		return out
+	case string:
+		return redactString(v)
+	case bool, json.Number, float64, nil:
+		return v
+	default:
+		return redactString(fmt.Sprint(v))
+	}
+}
+
+func redactString(value string) string {
+	if stripped, ok := stripURLSecrets(value); ok {
+		value = stripped
+	}
+	if output.DefaultRedactor(value) != value {
+		return redacted
+	}
+	return value
+}
+
+// stripURLSecrets reports whether raw is an http(s) or socks URL and
+// returns it without userinfo, query, or fragment. The host and path stay
+// so a rule can see where a proxy or base URL points.
+func stripURLSecrets(raw string) (string, bool) {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return "", false
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "http", "https", "socks5", "socks5h":
+	default:
+		return "", false
+	}
+	u.User = nil
+	u.RawQuery = ""
+	u.ForceQuery = false
+	u.Fragment = ""
+	return u.String(), true
+}
+
+// NormalizeSkill parses a SKILL.md file into items attributed to harness.
+// The generic adapter uses it for .agents/skills and .github/skills, which
+// share this file shape but are not Claude Code configuration.
+func NormalizeSkill(harness model.Harness, path string, raw []byte) ([]model.ConfigItem, []adapters.Diagnostic) {
+	c := &collector{harness: harness}
+	newSrc(c, model.ScopeRepo, path, raw).markdown(model.ConfigKindSkill, "skill", raw)
+	return c.items, c.diags
 }
 
 func sortedKeys(m map[string]any) []string {

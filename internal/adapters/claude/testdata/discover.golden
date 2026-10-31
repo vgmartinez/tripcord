@@ -26,7 +26,7 @@
         "key": "[\"setting\",\"env\"]",
         "setting": "env",
         "value": {
-          "OTEL_EXPORTER_OTLP_ENDPOINT": "[REDACTED]"
+          "OTEL_EXPORTER_OTLP_ENDPOINT": "https://otel.corp.example.test"
         }
       }
     },
@@ -71,35 +71,6 @@
           ],
           "disableBypassPermissionsMode": "disable"
         }
-      }
-    },
-    {
-      "harness": "claude",
-      "scope": "repo",
-      "path": ".agents/skills/lint/SKILL.md",
-      "sha256": "fbe9d27954855740dcedff3a7a973a6391a56dd1c24591d6f6e6afd3597910b2",
-      "kind": "hook",
-      "payload": {
-        "command": "make lint",
-        "event": "PostToolUse",
-        "key": "[\"hook\",\"PostToolUse\",\"Edit\",\"command\",\"make lint\"]",
-        "matcher": "Edit",
-        "type": "command"
-      }
-    },
-    {
-      "harness": "claude",
-      "scope": "repo",
-      "path": ".agents/skills/lint/SKILL.md",
-      "sha256": "fbe9d27954855740dcedff3a7a973a6391a56dd1c24591d6f6e6afd3597910b2",
-      "kind": "skill",
-      "payload": {
-        "content": "---\r\nname: lint\r\nhooks:\r\n  PostToolUse:\r\n    - matcher: Edit\r\n      hooks:\r\n        - type: command\r\n          command: \"make lint\"\r\n---\r\nLint after edits.\r\n",
-        "frontmatter": {
-          "name": "lint"
-        },
-        "key": "[\"skill\"]",
-        "role": "skill"
       }
     },
     {
@@ -295,7 +266,7 @@
         "key": "[\"setting\",\"env\"]",
         "setting": "env",
         "value": {
-          "ANTHROPIC_BASE_URL": "[REDACTED]",
+          "ANTHROPIC_BASE_URL": "https://proxy.example.test",
           "GITHUB_TOKEN": "[REDACTED]"
         }
       }
@@ -516,21 +487,6 @@
     {
       "harness": "claude",
       "scope": "repo",
-      "path": ".github/skills/docs/SKILL.md",
-      "sha256": "15e2fa12862ec6e36e163a6ff3550ac549eb601844c180997687ab104eee7a0e",
-      "kind": "skill",
-      "payload": {
-        "content": "﻿---\nname: docs\n---\nWrite docs.\n",
-        "frontmatter": {
-          "name": "docs"
-        },
-        "key": "[\"skill\"]",
-        "role": "skill"
-      }
-    },
-    {
-      "harness": "claude",
-      "scope": "repo",
       "path": ".mcp.json",
       "sha256": "687b6a39281c353ab08023ff1061f09620271647e325b58370fb6ca21f6e4fc0",
       "kind": "mcp-server",
@@ -543,7 +499,7 @@
         "command": "npx",
         "env": {
           "API_TOKEN": "[REDACTED]",
-          "LOG_LEVEL": "[REDACTED]"
+          "LOG_LEVEL": "info"
         },
         "env_keys": [
           "API_TOKEN",

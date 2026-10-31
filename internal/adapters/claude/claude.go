@@ -23,10 +23,24 @@ const maxClaudeJSONBytes int64 = 256 << 20
 // maxManagedDropIns caps managed-settings.d entries.
 const maxManagedDropIns = 256
 
+// legacyManagedDir is the legacy Windows managed directory. It is not
+// scanned. When it exists, discovery emits an informational diagnostic.
+var legacyManagedDir = `C:\ProgramData\ClaudeCode`
+
+// SetLegacyManagedDirForTest points the legacy ProgramData probe at dir
+// and returns a restore function. The CLI does not call it.
+func SetLegacyManagedDirForTest(dir string) func() {
+	prev := legacyManagedDir
+	legacyManagedDir = dir
+	return func() { legacyManagedDir = prev }
+}
+
 // Options controls discovery. The zero value scans repository scope only;
 // the CLI uses it so a repository scan never reads the developer's home
 // directory or system configuration implicitly.
 type Options struct {
+	// SkipRepo omits the repository. The zero value scans it.
+	SkipRepo       bool
 	IncludeUser    bool
 	IncludeManaged bool
 	// HomeDir overrides os.UserHomeDir.
@@ -35,6 +49,9 @@ type Options struct {
 	Getenv func(string) string
 	// ManagedDir overrides the OS managed settings directory.
 	ManagedDir string
+	// LegacyDir overrides the legacy ProgramData probe. Empty uses
+	// C:\ProgramData\ClaudeCode. The CLI leaves it empty.
+	LegacyDir string
 	// Limits overrides DefaultLimits for repository discovery.
 	Limits *Limits
 }
@@ -60,12 +77,17 @@ func (*Adapter) Harness() model.Harness { return model.HarnessClaude }
 // Detect reports whether the repository holds any file Claude Code reads,
 // or a config-relevant path Tripcord cannot safely read.
 func (a *Adapter) Detect(repoRoot string) bool {
+	// User and managed scopes are outside the repository, so a repo with no
+	// Claude files still has configuration to read when those scopes are on.
+	if a.options.IncludeUser || a.options.IncludeManaged {
+		return true
+	}
 	reader, err := adapters.NewSafeReader(repoRoot)
 	if err != nil {
 		return false
 	}
 	defer func() { _ = reader.Close() }()
-	c := &collector{}
+	c := newCollector()
 	files, err := a.listRepo(context.Background(), reader, c)
 	if err != nil {
 		return false
@@ -91,9 +113,11 @@ func (a *Adapter) Discover(ctx context.Context, repoRoot string) ([]model.Config
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	c := &collector{}
-	if err := a.discoverRepo(ctx, repoRoot, c); err != nil {
-		return nil, err
+	c := newCollector()
+	if !a.options.SkipRepo {
+		if err := a.discoverRepo(ctx, repoRoot, c); err != nil {
+			return nil, err
+		}
 	}
 	if a.options.IncludeUser {
 		a.discoverUser(c)
@@ -141,22 +165,36 @@ func (a *Adapter) userPaths(c *collector) (home string, files [][2]string, ok bo
 	}
 	configDir := filepath.Join(home, ".claude")
 	claudeJSON := filepath.Join(home, ".claude.json")
-	if dir := a.getenv("CLAUDE_CONFIG_DIR"); dir != "" {
+	outside := false
+	if dir := strings.TrimSpace(a.getenv("CLAUDE_CONFIG_DIR")); dir != "" {
 		if !filepath.IsAbs(dir) {
-			c.warn(model.ScopeUser, "", "CLAUDE_CONFIG_DIR is not an absolute path; user configuration not scanned")
+			c.warn(model.ScopeUser, "", "CLAUDE_CONFIG_DIR is not an absolute path; user configuration was not scanned")
 			return "", nil, false
 		}
 		configDir = filepath.Clean(dir)
 		claudeJSON = filepath.Join(configDir, ".claude.json")
+		logicalDir := tildePath(home, configDir)
+		outside = logicalDir != "~" && !strings.HasPrefix(logicalDir, "~/")
 	}
 	settings := filepath.Join(configDir, "settings.json")
 	for _, p := range []string{settings, claudeJSON} {
 		logical := tildePath(home, p)
+		if outside {
+			rel, err := filepath.Rel(configDir, p)
+			if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+				c.warn(model.ScopeUser, "~/CLAUDE_CONFIG_DIR", "CLAUDE_CONFIG_DIR is outside the home directory; a file could not be named without its absolute path and was not scanned")
+				return "", nil, false
+			}
+			logical = "~/CLAUDE_CONFIG_DIR/" + filepath.ToSlash(rel)
+		}
 		if !strings.HasPrefix(logical, "~/") {
-			c.warn(model.ScopeUser, "", "CLAUDE_CONFIG_DIR is outside the home directory; user-scope paths must be rooted at ~/, so user configuration was not scanned")
+			c.warn(model.ScopeUser, "", "CLAUDE_CONFIG_DIR is outside the home directory; user configuration was not scanned")
 			return "", nil, false
 		}
 		files = append(files, [2]string{p, logical})
+	}
+	if outside {
+		c.warn(model.ScopeUser, "~/CLAUDE_CONFIG_DIR", "CLAUDE_CONFIG_DIR is outside the home directory; configuration is scanned and paths are shown as ~/CLAUDE_CONFIG_DIR")
 	}
 	return home, files, true
 }
@@ -190,6 +228,7 @@ func defaultManagedDir() string {
 }
 
 func (a *Adapter) discoverManaged(c *collector) {
+	a.noteLegacyManaged(c)
 	dir := a.options.ManagedDir
 	if dir == "" {
 		dir = defaultManagedDir()
@@ -247,4 +286,22 @@ func (a *Adapter) discoverManaged(c *collector) {
 			s.settings(raw)
 		}
 	}
+}
+
+// noteLegacyManaged reports the retired ProgramData directory when it
+// exists. The note is informational: the directory is not read, and the
+// scan's exit code does not change because of it.
+func (a *Adapter) legacyDir() string {
+	if a.options.LegacyDir != "" {
+		return a.options.LegacyDir
+	}
+	return legacyManagedDir
+}
+
+func (a *Adapter) noteLegacyManaged(c *collector) {
+	info, err := os.Stat(a.legacyDir())
+	if err != nil || !info.IsDir() {
+		return
+	}
+	c.note(model.ScopeManaged, "C:/ProgramData/ClaudeCode", true, "legacy managed settings directory exists and is not scanned; Claude Code reads C:/Program Files/ClaudeCode")
 }
