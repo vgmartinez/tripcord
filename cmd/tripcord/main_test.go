@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -78,14 +80,58 @@ func TestVersionWriteError(t *testing.T) {
 func TestUnknownCommand(t *testing.T) {
 	t.Parallel()
 	var stdout, stderr bytes.Buffer
-	code := run([]string{"scan"}, &stdout, &stderr)
+	code := run([]string{"unknown"}, &stdout, &stderr)
 	if code != int(exitcode.Config) {
 		t.Fatalf("exit code = %d, want %d (configuration error)", code, exitcode.Config)
 	}
 	if stdout.Len() != 0 {
 		t.Fatalf("stdout = %q", stdout.String())
 	}
-	if got, want := stderr.String(), "tripcord: unknown command \"scan\"\n\n"+usage; got != want {
+	if got, want := stderr.String(), "tripcord: unknown command \"unknown\"\n\n"+usage; got != want {
 		t.Fatalf("stderr = %q, want %q", got, want)
+	}
+}
+
+func TestScanTextGolden(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, ".git"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"scan", root}, &stdout, &stderr); code != int(exitcode.OK) {
+		t.Fatalf("exit code = %d, stderr = %q", code, stderr.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+	assertGolden(t, "scan-text.golden", stdout.String())
+}
+
+func TestScanV0SecretsError(t *testing.T) {
+	t.Parallel()
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"scan", "--secrets"}, &stdout, &stderr); code != int(exitcode.Config) {
+		t.Fatalf("exit code = %d, stderr = %q", code, stderr.String())
+	}
+	if stdout.Len() != 0 || !strings.Contains(stderr.String(), "not available in v0") {
+		t.Fatalf("stdout = %q, stderr = %q", stdout.String(), stderr.String())
+	}
+}
+
+func assertGolden(t *testing.T, name, got string) {
+	t.Helper()
+	path := filepath.Join("testdata", name)
+	if os.Getenv("UPDATE_GOLDEN") == "1" {
+		if err := os.WriteFile(path, []byte(got), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != string(want) {
+		t.Fatalf("%s mismatch\n--- got ---\n%s--- want ---\n%s", name, got, want)
 	}
 }

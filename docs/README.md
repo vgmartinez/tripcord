@@ -8,6 +8,11 @@ Design notes for this private pre-release.
 no policy file, and how an explicit policy overrides them. The value
 depends on the surface: scans fail on high, and the hook warns.
 
+## Scan CLI
+
+[scan.md](scan.md) documents `tripcord scan`, its static-only behavior,
+formats, flags, policy interaction, examples, and exit codes.
+
 ## Finding fingerprints
 
 [fingerprint.md](fingerprint.md) defines the canonical finding fingerprint.
