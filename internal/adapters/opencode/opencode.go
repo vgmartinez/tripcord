@@ -380,7 +380,12 @@ const maxNestedNotes = 32
 func noteNestedRepo(c *kit.Collector, files []string) {
 	for i, rel := range files {
 		if i == maxNestedNotes {
-			c.Note(model.ScopeRepo, "", true, "further %d nested plugin or tool files were not listed", len(files)-i)
+			remaining := len(files) - i
+			noun, verb := "files", "were"
+			if remaining == 1 {
+				noun, verb = "file", "was"
+			}
+			c.Note(model.ScopeRepo, "", true, "further %d nested plugin or tool %s %s not listed", remaining, noun, verb)
 			return
 		}
 		c.Note(model.ScopeRepo, rel, true, "%s", nestedNote)

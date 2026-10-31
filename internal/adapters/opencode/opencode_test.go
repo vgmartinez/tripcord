@@ -134,6 +134,15 @@ func TestRepoNestedPluginNotesAreCapped(t *testing.T) {
 	if kittest.Blocking(t, New(Options{}), root, "nested plugin or tool") {
 		t.Fatal("nested plugin notes were blocking")
 	}
+
+	root = t.TempDir()
+	for i := 0; i < maxNestedNotes+1; i++ {
+		kittest.WriteFile(t, filepath.Join(root, ".opencode", "plugins", "helpers", fmt.Sprintf("q%02d.ts", i)), "nested-secret")
+	}
+	got = kittest.Discover(t, New(Options{}), root)
+	if !got.HasDiag("further 1 nested plugin or tool file was not listed") || got.HasDiag("further 1 nested plugin or tool files") {
+		t.Fatalf("diagnostics = %v", got.Diagnostics)
+	}
 }
 
 func TestCodeFileShaPinsContent(t *testing.T) {
