@@ -63,6 +63,19 @@ func TestRegistrySelect(t *testing.T) {
 	}
 }
 
+func TestGenericHarnessRegisters(t *testing.T) {
+	t.Parallel()
+	if _, err := NewRegistry(fixtureAdapter{harness: model.SurfaceGeneric}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewRegistry(fixtureAdapter{harness: model.SurfaceVSCode}); err == nil {
+		t.Fatal("vscode registered as an adapter")
+	}
+	if !AdapterHarness(model.SurfaceGeneric) || !AdapterHarness(model.HarnessClaude) || AdapterHarness(model.SurfaceDevcontainer) {
+		t.Fatal("AdapterHarness mismatch")
+	}
+}
+
 func contains(s, part string) bool {
 	for i := 0; i+len(part) <= len(s); i++ {
 		if s[i:i+len(part)] == part {
