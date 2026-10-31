@@ -7,6 +7,8 @@ It will scan agent configuration, look for secrets in context and transcripts,
 and support local forensics. This build only implements `help` and `version`.
 Normalized records live in `internal/model`, JSON schemas in `schemas/`,
 and process exit codes in `internal/exitcode`.
+The rule engine (YAML rules with CEL conditions) is in `internal/rules`,
+and policy loading and layering is in `internal/policy`.
 Finding fingerprints are specified in [docs/fingerprint.md](docs/fingerprint.md).
 
 ```sh

@@ -59,6 +59,105 @@ jobs:
           install-mode: binary
           args: --timeout=5m
 
+  fuzz:
+    name: fuzz parsers
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Fuzz rule YAML parser
+        run: go test ./internal/rules -run '^$' -fuzz '^FuzzParseSpec$' -fuzztime 30s
+
+      - name: Fuzz policy parser
+        run: go test ./internal/policy -run '^$' -fuzz '^FuzzParse$' -fuzztime 30s
+
+  licenses:
+    name: dependency licenses
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      # v2.0.1. Pinned by commit so a moved tag cannot change the checker.
+      - name: Install go-licenses
+        run: go install github.com/google/go-licenses/v2@3e084b0caf710f7bfead967567539214f598c0a2
+
+      # Allowlist: anything else, including AGPL, GPL, SSPL, and unknown
+      # licenses, fails. GOROOT is set so go-licenses recognizes the
+      # standard library under the go.mod toolchain.
+      - name: Check licenses
+        shell: bash
+        run: |
+          set -euo pipefail
+          GOROOT="$(go env GOROOT)" "$(go env GOPATH)/bin/go-licenses" check ./... \
+            --include_tests \
+            --allowed_licenses=Apache-2.0,MIT,BSD-2-Clause,BSD-3-Clause,ISC
+
+      - name: Reject TruffleHog
+        shell: bash
+        run: |
+          set -euo pipefail
+          if go list -m all | grep -i trufflehog; then
+            echo "::error::TruffleHog is AGPL-3.0 and must never be linked. See CONTRIBUTING.md."
+            exit 1
+          fi
+
+  rule-registry:
+    name: rule id registry
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Registry is append-only
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            base="$PR_BASE_SHA"
+          else
+            base="$PUSH_BEFORE_SHA"
+          fi
+          old="$RUNNER_TEMP/REGISTRY.base"
+          : > "$old"
+          if [ -n "$base" ] && git cat-file -e "${base}:rules/REGISTRY" 2>/dev/null; then
+            git show "${base}:rules/REGISTRY" > "$old"
+          fi
+          go run ./internal/tools/registrycheck "$old" rules/REGISTRY
+
   zizmor:
     name: zizmor
     runs-on: ubuntu-latest
