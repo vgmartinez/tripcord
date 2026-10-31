@@ -1,0 +1,309 @@
+{
+  "items": [
+    {
+      "harness": "devcontainer",
+      "scope": "repo",
+      "path": ".devcontainer.json",
+      "sha256": "481f31cb0b38ac3955a7e72dc8d32589b95d478d06909135313482f2e831bce3",
+      "kind": "env-setup",
+      "payload": {
+        "command": "true",
+        "form": "string",
+        "key": "[\"lifecycle\",\"postStartCommand\",\"\",\"sig:70e6735b6454f1e7\"]",
+        "runs_on": "container",
+        "setting": "postStartCommand"
+      }
+    },
+    {
+      "harness": "devcontainer",
+      "scope": "repo",
+      "path": ".devcontainer.json",
+      "sha256": "481f31cb0b38ac3955a7e72dc8d32589b95d478d06909135313482f2e831bce3",
+      "kind": "env-setup",
+      "payload": {
+        "key": "[\"setting\",\"image\",\"sig:4c9a3c70085c78df\"]",
+        "setting": "image",
+        "value": "alpine"
+      }
+    },
+    {
+      "harness": "devcontainer",
+      "scope": "repo",
+      "path": ".devcontainer/devcontainer.json",
+      "sha256": "7817e7cce2f12f802248d2a1f0767d649a014fdb46f0c75635d4ae6794a1ac87",
+      "kind": "env-setup",
+      "payload": {
+        "command": "curl -fsSL https://get.example.com/install.sh | sh",
+        "form": "string",
+        "key": "[\"lifecycle\",\"initializeCommand\",\"\",\"sig:08bd5562e2cf996f\"]",
+        "runs_on": "host",
+        "setting": "initializeCommand"
+      }
+    },
+    {
+      "harness": "devcontainer",
+      "scope": "repo",
+      "path": ".devcontainer/devcontainer.json",
+      "sha256": "7817e7cce2f12f802248d2a1f0767d649a014fdb46f0c75635d4ae6794a1ac87",
+      "kind": "env-setup",
+      "payload": {
+        "command": "git config --global url.https://git.example.com/.insteadOf https://git.example.com/",
+        "form": "string",
+        "key": "[\"lifecycle\",\"postStartCommand\",\"\",\"sig:aea4a4bb0559fa72\",\"sig:9292e2c2\"]",
+        "runs_on": "container",
+        "setting": "postStartCommand"
+      }
+    },
+    {
+      "harness": "devcontainer",
+      "scope": "repo",
+      "path": ".devcontainer/devcontainer.json",
+      "sha256": "7817e7cce2f12f802248d2a1f0767d649a014fdb46f0c75635d4ae6794a1ac87",
+      "kind": "env-setup",
+      "payload": {
+        "command": "go mod download",
+        "form": "object",
+        "key": "[\"lifecycle\",\"postCreateCommand\",\"deps\",\"sig:a5c000bf81abe376\"]",
+        "name": "deps",
+        "runs_on": "container",
+        "setting": "postCreateCommand"
+      }
+    },
+    {
+      "harness": "devcontainer",
+      "scope": "repo",
+      "path": ".devcontainer/devcontainer.json",
+      "sha256": "7817e7cce2f12f802248d2a1f0767d649a014fdb46f0c75635d4ae6794a1ac87",
+      "kind": "env-setup",
+      "payload": {
+        "command": "npm ci",
+        "form": "string",
+        "key": "[\"lifecycle\",\"updateContentCommand\",\"\",\"sig:b8473a6c3ca1eeed\"]",
+        "runs_on": "container",
+        "setting": "updateContentCommand"
+      }
+    },
+    {
+      "harness": "devcontainer",
+      "scope": "repo",
+      "path": ".devcontainer/devcontainer.json",
+      "sha256": "7817e7cce2f12f802248d2a1f0767d649a014fdb46f0c75635d4ae6794a1ac87",
+      "kind": "env-setup",
+      "payload": {
+        "command": [
+          "bash",
+          "-lc",
+          "echo ready"
+        ],
+        "form": "array",
+        "key": "[\"lifecycle\",\"postAttachCommand\",\"\",\"sig:879a39c5eeb0c3f0\"]",
+        "runs_on": "container",
+        "setting": "postAttachCommand"
+      }
+    },
+    {
+      "harness": "devcontainer",
+      "scope": "repo",
+      "path": ".devcontainer/devcontainer.json",
+      "sha256": "7817e7cce2f12f802248d2a1f0767d649a014fdb46f0c75635d4ae6794a1ac87",
+      "kind": "env-setup",
+      "payload": {
+        "command": [
+          "docker",
+          "login",
+          "-p",
+          "[REDACTED]",
+          "ghcr.io"
+        ],
+        "form": "array",
+        "key": "[\"lifecycle\",\"onCreateCommand\",\"\",\"sig:317db716a4240095\",\"sig:dc210533\"]",
+        "runs_on": "container",
+        "setting": "onCreateCommand"
+      }
+    },
+    {
+      "harness": "devcontainer",
+      "scope": "repo",
+      "path": ".devcontainer/devcontainer.json",
+      "sha256": "7817e7cce2f12f802248d2a1f0767d649a014fdb46f0c75635d4ae6794a1ac87",
+      "kind": "env-setup",
+      "payload": {
+        "command": [
+          "npm",
+          "login",
+          "--auth-token",
+          "[REDACTED]"
+        ],
+        "form": "object",
+        "key": "[\"lifecycle\",\"postCreateCommand\",\"login\",\"sig:27400eebb2d05145\",\"sig:ff216fff\"]",
+        "name": "login",
+        "runs_on": "container",
+        "setting": "postCreateCommand"
+      }
+    },
+    {
+      "harness": "devcontainer",
+      "scope": "repo",
+      "path": ".devcontainer/devcontainer.json",
+      "sha256": "7817e7cce2f12f802248d2a1f0767d649a014fdb46f0c75635d4ae6794a1ac87",
+      "kind": "env-setup",
+      "payload": {
+        "env_keys": [
+          "API_TOKEN",
+          "MODE"
+        ],
+        "key": "[\"setting\",\"containerEnv\",\"sig:45960f8373e74a0a\",\"sig:da414735\"]",
+        "setting": "containerEnv",
+        "value": {
+          "API_TOKEN": "[REDACTED]",
+          "MODE": "dev"
+        }
+      }
+    },
+    {
+      "harness": "devcontainer",
+      "scope": "repo",
+      "path": ".devcontainer/devcontainer.json",
+      "sha256": "7817e7cce2f12f802248d2a1f0767d649a014fdb46f0c75635d4ae6794a1ac87",
+      "kind": "env-setup",
+      "payload": {
+        "env_keys": [
+          "GITHUB_TOKEN",
+          "PATH"
+        ],
+        "key": "[\"setting\",\"remoteEnv\",\"sig:a123e828267617bf\",\"sig:e13e2f9f\"]",
+        "setting": "remoteEnv",
+        "value": {
+          "GITHUB_TOKEN": "[REDACTED]",
+          "PATH": "${containerEnv:PATH}:/opt/bin"
+        }
+      }
+    },
+    {
+      "harness": "devcontainer",
+      "scope": "repo",
+      "path": ".devcontainer/devcontainer.json",
+      "sha256": "7817e7cce2f12f802248d2a1f0767d649a014fdb46f0c75635d4ae6794a1ac87",
+      "kind": "env-setup",
+      "payload": {
+        "feature": "./local-feature",
+        "key": "[\"feature\",\"./local-feature\",\"sig:c69c9cd318c0ee80\"]",
+        "options": {},
+        "setting": "features"
+      }
+    },
+    {
+      "harness": "devcontainer",
+      "scope": "repo",
+      "path": ".devcontainer/devcontainer.json",
+      "sha256": "7817e7cce2f12f802248d2a1f0767d649a014fdb46f0c75635d4ae6794a1ac87",
+      "kind": "env-setup",
+      "payload": {
+        "feature": "ghcr.io/devcontainers/features/node:1",
+        "key": "[\"feature\",\"ghcr.io/devcontainers/features/node:1\",\"sig:11790d89746f4d28\"]",
+        "options": {
+          "version": "22"
+        },
+        "setting": "features"
+      }
+    },
+    {
+      "harness": "devcontainer",
+      "scope": "repo",
+      "path": ".devcontainer/devcontainer.json",
+      "sha256": "7817e7cce2f12f802248d2a1f0767d649a014fdb46f0c75635d4ae6794a1ac87",
+      "kind": "env-setup",
+      "payload": {
+        "key": "[\"setting\",\"image\",\"sig:8c4a1c6a661263db\"]",
+        "setting": "image",
+        "value": "mcr.microsoft.com/devcontainers/go:1"
+      }
+    },
+    {
+      "harness": "devcontainer",
+      "scope": "repo",
+      "path": ".devcontainer/devcontainer.json",
+      "sha256": "7817e7cce2f12f802248d2a1f0767d649a014fdb46f0c75635d4ae6794a1ac87",
+      "kind": "env-setup",
+      "payload": {
+        "key": "[\"setting\",\"mounts\",\"sig:b048bf4dc41bf2e3\"]",
+        "setting": "mounts",
+        "value": [
+          "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
+        ]
+      }
+    },
+    {
+      "harness": "devcontainer",
+      "scope": "repo",
+      "path": ".devcontainer/devcontainer.json",
+      "sha256": "7817e7cce2f12f802248d2a1f0767d649a014fdb46f0c75635d4ae6794a1ac87",
+      "kind": "env-setup",
+      "payload": {
+        "key": "[\"setting\",\"privileged\",\"sig:a2fa70c1810a60a0\"]",
+        "setting": "privileged",
+        "value": true
+      }
+    },
+    {
+      "harness": "devcontainer",
+      "scope": "repo",
+      "path": ".devcontainer/devcontainer.json",
+      "sha256": "7817e7cce2f12f802248d2a1f0767d649a014fdb46f0c75635d4ae6794a1ac87",
+      "kind": "env-setup",
+      "payload": {
+        "key": "[\"setting\",\"remoteUser\",\"sig:8627afee93a8c95c\"]",
+        "setting": "remoteUser",
+        "value": "root"
+      }
+    },
+    {
+      "harness": "devcontainer",
+      "scope": "repo",
+      "path": ".devcontainer/devcontainer.json",
+      "sha256": "7817e7cce2f12f802248d2a1f0767d649a014fdb46f0c75635d4ae6794a1ac87",
+      "kind": "env-setup",
+      "payload": {
+        "key": "[\"setting\",\"runArgs\",\"sig:d5d394181a7f32c0\",\"sig:52db1e38\"]",
+        "setting": "runArgs",
+        "value": [
+          "--cap-add=SYS_PTRACE",
+          "--env",
+          "SECRET_KEY=[REDACTED]"
+        ]
+      }
+    },
+    {
+      "harness": "devcontainer",
+      "scope": "repo",
+      "path": ".devcontainer/gpu/devcontainer.json",
+      "sha256": "209b06afa20d68629902a5c9e7d6c3c588b5e0195dd7f38d485e26f6c12982e9",
+      "kind": "env-setup",
+      "payload": {
+        "command": "./setup.sh",
+        "form": "string",
+        "key": "[\"lifecycle\",\"postCreateCommand\",\"\",\"sig:6f4591d0a5a2b1ff\"]",
+        "runs_on": "container",
+        "setting": "postCreateCommand"
+      }
+    },
+    {
+      "harness": "devcontainer",
+      "scope": "repo",
+      "path": ".devcontainer/gpu/devcontainer.json",
+      "sha256": "209b06afa20d68629902a5c9e7d6c3c588b5e0195dd7f38d485e26f6c12982e9",
+      "kind": "env-setup",
+      "payload": {
+        "key": "[\"setting\",\"build\",\"sig:4e31503b40a1e588\",\"sig:39614b50\"]",
+        "setting": "build",
+        "value": {
+          "args": {
+            "NPM_TOKEN": "[REDACTED]"
+          },
+          "dockerfile": "Dockerfile"
+        }
+      }
+    }
+  ],
+  "diagnostics": []
+}
