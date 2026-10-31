@@ -1,0 +1,20 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {"type": "command", "command": "tripcord hook"},
+          {"type": "command", "command": "echo audit"}
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": ["Bash(go test ./...)"],
+    "deny": ["Read(.env)"],
+    "defaultMode": "acceptEdits"
+  },
+  "env": {"TRIPCORD_MODE": "warn"},
+  "apiKeyHelper": "security find-generic-password -w"
+}

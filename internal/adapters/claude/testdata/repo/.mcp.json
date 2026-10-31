@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/workspace"],
+      "env": {"LOG_LEVEL": "info"}
+    },
+    "remote": {
+      "url": "https://mcp.example.test/sse"
+    }
+  }
+}

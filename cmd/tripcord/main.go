@@ -39,7 +39,7 @@ Usage:
   tripcord scan [PATH] [flags]
 
 scan performs static configuration scanning only. Harness adapters land in
-later releases; this command already provides the safe orchestration boundary.
+this command. By default it reads repository-scoped configuration only.
 --secrets (v1) and --all (v1) are not available.
 `
 
@@ -142,7 +142,7 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 	for _, adapter := range selected {
 		discovered, err := adapter.Discover(context.Background(), root)
 		if err != nil {
-			return scanInternalError(stderr, fmt.Errorf("%s discovery: %w", adapter.Harness(), err))
+			return scanConfigError(stderr, fmt.Errorf("%s config: %w", adapter.Harness(), err))
 		}
 		items = append(items, discovered...)
 	}

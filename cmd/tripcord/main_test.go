@@ -116,6 +116,31 @@ func TestScanTextGolden(t *testing.T) {
 	assertGolden(t, "scan-text.golden", stdout.String())
 }
 
+func TestScanClaudeFixtureJSON(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, ".git"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(root, ".claude"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	settings := `{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"tripcord hook"}]}]}}`
+	if err := os.WriteFile(filepath.Join(root, ".claude", "settings.json"), []byte(settings), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"scan", "--format", "json", root}, &stdout, &stderr); code != int(exitcode.OK) {
+		t.Fatalf("exit code = %d, stderr = %q", code, stderr.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("json output = %q, want no findings", stdout.String())
+	}
+}
+
 func TestScanSecretsAndAllDoNotScan(t *testing.T) {
 	t.Parallel()
 	const want = "tripcord scan: secret scanning lands in v1; v0 supports --config only\n"
