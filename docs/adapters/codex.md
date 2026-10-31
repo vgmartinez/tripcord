@@ -131,12 +131,18 @@ too.
   [project trust](#project-trust) but always scanned) and
   `~/.codex/rules/*.rules` (user, always active): one item per
   `prefix_rule(pattern=[...], decision=..., justification=..., match=...,
-  not_match=...)` call, key `["rule", decision, pattern-as-JSON]` plus a
-  discriminator. `decision` defaults to `"allow"` when omitted. A `.rules`
-  file this parser cannot model conservatively (see
-  [Parsing](#parsing)) is reported as a single opaque item,
-  `{"role": "rules-file", "parsed": false, "content": <sanitized file>}`,
-  instead of guessing at its meaning.
+  not_match=...)` call, key `["rule", decision, pattern-as-JSON]`, and
+  one per `host_executable(name=..., paths=[...])` call,
+  `{"role": "host-executable", "name", "paths"}`, key
+  `["host-executable", name]`. `decision` defaults to `"allow"` when
+  omitted and must otherwise be exactly `"allow"`, `"prompt"`, or
+  `"forbidden"`; any other spelling (`"ALLOW"`, `"deny"`) is not
+  normalized to a guess. A `.rules` file this parser cannot model
+  conservatively (see [Parsing](#parsing)) is reported as a single opaque
+  item, `{"role": "rules-file", "parsed": false, "content": <sanitized
+  file>}`, instead of guessing at its meaning, with a blocking
+  diagnostic: the part the parser could not read may hold an `allow`
+  rule, so the scan exits non-zero rather than looking clean.
 
 Other keys are not emitted. The list was reviewed against the
 configuration reference on 2026-10-31.
@@ -155,14 +161,25 @@ configuration reference on 2026-10-31.
 - `.rules` files are [Codex's Starlark-based exec
   policy](https://developers.openai.com/codex/rules). They are parsed, not
   executed: a small tokenizer and parser recognize only top-level
-  `prefix_rule(...)` calls built from string and list literals (comments
-  start with `#`), and bail out the moment they see anything else — an
-  unrecognized call or keyword, a duplicate keyword, a non-string or
-  non-list value, `==`, a triple-quoted string, an unsupported escape, a
+  `prefix_rule(...)` and `host_executable(...)` calls built from string
+  and list literals (comments start with `#`), and bail out the moment
+  they see anything else — an unrecognized call or keyword, a duplicate
+  keyword, a non-string or non-list value, an undocumented `decision`,
+  `host_executable` without exactly a non-empty `name` and a `paths` list
+  of strings, `==`, a triple-quoted string, an unsupported escape, a
   multi-line or unterminated string, or any byte the grammar does not
-  define. On a bail-out the whole file is reported as one opaque item
-  rather than partially interpreted. At most 64 `.rules` files are read
-  per scope.
+  define. The parser also bails out past these limits:
+
+  | Limit | Value |
+  | --- | --- |
+  | List nesting depth in one value | 16 |
+  | `prefix_rule` plus `host_executable` calls per file | 512 |
+  | Top-level calls per file | 1024 |
+  | Tokens per file | 200,000 |
+
+  On a bail-out the whole file is reported as one opaque item rather
+  than partially interpreted. At most 64 `.rules` files are read per
+  scope.
 
 Reads, symlink handling, limits, and diagnostics are those of the
 [Claude adapter](claude.md#safe-reads): a `.codex` symlink that resolves

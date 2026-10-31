@@ -274,7 +274,7 @@
       "harness": "codex",
       "scope": "repo",
       "path": ".codex/rules/default.rules",
-      "sha256": "e2e7ce0f60773d9c028177c1f19367bb30ef185712d10ab482a627069a54c7bc",
+      "sha256": "346d29697310fc8ed96ac62f22e5e48baa9be71898638caccfe00c7a35b3e115",
       "kind": "permissions",
       "payload": {
         "decision": "allow",
@@ -292,7 +292,7 @@
       "harness": "codex",
       "scope": "repo",
       "path": ".codex/rules/default.rules",
-      "sha256": "e2e7ce0f60773d9c028177c1f19367bb30ef185712d10ab482a627069a54c7bc",
+      "sha256": "346d29697310fc8ed96ac62f22e5e48baa9be71898638caccfe00c7a35b3e115",
       "kind": "permissions",
       "payload": {
         "decision": "allow",
@@ -309,7 +309,7 @@
       "harness": "codex",
       "scope": "repo",
       "path": ".codex/rules/default.rules",
-      "sha256": "e2e7ce0f60773d9c028177c1f19367bb30ef185712d10ab482a627069a54c7bc",
+      "sha256": "346d29697310fc8ed96ac62f22e5e48baa9be71898638caccfe00c7a35b3e115",
       "kind": "permissions",
       "payload": {
         "decision": "prompt",
@@ -328,6 +328,23 @@
         ],
         "project_trust": "unset",
         "role": "rule"
+      }
+    },
+    {
+      "harness": "codex",
+      "scope": "repo",
+      "path": ".codex/rules/default.rules",
+      "sha256": "346d29697310fc8ed96ac62f22e5e48baa9be71898638caccfe00c7a35b3e115",
+      "kind": "permissions",
+      "payload": {
+        "key": "[\"host-executable\",\"git\",\"sig:8dcaeea8bab6a31e\"]",
+        "name": "git",
+        "paths": [
+          "/usr/bin/git",
+          "/opt/homebrew/bin/git"
+        ],
+        "project_trust": "unset",
+        "role": "host-executable"
       }
     },
     {

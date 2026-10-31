@@ -353,27 +353,60 @@ func TestRulesFileDecisionDefaultsToAllow(t *testing.T) {
 }
 
 // TestRulesFileOpaqueOnUnknownConstruct is the conservative fallback: a
-// construct rules_parse.go does not model (here, a second top-level
-// call Codex's execpolicy actually supports but this parser does not)
-// makes the whole file opaque instead of silently dropping the rule or
-// guessing at its meaning.
+// construct rules_parse.go does not model makes the whole file opaque
+// instead of silently dropping the rule or guessing at its meaning, and
+// the diagnostic is blocking, since the unparsed part may hold an allow
+// rule.
 func TestRulesFileOpaqueOnUnknownConstruct(t *testing.T) {
+	t.Parallel()
+	for name, extra := range map[string]string{
+		"unknown call":       "exec_rule(pattern = [\"git\"])\n",
+		"uppercase decision": "prefix_rule(pattern = [\"rm\"], decision = \"ALLOW\")\n",
+	} {
+		root := t.TempDir()
+		kittest.WriteFile(t, filepath.Join(root, ".codex", "rules", "default.rules"),
+			"prefix_rule(pattern = [\"git\", \"add\"], decision = \"allow\")\n"+extra)
+		a := New(Options{})
+		got := kittest.Discover(t, a, root)
+		items := got.Find(".codex/rules/default.rules", model.ConfigKindPermissions)
+		if len(items) != 1 {
+			t.Fatalf("%s: items = %+v, want one opaque item", name, got.Items)
+		}
+		p := kittest.Payload(t, items[0])
+		if p["role"] != "rules-file" || p["parsed"] != false {
+			t.Fatalf("%s: payload = %+v", name, p)
+		}
+		if !strings.Contains(p["content"].(string), strings.TrimSpace(extra)) {
+			t.Fatalf("%s: opaque content dropped the file body: %+v", name, p)
+		}
+		if !kittest.Blocking(t, a, root, "does not parse conservatively") {
+			t.Fatalf("%s: opaque rules file is not a blocking diagnostic: %v", name, got.Diagnostics)
+		}
+	}
+}
+
+func TestRulesFileHostExecutable(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	kittest.WriteFile(t, filepath.Join(root, ".codex", "rules", "default.rules"),
-		"prefix_rule(pattern = [\"git\", \"add\"], decision = \"allow\")\n"+
-			"host_executable(name = \"git\")\n")
+		"host_executable(name = \"git\", paths = [\"/usr/bin/git\", \"/opt/homebrew/bin/git\"])\n"+
+			"prefix_rule(pattern = [\"git\", \"status\"])\n")
 	got := kittest.Discover(t, New(Options{}), root)
-	items := got.Find(".codex/rules/default.rules", model.ConfigKindPermissions)
-	if len(items) != 1 {
-		t.Fatalf("items = %+v, want one opaque item", got.Items)
+	if len(got.Diagnostics) != 0 {
+		t.Fatalf("diagnostics = %v", got.Diagnostics)
 	}
-	p := kittest.Payload(t, items[0])
-	if p["role"] != "rules-file" || p["parsed"] != false {
-		t.Fatalf("payload = %+v", p)
+	var host map[string]any
+	for _, item := range got.Find(".codex/rules/default.rules", model.ConfigKindPermissions) {
+		if p := kittest.Payload(t, item); p["role"] == "host-executable" {
+			host = p
+		}
 	}
-	if !strings.Contains(p["content"].(string), "host_executable") {
-		t.Fatalf("opaque content dropped the file body: %+v", p)
+	if host == nil || host["name"] != "git" {
+		t.Fatalf("no host-executable item: %+v", got.Items)
+	}
+	paths, _ := host["paths"].([]any)
+	if len(paths) != 2 || paths[0] != "/usr/bin/git" || host["project_trust"] != trustUnknown {
+		t.Fatalf("host-executable payload = %+v", host)
 	}
 }
 

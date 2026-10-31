@@ -5,12 +5,13 @@ package codex
 // https://developers.openai.com/codex/rules and
 // https://github.com/openai/codex/blob/main/codex-rs/execpolicy/README.md).
 // It never evaluates the file; it only recognizes a fixed grammar of
-// top-level prefix_rule(...) calls built from string and list literals,
-// and reports ok=false the moment it sees anything else, so the caller
-// can fall back to treating the file as opaque instead of silently
-// dropping or misinterpreting a construct this parser does not model
-// (another call such as host_executable, a variable, string
-// concatenation, a triple-quoted string, an unsupported escape, ...).
+// top-level prefix_rule(...) and host_executable(...) calls built from
+// string and list literals, and reports ok=false the moment it sees
+// anything else, so the caller can fall back to treating the file as
+// opaque instead of silently dropping or misinterpreting a construct
+// this parser does not model (another call, a variable, string
+// concatenation, a triple-quoted string, an unsupported escape, a
+// decision other than "allow", "prompt", or "forbidden", ...).
 //
 // Grammar recognized (EBNF-ish):
 //
@@ -20,9 +21,10 @@ package codex
 //	value      = string | list ;
 //	list       = "[" [ value { "," value } [ "," ] ] "]" ;
 //
-// "#" starts a line comment. Only call is "prefix_rule"; any other
-// top-level call name, or any kwarg name prefix_rule does not define,
-// makes the file opaque.
+// "#" starts a line comment. The only calls are "prefix_rule" and
+// "host_executable"; any other top-level call name, or any kwarg name
+// the call does not define, makes the file opaque. maxRulesPerFile
+// counts both kinds of call.
 const (
 	maxRulesTokens        = 200_000
 	maxRulesNestingDepth  = 16
@@ -39,52 +41,100 @@ type rawPrefixRule struct {
 	notMatch      []any
 }
 
+// rawHostExecutable is one parsed host_executable(...) call: the
+// absolute paths a basename rule for name may resolve through.
+type rawHostExecutable struct {
+	name  string
+	paths []any
+}
+
+// parsedRules is a .rules file parsed by parseRulesFile.
+type parsedRules struct {
+	prefixRules     []rawPrefixRule
+	hostExecutables []rawHostExecutable
+}
+
 var prefixRuleArgs = map[string]bool{
 	"pattern": true, "decision": true, "justification": true,
 	"match": true, "not_match": true,
 }
 
-func parseRulesFile(raw []byte) ([]rawPrefixRule, bool) {
+// rulesDecisions are the decision values Codex documents. Any other
+// spelling ("ALLOW", "deny") makes the file opaque rather than being
+// normalized to a guess.
+var rulesDecisions = map[string]bool{"allow": true, "prompt": true, "forbidden": true}
+
+func parseRulesFile(raw []byte) (parsedRules, bool) {
+	var out parsedRules
 	toks, ok := lexRules(raw)
 	if !ok || len(toks) > maxRulesTokens {
-		return nil, false
+		return out, false
 	}
 	p := &rulesParser{toks: toks}
-	var rules []rawPrefixRule
 	calls := 0
 	for !p.at(rtEOF) {
 		calls++
 		if calls > maxRulesTopLevelCalls {
-			return nil, false
+			return out, false
 		}
 		if !p.at(rtIdent) {
-			return nil, false
+			return out, false
 		}
 		name := p.cur().text
 		p.pos++
 		if !p.consume(rtLParen) {
-			return nil, false
+			return out, false
 		}
 		args, ok := p.parseKwArgs()
 		if !ok {
-			return nil, false
+			return out, false
 		}
 		if !p.consume(rtRParen) {
-			return nil, false
+			return out, false
 		}
-		if name != "prefix_rule" {
-			return nil, false
+		switch name {
+		case "prefix_rule":
+			rule, ok := buildPrefixRule(args)
+			if !ok {
+				return out, false
+			}
+			out.prefixRules = append(out.prefixRules, rule)
+		case "host_executable":
+			host, ok := buildHostExecutable(args)
+			if !ok {
+				return out, false
+			}
+			out.hostExecutables = append(out.hostExecutables, host)
+		default:
+			return out, false
 		}
-		rule, ok := buildPrefixRule(args)
-		if !ok {
-			return nil, false
-		}
-		rules = append(rules, rule)
-		if len(rules) > maxRulesPerFile {
-			return nil, false
+		if len(out.prefixRules)+len(out.hostExecutables) > maxRulesPerFile {
+			return out, false
 		}
 	}
-	return rules, true
+	return out, true
+}
+
+// buildHostExecutable requires exactly a non-empty name string and a
+// paths list of strings.
+func buildHostExecutable(args map[string]any) (rawHostExecutable, bool) {
+	if len(args) != 2 {
+		return rawHostExecutable{}, false
+	}
+	name, ok := args["name"].(string)
+	if !ok || name == "" {
+		return rawHostExecutable{}, false
+	}
+	paths, ok := args["paths"].([]any)
+	if !ok {
+		return rawHostExecutable{}, false
+	}
+	for _, p := range paths {
+		if _, ok := p.(string); !ok {
+			return rawHostExecutable{}, false
+		}
+	}
+	return rawHostExecutable{name: name, paths: paths}, true
 }
 
 func buildPrefixRule(args map[string]any) (rawPrefixRule, bool) {
@@ -100,7 +150,7 @@ func buildPrefixRule(args map[string]any) (rawPrefixRule, bool) {
 	rule := rawPrefixRule{pattern: pattern, decision: "allow"}
 	if v, present := args["decision"]; present {
 		s, ok := v.(string)
-		if !ok {
+		if !ok || !rulesDecisions[s] {
 			return rawPrefixRule{}, false
 		}
 		rule.decision = s

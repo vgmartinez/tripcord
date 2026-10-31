@@ -16,3 +16,8 @@ prefix_rule(
     pattern = ["env", "PGPASSWORD=s3cr3t", "psql"],
     decision = "allow",
 )
+
+host_executable(
+    name = "git",
+    paths = ["/usr/bin/git", "/opt/homebrew/bin/git"],
+)
