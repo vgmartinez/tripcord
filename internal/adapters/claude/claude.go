@@ -183,7 +183,12 @@ func (a *Adapter) userPaths(c *collector) (home string, files [][2]string, ok bo
 			logical = "~/CLAUDE_CONFIG_DIR/" + filepath.ToSlash(rel)
 		}
 		if !strings.HasPrefix(logical, "~/") {
-			c.warn(model.ScopeUser, "", "CLAUDE_CONFIG_DIR is outside the home directory; user configuration was not scanned")
+			// outside is always false here: when it is true, logical was
+			// already rewritten to "~/CLAUDE_CONFIG_DIR/..." above, which
+			// always has this prefix. This is the home directory itself
+			// being too short to root a "~/..." path under (empty, "/",
+			// or similar), not a CLAUDE_CONFIG_DIR problem.
+			c.warn(model.ScopeUser, "", "home directory is too short to scope user configuration under it; user configuration was not scanned")
 			return "", nil, false
 		}
 		files = append(files, [2]string{p, logical})

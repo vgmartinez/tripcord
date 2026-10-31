@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
-	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -122,18 +121,131 @@ func (s *src) safeKey(parts []string) []string {
 	return out
 }
 
-var commandSecretFlag = regexp.MustCompile(`(?i)(--(?:api[-_]?key|token|secret|password)|-(?:k|t))\s+(?:'[^']*'|"[^"]*"|\S+)`)
+// secretFlagNamePattern matches a CLI flag whose value is a credential,
+// shared between commandSecretFlag (the flag and its value in one string,
+// "--token X" or "--token=X") and secretFlagName (the bare flag name,
+// used when a flag and its value are two separate argv elements, as in an
+// MCP server's "args" array).
+const secretFlagNamePattern = `--(?:api[-_]?key|token|secret|password)|-(?:k|t)`
+
+var (
+	commandSecretFlag = regexp.MustCompile(`(?i)(` + secretFlagNamePattern + `)(?:=|\s+)('[^']*'|"[^"]*"|\S+)`)
+	secretFlagName    = regexp.MustCompile(`(?i)^(?:` + secretFlagNamePattern + `)$`)
+	bearerToken       = regexp.MustCompile(`(?i)\b(bearer)\s+(\S+)`)
+	// embeddedURL finds an absolute URL anywhere inside a larger string,
+	// such as the command of "curl 'https://host/x?sig=y' | sh". It stops
+	// at whitespace and quotes so the match does not swallow a trailing
+	// shell quote or the rest of a pipeline.
+	embeddedURL = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://[^\s'"<>]+`)
+)
+
+// redactCommandSecrets redacts CLI secret flags ("--token X", "--token=X")
+// and "Bearer <token>" occurrences inside value. It returns the redacted
+// text and the raw secret substrings it removed, for keyDiscriminator.
+func redactCommandSecrets(value string) (string, []string) {
+	var removed []string
+	value = commandSecretFlag.ReplaceAllStringFunc(value, func(m string) string {
+		g := commandSecretFlag.FindStringSubmatch(m)
+		removed = append(removed, g[2])
+		return g[1] + " " + redacted
+	})
+	value = bearerToken.ReplaceAllStringFunc(value, func(m string) string {
+		g := bearerToken.FindStringSubmatch(m)
+		removed = append(removed, g[2])
+		return g[1] + " " + redacted
+	})
+	return value, removed
+}
+
+// stripEmbeddedURLSecrets applies stripURLSecrets to every URL found
+// anywhere inside value, not only when the whole value is one URL (so a
+// command such as "curl '<url>?sig=...' | sh" is covered, not just a bare
+// "url" hook field). It returns the rewritten text and the raw removed
+// substrings, for keyDiscriminator.
+func stripEmbeddedURLSecrets(value string) (string, []string) {
+	var removed []string
+	value = embeddedURL.ReplaceAllStringFunc(value, func(m string) string {
+		stripped, raw, ok := stripURLSecrets(m)
+		if !ok {
+			return m
+		}
+		if raw != "" {
+			removed = append(removed, raw)
+		}
+		return stripped
+	})
+	return value, removed
+}
+
+// sanitizeResult is the outcome of sanitizing one string: the safe text to
+// store or display, and the raw secret substrings that were removed to
+// produce it (never stored; only hashed by keyDiscriminator).
+type sanitizeResult struct {
+	value   string
+	removed []string
+}
+
+// sanitizeString strips URL secrets and CLI/header credentials from value,
+// then rewrites a home-directory prefix to "~" (user scope only; see
+// tildeHome). Unlike the old implementation, it never blanket-converts
+// backslashes to slashes: only the home-directory prefix it actually
+// matches is rewritten, so two commands that differ only by `\` vs `/`
+// outside that prefix stay distinct.
+func (s *src) sanitizeString(value string) sanitizeResult {
+	value, removedURLs := stripEmbeddedURLSecrets(value)
+	value, removedFlags := redactCommandSecrets(value)
+	value = s.tildeHome(value)
+	return sanitizeResult{value: value, removed: append(removedURLs, removedFlags...)}
+}
+
+// tildeHome rewrites a home-directory-rooted value as "~/...". It never
+// touches repo- or managed-scope content: Claude Code's own config can
+// legitimately contain a path that happens to match the scanning
+// machine's home directory, and rewriting it would make a repo-scope
+// fingerprint depend on who ran the scan. Home directories of "" or a
+// single character (for example "/" or "\") are also left alone, since
+// rewriting those would match on every path, not a real home directory.
+func (s *src) tildeHome(value string) string {
+	if s.scope != model.ScopeUser {
+		return value
+	}
+	home := s.c.home
+	if len(home) <= 1 {
+		return value
+	}
+	switch {
+	case value == home:
+		return "~"
+	case strings.HasPrefix(value, home+"/"):
+		return "~" + value[len(home):]
+	case strings.HasPrefix(value, home+`\`):
+		return "~" + value[len(home):]
+	default:
+		return value
+	}
+}
 
 func (s *src) safeString(value string) string {
-	if stripped, ok := stripURLSecrets(value); ok {
-		value = stripped
-	}
-	value = commandSecretFlag.ReplaceAllString(value, "$1 "+redacted)
-	home := s.c.home
-	if home == "" {
-		home, _ = os.UserHomeDir()
-	}
-	return strings.ReplaceAll(strings.ReplaceAll(value, `\`, "/"), strings.ReplaceAll(home, `\`, "/"), "~")
+	return s.sanitizeString(value).value
+}
+
+// keyDiscriminator is the first 8 hex characters of SHA-256 over removed,
+// joined by NUL. Appending it to an evidence key keeps two entries whose
+// only difference is a secret value (a signed URL's query, a --token
+// value, ...) from colliding on the same key, and therefore the same
+// fingerprint, once that secret is redacted: without it, suppressing one
+// as a false positive would silently suppress the other too. It is
+// computed from the raw value that was removed, never the sanitized
+// text, so it stays the same across machines with different home
+// directories (home substitution is not "removed"; see tildeHome) but
+// differs whenever the underlying secret differs. This does let someone
+// who has already guessed a low-entropy secret (a short shared token or
+// signature) confirm that guess by recomputing the hash; that is accepted
+// here because signatures and tokens are the values this guards, and the
+// alternative -- two different secrets sharing one key -- is worse.
+func keyDiscriminator(removed []string) string {
+	sum := sha256.Sum256([]byte(strings.Join(removed, "\x00")))
+	return hex.EncodeToString(sum[:])[:8]
 }
 
 // evidenceKey encodes parts as a compact JSON array, so no choice of
@@ -172,7 +284,8 @@ func (s *src) settingsObject(obj map[string]any) {
 		}
 		value := obj[name]
 		payload := map[string]any{"setting": name}
-		if name == "env" {
+		switch {
+		case name == "env":
 			envObj, ok := value.(map[string]any)
 			if !ok {
 				s.warn("env must be an object")
@@ -180,6 +293,13 @@ func (s *src) settingsObject(obj map[string]any) {
 			}
 			payload["env_keys"] = sortedKeys(envObj)
 			value = redactValues(envObj)
+		default:
+			// Every other curated setting's value can itself be, or
+			// contain, a credential (apiKeyHelper's command, a
+			// --token flag in awsAuthRefresh, a marketplace URL with
+			// userinfo in extraKnownMarketplaces, ...). Sanitize it
+			// the same way a hook's fields are sanitized.
+			value = s.safePayloadValue(name, value)
 		}
 		payload["value"] = value
 		if command := commandOf(value); command != "" {
@@ -261,17 +381,45 @@ func (s *src) hook(event, matcher string, hook map[string]any) {
 	payload["event"] = event
 	payload["matcher"] = matcher
 	hookType, _ := hook["type"].(string)
-	s.add(model.ConfigKindHook, []string{"hook", event, matcher, hookType, hookAction(payload)}, payload)
+	field, action := hookAction(payload)
+	key := []string{"hook", event, matcher, hookType, action}
+	// The discriminator must come from the RAW field value, before
+	// sanitization: by the time "action" above is computed, a secret
+	// value has already been replaced with the constant string
+	// redacted, so re-sanitizing it here could never recover what was
+	// removed. See keyDiscriminator.
+	if field != "" {
+		if raw, ok := hook[field].(string); ok {
+			if removed := s.sanitizeString(raw).removed; len(removed) > 0 {
+				key = append(key, "sig:"+keyDiscriminator(removed))
+			}
+		}
+	}
+	s.add(model.ConfigKindHook, key, payload)
 }
 
+// secretFlagName matches a bare CLI flag whose value is a credential, used
+// when the flag and its value are two separate elements of an array (an
+// MCP server's "args", for example ["--token", "X"]), so neither element
+// alone carries both the flag and its value for commandSecretFlag to
+// match.
 func (s *src) safePayloadValue(key string, value any) any {
 	switch v := value.(type) {
 	case string:
 		return s.safeString(v)
 	case []any:
 		out := make([]any, len(v))
+		redactNext := false
 		for i, item := range v {
+			if redactNext {
+				out[i] = redacted
+				redactNext = false
+				continue
+			}
 			out[i] = s.safePayloadValue(key, item)
+			if name, ok := item.(string); ok && secretFlagName.MatchString(name) {
+				redactNext = true
+			}
 		}
 		return out
 	case map[string]any:
@@ -285,19 +433,20 @@ func (s *src) safePayloadValue(key string, value any) any {
 	}
 }
 
-// hookAction is the part of a hook that says what it does. It falls back to
-// the canonical JSON of the whole (redacted) hook for unknown shapes.
-func hookAction(hook map[string]any) string {
-	for _, field := range []string{"command", "url", "prompt", "agent", "mcp_tool", "tool"} {
-		switch v := hook[field].(type) {
+// hookAction is the part of a hook that says what it does, and the field
+// it came from ("" for the fallback). It falls back to the canonical JSON
+// of the whole (already-sanitized) hook for unknown shapes.
+func hookAction(hook map[string]any) (field, text string) {
+	for _, name := range []string{"command", "url", "prompt", "agent", "mcp_tool", "tool"} {
+		switch v := hook[name].(type) {
 		case string:
 			if v != "" {
-				return v
+				return name, v
 			}
 		case nil:
 		default:
 			raw, _ := json.Marshal(v)
-			return string(raw)
+			return name, string(raw)
 		}
 	}
 	copied := map[string]any{}
@@ -307,7 +456,7 @@ func hookAction(hook map[string]any) string {
 		}
 	}
 	raw, _ := json.Marshal(copied)
-	return string(raw)
+	return "", string(raw)
 }
 
 // mcpFile normalizes .mcp.json and managed-mcp.json: {"mcpServers": {...}}.
@@ -461,7 +610,7 @@ func redactValue(key string, value any) any {
 }
 
 func redactString(value string) string {
-	if stripped, ok := stripURLSecrets(value); ok {
+	if stripped, _, ok := stripURLSecrets(value); ok {
 		value = stripped
 	}
 	if output.DefaultRedactor(value) != value {
@@ -470,24 +619,34 @@ func redactString(value string) string {
 	return value
 }
 
-// stripURLSecrets reports whether raw is an http(s) or socks URL and
-// returns it without userinfo, query, or fragment. The host and path stay
-// so a rule can see where a proxy or base URL points.
-func stripURLSecrets(raw string) (string, bool) {
+// stripURLSecrets reports whether raw parses as an absolute URL (any
+// scheme with a host, not only http/https/socks: a database or queue URL
+// such as "postgres://admin:pw@host/db" carries a credential in its
+// userinfo too) and, if so, returns it without userinfo, query, or
+// fragment. The host and path stay so a rule can see where a proxy or
+// base URL points. removedRaw is the exact userinfo, query, and fragment
+// text that was removed (NUL-joined), used only by keyDiscriminator; it
+// is never stored or displayed.
+func stripURLSecrets(raw string) (stripped, removedRaw string, ok bool) {
 	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" {
-		return "", false
+		return "", "", false
 	}
-	switch strings.ToLower(u.Scheme) {
-	case "http", "https", "socks5", "socks5h":
-	default:
-		return "", false
+	var removed []string
+	if u.User != nil {
+		removed = append(removed, u.User.String())
+		u.User = nil
 	}
-	u.User = nil
-	u.RawQuery = ""
-	u.ForceQuery = false
-	u.Fragment = ""
-	return u.String(), true
+	if u.RawQuery != "" || u.ForceQuery {
+		removed = append(removed, u.RawQuery)
+		u.RawQuery = ""
+		u.ForceQuery = false
+	}
+	if u.Fragment != "" {
+		removed = append(removed, u.Fragment)
+		u.Fragment = ""
+	}
+	return u.String(), strings.Join(removed, "\x00"), true
 }
 
 // NormalizeSkill parses a SKILL.md file into items attributed to harness.
