@@ -82,3 +82,31 @@ func TestRulesFileOpaqueRedactsToolSecretFlags(t *testing.T) {
 		}
 	}
 }
+
+// In an opaque rules file a tool word activates its flags only within its
+// own list: a later, unrelated pattern keeps its arguments.
+func TestRulesFileOpaqueScopesToolFlagsToEachList(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(root, ".codex", "rules", "default.rules"),
+		"x = unknown\n"+
+			`prefix_rule(pattern = ["redis-cli", "info"])`+"\n"+
+			`prefix_rule(pattern = ["make", "-a", "all"])`+"\n"+
+			`prefix_rule(pattern = ["mysql", "-pOPQ7"])`+"\n"+
+			`prefix_rule(pattern = ["jq", "-pretty"])`+"\n"+
+			`prefix_rule(pattern = ["redis-cli", "-a", "OPQ8"])`+"\n")
+	got := kittest.Discover(t, New(Options{}), root)
+	items := got.Find(".codex/rules/default.rules", model.ConfigKindPermissions)
+	if len(items) != 1 {
+		t.Fatalf("items = %+v, want one opaque item", got.Items)
+	}
+	content, _ := kittest.Payload(t, items[0])["content"].(string)
+	for _, kept := range []string{`["make", "-a", "all"]`, `["jq", "-pretty"]`, `["mysql", "-p[REDACTED]"]`, `["redis-cli", "-a", "[REDACTED]"]`} {
+		if !strings.Contains(content, kept) {
+			t.Errorf("content lost %q: %s", kept, content)
+		}
+	}
+	if strings.Contains(content, "OPQ") {
+		t.Fatalf("opaque content leaks a tool secret: %s", content)
+	}
+}

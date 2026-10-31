@@ -77,35 +77,52 @@ func (f *file) safeExamples(examples []any) []any {
 }
 
 // rulesLiteral is one string literal found in a rules file the parser
-// could not model: its byte span, quote, and decoded text.
+// could not model: its byte span, quote, decoded text, and group, the
+// innermost "[...]" or "(...)" enclosing it (a literal outside any has
+// a group of its own).
 type rulesLiteral struct {
 	start, end int
 	quote      string
 	text       string
+	group      int
 }
 
 // sanitizeRulesLiterals returns raw with every string literal sanitized
-// as one element of an argv-like list, in file order, through
-// kit.Source.SafeValue. A secret flag and its value are separate
-// literals in a pattern (["aws", "--secret-access-key", "X"]), which a
-// whole-file SafeString cannot pair up; SafeValue's array rule can, and
-// records what it removes for the key discriminator. SafeToolArgv runs
-// first, so a tool-specific flag (["redis-cli", "--pass", "X"],
-// ["mysql", "-pX"]) is redacted too; a tool word activates its flags for
-// every later literal in the file, the conservative reading of a file
-// whose structure is unknown. Literals are found leniently: an escape the
-// parser rejects is kept as written.
+// through kit.Source.SafeValue, each list or tuple of literals as one
+// argv-like list. A secret flag and its value are separate literals in a
+// pattern (["aws", "--secret-access-key", "X"]), which a whole-file
+// SafeString cannot pair up; SafeValue's array rule can, and records
+// what it removes for the key discriminator. SafeToolArgv runs first, so
+// a tool-specific flag (["redis-cli", "--pass", "X"], ["mysql", "-pX"])
+// is redacted too. A tool word activates its flags only within its own
+// list, so ["make", "-a", "all"] after ["redis-cli", "info"] keeps
+// "all". Literals are found leniently: an escape the parser rejects is
+// kept as written.
 func (f *file) sanitizeRulesLiterals(raw []byte) string {
 	literals := scanRulesLiterals(raw)
-	values := make([]any, len(literals))
+	sanitized := make([]string, len(literals))
+	var order []int
+	members := map[int][]int{}
 	for i, lit := range literals {
-		values[i] = lit.text
+		if members[lit.group] == nil {
+			order = append(order, lit.group)
+		}
+		members[lit.group] = append(members[lit.group], i)
 	}
-	sanitized, _ := f.SafeValue("", f.SafeToolArgv(values)).([]any)
+	for _, group := range order {
+		values := make([]any, len(members[group]))
+		for j, i := range members[group] {
+			values[j] = literals[i].text
+		}
+		out, _ := f.SafeValue("", f.SafeToolArgv(values)).([]any)
+		for j, i := range members[group] {
+			sanitized[i], _ = out[j].(string)
+		}
+	}
 	var b strings.Builder
 	pos := 0
 	for i, lit := range literals {
-		text, _ := sanitized[i].(string)
+		text := sanitized[i]
 		if text == lit.text {
 			continue
 		}
@@ -119,17 +136,34 @@ func (f *file) sanitizeRulesLiterals(raw []byte) string {
 
 func scanRulesLiterals(raw []byte) []rulesLiteral {
 	var out []rulesLiteral
+	var open []int
+	groups := 0
 	for i := 0; i < len(raw); {
 		switch raw[i] {
 		case '#':
 			for i < len(raw) && raw[i] != '\n' {
 				i++
 			}
+		case '[', '(':
+			groups++
+			open = append(open, groups)
+			i++
+		case ']', ')':
+			if len(open) > 0 {
+				open = open[:len(open)-1]
+			}
+			i++
 		case '\'', '"':
 			lit, ok := scanRulesLiteral(raw, i)
 			if !ok {
 				i++
 				continue
+			}
+			if len(open) > 0 {
+				lit.group = open[len(open)-1]
+			} else {
+				groups++
+				lit.group = groups
 			}
 			out = append(out, lit)
 			i = lit.end
