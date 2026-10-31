@@ -61,8 +61,10 @@ func findLiteralSpans(value string) literalSpans {
 		case tool != "":
 			pending = literalFlagArgument(&spans, tool, text, start, i)
 		}
-		if name := toolWordName(prev, text); literalTextFlags[name] != nil && !pending {
-			tool = name
+		if !pending && mentionsLiteralTool(text) {
+			if name := toolWordName(prev, text); literalTextFlags[name] != nil {
+				tool = name
+			}
 		}
 		prev = text
 	}
