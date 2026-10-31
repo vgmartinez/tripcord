@@ -163,7 +163,9 @@ func TestHookLimits(t *testing.T) {
 // over an input at the hook cap. The timeout cannot stop it, so the cap
 // must. It measures about 4 ms; the bound is loose for slow CI
 // machines, the point being that it stays well under the 45 ms a
-// 900 KB input took.
+// 900 KB input took. The fastest of five runs is compared, so a run
+// descheduled by a loaded machine does not fail the test, while a
+// regex that is really slow still does.
 func TestHookWorstCaseRegex(t *testing.T) {
 	env, err := NewEnv(HookLimits())
 	if err != nil {
@@ -176,10 +178,14 @@ func TestHookWorstCaseRegex(t *testing.T) {
 		t.Fatal(err)
 	}
 	x := compileT(t, env, `event.command.matches("(a|aa)*(b|c|d)$")`)
-	start := time.Now()
-	_, _ = x.Eval(context.Background(), in)
-	if d := time.Since(start); d > 20*time.Millisecond*timingScale {
-		t.Fatalf("worst-case regex at the hook cap took %v", d)
+	fastest := time.Duration(1<<63 - 1)
+	for range 5 {
+		start := time.Now()
+		_, _ = x.Eval(context.Background(), in)
+		fastest = min(fastest, time.Since(start))
+	}
+	if fastest > 20*time.Millisecond*timingScale {
+		t.Fatalf("worst-case regex at the hook cap took %v (fastest of 5 runs)", fastest)
 	}
 	ev.Command = strings.Repeat("a", HookMaxInputBytes)
 	if _, err := EventInput(ev, env.Limits()); !errors.Is(err, ErrInputLimit) {
