@@ -89,7 +89,7 @@ func TestRulesFileOpaqueScopesToolFlagsToEachList(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	kittest.WriteFile(t, filepath.Join(root, ".codex", "rules", "default.rules"),
-		"x = unknown\n"+
+		`"""opaque"""`+"\n"+
 			`prefix_rule(pattern = ["redis-cli", "info"])`+"\n"+
 			`prefix_rule(pattern = ["make", "-a", "all"])`+"\n"+
 			`prefix_rule(pattern = ["mysql", "-pOPQ7"])`+"\n"+
@@ -108,6 +108,51 @@ func TestRulesFileOpaqueScopesToolFlagsToEachList(t *testing.T) {
 	}
 	if strings.Contains(content, "OPQ") {
 		t.Fatalf("opaque content leaks a tool secret: %s", content)
+	}
+}
+
+func TestRulesFileOpaqueTokenizesIdentifiersOutsideStringsAndComments(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(root, ".codex", "rules", "default.rules"),
+		`T = "redis-cli"`+"\n"+
+			"[\n# tool\nT, \"-a\", \"QS01\"]\n"+
+			"[ # c\n T, \"-a\", \"QS02\"]\n"+
+			"[(T), \"-a\", \"QS03\"]\n"+
+			`["%s" % T, "-a", "QS04"]`+"\n"+
+			`["{}".format(T), "-a", "QS05"]`+"\n"+
+			"list((T, \"-a\", \"QS06\"))\n"+
+			`["-a" if 0 else T, "QS07"]`+"\n"+
+			`(T, "-a", "QS08")`+"\n")
+	got := kittest.Discover(t, New(Options{}), root)
+	items := got.Find(".codex/rules/default.rules", model.ConfigKindPermissions)
+	if len(items) != 1 {
+		t.Fatalf("items = %+v, want one opaque item", got.Items)
+	}
+	content, _ := kittest.Payload(t, items[0])["content"].(string)
+	for _, secret := range []string{"QS01", "QS02", "QS03", "QS04", "QS05", "QS06", "QS07", "QS08"} {
+		if strings.Contains(content, secret) {
+			t.Errorf("opaque content leaks %q: %s", secret, content)
+		}
+	}
+}
+
+func TestRulesFileOpaqueIgnoresStringAndCommentOperators(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(root, ".codex", "rules", "default.rules"),
+		`"""q12 + q16"""`+"\n"+
+			"# + q16\n"+
+			`prefix_rule(pattern = ["redis-cli", "info"])`+"\n"+
+			`prefix_rule(pattern = ["make", "-a", "all"])`+"\n")
+	got := kittest.Discover(t, New(Options{}), root)
+	items := got.Find(".codex/rules/default.rules", model.ConfigKindPermissions)
+	if len(items) != 1 {
+		t.Fatalf("items = %+v, want one opaque item", got.Items)
+	}
+	content, _ := kittest.Payload(t, items[0])["content"].(string)
+	if !strings.Contains(content, `["make", "-a", "all"]`) {
+		t.Errorf("string/comment + incorrectly enabled conservative fallback: %s", content)
 	}
 }
 

@@ -162,29 +162,73 @@ func (f *file) sanitizeRulesConservatively(values []string) []string {
 	return values
 }
 
-// hasUnresolvedRulesExpression recognizes source constructs the opaque
-// literal scanner cannot model. An identifier used as a list element,
-// concatenation, or a definition means argv words can cross literal
-// boundaries, so the caller must conservatively scan the whole block.
+var rulesExpressionIdentifiers = map[string]bool{
+	"prefix_rule": true, "pattern": true, "decision": true, "match": true,
+	"not_match": true, "justification": true, "True": true, "False": true,
+	"None": true,
+}
+
+// hasUnresolvedRulesExpression tokenizes source while skipping strings and
+// comments. Any identifier beyond the small grammar parseRulesFile supports,
+// or concatenation outside a string/comment, can join argv words at runtime
+// and therefore requires conservative whole-block sanitization.
 func hasUnresolvedRulesExpression(raw []byte) bool {
-	if strings.Contains(string(raw), "+") || strings.Contains(string(raw), "def ") {
-		return true
-	}
 	for i := 0; i < len(raw); {
-		if raw[i] != '[' && raw[i] != ',' {
-			i++
-			continue
-		}
-		i++
-		for i < len(raw) && (raw[i] == ' ' || raw[i] == '\t' || raw[i] == '\n') {
-			i++
-		}
-		if i < len(raw) && raw[i] != '"' && raw[i] != '\'' && raw[i] != '[' && raw[i] != ']' &&
-			(raw[i] == '_' || raw[i] >= 'A' && raw[i] <= 'Z' || raw[i] >= 'a' && raw[i] <= 'z') {
+		switch raw[i] {
+		case '#':
+			for i < len(raw) && raw[i] != '\n' {
+				i++
+			}
+		case '\'', '"':
+			i = rulesStringEnd(raw, i)
+		case '+':
 			return true
+		default:
+			if !rulesIdentifierStart(raw[i]) {
+				i++
+				continue
+			}
+			start := i
+			i++
+			for i < len(raw) && rulesIdentifierPart(raw[i]) {
+				i++
+			}
+			if !rulesExpressionIdentifiers[string(raw[start:i])] {
+				return true
+			}
 		}
 	}
 	return false
+}
+
+func rulesIdentifierStart(c byte) bool {
+	return c == '_' || c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z'
+}
+
+func rulesIdentifierPart(c byte) bool {
+	return rulesIdentifierStart(c) || c >= '0' && c <= '9'
+}
+
+func rulesStringEnd(raw []byte, start int) int {
+	quote := raw[start]
+	if start+2 < len(raw) && raw[start+1] == quote && raw[start+2] == quote {
+		for i := start + 3; i+2 < len(raw); i++ {
+			if raw[i] == quote && raw[i+1] == quote && raw[i+2] == quote {
+				return i + 3
+			}
+		}
+		return len(raw)
+	}
+	for i := start + 1; i < len(raw); i++ {
+		if raw[i] == '\\' {
+			i++
+			continue
+		}
+		if raw[i] == quote {
+			return i + 1
+		}
+	}
+	return len(raw)
 }
 
 func scanRulesLiterals(raw []byte) []rulesLiteral {
