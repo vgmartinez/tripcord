@@ -90,6 +90,76 @@ func TestDefaultRedactorUserFlagSpellings(t *testing.T) {
 	}
 }
 
+// A tool's short secret flag must be recognized regardless of what
+// precedes the tool's name in the command: a shell wrapper (bash -c,
+// sudo, a package runner), a subshell, or a user flag that happens to
+// come first. This is the general word-scan rule (any word whose
+// normalized basename matches a known tool activates that tool's flags
+// for the rest of the segment) rather than a list of wrappers to chase.
+func TestDefaultRedactorToolDetectionIsWrapperAgnostic(t *testing.T) {
+	t.Parallel()
+	leaks := map[string]string{
+		"bash -c 'openssl enc -k BASHC'":               "BASHC",
+		`bash -c "openssl enc -k BASHCQ"`:              "BASHCQ",
+		"npx vercel@latest -t ATLATEST":                "ATLATEST",
+		"sudo -u root openssl enc -k SUDOU":            "SUDOU",
+		"pnpm dlx vercel deploy -t PNPMDLX":            "PNPMDLX",
+		"uvx --from pkg vercel deploy -t UVXFROM":      "UVXFROM",
+		"$(openssl enc -k SUBSHELL)":                   "SUBSHELL",
+		"`openssl enc -k BACKTICK`":                    "BACKTICK",
+		"(openssl enc -k PAREN)":                       "PAREN",
+		"{ openssl enc -k BRACE; }":                    "BRACE",
+		"echo X | xargs openssl enc -k XARGS":          "XARGS",
+		"timeout 30 vercel deploy -t TIMEOUT30":        "TIMEOUT30",
+		"nice vercel deploy -t NICEVAL":                "NICEVAL",
+		"doas vercel deploy -t DOASVAL":                "DOASVAL",
+		"fly deploy -t FLYALIAS":                       "FLYALIAS",
+		"vc deploy -t VCALIAS":                         "VCALIAS",
+		"docker --config /c login -p DOCKERCONFIGPASS": "DOCKERCONFIGPASS",
+		"docker -H tcp://h login -p DOCKERHOSTPASS":    "DOCKERHOSTPASS",
+	}
+	for in, secret := range leaks {
+		if got := DefaultRedactor(in); strings.Contains(got, secret) {
+			t.Errorf("DefaultRedactor(%q) = %q leaks %q", in, got, secret)
+		}
+	}
+}
+
+// The same wrapper-agnostic detection applies to an MCP server's command
+// plus args, including a command that merges the wrapper and the tool
+// into a single argv element ("npx vercel" as one string).
+func TestRedactToolArgvIsWrapperAgnostic(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name, secret string
+		argv         []string
+	}{
+		{"npx vercel merged element", "MERGEDNPX", []string{"npx vercel", "-t", "MERGEDNPX"}},
+		{"sudo -u root openssl", "SUDOARGV", []string{"sudo", "-u", "root", "openssl", "enc", "-k", "SUDOARGV"}},
+		{"pnpm dlx vercel", "PNPMARGV", []string{"pnpm", "dlx", "vercel", "-t", "PNPMARGV"}},
+		{"uvx --from pkg vercel", "UVXARGV", []string{"uvx", "--from", "pkg", "vercel", "-t", "UVXARGV"}},
+		{"fly alias", "FLYARGV", []string{"fly", "deploy", "-t", "FLYARGV"}},
+		{"vc alias", "VCARGV", []string{"vc", "-t", "VCARGV"}},
+		{"docker --config login", "DOCKERARGVCFG", []string{"docker", "--config", "/c", "login", "-p", "DOCKERARGVCFG"}},
+		{"docker -H login", "DOCKERARGVHOST", []string{"docker", "-H", "tcp://h", "login", "-p", "DOCKERARGVHOST"}},
+		{"npx vercel@latest", "VERSIONEDARGV", []string{"npx", "vercel@latest", "-t", "VERSIONEDARGV"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, removed := RedactToolArgv(tc.argv)
+			for _, elem := range got {
+				if strings.Contains(elem, tc.secret) {
+					t.Fatalf("RedactToolArgv(%q) = %q leaks %q", tc.argv, got, tc.secret)
+				}
+			}
+			if !slices.Contains(removed, tc.secret) {
+				t.Fatalf("RedactToolArgv(%q) removed = %q, want it to include %q", tc.argv, removed, tc.secret)
+			}
+		})
+	}
+}
+
 func TestDefaultRedactorFollowUpGaps(t *testing.T) {
 	t.Parallel()
 	leaks := map[string]string{
