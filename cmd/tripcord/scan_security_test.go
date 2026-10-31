@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -269,6 +270,30 @@ func TestSanitizeGitStderrTruncates(t *testing.T) {
 		t.Fatalf("sanitizeGitStderr(%q) = %q, want a truncation marker", raw, got)
 	}
 	if !strings.HasPrefix(got, "fatal: "+strings.Repeat("x", 20)) {
+		t.Fatalf("sanitizeGitStderr dropped the start of the message: %q", got)
+	}
+}
+
+// TestSanitizeGitStderrTruncatesDubiousOwnership checks the truncation
+// against git's own real "dubious ownership" remediation text, which
+// lists every ancestor directory up to the repository root and can run
+// well past 1 KB on a deeply nested path.
+func TestSanitizeGitStderrTruncatesDubiousOwnership(t *testing.T) {
+	t.Parallel()
+	var b strings.Builder
+	b.WriteString("fatal: detected dubious ownership in repository at '/work/repo'\n")
+	for i := 0; i < 40; i++ {
+		fmt.Fprintf(&b, "To add an exception for this directory, call:\n\n\tgit config --global --add safe.directory /work/repo/segment-%02d\n\n", i)
+	}
+	raw := b.String()
+	got := sanitizeGitStderr([]byte(raw))
+	if len(got) > maxGitStderrBytes+64 {
+		t.Fatalf("sanitizeGitStderr did not cap the dubious-ownership dump: got %d bytes", len(got))
+	}
+	if !strings.Contains(got, "truncated") {
+		t.Fatalf("sanitizeGitStderr(%q) = %q, want a truncation marker", raw, got)
+	}
+	if !strings.HasPrefix(got, "fatal: detected dubious ownership") {
 		t.Fatalf("sanitizeGitStderr dropped the start of the message: %q", got)
 	}
 }
