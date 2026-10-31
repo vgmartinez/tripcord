@@ -16,6 +16,7 @@ import (
 
 	"github.com/vgmartinez/tripcord/internal/adapters"
 	"github.com/vgmartinez/tripcord/internal/model"
+	"github.com/vgmartinez/tripcord/internal/rules"
 )
 
 // Discovery is the golden form of one Discover call.
@@ -102,21 +103,23 @@ func CheckItem(t testing.TB, item model.ConfigItem) {
 func Payload(t testing.TB, item model.ConfigItem) map[string]any {
 	t.Helper()
 	var payload map[string]any
-	if err := json.Unmarshal(item.Payload, &payload); err != nil {
+	dec := json.NewDecoder(bytes.NewReader(item.Payload))
+	dec.UseNumber()
+	if err := dec.Decode(&payload); err != nil {
 		t.Fatalf("payload: %v", err)
 	}
 	return payload
 }
 
 // Fingerprint is the fingerprint of a finding whose only evidence cites
-// item by ID and evidence key.
+// item by ID and the evidence key the rules engine derives from it.
 func Fingerprint(t testing.TB, item model.ConfigItem) string {
 	t.Helper()
 	id, err := item.ID()
 	if err != nil {
 		t.Fatalf("ID: %v", err)
 	}
-	key, _ := Payload(t, item)["key"].(string)
+	key := rules.ConfigEvidenceKey(item)
 	fp, err := model.Fingerprint("TC-TEST-000", model.Location{Harness: item.Harness, Scope: item.Scope, Path: item.Path}, []model.Evidence{{Config: &model.ConfigRef{ID: id, Key: key}}})
 	if err != nil {
 		t.Fatalf("Fingerprint: %v", err)

@@ -58,7 +58,7 @@ func (m Match) Finding(severity model.Severity, decision model.Decision) (model.
 		return model.Finding{}, err
 	}
 	loc := model.Location{Harness: m.Item.Harness, Scope: m.Item.Scope, Path: m.Item.Path}
-	evidence := []model.Evidence{{Config: &model.ConfigRef{ID: id, Key: configEvidenceKey(m.Item)}}}
+	evidence := []model.Evidence{{Config: &model.ConfigRef{ID: id, Key: ConfigEvidenceKey(m.Item)}}}
 	fp, err := model.Fingerprint(m.Rule.ID, loc, evidence)
 	if err != nil {
 		return model.Finding{}, err

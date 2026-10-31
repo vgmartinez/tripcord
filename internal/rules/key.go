@@ -8,7 +8,7 @@ import (
 	"github.com/vgmartinez/tripcord/internal/model"
 )
 
-// configEvidenceKey derives the optional evidence key from the config
+// ConfigEvidenceKey derives the optional evidence key from the config
 // payload. It is empty when the payload does not carry one. The key is
 // content, never a position in the file:
 //
@@ -20,12 +20,17 @@ import (
 //   - a hook uses payload.matcher and payload.command joined by "|"
 //
 // Other kinds have no key. A value that is not a JSON string is ignored.
-func configEvidenceKey(item model.ConfigItem) string {
+func ConfigEvidenceKey(item model.ConfigItem) string {
 	if len(bytes.TrimSpace(item.Payload)) == 0 {
 		return ""
 	}
+	// UseNumber: a number outside float64's range (1e999) must not make
+	// the whole payload undecodable, or every item in the file would
+	// fall back to the same empty key and share one fingerprint.
 	var payload map[string]any
-	if err := json.Unmarshal(item.Payload, &payload); err != nil {
+	dec := json.NewDecoder(bytes.NewReader(item.Payload))
+	dec.UseNumber()
+	if err := dec.Decode(&payload); err != nil {
 		return ""
 	}
 	if key := jsonString(payload["key"]); key != "" {
