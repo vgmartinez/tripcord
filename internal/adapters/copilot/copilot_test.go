@@ -308,6 +308,68 @@ func TestSymlinkEscapeOutsideCopilotDirsNotReported(t *testing.T) {
 	}
 }
 
+// TestAgentMCPServersBothSpellingsReported is Follow-up 7: a custom
+// agent's frontmatter can declare mcp-servers and mcpServers side by
+// side (see docs/adapters/copilot.md). A server of the same name under
+// each spelling, with different definitions, must produce two separate
+// items; neither the second key processed nor a same-named entry from
+// the other spelling may silently overwrite or suppress the first.
+func TestAgentMCPServersBothSpellingsReported(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(root, ".github", "agents", "a.agent.md"),
+		"---\n"+
+			"mcp-servers:\n"+
+			"  fmt:\n"+
+			"    command: fmt-kebab\n"+
+			"mcpServers:\n"+
+			"  fmt:\n"+
+			"    command: fmt-camel\n"+
+			"---\nbody\n")
+	got := kittest.Discover(t, New(Options{}), root)
+	items := got.Find(".github/agents/a.agent.md", model.ConfigKindMCPServer)
+	if len(items) != 2 {
+		t.Fatalf("items = %+v, want one per spelling", got.Items)
+	}
+	commands := map[string]bool{}
+	keys := map[string]bool{}
+	for _, item := range items {
+		p := kittest.Payload(t, item)
+		commands[p["command"].(string)] = true
+		key, _ := p["key"].(string)
+		if keys[key] {
+			t.Fatalf("items share an evidence key, so one would hide the other: %+v", items)
+		}
+		keys[key] = true
+	}
+	if !commands["fmt-kebab"] || !commands["fmt-camel"] {
+		t.Fatalf("commands = %+v, want both fmt-kebab and fmt-camel reported", commands)
+	}
+}
+
+// TestAgentMCPServersSameSpellingLastNameWins pins YAML's own semantics
+// for a duplicate key reused in TestAgentMCPServersBothSpellingsReported's
+// setup: within one mcp-servers (or mcpServers) object, a repeated server
+// name is a YAML-level duplicate key, not Copilot's spelling collision,
+// and decodes to whichever value the decoder keeps.
+func TestAgentMCPServersSameSpellingLastNameWins(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(root, ".github", "agents", "a.agent.md"),
+		"---\n"+
+			"mcp-servers:\n"+
+			"  fmt:\n"+
+			"    command: first\n"+
+			"  fmt:\n"+
+			"    command: second\n"+
+			"---\nbody\n")
+	got := kittest.Discover(t, New(Options{}), root)
+	items := got.Find(".github/agents/a.agent.md", model.ConfigKindMCPServer)
+	if len(items) != 1 {
+		t.Fatalf("items = %+v, want the YAML decoder's one value for the duplicate key", got.Items)
+	}
+}
+
 func TestCaseInsensitivePaths(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

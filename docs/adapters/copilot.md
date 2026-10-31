@@ -71,7 +71,9 @@ fingerprints; see [fingerprint.md](../fingerprint.md#input).
   are.
 - Agents: frontmatter `hooks` as above, and `mcp-servers` (or
   `mcpServers`) as for [Codex](codex.md#normalized-payloads). The Markdown
-  body is `content`.
+  body is `content`. Both spellings are read independently: an agent that
+  declares the same server name under both, with different definitions,
+  gets one item per spelling, so one spelling can never shadow the other.
 - `copilot-setup-steps.yml`: one item for the workflow (`on`,
   `permissions`, `env`, `defaults`), one for the `copilot-setup-steps`
   job without its steps (`runs-on`, `permissions`, `env`, `container`,
