@@ -96,6 +96,27 @@ jobs:
       - name: Fuzz shared-file parser
         run: go test ./internal/adapters/generic -run '^$' -fuzz '^FuzzParseShared$' -fuzztime 30s
 
+  perf:
+    name: e2e perf budget
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Claude hook-heavy settings budget
+        env:
+          TRIPCORD_PERF_BUDGET: "1"
+        run: go test ./internal/adapters/claude -run '^TestDiscoverHookHeavyBudget$' -count 1 -v
+
   licenses:
     name: dependency licenses (${{ matrix.goos }})
     runs-on: ubuntu-latest
