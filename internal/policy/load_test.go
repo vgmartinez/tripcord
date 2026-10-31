@@ -284,6 +284,17 @@ func TestManagedPolicyPermissions(t *testing.T) {
 	_, err = Load(Options{RepoRoot: t.TempDir(), ManagedPolicy: managed, Surface: SurfaceScan, Env: testEnv(t), Catalog: catalog})
 	wantErr(t, err, "world-writable")
 	assertExit(t, err, exitcode.Config)
+
+	if err := os.Chmod(managed, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(filepath.Dir(managed), 0o777); err != nil {
+		t.Fatal(err)
+	}
+	_, err = Load(Options{RepoRoot: t.TempDir(), ManagedPolicy: managed, Surface: SurfaceScan, Env: testEnv(t), Catalog: catalog})
+	wantErr(t, err, "parent for")
+	wantErr(t, err, "world-writable")
+	assertExit(t, err, exitcode.Config)
 }
 
 func assertExit(t *testing.T, err error, want exitcode.Code) {

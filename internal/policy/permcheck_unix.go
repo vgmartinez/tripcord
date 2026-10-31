@@ -28,3 +28,13 @@ func checkManagedPolicyOwner(path string, info os.FileInfo) error {
 	}
 	return nil
 }
+
+// checkManagedPolicyParent rejects a directory that lets any local user
+// replace the managed policy. Sticky directories still allow their owner to
+// rewrite entries, so they are not a safe org-policy boundary either.
+func checkManagedPolicyParent(path string, info os.FileInfo) error {
+	if info.Mode().Perm()&0o002 != 0 {
+		return fmt.Errorf("managed policy parent for %s: %w", path, errWorldWritable)
+	}
+	return nil
+}

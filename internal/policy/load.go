@@ -67,6 +67,9 @@ type Options struct {
 	// RepoRoot holds .tripcord/policy.yaml and .tripcord/policy.local.yaml.
 	// Both are optional.
 	RepoRoot string
+	// RepoPolicy replaces RepoFile when set. It is used by the scan CLI's
+	// --policy flag; its adjacent local policy is not loaded.
+	RepoPolicy string
 	// ManagedPolicy is the managed org policy file. Empty means
 	// ManagedPolicyPath(runtime.GOOS). It is optional: when the file
 	// does not exist there is no managed layer. When it exists, Load
@@ -132,11 +135,17 @@ func LoadLayers(opts Options) ([]Layer, error) {
 		}
 	}
 
-	repo := filepath.Join(opts.RepoRoot, filepath.FromSlash(RepoFile))
+	repo := opts.RepoPolicy
+	if repo == "" {
+		repo = filepath.Join(opts.RepoRoot, filepath.FromSlash(RepoFile))
+	}
 	if err := l.root(repo, LayerRepo, false); err != nil {
 		return nil, err
 	}
 
+	if opts.RepoPolicy != "" {
+		return l.layers, nil
+	}
 	local := filepath.Join(opts.RepoRoot, filepath.FromSlash(LocalFile))
 	f, err := readFile(local)
 	switch {

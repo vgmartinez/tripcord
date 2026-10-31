@@ -3,6 +3,7 @@ package policy
 import (
 	"errors"
 	"os"
+	"path/filepath"
 )
 
 // checkManagedPolicyFile rejects a managed policy file an org
@@ -19,6 +20,11 @@ func checkManagedPolicyFile(path string) error {
 	}
 	if err := checkManagedPolicyOwner(path, info); err != nil {
 		return &Error{Source: path, Err: err}
+	}
+	if parent, err := os.Stat(filepath.Dir(path)); err == nil {
+		if err := checkManagedPolicyParent(path, parent); err != nil {
+			return &Error{Source: path, Err: err}
+		}
 	}
 	return nil
 }

@@ -14,6 +14,11 @@ import (
 // it later would be a breaking schema change.
 var fingerprintPattern = regexp.MustCompile(`^tcf_[0-9a-f]{16}$`)
 
+// ruleIDPattern mirrors the append-only rules/REGISTRY format without
+// importing internal/rules (which depends on model). It accepts core ids such
+// as TC-CFG-001 and namespaced policy ids such as ACME-001.
+var ruleIDPattern = regexp.MustCompile(`^[A-Z][A-Z0-9]*(-[A-Z][A-Z0-9]*)*-[0-9]{3,}$`)
+
 // ConfigRef cites one config file and, optionally, one stable entry
 // inside it. ID is a ConfigItem.ID (harness:scope:path). Key is a
 // content-derived sub-identifier, never a positional index: an MCP
@@ -93,6 +98,9 @@ func (f Finding) Validate() error {
 	}
 	if f.Rule == "" || f.Title == "" || f.Fix == "" {
 		return fmt.Errorf("finding: rule, title, and fix are required")
+	}
+	if len(f.Rule) > 64 || !ruleIDPattern.MatchString(f.Rule) {
+		return fmt.Errorf("finding: rule %q is not a rule id", f.Rule)
 	}
 	if !f.Severity.Valid() {
 		return fmt.Errorf("finding: severity %q: unknown", f.Severity)
