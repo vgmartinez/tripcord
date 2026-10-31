@@ -2,6 +2,7 @@ package codex
 
 import (
 	"encoding/json"
+	"strings"
 
 	"github.com/vgmartinez/tripcord/internal/model"
 )
@@ -30,6 +31,9 @@ func (f *file) rulesFile(raw []byte) {
 		return
 	}
 	for _, host := range parsed.hostExecutables {
+		for _, problem := range hostExecutableProblems(host) {
+			f.Warn("host_executable %q: %s", f.SafeString(host.name), problem)
+		}
 		f.Add(model.ConfigKindPermissions, []string{"host-executable", host.name}, map[string]any{
 			"role":  "host-executable",
 			"name":  f.SafeString(host.name),
@@ -55,4 +59,40 @@ func (f *file) rulesFile(raw []byte) {
 		patternJSON, _ := json.Marshal(pattern)
 		f.Add(model.ConfigKindPermissions, []string{"rule", rule.decision, string(patternJSON)}, payload)
 	}
+}
+
+// hostExecutableProblems reports why a host_executable entry may not
+// mean what it appears to: name must be a bare program name (the
+// basename a prefix_rule matches), and paths a non-empty list of
+// non-empty absolute paths. The entry is still reported; the diagnostic
+// says a finding citing it may not match what Codex resolves.
+func hostExecutableProblems(host rawHostExecutable) []string {
+	var problems []string
+	if host.name == "" || strings.ContainsAny(host.name, `/\;`) || strings.Contains(host.name, "..") {
+		problems = append(problems, `name is not a bare program name (empty, or contains "/", "\", "..", or ";")`)
+	}
+	if len(host.paths) == 0 {
+		problems = append(problems, "paths is empty")
+	}
+	for _, p := range host.paths {
+		if s, _ := p.(string); !absoluteRulesPath(s) {
+			problems = append(problems, "paths has an empty or relative entry")
+			break
+		}
+	}
+	return problems
+}
+
+// absoluteRulesPath reports whether p is absolute on any OS Codex runs
+// on, independent of the OS the scanner runs on: "/usr/bin/git",
+// `C:\Git\bin\git.exe`, "C:/Git/bin/git.exe", or a UNC `\\host\share\x`.
+func absoluteRulesPath(p string) bool {
+	switch {
+	case strings.HasPrefix(p, "/"), strings.HasPrefix(p, `\\`):
+		return len(p) > 1
+	case len(p) >= 3 && p[1] == ':' && (p[2] == '\\' || p[2] == '/'):
+		c := p[0] | 0x20
+		return c >= 'a' && c <= 'z'
+	}
+	return false
 }
