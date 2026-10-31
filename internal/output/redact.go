@@ -88,10 +88,17 @@ const unquotedCommandValue = "[^\\s;&|\"'\\n)`]"
 // preserve and an unquoted value runs to the end of the line (or to one
 // of ;&|"', in case the line is itself embedded in a larger shell
 // command); trailing whitespace is not part of it. Groups: open quote,
-// key, close quote, separator, value. A match only counts in a header
-// or assignment context (see colonAssignmentContext), so free text such
-// as git commit -m 'fix token: handling' is left alone.
-var assignmentPatternColon = regexp.MustCompile(`(?i)(["']?)((?:[A-Za-z0-9]*[_-])*(?:password|passwd|pgpassword|api[_-]?key|auth[_-]?token|token|secret))\b(["']?)(\s*:\s*)(` + quotedValue + `|[^;&|"'\n]*)`)
+// key, close quote, separator; redactColonAssignments reads the value
+// itself, so a rejected key costs only its head. A match only counts in
+// a header or assignment context (see colonAssignmentContext), so free
+// text such as git commit -m 'fix token: handling' is left alone.
+var (
+	assignmentColonHead   = regexp.MustCompile(`(?i)(["']?)((?:[A-Za-z0-9]*[_-])*(?:password|passwd|pgpassword|api[_-]?key|auth[_-]?token|token|secret))\b(["']?)(\s*:\s*)`)
+	assignmentQuotedValue = regexp.MustCompile(`^(?:` + quotedValue + `)`)
+)
+
+// colonValueEnd lists the bytes that end an unquoted "key: value" value.
+const colonValueEnd = ";&|\"'\n"
 
 // authorizationPattern matches an Authorization header or JSON field with a
 // Bearer, Basic, or token scheme, in both header ("Authorization: Bearer x")
@@ -157,18 +164,25 @@ func LooksLikeUserPass(value string) bool {
 	return i > 0
 }
 
-// secretFlagPattern matches a SecretFlags flag and its value, with "="
-// or whitespace after the flag name, never glued onto the value, so
-// "--user-agent x" or "--tokenizer gpt2" is not read as a flag. The flag
-// may itself be quoted ("--token" abc). Groups: open quote, flag, close
-// quote, then either "=" and its value or whitespace and its value. The
-// value uses the quotedValue grammar, so a whole quoted phrase such as
+// secretFlagHead matches a SecretFlags flag and the "=" or whitespace
+// after it, never glued onto the value, so "--user-agent x" or
+// "--tokenizer gpt2" is not read as a flag. The flag may itself be
+// quoted ("--token" abc). Groups: open quote, flag, close quote,
+// separator. RedactSecretFlags checks the left word boundary itself.
+//
+// The value after the separator is read with secretFlagEqualValue or
+// secretFlagSpaceValue, anchored, so a rejected candidate costs only its
+// head and redaction stays linear in the input. Both use the quotedValue
+// grammar, so a whole quoted phrase such as
 // `--password "correct horse battery"` is redacted as one value. An
 // unquoted space-separated value never starts with "-", so
 // "--token --verbose" does not eat the next flag; an "=" value may
 // ("--token=-abc"), since "=" unambiguously ends the flag name.
-// RedactSecretFlags checks the left word boundary itself.
-var secretFlagPattern = regexp.MustCompile(`(?i)(["']?)(` + SecretFlagAlternation() + `)(["']?)(?:(=)(` + quotedValue + `|` + unquotedCommandValue + `*)|(\s+)(` + quotedValue + `|[^-\s;&|"'\n)` + "`" + `]` + unquotedCommandValue + `*))`)
+var (
+	secretFlagHead       = regexp.MustCompile(`(?i)(["']?)(` + SecretFlagAlternation() + `)(["']?)(=|\s+)`)
+	secretFlagEqualValue = regexp.MustCompile(`^(?:` + quotedValue + `|` + unquotedCommandValue + `*)`)
+	secretFlagSpaceValue = regexp.MustCompile(`^(?:` + quotedValue + `|[^-\s;&|"'\n)` + "`" + `]` + unquotedCommandValue + `*)`)
+)
 
 // literalArgFlags are flags whose argument is literal text (a commit
 // message, a grep pattern), not a command line: a secret flag name
@@ -186,34 +200,38 @@ func RedactSecretFlags(value string) (string, []string) {
 	var b strings.Builder
 	pos := 0
 	for pos < len(value) {
-		m := secretFlagPattern.FindStringSubmatchIndex(value[pos:])
+		m := secretFlagHead.FindStringSubmatchIndex(value[pos:])
 		if m == nil {
 			break
 		}
 		for i := range m {
-			if m[i] >= 0 {
-				m[i] += pos
-			}
+			m[i] += pos
 		}
-		start, end := m[0], m[1]
+		start, sepEnd := m[0], m[1]
 		openQuote, closeQuote := value[m[2]:m[3]], value[m[6]:m[7]]
-		sepEnd, valStart, valEnd := m[9], m[10], m[11]
-		if m[8] < 0 {
-			sepEnd, valStart, valEnd = m[13], m[14], m[15]
+		valuePattern := secretFlagSpaceValue
+		if value[m[8]] == '=' {
+			valuePattern = secretFlagEqualValue
 		}
-		body := value[valStart:valEnd]
-		if !wordBoundaryBefore(value, start) ||
-			(closeQuote != "" && closeQuote != openQuote) ||
-			literalArgFlags[previousWord(value, start)] ||
-			placeholderSecret(body) {
-			b.WriteString(value[pos : start+1])
-			pos = start + 1
+		var body string
+		var loc []int
+		if wordBoundaryBefore(value, start) &&
+			(closeQuote == "" || closeQuote == openQuote) &&
+			!literalArgFlags[previousWord(value, start)] {
+			loc = valuePattern.FindStringIndex(value[sepEnd:])
+		}
+		if loc != nil {
+			body = value[sepEnd : sepEnd+loc[1]]
+		}
+		if loc == nil || placeholderSecret(body) {
+			b.WriteString(value[pos:sepEnd])
+			pos = sepEnd
 			continue
 		}
 		removed = append(removed, unquote(body))
 		b.WriteString(value[pos:sepEnd])
 		b.WriteString(quoteLike(body, redactedMarker))
-		pos = end
+		pos = sepEnd + len(body)
 	}
 	b.WriteString(value[pos:])
 	return b.String(), removed
@@ -349,41 +367,56 @@ func RedactAssignments(value string) (string, []string) {
 	return value, removed
 }
 
-// redactColonAssignments applies assignmentPatternColon where
-// colonAssignmentContext accepts the match.
+// redactColonAssignments applies assignmentColonHead where
+// colonAssignmentContext accepts the match. A rejected head is skipped
+// whole: a candidate starting inside it would follow a key byte or a
+// quote, which no context accepts.
 func redactColonAssignments(value string, removed *[]string) string {
 	var b strings.Builder
 	pos := 0
 	for pos < len(value) {
-		m := assignmentPatternColon.FindStringSubmatchIndex(value[pos:])
+		m := assignmentColonHead.FindStringSubmatchIndex(value[pos:])
 		if m == nil {
 			break
 		}
 		for i := range m {
-			if m[i] >= 0 {
-				m[i] += pos
+			m[i] += pos
+		}
+		start, valStart := m[0], m[1]
+		openQuote, closeQuote := value[m[2]:m[3]], value[m[6]:m[7]]
+		body := ""
+		ok := start == 0 || !isAlnum(value[start-1])
+		if ok {
+			var stop string
+			if ok, stop = colonAssignmentContext(value, start, openQuote, closeQuote); ok {
+				body = colonValue(value[valStart:], stop)
 			}
 		}
-		start := m[0]
-		openQuote, closeQuote := value[m[2]:m[3]], value[m[6]:m[7]]
-		raw := value[m[10]:m[11]]
-		ok, stop := colonAssignmentContext(value, start, openQuote, closeQuote)
-		if i := strings.IndexAny(raw, stop); stop != "" && i >= 0 && raw[0] != '"' && raw[0] != '\'' {
-			raw = raw[:i]
-		}
-		body := strings.TrimRight(raw, " \t\r")
-		if !ok || (start > 0 && isAlnum(value[start-1])) || placeholderSecret(body) {
-			b.WriteString(value[pos : start+1])
-			pos = start + 1
+		if !ok || placeholderSecret(body) {
+			b.WriteString(value[pos:valStart])
+			pos = valStart
 			continue
 		}
 		*removed = append(*removed, strings.Trim(body, `"'`))
-		b.WriteString(value[pos:m[10]])
+		b.WriteString(value[pos:valStart])
 		b.WriteString(quoteLike(body, redactedMarker))
-		pos = m[10] + len(body)
+		pos = valStart + len(body)
 	}
 	b.WriteString(value[pos:])
 	return b.String()
+}
+
+// colonValue returns the "key: value" value at the start of rest: a
+// quoted string, or the unquoted run up to a colonValueEnd or stop
+// byte, without trailing whitespace.
+func colonValue(rest, stop string) string {
+	if loc := assignmentQuotedValue.FindStringIndex(rest); loc != nil {
+		return rest[:loc[1]]
+	}
+	if i := strings.IndexAny(rest, colonValueEnd+stop); i >= 0 {
+		rest = rest[:i]
+	}
+	return strings.TrimRight(rest, " \t\r")
 }
 
 // colonAssignmentContext reports whether a "key: value" match starting at
@@ -394,24 +427,33 @@ func redactColonAssignments(value string, removed *[]string) string {
 // stop lists the bytes that end an unquoted value in that context: ","
 // and "}" in a mapping, whitespace in an unquoted header argument, and
 // nothing extra on a line of its own.
+//
+// It looks back only across blanks and the adjacent word, never to the
+// start of the line, so checking every candidate stays linear.
 func colonAssignmentContext(value string, offset int, openQuote, closeQuote string) (ok bool, stop string) {
-	before := value[:offset]
-	line := before[strings.LastIndexByte(before, '\n')+1:]
-	trimmedBefore := strings.TrimRight(before, " \t")
+	i := skipBlanksBack(value, offset)
 	switch {
 	case openQuote != "" && openQuote == closeQuote,
-		strings.HasSuffix(trimmedBefore, "{"), strings.HasSuffix(trimmedBefore, ","):
+		i > 0 && (value[i-1] == '{' || value[i-1] == ','):
 		return true, ",}"
-	case strings.TrimSpace(line) == "", strings.TrimSpace(line) == "-":
+	case i == 0 || value[i-1] == '\n':
 		return true, ""
+	case value[i-1] == '-':
+		if j := skipBlanksBack(value, i-1); j == 0 || value[j-1] == '\n' {
+			return true, ""
+		}
 	}
 	header := false
-	switch prefix := before[strings.LastIndexAny(before, " \t\r\n")+1:]; prefix {
-	case "":
+	if offset == 0 || isCommandSpace(value[offset-1]) {
 		word := previousWord(value, offset)
 		header = word == "-H" || word == "--header"
-	case "-H", "-H=", "--header=":
-		header = true
+	} else {
+		before := value[:offset]
+		for _, flag := range []string{"-H", "-H=", "--header="} {
+			if strings.HasSuffix(before, flag) && (len(before) == len(flag) || isCommandSpace(before[len(before)-len(flag)-1])) {
+				header = true
+			}
+		}
 	}
 	if !header {
 		return false, ""
@@ -420,6 +462,15 @@ func colonAssignmentContext(value string, offset int, openQuote, closeQuote stri
 		return true, " \t"
 	}
 	return true, ""
+}
+
+// skipBlanksBack returns the offset before the run of spaces, tabs, and
+// carriage returns that ends at offset.
+func skipBlanksBack(value string, offset int) int {
+	for offset > 0 && (value[offset-1] == ' ' || value[offset-1] == '\t' || value[offset-1] == '\r') {
+		offset--
+	}
+	return offset
 }
 
 func isAlnum(c byte) bool {
