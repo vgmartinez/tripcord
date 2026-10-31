@@ -142,8 +142,9 @@ var (
 	// compound word, such as the "-password" inside "find-generic-
 	// password -w" (not a flag at all, but a literal binary name),
 	// wrongly treating the "-w" that happens to follow it as the
-	// flag's value.
-	commandSecretFlag = regexp.MustCompile(`(?i)(^|\s)(` + secretFlagNamePattern + `)(?:=|\s+)('[^']*'|"[^"]*"|\S+)`)
+	// flag's value. An unquoted value never starts with "-", so
+	// "--token --verbose" does not eat the next flag.
+	commandSecretFlag = regexp.MustCompile(`(?i)(^|\s)(` + secretFlagNamePattern + `)(?:=|\s+)('[^']*'|"[^"]*"|[^-\s]\S*)`)
 	secretFlagName    = regexp.MustCompile(`(?i)^(?:` + secretFlagNamePattern + `)$`)
 	// userFlagName matches a bare curl user/password flag name
 	// (output.UserFlagAlternation), used the same way secretFlagName is:
@@ -170,9 +171,11 @@ var (
 	embeddedURL = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://[^\s'"<>]+`)
 )
 
-// redactCommandSecrets redacts CLI secret flags ("--token X", "--token=X")
-// and "Bearer <token>" occurrences inside value. It returns the redacted
-// text and the raw secret substrings it removed, for keyDiscriminator.
+// redactCommandSecrets redacts CLI secret flags ("--token X", "--token=X"),
+// "Bearer <token>", curl-style "-u user:pass" (output.RedactUserFlags),
+// and tool-specific short flags such as "openssl -k X" or "vercel -t X"
+// (output.RedactToolFlags) inside value. It returns the redacted text and
+// the raw secret substrings it removed, for keyDiscriminator.
 func redactCommandSecrets(value string) (string, []string) {
 	var removed []string
 	value = commandSecretFlag.ReplaceAllStringFunc(value, func(m string) string {
@@ -185,7 +188,10 @@ func redactCommandSecrets(value string) (string, []string) {
 		removed = append(removed, g[2])
 		return g[1] + " " + redacted
 	})
-	return value, removed
+	value, userRemoved := output.RedactUserFlags(value)
+	value, toolRemoved := output.RedactToolFlags(value)
+	removed = append(removed, userRemoved...)
+	return value, append(removed, toolRemoved...)
 }
 
 // stripEmbeddedURLSecrets applies stripURLSecrets to every URL found
@@ -263,6 +269,15 @@ func (s *src) safeString(value string) string {
 func keyDiscriminator(removed []string) string {
 	sum := sha256.Sum256([]byte(strings.Join(removed, "\x00")))
 	return hex.EncodeToString(sum[:])[:8]
+}
+
+// withDiscriminator appends "sig:<keyDiscriminator(removed)>" to key when
+// sanitizing the entry removed any secret.
+func withDiscriminator(key, removed []string) []string {
+	if len(removed) == 0 {
+		return key
+	}
+	return append(key, "sig:"+keyDiscriminator(removed))
 }
 
 // evidenceKey encodes parts as a compact JSON array, so no choice of
@@ -485,8 +500,10 @@ func (s *src) safePayloadValue(key string, value any) (any, []string) {
 	case map[string]any:
 		out := make(map[string]any, len(v))
 		var removed []string
-		for name, item := range v {
-			sanitized, itemRemoved := s.safePayloadValue(name, item)
+		// Sorted so removed, and therefore keyDiscriminator, is the same
+		// on every run despite Go's randomized map iteration order.
+		for _, name := range sortedKeys(v) {
+			sanitized, itemRemoved := s.safePayloadValue(name, v[name])
 			out[name] = sanitized
 			removed = append(removed, itemRemoved...)
 		}
@@ -558,11 +575,12 @@ func (s *src) mcpServers(value any, project string) {
 		}
 		payload := map[string]any{}
 		var removed []string
-		for k, v := range server {
-			sanitized, itemRemoved := s.safePayloadValue(k, v)
+		for _, k := range sortedKeys(server) {
+			sanitized, itemRemoved := s.safePayloadValue(k, server[k])
 			payload[k] = sanitized
 			removed = append(removed, itemRemoved...)
 		}
+		removed = append(removed, redactToolArgs(payload)...)
 		if env, ok := server["env"].(map[string]any); ok {
 			payload["env"] = redactValues(env)
 			payload["env_keys"] = sortedKeys(env)
@@ -586,6 +604,38 @@ func (s *src) mcpServers(value any, project string) {
 		}
 		s.add(model.ConfigKindMCPServer, key, payload)
 	}
+}
+
+// redactToolArgs applies output.RedactToolArgv to an MCP server's command
+// and args, where a tool-specific flag and its value are separate array
+// elements (["deploy", "-t", "X"] for command "vercel"). It rewrites
+// payload["args"] in place and returns the raw values it removed.
+func redactToolArgs(payload map[string]any) []string {
+	command, ok := payload["command"].(string)
+	if !ok {
+		return nil
+	}
+	args, _ := payload["args"].([]any)
+	argv := make([]string, 0, len(args)+1)
+	argv = append(argv, command)
+	for _, arg := range args {
+		text, _ := arg.(string)
+		argv = append(argv, text)
+	}
+	redactedArgv, removed := output.RedactToolArgv(argv)
+	if len(removed) == 0 {
+		return nil
+	}
+	out := make([]any, len(args))
+	for i, arg := range args {
+		if _, isString := arg.(string); isString {
+			out[i] = redactedArgv[i+1]
+		} else {
+			out[i] = arg
+		}
+	}
+	payload["args"] = out
+	return removed
 }
 
 // markdown normalizes an instruction, rule, agent, command, or skill file.
