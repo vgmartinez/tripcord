@@ -1,0 +1,1 @@
+{"hooks": {"post_write_code": [{"command": "/usr/local/bin/format-hook"}]}}

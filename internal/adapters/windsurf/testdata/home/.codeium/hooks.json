@@ -1,0 +1,1 @@
+{"hooks": {"pre_user_prompt": [{"command": "jb-prompt-filter"}]}}

@@ -1,0 +1,1 @@
+{"hooks": {"pre_write_code": [{"command": "npm run lint -- --api-key ws-key-333"}]}}

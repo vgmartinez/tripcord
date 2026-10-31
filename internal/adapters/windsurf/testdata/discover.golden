@@ -1,0 +1,194 @@
+{
+  "items": [
+    {
+      "harness": "windsurf",
+      "scope": "managed",
+      "path": "/etc/windsurf/hooks.json",
+      "sha256": "89478fe99765a8ca1e2e74a68fe28d9fd714d0838eaa22148cec4b77ac1d2d20",
+      "kind": "hook",
+      "payload": {
+        "command": "/opt/corp/block-rm.sh --secret [REDACTED]",
+        "event": "pre_run_command",
+        "key": "[\"hook\",\"pre_run_command\",\"\",\"\",\"/opt/corp/block-rm.sh --secret [REDACTED]\",\"sig:0080cca0c94b5b87\",\"sig:23c71309\"]",
+        "matcher": ""
+      }
+    },
+    {
+      "harness": "windsurf",
+      "scope": "repo",
+      "path": ".windsurf/hooks.json",
+      "sha256": "fb063ca4a3a8282de4597d249e791c897c953f1218a98d1018a5de30c75ed17f",
+      "kind": "hook",
+      "payload": {
+        "command": "./audit.sh",
+        "event": "pre_run_command",
+        "key": "[\"hook\",\"pre_run_command\",\"\",\"\",\"./audit.sh\",\"sig:1d5d3f3175941790\"]",
+        "matcher": "",
+        "powershell": "./audit.ps1",
+        "working_directory": "scripts"
+      }
+    },
+    {
+      "harness": "windsurf",
+      "scope": "repo",
+      "path": ".windsurf/hooks.json",
+      "sha256": "fb063ca4a3a8282de4597d249e791c897c953f1218a98d1018a5de30c75ed17f",
+      "kind": "hook",
+      "payload": {
+        "command": "curl -s https://hooks.example.com/log",
+        "event": "post_cascade_response",
+        "key": "[\"hook\",\"post_cascade_response\",\"\",\"\",\"curl -s https://hooks.example.com/log\",\"sig:763a480d3c8ff509\",\"sig:9c04b7be\"]",
+        "matcher": ""
+      }
+    },
+    {
+      "harness": "windsurf",
+      "scope": "repo",
+      "path": ".windsurf/hooks.json",
+      "sha256": "fb063ca4a3a8282de4597d249e791c897c953f1218a98d1018a5de30c75ed17f",
+      "kind": "hook",
+      "payload": {
+        "command": "python3 .windsurf/guard.py --token [REDACTED]",
+        "event": "pre_mcp_tool_use",
+        "key": "[\"hook\",\"pre_mcp_tool_use\",\"\",\"\",\"python3 .windsurf/guard.py --token [REDACTED]\",\"sig:e0baff4a3d89fcc5\",\"sig:f8896aec\"]",
+        "matcher": "",
+        "show_output": true
+      }
+    },
+    {
+      "harness": "windsurf",
+      "scope": "repo",
+      "path": ".windsurf/rules/backend/db.md",
+      "sha256": "42038f9c7bc8d34bea23f9150ee1beebb5512fc25ee6807e3c4fb3de105c427c",
+      "kind": "instructions",
+      "payload": {
+        "content": "See https://docs.example.com/db for the schema.\n",
+        "frontmatter": {
+          "globs": "**/*.sql",
+          "trigger": "glob"
+        },
+        "key": "[\"rule\",\"sig:f2f482a67674101b\",\"sig:07130164\"]",
+        "role": "rule"
+      }
+    },
+    {
+      "harness": "windsurf",
+      "scope": "repo",
+      "path": ".windsurf/rules/style.md",
+      "sha256": "8ebbd3088527a24c9ef4fde5b4889c25049e2368d2835d41f6bdc85a4e06d217",
+      "kind": "instructions",
+      "payload": {
+        "content": "Use tabs.\n",
+        "frontmatter": {
+          "trigger": "always_on"
+        },
+        "key": "[\"rule\",\"sig:91631bfe69933110\"]",
+        "role": "rule"
+      }
+    },
+    {
+      "harness": "windsurf",
+      "scope": "repo",
+      "path": ".windsurfrules",
+      "sha256": "830fb76bf1e0fd6f22e1a1d0fe813d387bf3bc601587d08204f107a1c0b48d65",
+      "kind": "instructions",
+      "payload": {
+        "content": "Legacy rules.\n",
+        "key": "[\"rules\",\"sig:1e58b33109370cc5\"]",
+        "role": "rules"
+      }
+    },
+    {
+      "harness": "windsurf",
+      "scope": "repo",
+      "path": "web/.windsurf/hooks.json",
+      "sha256": "8d725b4c3cd1cd5df713da9c95847375ef9a76c65cca2ccad87d4c6d74380039",
+      "kind": "hook",
+      "payload": {
+        "command": "npm run lint -- --api-key [REDACTED]",
+        "event": "pre_write_code",
+        "key": "[\"hook\",\"pre_write_code\",\"\",\"\",\"npm run lint -- --api-key [REDACTED]\",\"sig:846c6721b8b46b78\",\"sig:79069124\"]",
+        "matcher": ""
+      }
+    },
+    {
+      "harness": "windsurf",
+      "scope": "user",
+      "path": "~/.codeium/hooks.json",
+      "sha256": "aa1666076af5c39d65e99dd88a29e2278e09915cd89a9bb0c46c55fa1fa2b840",
+      "kind": "hook",
+      "payload": {
+        "command": "jb-prompt-filter",
+        "event": "pre_user_prompt",
+        "key": "[\"hook\",\"pre_user_prompt\",\"\",\"\",\"jb-prompt-filter\",\"sig:9e0180f3dcc8f719\"]",
+        "matcher": ""
+      }
+    },
+    {
+      "harness": "windsurf",
+      "scope": "user",
+      "path": "~/.codeium/windsurf/hooks.json",
+      "sha256": "0b118e51ff52f1213b2b37ccf103f61c986ebbac86807a833d66aa04cda75909",
+      "kind": "hook",
+      "payload": {
+        "command": "/usr/local/bin/format-hook",
+        "event": "post_write_code",
+        "key": "[\"hook\",\"post_write_code\",\"\",\"\",\"/usr/local/bin/format-hook\",\"sig:f93f3a6a21e280a6\"]",
+        "matcher": ""
+      }
+    },
+    {
+      "harness": "windsurf",
+      "scope": "user",
+      "path": "~/.codeium/windsurf/mcp_config.json",
+      "sha256": "17a38871b0d78eab64467838d749a9fa71fa26afa7bc6903b7b0a714d301a114",
+      "kind": "mcp-server",
+      "payload": {
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-github"
+        ],
+        "command": "npx",
+        "env": {
+          "GITHUB_PERSONAL_ACCESS_TOKEN": "[REDACTED]"
+        },
+        "env_keys": [
+          "GITHUB_PERSONAL_ACCESS_TOKEN"
+        ],
+        "key": "[\"mcp\",\"github\",\"sig:bc0fa3b1373d47ad\",\"sig:a8d36b24\"]",
+        "name": "github"
+      }
+    },
+    {
+      "harness": "windsurf",
+      "scope": "user",
+      "path": "~/.codeium/windsurf/mcp_config.json",
+      "sha256": "17a38871b0d78eab64467838d749a9fa71fa26afa7bc6903b7b0a714d301a114",
+      "kind": "mcp-server",
+      "payload": {
+        "header_keys": [
+          "Authorization"
+        ],
+        "headers": {
+          "Authorization": "[REDACTED]"
+        },
+        "key": "[\"mcp\",\"remote\",\"sig:071acb6095ae452e\",\"sig:b88f5038\"]",
+        "name": "remote",
+        "serverUrl": "https://mcp.example.com/mcp"
+      }
+    },
+    {
+      "harness": "windsurf",
+      "scope": "user",
+      "path": "~/.codeium/windsurf/memories/global_rules.md",
+      "sha256": "ff69c27840aaec1abf6b14a4306bfa22f951689b37632460437e7d500f95ad5e",
+      "kind": "instructions",
+      "payload": {
+        "content": "Always answer in English.\n",
+        "key": "[\"global\",\"sig:7b099af124ec1077\"]",
+        "role": "global"
+      }
+    }
+  ],
+  "diagnostics": []
+}
