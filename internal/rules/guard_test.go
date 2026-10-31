@@ -68,6 +68,14 @@ func TestGuardsReject(t *testing.T) {
 		// traced to a variable, so has() cannot guard it either, even
 		// when each branch alone would be fine.
 		`(has(payload.a) ? payload : task).b == 1`: "another function's result",
+		// A field read off a literal cannot be traced to a variable, so
+		// has() cannot guard it. dyn() inside the literal does not
+		// change that: the chain still ends at the literal.
+		`{"a": task}.a.runOptions.runOn == "never"`:      "literal",
+		`{"a": dyn(task)}.a.runOptions.runOn == "never"`: "literal",
+		`[task][0].runOptions.runOn == "never"`:          "literal",
+		`[dyn(task)][0].runOptions.runOn == "never"`:     "literal",
+		`!({"a": task}.a.runOptions.runOn == "never")`:   "literal",
 	} {
 		_, err := env.Compile(src)
 		if err == nil || !strings.Contains(err.Error(), want) {

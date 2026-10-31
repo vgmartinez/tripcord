@@ -28,9 +28,10 @@ var configKeys = []string{"id", "harness", "scope", "path", "sha256", "kind"}
 // fields, under the same guard. config reads must name one of the keys
 // ConfigInput binds; eventFields are bound on every input. dyn(x) is
 // transparent for this check: dyn(payload).a needs the same guard as
-// payload.a. Selecting a field off any other function's result is
-// rejected outright, since it cannot be traced back to a variable for
-// has() to guard.
+// payload.a. Selecting a field off any other function's result, or off
+// a map, list, or struct literal or a comprehension, is rejected
+// outright, since it cannot be traced back to a variable for has() to
+// guard.
 func checkGuards(expr ast.Expr) error {
 	g := &guards{optional: map[string]bool{VarPayload: true, VarTask: true, VarEvent: true}}
 	g.check(expr, nil)
@@ -136,11 +137,12 @@ func (g *guards) read(e ast.Expr, known []string) {
 			// has(), and out of range it is silently false.
 			g.fail("index a variable's fields only with a constant string key; use exists() or all() for lists")
 		case blockedByCall:
-			// A field selected off the result of a function other than
-			// dyn() cannot be traced back to a variable, so has() cannot
-			// guard it either; dyn(x) is transparent and walks through
-			// to x instead of landing here.
-			g.fail("select a field from a variable or from dyn() of one, not from another function's result; name the variable directly so the guard can be checked")
+			// A field selected off a function result other than dyn(), or
+			// off a map, list, or struct literal or a comprehension,
+			// cannot be traced back to a variable, so has() cannot guard
+			// it either. dyn(x) is transparent and walks through to x
+			// instead of landing here.
+			g.fail("select a field from a variable or from dyn() of one, not from another function's result or a literal; name the variable directly so the guard can be checked")
 		}
 		return
 	}
@@ -165,8 +167,9 @@ func (g *guards) read(e ast.Expr, known []string) {
 // reads, constant string indexes, and dyn() wrappers on a variable;
 // root is still set when the chain starts at a variable. blockedByCall
 // is true when resolution stopped at a function call other than dyn()
-// or a constant-key index: that result cannot be traced back to a
-// variable, so has() cannot guard whatever it holds.
+// or a constant-key index, or at a map, list, or struct literal or a
+// comprehension: that result cannot be traced back to a variable, so
+// has() cannot guard whatever it holds.
 func fieldPath(e ast.Expr) (root string, fields []string, ok bool, blockedByCall bool) {
 	ok = true
 	for {
@@ -195,7 +198,10 @@ func fieldPath(e ast.Expr) (root string, fields []string, ok bool, blockedByCall
 				return "", nil, false, true
 			}
 		default:
-			return "", nil, false, false
+			// A map, list, or struct literal, or a comprehension, is not
+			// a variable. Selecting a field off it fails open: a missing
+			// field is silently false, and has() cannot name it.
+			return "", nil, false, true
 		}
 	}
 }
