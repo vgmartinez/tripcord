@@ -13,7 +13,10 @@ import (
 
 // Policy file locations relative to the repository root.
 const (
-	RepoFile  = ".tripcord/policy.yaml"
+	RepoFile = ".tripcord/policy.yaml"
+	// LocalFile is the per-checkout layer, loaded after the repo policy.
+	// It is not committed. tripcord init, in a later change, must add
+	// this path to the .gitignore it generates.
 	LocalFile = ".tripcord/policy.local.yaml"
 )
 

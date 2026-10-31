@@ -76,7 +76,7 @@ func TestCheckRuleFixturesFailures(t *testing.T) {
 		"positive out of scope":     {map[string]string{"positivos/a.json": outOfScope, "negativos/b.json": quiet}, "no item matches"},
 		"no negatives":              {map[string]string{"positivos/a.json": trigger}, "negativos"},
 		"empty negatives":           {map[string]string{"positivos/a.json": trigger, "negativos/.keep": ""}, "at least one fixture"},
-		"raw config fixture":        {map[string]string{"positivos/a.json": trigger, "negativos/tasks.yaml": "x: 1"}, "until harness adapters"},
+		"raw config fixture":        {map[string]string{"positivos/a.json": trigger, "negativos/tasks.yaml": "x: 1"}, "raw config fixtures come with"},
 		"invalid item":              {map[string]string{"positivos/a.json": `{"harness":"emacs"}`, "negativos/b.json": quiet}, "harness"},
 		"eval error":                {map[string]string{"positivos/a.json": trigger, "negativos/b.json": `{"harness":"claude","scope":"repo","path":".mcp.json","kind":"mcp-server","payload":{"command":1}}`}, "TEST-CFG-002"},
 	}

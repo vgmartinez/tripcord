@@ -32,6 +32,11 @@ const (
 	ModeAudit   Mode = "audit"
 )
 
+// DefaultMode is the mode when no policy layer sets one.
+// The spec owner has not confirmed this value. Change this constant
+// to change the default.
+const DefaultMode Mode = ModeEnforce
+
 // strength orders modes for locking: a lower layer may not pick a mode
 // with lower strength than a locked one.
 func (m Mode) strength() int {
@@ -134,14 +139,22 @@ type Cloud struct {
 	ReportChannel []string `yaml:"report_channel"`
 }
 
-// Locked lists values that layers loaded after this one cannot relax.
+// Locked lists values a later layer cannot relax. v0 locks mode, rules,
+// and exceptions. Nothing else (harnesses, privacy, secrets, cloud,
+// packs, custom rules) is lockable yet.
 //
 //	locked:
-//	  mode: true          # later layers cannot pick a weaker mode
-//	  rules: [TC-CFG-*]   # later layers cannot lower severity or add exceptions
+//	  mode: true               # later layers cannot pick a weaker mode
+//	  rules: [TC-CFG-*]        # severity floor
+//	  exceptions: [TC-SEC-*]   # later layers cannot add exceptions
+//
+// Locking a rule, either under rules or under exceptions, also locks it
+// against the allowlist: a later rules.include cannot drop it. A repo
+// cannot exempt itself from a rule an earlier layer locked.
 type Locked struct {
-	Mode  *bool    `yaml:"mode"`
-	Rules []string `yaml:"rules"`
+	Mode       *bool    `yaml:"mode"`
+	Rules      []string `yaml:"rules"`
+	Exceptions []string `yaml:"exceptions"`
 }
 
 // ExpiresLayout is the exceptions[].expires date format.
@@ -273,6 +286,11 @@ func (f *File) Validate() error {
 		for _, p := range l.Rules {
 			if err := validateIDGlob(p); err != nil {
 				add("locked.rules: %v", err)
+			}
+		}
+		for _, p := range l.Exceptions {
+			if err := validateIDGlob(p); err != nil {
+				add("locked.exceptions: %v", err)
 			}
 		}
 	}

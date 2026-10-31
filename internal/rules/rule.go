@@ -18,7 +18,7 @@ const MaxRuleBytes = 64 << 10
 // Spec is one rule file as written, before compilation.
 //
 //	id: TC-CFG-002
-//	pack: tripcord/core@2026.11
+//	pack: tripcord/core
 //	title: "VS Code task that runs when the folder opens"
 //	severity: high
 //	harness: [vscode, cursor, windsurf]
@@ -62,10 +62,7 @@ func (s *Spec) Validate() error {
 	if !ValidID(s.ID) {
 		return fmt.Errorf("id %q: want an id such as TC-CFG-001", s.ID)
 	}
-	if s.Pack == "" {
-		return errors.New("pack is required")
-	}
-	if _, err := ParsePackRef(s.Pack); err != nil {
+	if _, err := ParsePackName(s.Pack); err != nil {
 		return err
 	}
 	if strings.TrimSpace(s.Title) == "" {
@@ -154,15 +151,19 @@ type Rule struct {
 }
 
 // Compile validates spec and compiles its when expression in env.
-func Compile(spec *Spec, env *Env) (*Rule, error) {
+// manifest is the pack the rule belongs to. spec.Pack must be that
+// pack's name; the compiled rule inherits manifest's version.
+func Compile(spec *Spec, manifest PackRef, env *Env) (*Rule, error) {
 	if err := spec.Validate(); err != nil {
 		return nil, err
+	}
+	if manifest.Name == "" || manifest.Version == "" || spec.Pack != manifest.Name {
+		return nil, fmt.Errorf("pack %s does not match the manifest %s", spec.Pack, manifest)
 	}
 	when, err := env.Compile(spec.When)
 	if err != nil {
 		return nil, fmt.Errorf("when: %w", err)
 	}
-	pack, _ := ParsePackRef(spec.Pack)
 	sev, _ := model.ParseSeverity(spec.Severity)
 	harness := make([]model.Harness, len(spec.Harness))
 	for i, h := range spec.Harness {
@@ -170,7 +171,7 @@ func Compile(spec *Spec, env *Env) (*Rule, error) {
 	}
 	return &Rule{
 		ID:       spec.ID,
-		Pack:     pack,
+		Pack:     manifest,
 		Title:    spec.Title,
 		Severity: sev,
 		Harness:  harness,

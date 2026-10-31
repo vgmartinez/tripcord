@@ -22,9 +22,10 @@ const (
 	NegativeDir = "negativos"
 )
 
-// FixtureExt is the only fixture format until harness adapters exist:
-// a JSON ConfigItem, or an array of them. An empty sha256 is filled in
-// as the SHA-256 of the payload bytes.
+// FixtureExt is the engine fixture format: a JSON ConfigItem, or an
+// array of them. An empty sha256 is filled in as the SHA-256 of the
+// payload bytes. Raw config files are a later step, with the harness
+// adapters.
 const FixtureExt = ".json"
 
 // CheckRuleFixtures runs rule against packDir/<ID>.test/. Every file in
@@ -63,7 +64,7 @@ func fixtureFiles(dir string) ([]string, error) {
 		}
 		path := filepath.Join(dir, e.Name())
 		if filepath.Ext(e.Name()) != FixtureExt {
-			return nil, fmt.Errorf("%s: fixtures must be %s ConfigItem documents until harness adapters can parse raw config", path, FixtureExt)
+			return nil, fmt.Errorf("%s: engine fixtures are %s ConfigItem documents; raw config fixtures come with the harness adapters", path, FixtureExt)
 		}
 		files = append(files, path)
 	}

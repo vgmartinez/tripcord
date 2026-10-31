@@ -8,7 +8,7 @@ import (
 )
 
 const validRule = `id: TC-CFG-002
-pack: tripcord/core@2026.11
+pack: tripcord/core
 title: "VS Code task that runs when the folder opens"
 severity: high
 harness: [vscode, cursor, windsurf]
@@ -64,14 +64,16 @@ func TestParseSpecValid(t *testing.T) {
 	if spec.ID != "TC-CFG-002" || spec.Severity != "high" || len(spec.Harness) != 3 || len(spec.Refs) != 1 {
 		t.Fatalf("spec = %+v", spec)
 	}
-	r, err := Compile(spec, testEnv(t))
+	r, err := Compile(spec, coreManifest, testEnv(t))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Severity != model.SeverityHigh || r.Pack.Name != "tripcord/core" {
+	if r.Severity != model.SeverityHigh || r.Pack != coreManifest {
 		t.Fatalf("rule = %+v", r)
 	}
 }
+
+var coreManifest = PackRef{Name: "tripcord/core", Version: "2026.11"}
 
 // withoutKey drops the top-level key from validRule, including its
 // continuation lines.
@@ -118,7 +120,8 @@ func TestParseSpecRejects(t *testing.T) {
 		"backslash glob":  strings.Replace(validRule, `".vscode/tasks.json"`, `".vscode\\tasks.json"`, 1),
 		"invalid glob":    strings.Replace(validRule, `".vscode/tasks.json"`, `".vscode/[tasks.json"`, 1),
 		"bad id":          strings.Replace(validRule, "id: TC-CFG-002", "id: tc-cfg-2", 1),
-		"bad pack":        strings.Replace(validRule, "tripcord/core@2026.11", "tripcord/core", 1),
+		"versioned pack":  strings.Replace(validRule, "pack: tripcord/core", "pack: tripcord/core@2026.11", 1),
+		"bare pack name":  strings.Replace(validRule, "pack: tripcord/core", "pack: core", 1),
 		"blank title":     strings.Replace(validRule, `title: "VS Code task that runs when the folder opens"`, `title: "  "`, 1),
 		"not a mapping":   "- a\n- b\n",
 		"empty":           "",
@@ -163,7 +166,7 @@ func TestCompileRejectsBadWhen(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := Compile(spec, testEnv(t)); err == nil {
+			if _, err := Compile(spec, coreManifest, testEnv(t)); err == nil {
 				t.Fatalf("compiled %q", when)
 			}
 		})
@@ -175,7 +178,7 @@ func TestApplies(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := Compile(spec, testEnv(t))
+	r, err := Compile(spec, coreManifest, testEnv(t))
 	if err != nil {
 		t.Fatal(err)
 	}

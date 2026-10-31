@@ -22,7 +22,20 @@ var packNamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*/[a-z0-9][a-z0-9-]*
 // .N patch, as in tripcord/core@2026.11.
 var packVersionPattern = regexp.MustCompile(`^[0-9]{4}\.(0[1-9]|1[0-2])(\.(0|[1-9][0-9]*))?$`)
 
+// ParsePackName parses a pack name, <namespace>/<name>, with no version.
+// A rule file names its pack; the version lives only in pack.yaml.
+func ParsePackName(s string) (string, error) {
+	if strings.Contains(s, "@") {
+		return "", fmt.Errorf("pack %q: a rule names the pack only; the version lives in pack.yaml", s)
+	}
+	if !packNamePattern.MatchString(s) {
+		return "", fmt.Errorf("pack %q: want <namespace>/<name> in lower case", s)
+	}
+	return s, nil
+}
+
 // PackRef names a versioned rule pack, such as tripcord/core@2026.11.
+// The version comes from the pack manifest. Rule files do not carry it.
 type PackRef struct {
 	Name    string
 	Version string

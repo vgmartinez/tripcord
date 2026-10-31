@@ -75,6 +75,14 @@ type RuleLock struct {
 	overrides map[string]model.Severity
 }
 
+// ExemptionLock stops a later layer from exempting a rule. It cannot
+// add an exception for the rule, and rules.include, the allowlist,
+// cannot drop it. locked.rules and locked.exceptions both create these.
+type ExemptionLock struct {
+	Pattern string
+	Origin  Origin
+}
+
 // ModeLock is a locked mode: later layers cannot pick a weaker mode.
 type ModeLock struct {
 	Floor  Mode
@@ -86,8 +94,8 @@ type ModeLock struct {
 // "rules.include", "rules.severity_overrides.<id>",
 // "rules.exceptions[<i>]" (index into Exceptions), "custom.<id>",
 // "secrets.rulesets", "secrets.store", "privacy.egress",
-// "privacy.redact", "cloud.report_channel", "locked.mode", and
-// "locked.rules[<pattern>]".
+// "privacy.redact", "cloud.report_channel", "locked.mode",
+// "locked.rules[<pattern>]", and "locked.exceptions[<pattern>]".
 type Effective struct {
 	Mode              Mode
 	Packs             []rules.PackRef
@@ -103,17 +111,20 @@ type Effective struct {
 	ReportChannel     []string
 	ModeLock          *ModeLock
 	RuleLocks         []RuleLock
+	ExemptionLocks    []ExemptionLock
 	Provenance        map[string]Origin
 	Layers            []Origin
 }
 
 var defaultOrigin = Origin{Layer: LayerDefault, Source: "default"}
 
-// defaults is the policy with no files. Every value here is listed as
-// an open question in the pull request that introduced it.
+// defaults is the policy with no files. DefaultMode is pending
+// confirmation; the other values are the spec sample's local-only
+// choices (every harness, every rule, no egress, redacted, fingerprint
+// store).
 func defaults() *Effective {
 	e := &Effective{
-		Mode: ModeEnforce,
+		Mode: DefaultMode,
 		Harnesses: []model.Harness{
 			model.HarnessClaude, model.HarnessCodex, model.HarnessCursor, model.HarnessCopilot,
 			model.HarnessGemini, model.HarnessOpenCode, model.HarnessWindsurf,
@@ -191,8 +202,8 @@ func (e *Effective) apply(env *rules.Env, catalog RuleCatalog, l Layer, customID
 		e.Provenance["rules.severity_overrides."+id] = o
 	}
 	for _, spec := range f.Rules.Exceptions {
-		if lock, ok := e.ruleLock(spec.Rule); ok {
-			errs = append(errs, fmt.Errorf("rules.exceptions: %s is locked by %s; exceptions must be added there", spec.Rule, lock.Origin.Source))
+		if lock, ok := e.exemptionLock(spec.Rule); ok {
+			errs = append(errs, fmt.Errorf("rules.exceptions: %s is locked by %s; a later layer cannot exempt it", spec.Rule, lock.Origin.Source))
 			continue
 		}
 		expires, _ := time.Parse(ExpiresLayout, spec.Expires)
@@ -258,7 +269,12 @@ func (e *Effective) apply(env *rules.Env, catalog RuleCatalog, l Layer, customID
 		}
 		for _, p := range lk.Rules {
 			e.RuleLocks = append(e.RuleLocks, RuleLock{Pattern: p, Origin: o, overrides: maps.Clone(e.SeverityOverrides)})
+			e.ExemptionLocks = append(e.ExemptionLocks, ExemptionLock{Pattern: p, Origin: o})
 			e.Provenance["locked.rules["+p+"]"] = o
+		}
+		for _, p := range lk.Exceptions {
+			e.ExemptionLocks = append(e.ExemptionLocks, ExemptionLock{Pattern: p, Origin: o})
+			e.Provenance["locked.exceptions["+p+"]"] = o
 		}
 	}
 	return errors.Join(errs...)
@@ -295,6 +311,15 @@ func (e *Effective) ruleLock(id string) (RuleLock, bool) {
 		}
 	}
 	return RuleLock{}, false
+}
+
+func (e *Effective) exemptionLock(id string) (ExemptionLock, bool) {
+	for _, lock := range e.ExemptionLocks {
+		if matchID(lock.Pattern, id) {
+			return lock, true
+		}
+	}
+	return ExemptionLock{}, false
 }
 
 func compileCustom(env *rules.Env, spec CustomSpec, o Origin) (*CustomRule, error) {
@@ -335,20 +360,30 @@ func matchID(pattern, id string) bool {
 }
 
 // RuleLocked reports whether a locked.rules pattern covers id.
+// That freezes the severity floor. It also exempt-locks the rule.
 func (e *Effective) RuleLocked(id string) bool {
 	_, ok := e.ruleLock(id)
 	return ok
 }
 
-// Enabled reports whether rule id runs: it matches rules.include, or it
-// is locked. A lower layer that narrows include cannot drop a locked rule.
+// ExemptionLocked reports whether a later layer is forbidden from
+// exempting id, through an exception or by leaving it out of
+// rules.include. locked.rules and locked.exceptions both do this.
+func (e *Effective) ExemptionLocked(id string) bool {
+	_, ok := e.exemptionLock(id)
+	return ok
+}
+
+// Enabled reports whether rule id runs. rules.include is the allowlist.
+// A rule an earlier layer locked still runs when a later include leaves
+// it out, so a repo cannot exempt itself by narrowing the allowlist.
 func (e *Effective) Enabled(id string) bool {
 	for _, p := range e.Include {
 		if matchID(p, id) {
 			return true
 		}
 	}
-	return e.RuleLocked(id)
+	return e.ExemptionLocked(id)
 }
 
 // Severity returns the override for id, or base.

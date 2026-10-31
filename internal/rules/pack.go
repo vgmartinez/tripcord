@@ -37,7 +37,8 @@ type Pack struct {
 // LoadPack loads the pack at the root of fsys. source labels errors.
 //
 // A pack directory holds pack.yaml, REGISTRY, and one <ID>.yaml per
-// rule. Each rule's pack field must equal the manifest's, and its id
+// rule. Each rule's pack field names the manifest pack and inherits its
+// version, and its id
 // must be active in REGISTRY. Every active id must have a rule file and
 // no retired id may have one. <ID>.test/ fixture directories and other
 // non-YAML files are ignored. All problems are reported together.
@@ -126,7 +127,7 @@ func loadRule(fsys fs.FS, name, id string, ref PackRef, reg *Registry, env *Env)
 	if spec.ID != id {
 		return nil, fmt.Errorf("id %s does not match the file name", spec.ID)
 	}
-	if spec.Pack != ref.String() {
+	if spec.Pack != ref.Name {
 		return nil, fmt.Errorf("pack %s does not match the manifest %s", spec.Pack, ref)
 	}
 	entry, ok := reg.Lookup(id)
@@ -136,7 +137,7 @@ func loadRule(fsys fs.FS, name, id string, ref PackRef, reg *Registry, env *Env)
 	case entry.Status == StatusRetired:
 		return nil, fmt.Errorf("%s is retired in %s; rule ids are never reused", id, RegistryFile)
 	}
-	return Compile(spec, env)
+	return Compile(spec, ref, env)
 }
 
 // readLimited reads name from fsys, failing when it exceeds limit bytes.

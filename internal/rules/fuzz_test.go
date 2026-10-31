@@ -36,6 +36,6 @@ func FuzzParseSpec(f *testing.F) {
 			t.Fatalf("ParseSpec accepted what Validate rejects: %v", err)
 		}
 		// Compilation may fail on the expression, but must not panic.
-		_, _ = Compile(spec, env)
+		_, _ = Compile(spec, PackRef{Name: spec.Pack, Version: "2026.11"}, env)
 	})
 }

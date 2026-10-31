@@ -73,7 +73,7 @@ func wantErr(t *testing.T, err error, substr string) {
 
 func TestDefaults(t *testing.T) {
 	e := mustMerge(t, nil)
-	if e.Mode != ModeEnforce || len(e.Harnesses) != 7 || !e.Enabled("TC-CFG-001") || e.Egress != EgressNone || !e.Redact {
+	if e.Mode != DefaultMode || len(e.Harnesses) != 7 || !e.Enabled("TC-CFG-001") || e.Egress != EgressNone || !e.Redact {
 		t.Fatalf("defaults = %+v", e)
 	}
 	if e.Provenance["mode"].Layer != LayerDefault {
@@ -188,6 +188,57 @@ func TestLockedExceptions(t *testing.T) {
 	if len(e.Exceptions) != 2 || e.Exceptions[0].Origin.Layer != LayerOrg {
 		t.Fatalf("exceptions %+v", e.Exceptions)
 	}
+}
+
+func exceptionDoc(rule string) string {
+	return "rules:\n  exceptions:\n    - {rule: " + rule + ", path: .claude/settings.json, sha256: " + strings.Repeat("a", 64) + ", reason: ok, expires: 2027-01-31}\n"
+}
+
+// TestExemptionLocks covers locked.exceptions and the allowlist.
+// A later layer cannot add an exception for a rule locked under rules
+// or under exceptions, and rules.include cannot drop it. An exceptions
+// lock does not freeze severity.
+func TestExemptionLocks(t *testing.T) {
+	org := "locked:\n  rules: [TC-SEC-018]\n  exceptions: [TC-CFG-004]\n"
+	e := mustMerge(t, catalog, org, "rules:\n  include: [\"TC-FOR-*\"]\n")
+	if !e.Enabled("TC-SEC-018") || !e.Enabled("TC-CFG-004") {
+		t.Fatalf("allowlist dropped a locked rule")
+	}
+	if e.Enabled("TC-CFG-001") || !e.Enabled("TC-FOR-020") {
+		t.Fatalf("include applied wrong: cfg001=%v for020=%v", e.Enabled("TC-CFG-001"), e.Enabled("TC-FOR-020"))
+	}
+	if !e.RuleLocked("TC-SEC-018") || e.RuleLocked("TC-CFG-004") {
+		t.Fatal("exceptions lock froze severity")
+	}
+	if !e.ExemptionLocked("TC-SEC-018") || !e.ExemptionLocked("TC-CFG-004") || e.ExemptionLocked("TC-CFG-001") {
+		t.Fatal("exemption lock set wrong")
+	}
+	if e.Provenance["locked.exceptions[TC-CFG-004]"].Layer != LayerOrg {
+		t.Fatalf("provenance %v", e.Provenance["locked.exceptions[TC-CFG-004]"])
+	}
+
+	e = mustMerge(t, catalog, org, "rules:\n  severity_overrides: {TC-CFG-004: low}\n")
+	if e.Severity("TC-CFG-004", model.SeverityHigh) != model.SeverityLow {
+		t.Fatal("exceptions lock froze severity")
+	}
+	_, err := merge(t, catalog, org, "rules:\n  severity_overrides: {TC-SEC-018: low}\n")
+	wantErr(t, err, "below critical")
+
+	_, err = merge(t, catalog, org, exceptionDoc("TC-CFG-004"))
+	wantErr(t, err, "cannot exempt")
+	_, err = merge(t, catalog, org, exceptionDoc("TC-SEC-018"))
+	wantErr(t, err, "cannot exempt")
+	e = mustMerge(t, catalog, org, exceptionDoc("TC-CFG-001"))
+	if len(e.Exceptions) != 1 || e.Exceptions[0].Rule != "TC-CFG-001" {
+		t.Fatalf("unlocked exception %+v", e.Exceptions)
+	}
+
+	e = mustMerge(t, catalog, exceptionDoc("TC-CFG-004")+org)
+	if len(e.Exceptions) != 1 || e.Exceptions[0].Origin.Layer != LayerOrg {
+		t.Fatalf("locking layer lost its exception: %+v", e.Exceptions)
+	}
+	_, err = merge(t, catalog, exceptionDoc("TC-CFG-004")+org, exceptionDoc("TC-CFG-004"))
+	wantErr(t, err, "cannot exempt")
 }
 
 func TestLockedRuleStaysEnabled(t *testing.T) {

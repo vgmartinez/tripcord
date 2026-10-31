@@ -38,7 +38,7 @@ and CEL cannot read files, use the network, or run commands.
 
 ```yaml
 id: TC-CFG-002
-pack: tripcord/core@2026.11
+pack: tripcord/core
 title: "VS Code task that runs when the folder opens"
 severity: high                       # low | medium | high | critical
 harness: [vscode, cursor, windsurf]
@@ -51,7 +51,10 @@ refs:
 
 Every key is required. `refs` needs at least one https link to the
 incident or to official documentation; a rule without `refs` is not
-accepted. `pack` must equal the `pack` in `rules/pack.yaml`.
+accepted. `pack` is the pack name, `<namespace>/<name>`. The version
+lives only in `rules/pack.yaml` (for example `tripcord/core@2026.11`);
+a rule inherits it. `rules/REGISTRY` is what stops a rule id from being
+reused.
 
 `when` sees these variables:
 
@@ -81,8 +84,9 @@ Do not remove lines. CI compares the file with the pull request base.
 
 `rules/<ID>.test/positivos/` holds inputs that must trigger the rule and
 `rules/<ID>.test/negativos/` inputs that must not. Each needs at least
-one file. Until harness adapters land, a fixture is a JSON config item,
-or an array of them; `sha256` may be left empty:
+one file. An engine fixture is a JSON config item, or an array of
+them; `sha256` may be left empty. Raw config files are checked later,
+with the harness adapters:
 
 ```json
 {"harness": "vscode", "scope": "repo", "path": ".vscode/tasks.json", "sha256": "",
@@ -96,6 +100,17 @@ make test-rule ID=TC-CFG-002
 ```
 
 `go test ./internal/rules` runs every rule's fixtures.
+
+## Policy
+
+`.tripcord/policy.yaml` is the repo policy. `.tripcord/policy.local.yaml`
+is the per-checkout layer and is not committed. `tripcord init`, when
+it lands, must add `.tripcord/policy.local.yaml` to the `.gitignore` it
+writes.
+
+`locked` can freeze `mode`, `rules`, and `exceptions`. A locked rule
+stays enabled even if a later `rules.include` leaves it out, and a
+later layer cannot add an exception for it.
 
 ## Dependencies and licenses
 
