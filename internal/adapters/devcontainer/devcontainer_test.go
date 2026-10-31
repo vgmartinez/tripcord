@@ -112,13 +112,13 @@ func TestSecretsSeparateFingerprints(t *testing.T) {
 func TestRunArgsKeepsNonSecretAssignments(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	kittest.WriteFile(t, filepath.Join(root, ".devcontainer.json"), `{"runArgs":["-e","MODE=dev","--env","API_KEY=k-1","-eX_TOKEN=t-1","--name","SECRET_KEY=not-an-env"]}`)
+	kittest.WriteFile(t, filepath.Join(root, ".devcontainer.json"), `{"runArgs":["-e","MODE=dev","--env","API_KEY=k-1","-eX_TOKEN=t-1","--name","SECRET_KEY=not-an-env","-ePRIVATE_KEY=pk-1","-eHOME=/home/dev"]}`)
 	got := kittest.Discover(t, New(Options{}), root)
 	if len(got.Items) != 1 {
 		t.Fatalf("items = %+v", got.Items)
 	}
 	value, _ := kittest.Payload(t, got.Items[0])["value"].([]any)
-	want := []any{"-e", "MODE=dev", "--env", "API_KEY=" + kit.Redacted, "-eX_TOKEN=" + kit.Redacted, "--name", "SECRET_KEY=" + kit.Redacted}
+	want := []any{"-e", "MODE=dev", "--env", "API_KEY=" + kit.Redacted, "-eX_TOKEN=" + kit.Redacted, "--name", "SECRET_KEY=" + kit.Redacted, "-ePRIVATE_KEY=" + kit.Redacted, "-eHOME=/home/dev"}
 	if len(value) != len(want) {
 		t.Fatalf("value = %v", value)
 	}

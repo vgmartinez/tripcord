@@ -62,7 +62,7 @@ over the removed text; see [fingerprint.md](../fingerprint.md#input).
   shared tool-flag and credential rules. The value of any credential-named
   `NAME=VALUE` element (`SECRET_KEY`, `DB_PASS`, `API_KEY`, ...) is
   redacted, whether it follows `-e`, `--env`, `--env=`, or another flag
-  such as `--name`.
+  such as `--name`, and also in docker's glued `-eNAME=VALUE` form.
 - Settings: one `{"setting", "value"}` item per present key of `image`,
   `build`, `dockerFile`, `context`, `dockerComposeFile`, `service`,
   `runServices`, `mounts`, `workspaceMount`, `workspaceFolder`,

@@ -1,6 +1,8 @@
 package devcontainer
 
 import (
+	"strings"
+
 	"github.com/vgmartinez/tripcord/internal/adapters/kit"
 	"github.com/vgmartinez/tripcord/internal/model"
 )
@@ -154,13 +156,23 @@ func (f *file) features(value any) {
 
 // runArgs sanitizes the docker run arguments as an argv. The shared
 // rules redact a credential-named NAME=VALUE element wherever it
-// appears, which covers -e, --env, and --env= assignments.
+// appears, which covers -e NAME=VALUE and --env=NAME=VALUE. docker also
+// accepts the short flag glued to its value, -eNAME=VALUE, where the
+// shared rules would read "eNAME" as the name, so that assignment is
+// sanitized without its flag.
 func (f *file) runArgs(value any) any {
 	args, ok := value.([]any)
 	if !ok {
 		return f.SafeValue("runArgs", value)
 	}
-	return f.SafeValue("", f.SafeToolArgv(args))
+	out, _ := f.SafeValue("", f.SafeToolArgv(args)).([]any)
+	for i, arg := range args {
+		text, _ := arg.(string)
+		if assignment, glued := strings.CutPrefix(text, "-e"); glued && strings.Contains(assignment, "=") {
+			out[i] = "-e" + f.SafeString(assignment)
+		}
+	}
+	return out
 }
 
 // env emits a containerEnv or remoteEnv map with its values redacted and
