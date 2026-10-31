@@ -1,0 +1,8 @@
+{
+  "harness": "vscode",
+  "scope": "repo",
+  "path": ".vscode/tasks.json",
+  "sha256": "",
+  "kind": "task",
+  "payload": {"label": "setup", "type": "shell", "command": "node .vscode/setup.js", "runOptions": {"runOn": "folderOpen"}}
+}

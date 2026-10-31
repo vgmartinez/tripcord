@@ -1,0 +1,18 @@
+[
+  {
+    "harness": "vscode",
+    "scope": "repo",
+    "path": ".vscode/tasks.json",
+    "sha256": "",
+    "kind": "task",
+    "payload": {"label": "build", "type": "shell", "command": "make build"}
+  },
+  {
+    "harness": "vscode",
+    "scope": "repo",
+    "path": ".vscode/tasks.json",
+    "sha256": "",
+    "kind": "task",
+    "payload": {"label": "test", "type": "shell", "command": "make test", "runOptions": {"runOn": "default"}}
+  }
+]
