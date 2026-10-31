@@ -92,7 +92,14 @@ func TestSeverityOrder(t *testing.T) {
 
 func TestDecisionVocabulary(t *testing.T) {
 	t.Parallel()
-	for _, d := range decisions {
+	want := []Decision{DecisionAllow, DecisionDeny, DecisionWarn, DecisionAudit, DecisionAsk}
+	if len(decisions) != len(want) {
+		t.Fatalf("len(decisions) = %d", len(decisions))
+	}
+	for i, d := range want {
+		if decisions[i] != d {
+			t.Fatalf("decisions[%d] = %s, want %s", i, decisions[i], d)
+		}
 		got, err := ParseDecision(string(d))
 		if err != nil || got != d || !got.Valid() {
 			t.Fatalf("decision %s: %v", d, err)

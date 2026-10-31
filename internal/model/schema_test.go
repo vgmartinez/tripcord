@@ -81,6 +81,33 @@ func TestSchemaObjectsAreOpenAtModelLevel(t *testing.T) {
 	}
 }
 
+func TestDecisionAsk(t *testing.T) {
+	t.Parallel()
+	got, err := ParseDecision("ask")
+	if err != nil || got != DecisionAsk || !got.Valid() {
+		t.Fatalf("ParseDecision(ask) = %q, %v", got, err)
+	}
+
+	var finding Finding
+	if err := json.Unmarshal(readTestdata(t, "finding.json"), &finding); err != nil {
+		t.Fatal(err)
+	}
+	finding.Decision = DecisionAsk
+	if err := finding.Validate(); err != nil {
+		t.Fatalf("Validate rejected ask: %v", err)
+	}
+
+	doc := mustObject(t, readTestdata(t, "finding.json"))
+	doc["decision"] = "ask"
+	raw, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := loadSchemaIndex(t).validate(schemaIDFinding, raw); err != nil {
+		t.Fatalf("schema rejected decision ask: %v", err)
+	}
+}
+
 func TestSchemaRejectsInvalidDocuments(t *testing.T) {
 	t.Parallel()
 	idx := loadSchemaIndex(t)
