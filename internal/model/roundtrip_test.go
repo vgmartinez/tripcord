@@ -510,6 +510,37 @@ func TestLocationScopeValidate(t *testing.T) {
 	}
 }
 
+func TestFindingValidateRuleID(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		rule string
+		want bool
+	}{
+		{"TC-CFG-001", true},
+		{"ACME-001", true},
+		{"TC-CFG-01", false},
+		{"tc-cfg-001", false},
+		{"TC-CFG-001\n::error", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.rule, func(t *testing.T) {
+			var finding Finding
+			if err := json.Unmarshal(readTestdata(t, "finding.json"), &finding); err != nil {
+				t.Fatal(err)
+			}
+			finding.Rule = tc.rule
+			fingerprint, err := Fingerprint(finding.Rule, finding.Location, finding.Evidence)
+			if err != nil {
+				t.Fatal(err)
+			}
+			finding.Fingerprint = fingerprint
+			if got := finding.Validate() == nil; got != tc.want {
+				t.Fatalf("Validate(%q) = %t, want %t", tc.rule, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestFindingValidateLocationPath(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
