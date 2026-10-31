@@ -58,10 +58,68 @@ func TestSinceDoesNotExecuteRepoGitConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"core.fsmonitor=false", "core.hooksPath=/dev/null", "--no-textconv", "--no-ext-diff", "-z", "--end-of-options", "HEAD~1"} {
+	for _, want := range []string{
+		"core.fsmonitor=false", "core.hooksPath=/dev/null",
+		"protocol.allow=never", "protocol.ext.allow=never", "protocol.file.allow=never",
+		"--no-textconv", "--no-ext-diff", "--no-renames", "-z", "--end-of-options", "HEAD~1",
+	} {
 		if !strings.Contains(string(logged), want) {
 			t.Fatalf("git invocation missing %s: %q", want, logged)
 		}
+	}
+}
+
+// TestSinceDoesNotLazyFetchFromPromisorRemote checks that --since does not
+// contact a partial clone's promisor remote. Without --no-renames, "git
+// diff --name-only" performs rename detection, which needs blob content
+// and triggers a lazy fetch in a "--filter=blob:none" clone; a malicious
+// remote.origin.url (here an "ext::" transport) could then run arbitrary
+// code even though protocol.allow=never is set, because the repository's
+// own protocol.ext.allow=always config takes precedence for that command.
+func TestSinceDoesNotLazyFetchFromPromisorRemote(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	src := t.TempDir()
+	runGit(t, src, "init")
+	runGit(t, src, "config", "user.email", "tripcord@example.com")
+	runGit(t, src, "config", "user.name", "tripcord")
+	runGit(t, src, "config", "uploadpack.allowfilter", "true")
+	if err := os.WriteFile(filepath.Join(src, "old-name.txt"), []byte(strings.Repeat("line\n", 50)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, src, "add", "old-name.txt")
+	runGit(t, src, "commit", "-m", "init")
+	if err := os.Rename(filepath.Join(src, "old-name.txt"), filepath.Join(src, "new-name.txt")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "new-name.txt"), []byte(strings.Repeat("line\n", 50)+"tail\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, src, "add", "-A")
+	runGit(t, src, "commit", "-m", "rename")
+
+	clone := filepath.Join(t.TempDir(), "clone")
+	cloneCmd := exec.Command("git", "clone", "-q", "--no-local", "--filter=blob:none", "file://"+src, clone)
+	if out, err := cloneCmd.CombinedOutput(); err != nil {
+		t.Skipf("partial clone is not supported: %v\n%s", err, out)
+	}
+
+	canary := filepath.Join(t.TempDir(), "canary")
+	script := filepath.Join(t.TempDir(), "evil.sh")
+	body := "#!/bin/sh\ntouch " + shellQuote(canary) + "\nexit 1\n"
+	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, clone, "config", "remote.origin.url", "ext::"+script)
+	runGit(t, clone, "config", "protocol.ext.allow", "always")
+
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"scan", clone, "--since", "HEAD~1"}, &stdout, &stderr); code != int(exitcode.OK) {
+		t.Fatalf("exit code = %d, stderr = %q", code, stderr.String())
+	}
+	if _, err := os.Stat(canary); !os.IsNotExist(err) {
+		t.Fatal("partial clone contacted the promisor remote")
 	}
 }
 

@@ -383,10 +383,14 @@ func changedFiles(root, ref string) (map[string]bool, error) {
 		"-C", root,
 		"-c", "core.fsmonitor=false",
 		"-c", "core.hooksPath=/dev/null",
+		"-c", "protocol.allow=never",
+		"-c", "protocol.ext.allow=never",
+		"-c", "protocol.file.allow=never",
 		"--no-optional-locks",
 		"diff",
 		"--no-textconv",
 		"--no-ext-diff",
+		"--no-renames",
 		"--name-only",
 		"-z",
 		"--end-of-options",
@@ -419,9 +423,11 @@ func changedFiles(root, ref string) (map[string]bool, error) {
 }
 
 // gitCommandEnv drops inherited Git configuration. GIT_CONFIG_NOSYSTEM
-// ignores the system file, and the ceiling stops discovery above root.
+// ignores the system file, the ceiling stops discovery above root, and
+// GIT_NO_LAZY_FETCH stops a partial clone's promisor remote from being
+// contacted to fill in missing objects.
 func gitCommandEnv(root string) []string {
-	env := make([]string, 0, len(os.Environ())+2)
+	env := make([]string, 0, len(os.Environ())+3)
 	for _, entry := range os.Environ() {
 		key, _, _ := strings.Cut(entry, "=")
 		if strings.HasPrefix(key, "GIT_") {
@@ -432,6 +438,7 @@ func gitCommandEnv(root string) []string {
 	return append(env,
 		"GIT_CONFIG_NOSYSTEM=1",
 		"GIT_CEILING_DIRECTORIES="+filepath.Dir(root),
+		"GIT_NO_LAZY_FETCH=1",
 	)
 }
 
