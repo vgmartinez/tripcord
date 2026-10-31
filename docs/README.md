@@ -1,6 +1,11 @@
 # Documentation
 
-Design notes will be added here. This repository is a private pre-release.
+Design notes for this private pre-release.
+
+## Finding fingerprints
+
+[fingerprint.md](fingerprint.md) defines the canonical finding fingerprint.
+The digest is stable across versions. Golden tests lock it.
 
 ## Repository identity
 

@@ -1,0 +1,21 @@
+{
+  "schema": "tripcord.finding/v1",
+  "rule": "TC-SEC-018",
+  "title": "El agente intentó leer el entorno de otro proceso",
+  "severity": "critical",
+  "decision": "deny",
+  "confidence": 0.95,
+  "evidence": [
+    {
+      "event": "evt_01JD7Q2M9X",
+      "excerpt": "cat /proc/$PPID/environ"
+    }
+  ],
+  "location": {
+    "harness": "claude",
+    "session": "00893aaf-19fa-41d2"
+  },
+  "refs": ["https://novee.security/blog/breaking-ai-agent-sandboxes/"],
+  "fix": "Ejecuta el agente con PID namespace propio o hidepid=2",
+  "fingerprint": "tcf_8c1e77"
+}

@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "tripcord.event/v1",
+  "$comment": "SPDX-License-Identifier: Apache-2.0",
+  "title": "Tripcord event",
+  "description": "One session fact: a tool call, read, write, network access, or message.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "id",
+    "ts",
+    "source",
+    "session",
+    "kind",
+    "tool",
+    "command",
+    "paths",
+    "net",
+    "credentials",
+    "redactions",
+    "raw_ref"
+  ],
+  "properties": {
+    "schema": {
+      "const": "tripcord.event/v1"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "ts": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["harness", "surface", "version", "origin"],
+      "properties": {
+        "harness": {
+          "type": "string",
+          "enum": ["claude", "codex", "cursor", "copilot", "gemini", "opencode", "windsurf"]
+        },
+        "surface": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "origin": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "session": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "repo", "branch", "actor", "parent"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "repo": {
+          "type": "string"
+        },
+        "branch": {
+          "type": "string"
+        },
+        "actor": {
+          "type": "string"
+        },
+        "parent": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "kind": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tool": {
+      "type": "string"
+    },
+    "command": {
+      "type": "string"
+    },
+    "paths": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "net": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "credentials": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "redactions": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "raw_ref": {
+      "type": "string"
+    }
+  }
+}

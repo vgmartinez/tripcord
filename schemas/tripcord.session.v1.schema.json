@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "tripcord.session/v1",
+  "$comment": "SPDX-License-Identifier: Apache-2.0",
+  "title": "Tripcord session",
+  "description": "Events grouped for one session. Origin is local, cloud, or imported.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "id", "origin", "events"],
+  "properties": {
+    "schema": {
+      "const": "tripcord.session/v1"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "origin": {
+      "type": "string",
+      "enum": ["local", "cloud", "imported"]
+    },
+    "repo": {
+      "type": "string"
+    },
+    "branch": {
+      "type": "string"
+    },
+    "actor": {
+      "type": "string"
+    },
+    "parent": {
+      "type": ["string", "null"]
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "$ref": "tripcord.event/v1"
+      }
+    }
+  }
+}

@@ -5,6 +5,9 @@ Private pre-release.
 tripcord is an Apache-2.0 command-line tool for coding-agent security.
 It will scan agent configuration, look for secrets in context and transcripts,
 and support local forensics. This build only implements `help` and `version`.
+Normalized records live in `internal/model`, JSON schemas in `schemas/`,
+and process exit codes in `internal/exitcode`.
+Finding fingerprints are specified in [docs/fingerprint.md](docs/fingerprint.md).
 
 ```sh
 make build   # CGO_ENABLED=0 binary at bin/tripcord

@@ -1,0 +1,26 @@
+{
+  "schema": "tripcord.event/v1",
+  "id": "evt_01JD7Q2M9X",
+  "ts": "2026-10-31T07:41:12.384Z",
+  "source": {
+    "harness": "claude",
+    "surface": "cloud",
+    "version": "2.1.310",
+    "origin": "hook:PreToolUse"
+  },
+  "session": {
+    "id": "00893aaf-19fa-41d2",
+    "repo": "acme/api",
+    "branch": "claude/fix-auth",
+    "actor": "agent",
+    "parent": null
+  },
+  "kind": "tool_call",
+  "tool": "shell",
+  "command": "cat /proc/$PPID/environ",
+  "paths": ["/proc/1234/environ"],
+  "net": [],
+  "credentials": [],
+  "redactions": 0,
+  "raw_ref": "transcript:~/.claude/projects/-repo/00893aaf.jsonl#L418"
+}
