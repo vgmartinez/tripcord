@@ -17,6 +17,8 @@ as `~/...` in every sink:
 - `/home/<name>/...`
 - `<drive>:\Users\<name>\...` or `<drive>:/Users/<name>/...`, in any case
 
+The model stores a Windows home path as `C:/users/<name>/...`. A sink
+also rewrites the other slash and case spellings when it is handed them.
 `<name>` is one path segment. The rest of the path keeps its spelling.
 `/etc/cursor/hooks.json` and `C:/ProgramData/...` are unchanged. This is
 presentation only.

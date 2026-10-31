@@ -19,7 +19,7 @@ Evidence:
 runOn: folderOpen
 ```
 
-Fingerprint: `tcf_fedcba9876543210`
+Fingerprint: `tcf_7a4367039eb41858`
 
 ### `TC-CFG-010` — `Plugin executes arbitrary code`
 
@@ -33,4 +33,4 @@ Evidence:
 plugin: ./plugins/unreviewed.js
 ```
 
-Fingerprint: `tcf_0123456789abcdef`
+Fingerprint: `tcf_47cbba354adad9a1`

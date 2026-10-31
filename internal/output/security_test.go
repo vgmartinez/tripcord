@@ -60,6 +60,13 @@ func TestInjectionPayloadsAreInert(t *testing.T) {
 			for _, format := range allFormats {
 				t.Run(payloadName+"/"+placementName+"/"+string(format), func(t *testing.T) {
 					t.Parallel()
+					if err := writable(finding); err != nil {
+						if placementName != "path" {
+							t.Fatal(err)
+						}
+						assertRejected(t, format, finding)
+						return
+					}
 					got := render(t, format, input)
 					assertNoRawControls(t, got)
 					assertLineStructure(t, format, got, len(input))
@@ -78,6 +85,34 @@ func TestInjectionPayloadsAreInert(t *testing.T) {
 				})
 			}
 		}
+	}
+}
+
+// writable reports whether finding can be stored: its path and evidence
+// satisfy the model, and a fingerprint can be stamped.
+func writable(finding model.Finding) error {
+	fp, err := model.Fingerprint(finding.Rule, finding.Location, finding.Evidence)
+	if err != nil {
+		return err
+	}
+	finding.Fingerprint = fp
+	return finding.Validate()
+}
+
+// assertRejected checks that a finding the model rejects is not written
+// and produces no bytes.
+func assertRejected(t *testing.T, format Format, finding model.Finding) {
+	t.Helper()
+	var buffer bytes.Buffer
+	sink, err := NewStdoutSink(format, &buffer, testOptions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sink.Write(finding); err == nil {
+		t.Fatal("invalid finding was written")
+	}
+	if buffer.Len() != 0 {
+		t.Fatalf("rejected finding produced %q", buffer.String())
 	}
 }
 
@@ -149,7 +184,7 @@ func assertLineStructure(t *testing.T, format Format, got string, findings int) 
 // assertJSONFaithful checks that JSONL escapes without changing values.
 func assertJSONFaithful(t *testing.T, got string, want model.Finding, placement string) {
 	t.Helper()
-	want = redactFinding(want, DefaultRedactor)
+	want = redactFinding(seal(t, want), DefaultRedactor)
 	for _, line := range strings.Split(strings.TrimSuffix(got, "\n"), "\n") {
 		var decoded model.Finding
 		if err := json.Unmarshal([]byte(line), &decoded); err != nil {
@@ -309,7 +344,7 @@ func TestUnredactedSecretsNeverReachOutput(t *testing.T) {
 		for _, mode := range []SARIFNonRepoLocation{SARIFNonRepoLogical, SARIFNonRepoURIBase} {
 			options := testOptions()
 			options.NonRepoSARIF = mode
-			got := renderWith(t, format, []model.Finding{finding, user}, options)
+			got := renderWith(t, format, sealAll(t, []model.Finding{finding, user}), options)
 			for _, secret := range secrets {
 				if strings.Contains(got, secret) {
 					t.Fatalf("%s/%s leaked %q:\n%s", format, mode, secret, got)
@@ -333,7 +368,7 @@ func TestRedactorRunsInEverySink(t *testing.T) {
 	options := testOptions()
 	options.Redactor = func(value string) string { return strings.ReplaceAll(value, canary, "gone") }
 	for _, format := range allFormats {
-		got := renderWith(t, format, []model.Finding{finding}, options)
+		got := renderWith(t, format, sealAll(t, []model.Finding{finding}), options)
 		if strings.Contains(got, canary) || !strings.Contains(got, "gone") {
 			t.Fatalf("%s did not apply the redactor:\n%s", format, got)
 		}
@@ -393,17 +428,18 @@ func TestAbsolutePathsNeverLeak(t *testing.T) {
 		finding := findings()[0]
 		finding.Location.Scope = tc.scope
 		finding.Location.Path = tc.path
+		ref := locate(finding.Location, "/work/repo")
+		if strings.Contains(strings.ToLower(ref.path), "alice") {
+			t.Fatalf("locate kept %s path %q as %q", tc.scope, tc.path, ref.path)
+		}
+		if err := writable(finding); err != nil {
+			assertRejected(t, FormatText, finding)
+			continue
+		}
 		for _, format := range allFormats {
-			for _, mode := range []SARIFNonRepoLocation{SARIFNonRepoLogical, SARIFNonRepoURIBase} {
-				options := testOptions()
-				options.NonRepoSARIF = mode
-				got := renderWith(t, format, []model.Finding{finding}, options)
-				if strings.Contains(strings.ToLower(got), "alice") {
-					t.Fatalf("%s/%s leaked %s path %q:\n%s", format, mode, tc.scope, tc.path, got)
-				}
-				if format == FormatSARIF {
-					validateSARIF(t, got)
-				}
+			got := render(t, format, []model.Finding{finding})
+			if strings.Contains(strings.ToLower(got), "alice") {
+				t.Fatalf("%s leaked %s path %q:\n%s", format, tc.scope, tc.path, got)
 			}
 		}
 	}
@@ -418,21 +454,20 @@ func TestManagedHomePathsDisplayAsTilde(t *testing.T) {
 	}{
 		{name: "macOS", path: "/Users/alice/.cursor/hooks.json", want: "~/.cursor/hooks.json"},
 		{name: "linux", path: "/home/alice/.cursor/hooks.json", want: "~/.cursor/hooks.json"},
-		{name: "windows", path: `C:\Users\alice\.cursor\hooks.json`, want: "~/.cursor/hooks.json"},
-		{name: "windows-slash", path: "C:/Users/alice/.cursor/hooks.json", want: "~/.cursor/hooks.json"},
-		{name: "windows-case", path: `c:\USERS\alice\.cursor\hooks.json`, want: "~/.cursor/hooks.json"},
-		{name: "macOS-case", path: "/USERS/Alice/Library/Cursor/hooks.json", want: "~/Library/Cursor/hooks.json"},
+		{name: "windows", path: "C:/users/alice/.cursor/hooks.json", want: "~/.cursor/hooks.json"},
 	}
 	for _, tc := range cases {
 		finding := managedFinding()
 		finding.Location.Path = tc.path
-		stored := finding.Location.Path
+		finding = seal(t, finding)
+		storedPath := finding.Location.Path
+		storedFP := finding.Fingerprint
 		for _, format := range allFormats {
 			for _, mode := range []SARIFNonRepoLocation{SARIFNonRepoLogical, SARIFNonRepoURIBase} {
 				options := testOptions()
 				options.NonRepoSARIF = mode
 				got := renderWith(t, format, []model.Finding{finding}, options)
-				if finding.Location.Path != stored || finding.Fingerprint != "tcf_2222222222222222" {
+				if finding.Location.Path != storedPath || finding.Fingerprint != storedFP {
 					t.Fatalf("render mutated the finding")
 				}
 				if !strings.Contains(got, tc.want) || strings.Contains(strings.ToLower(got), "alice") {
@@ -451,7 +486,7 @@ func TestManagedHomeDisplayLeavesFingerprint(t *testing.T) {
 	for _, path := range []string{
 		"/Users/alice/.cursor/hooks.json",
 		"/home/alice/.cursor/hooks.json",
-		`C:\Users\alice\.cursor\hooks.json`,
+		"C:/users/alice/.cursor/hooks.json",
 	} {
 		finding := managedFinding()
 		finding.Location.Path = path
@@ -493,7 +528,7 @@ func TestSARIFRuleTextFallsBackToFinding(t *testing.T) {
 		},
 		"TC-CFG-002": {HelpURI: "javascript:alert(1)"},
 	}
-	got := renderWith(t, FormatSARIF, findings(), options)
+	got := renderWith(t, FormatSARIF, sealAll(t, findings()), options)
 	validateSARIF(t, got)
 	for _, want := range []string{"Catalog description", "Catalog help", "https://example.invalid/catalog/TC-CFG-010"} {
 		if !strings.Contains(got, want) {
@@ -512,16 +547,19 @@ func TestSARIFRuleTextFallsBackToFinding(t *testing.T) {
 
 func TestWindowsRootRelativizes(t *testing.T) {
 	t.Parallel()
-	options := testOptions()
-	options.RepoRoot = `C:\Users\alice\proj`
-	finding := findings()[0]
-	finding.Location.Path = "c:/users/alice/proj/src/a.json"
-	for _, format := range allFormats {
-		got := renderWith(t, format, []model.Finding{finding}, options)
-		if strings.Contains(strings.ToLower(got), "alice") || !strings.Contains(got, "src/a.json") {
-			t.Fatalf("%s did not relativize the Windows path:\n%s", format, got)
+	ref := locate(model.Location{Scope: model.ScopeRepo, Path: "c:/users/alice/proj/src/a.json"}, `C:\Users\alice\proj`)
+	if ref.kind != locRepo || ref.path != "src/a.json" || strings.Contains(strings.ToLower(ref.path), "alice") {
+		t.Fatalf("located = %+v", ref)
+	}
+	for _, path := range []string{`C:\Users\alice\.cursor\hooks.json`, "c:/USERS/alice/.cursor/hooks.json", "/USERS/Alice/Library/Cursor/hooks.json"} {
+		home := locate(model.Location{Scope: model.ScopeManaged, Path: path}, "")
+		if !strings.HasPrefix(home.path, "~/") || strings.Contains(strings.ToLower(home.path+home.uri), "alice") {
+			t.Fatalf("located %q = %+v", path, home)
 		}
 	}
+	finding := findings()[0]
+	finding.Location.Path = "c:/users/alice/proj/src/a.json"
+	assertRejected(t, FormatText, finding)
 }
 
 func TestSortIsTotalOrder(t *testing.T) {
@@ -529,6 +567,7 @@ func TestSortIsTotalOrder(t *testing.T) {
 	base := findings()[0]
 	scope := base
 	scope.Location.Scope = model.ScopeUser
+	scope.Location.Path = "~/.cursor/hook.json"
 	severity := base
 	severity.Severity = model.SeverityCritical
 	decision := base

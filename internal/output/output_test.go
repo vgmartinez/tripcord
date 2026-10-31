@@ -84,7 +84,7 @@ func TestWriteAfterFlush(t *testing.T) {
 	if err := sink.Flush(); err != nil {
 		t.Fatal(err)
 	}
-	if err := sink.Write(findings()[0]); err == nil {
+	if err := sink.Write(seal(t, findings()[0])); err == nil {
 		t.Fatal("write after flush was accepted")
 	}
 }
@@ -187,7 +187,7 @@ func TestNonRepoLocationGoldens(t *testing.T) {
 			t.Parallel()
 			options := testOptions()
 			options.NonRepoSARIF = tc.options.NonRepoSARIF
-			got := renderWith(t, tc.format, tc.input, options)
+			got := renderWith(t, tc.format, sealAll(t, tc.input), options)
 			assertGolden(t, tc.name+".golden", got)
 			if strings.Contains(got, "file://") || strings.Contains(got, "/home/") || strings.Contains(got, "file=") || strings.Contains(got, `claude//`) || strings.Contains(got, `etc//`) {
 				t.Fatalf("location leaked a file annotation or an unnormalized path:\n%s", got)
@@ -208,8 +208,8 @@ func TestSARIFLogicalIsDefault(t *testing.T) {
 	}
 	explicit := testOptions()
 	explicit.NonRepoSARIF = SARIFNonRepoLogical
-	input := []model.Finding{userFinding(), managedFinding()}
-	got := render(t, FormatSARIF, input)
+	input := sealAll(t, []model.Finding{userFinding(), managedFinding()})
+	got := renderWith(t, FormatSARIF, input, testOptions())
 	if got != renderWith(t, FormatSARIF, input, explicit) {
 		t.Fatal("explicit logical form differs from the default")
 	}
@@ -295,7 +295,32 @@ func TestRejectsUnknownSARIFLocationMode(t *testing.T) {
 
 func render(t *testing.T, format Format, input []model.Finding) string {
 	t.Helper()
-	return renderWith(t, format, input, testOptions())
+	return renderWith(t, format, sealAll(t, input), testOptions())
+}
+
+// seal stamps the fingerprint the model requires and checks the finding.
+// Rendering never recomputes a fingerprint; it only accepts one Validate
+// already accepts.
+func seal(t *testing.T, finding model.Finding) model.Finding {
+	t.Helper()
+	fp, err := model.Fingerprint(finding.Rule, finding.Location, finding.Evidence)
+	if err != nil {
+		t.Fatal(err)
+	}
+	finding.Fingerprint = fp
+	if err := finding.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	return finding
+}
+
+func sealAll(t *testing.T, input []model.Finding) []model.Finding {
+	t.Helper()
+	out := make([]model.Finding, len(input))
+	for i, finding := range input {
+		out[i] = seal(t, finding)
+	}
+	return out
 }
 
 func testOptions() Options {
@@ -334,7 +359,7 @@ func findings() []model.Finding {
 				Config:  &model.ConfigRef{ID: "cursor:repo:configs/hook.json"},
 				Excerpt: "plugin: ./plugins/unreviewed.js",
 			}},
-			Location:    model.Location{Harness: model.HarnessCursor, Scope: model.ScopeRepo, Path: "/work/repo/configs/hook.json", Line: &line},
+			Location:    model.Location{Harness: model.HarnessCursor, Scope: model.ScopeRepo, Path: "configs/hook.json", Line: &line},
 			Refs:        []string{"https://example.invalid/rules/TC-CFG-010"},
 			Fix:         "Remove the plugin or review and pin it.",
 			Fingerprint: "tcf_0123456789abcdef",
@@ -420,7 +445,7 @@ func outputTestdataDir(t *testing.T) string {
 
 func writeFindings(t *testing.T, sink Sink, input []model.Finding) {
 	t.Helper()
-	for _, finding := range input {
+	for _, finding := range sealAll(t, input) {
 		if err := sink.Write(finding); err != nil {
 			t.Fatal(err)
 		}
@@ -446,7 +471,7 @@ func userFinding() model.Finding {
 		Location: model.Location{
 			Harness: model.HarnessClaude,
 			Scope:   model.ScopeUser,
-			Path:    `~\.claude//settings.json`,
+			Path:    "~/.claude/settings.json",
 			Line:    &line,
 		},
 		Refs:        []string{"https://example.invalid/rules/TC-CFG-001"},
@@ -470,7 +495,7 @@ func managedFinding() model.Finding {
 		Location: model.Location{
 			Harness: model.HarnessCursor,
 			Scope:   model.ScopeManaged,
-			Path:    `/etc//cursor/hooks.json`,
+			Path:    "/etc/cursor/hooks.json",
 		},
 		Refs:        []string{"https://example.invalid/rules/TC-CFG-006"},
 		Fix:         "Point the hook at a versioned script.",
