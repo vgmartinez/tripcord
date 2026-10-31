@@ -1,8 +1,10 @@
 // Package codex discovers OpenAI Codex configuration without executing
 // it: config.toml (MCP servers, sandbox and approval settings, inline
-// hooks), hooks.json, AGENTS.override.md, and the user and system layers.
-// AGENTS.md is shared with other harnesses and is read by the generic
-// adapter.
+// hooks), hooks.json, AGENTS.override.md, .codex/rules/*.rules (and the
+// user and system layers), and its own, deprecated ~/.codex/skills. A
+// .rules file is Codex's Starlark-based exec policy; it is parsed
+// conservatively and never executed (see rules_parse.go). AGENTS.md and
+// shared skills are read by the generic adapter.
 package codex
 
 import (
@@ -22,6 +24,9 @@ const product = "Codex"
 
 // maxProfiles caps $CODEX_HOME/*.config.toml profile files.
 const maxProfiles = 64
+
+// maxRulesFiles caps $CODEX_HOME/rules/*.rules files.
+const maxRulesFiles = 64
 
 // Options controls discovery. The zero value scans repository scope only,
 // so a repository scan never reads the home directory or system files.
@@ -120,15 +125,19 @@ const (
 	roleConfig
 	roleHooks
 	roleOverride
+	roleRules
 )
 
 func classify(rel string) role {
 	segments := kit.Segments(rel)
 	n := len(segments)
 	base := segments[n-1]
-	parent := ""
+	parent, grandparent := "", ""
 	if n >= 2 {
 		parent = segments[n-2]
+	}
+	if n >= 3 {
+		grandparent = segments[n-3]
 	}
 	switch {
 	case parent == ".codex" && base == "config.toml":
@@ -137,6 +146,8 @@ func classify(rel string) role {
 		return roleHooks
 	case base == "agents.override.md":
 		return roleOverride
+	case grandparent == ".codex" && parent == "rules" && strings.HasSuffix(base, ".rules"):
+		return roleRules
 	}
 	return roleNone
 }
@@ -175,6 +186,8 @@ func (a *Adapter) discoverRepo(ctx context.Context, repoRoot string, c *kit.Coll
 			(&file{Source: src.WithField("project_trust", trust)}).hooksFile(raw)
 		case roleOverride:
 			src.Markdown(model.ConfigKindInstructions, "agents-override", raw, kit.LooseFrontmatter)
+		case roleRules:
+			(&file{Source: src.WithField("project_trust", trust)}).rulesFile(raw)
 		case roleNone:
 		}
 	}
@@ -212,6 +225,13 @@ func (a *Adapter) discoverUser(ctx context.Context, c *kit.Collector, repoRoot s
 	abs, logical = dir.File("hooks.json")
 	if raw, ok := c.ReadLocal(model.ScopeUser, abs, logical); ok {
 		(&file{Source: c.Source(model.ScopeUser, logical, raw)}).hooksFile(raw)
+	}
+	rulesDir := dir.Dir("rules")
+	for _, name := range c.ListLocal(model.ScopeUser, rulesDir.Abs, rulesDir.Logical, ".rules", maxRulesFiles) {
+		abs, logical := rulesDir.File(name)
+		if raw, ok := c.ReadLocal(model.ScopeUser, abs, logical); ok {
+			(&file{Source: c.Source(model.ScopeUser, logical, raw)}).rulesFile(raw)
+		}
 	}
 	for _, name := range []string{"AGENTS.md", "AGENTS.override.md"} {
 		abs, logical := dir.File(name)

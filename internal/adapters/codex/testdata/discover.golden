@@ -273,6 +273,66 @@
     {
       "harness": "codex",
       "scope": "repo",
+      "path": ".codex/rules/default.rules",
+      "sha256": "e2e7ce0f60773d9c028177c1f19367bb30ef185712d10ab482a627069a54c7bc",
+      "kind": "permissions",
+      "payload": {
+        "decision": "allow",
+        "key": "[\"rule\",\"allow\",\"[\\\"env\\\",\\\"PGPASSWORD=[REDACTED]\\\",\\\"psql\\\"]\",\"sig:1c7d47872b02ddb3\"]",
+        "pattern": [
+          "env",
+          "PGPASSWORD=[REDACTED]",
+          "psql"
+        ],
+        "project_trust": "unset",
+        "role": "rule"
+      }
+    },
+    {
+      "harness": "codex",
+      "scope": "repo",
+      "path": ".codex/rules/default.rules",
+      "sha256": "e2e7ce0f60773d9c028177c1f19367bb30ef185712d10ab482a627069a54c7bc",
+      "kind": "permissions",
+      "payload": {
+        "decision": "allow",
+        "key": "[\"rule\",\"allow\",\"[\\\"git\\\",\\\"add\\\"]\",\"sig:f7bbc459e3073341\"]",
+        "pattern": [
+          "git",
+          "add"
+        ],
+        "project_trust": "unset",
+        "role": "rule"
+      }
+    },
+    {
+      "harness": "codex",
+      "scope": "repo",
+      "path": ".codex/rules/default.rules",
+      "sha256": "e2e7ce0f60773d9c028177c1f19367bb30ef185712d10ab482a627069a54c7bc",
+      "kind": "permissions",
+      "payload": {
+        "decision": "prompt",
+        "justification": "Viewing PRs is allowed with approval",
+        "key": "[\"rule\",\"prompt\",\"[\\\"gh\\\",\\\"pr\\\",\\\"view\\\"]\",\"sig:a39add864dae7c98\"]",
+        "match": [
+          "gh pr view 7888"
+        ],
+        "not_match": [
+          "gh pr --repo openai/codex view 7888"
+        ],
+        "pattern": [
+          "gh",
+          "pr",
+          "view"
+        ],
+        "project_trust": "unset",
+        "role": "rule"
+      }
+    },
+    {
+      "harness": "codex",
+      "scope": "repo",
       "path": "AGENTS.override.md",
       "sha256": "b74a2f426fe778ef0b0b743f232a073ab4bc36b1d85dccccaa865d774bc350a2",
       "kind": "instructions",
@@ -346,6 +406,22 @@
         "key": "[\"hook\",\"SessionStart\",\"\",\"command\",\"./start.sh\",\"sig:126aeda750dbe96d\"]",
         "matcher": "",
         "type": "command"
+      }
+    },
+    {
+      "harness": "codex",
+      "scope": "user",
+      "path": "~/.codex/rules/default.rules",
+      "sha256": "52b912c666611ebef19c3143a29c143803806559fed770864e58429b56569e2d",
+      "kind": "permissions",
+      "payload": {
+        "decision": "allow",
+        "key": "[\"rule\",\"allow\",\"[\\\"npm\\\",\\\"test\\\"]\",\"sig:33815ab6e55075a8\"]",
+        "pattern": [
+          "npm",
+          "test"
+        ],
+        "role": "rule"
       }
     },
     {

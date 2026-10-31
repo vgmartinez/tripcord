@@ -1,0 +1,5 @@
+# User layer: always active, not gated by project trust.
+prefix_rule(
+    pattern = ["npm", "test"],
+    decision = "allow",
+)

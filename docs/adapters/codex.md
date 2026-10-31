@@ -20,6 +20,7 @@ no other reader and is reported here. Codex session transcripts
 | `.codex/config.toml` (any depth) | `mcp-server`, `hook`, `permissions`, `env-setup`, `plugin` |
 | `.codex/hooks.json` (any depth) | `hook` |
 | `AGENTS.override.md` (any depth) | `instructions` (role `agents-override`) |
+| `.codex/rules/*.rules` (any depth) | `permissions` |
 
 Codex loads project `.codex/` layers from the project root down to the
 working directory, so nested directories are scanned like the root. Path
@@ -36,6 +37,7 @@ matching is case-insensitive.
 | `hooks.json` | `hook` |
 | `AGENTS.md`, `AGENTS.override.md` | `instructions` (roles `agents`, `agents-override`) |
 | `skills/**/SKILL.md` | `skill` |
+| `rules/*.rules` (at most 64) | `permissions` |
 
 `skills` (`$CODEX_HOME/skills`, i.e. `~/.codex/skills` by default) is
 Codex's deprecated user-skill location, kept for backward compatibility
@@ -62,7 +64,7 @@ Codex loads a project `.codex/` layer only when the project is trusted
 (`[projects."<absolute path>"] trust_level = "trusted"` in the user
 `config.toml`). The adapter scans project files regardless and records
 `project_trust` on every item from `.codex/config.toml` and
-`.codex/hooks.json`:
+`.codex/hooks.json`, and `.codex/rules/*.rules`:
 
 | Value | Meaning |
 | --- | --- |
@@ -120,6 +122,17 @@ differ elsewhere (a second hook with the same command but a different
   `notify`, `profile(s)`, `experimental_realtime_ws_base_url`, `otel`) are
   still emitted from the repository with `ignored_in_project: true`.
 
+- Exec policy rules, from `.codex/rules/*.rules` (project, gated by
+  [project trust](#project-trust) but always scanned) and
+  `~/.codex/rules/*.rules` (user, always active): one item per
+  `prefix_rule(pattern=[...], decision=..., justification=..., match=...,
+  not_match=...)` call, key `["rule", decision, pattern-as-JSON]` plus a
+  discriminator. `decision` defaults to `"allow"` when omitted. A `.rules`
+  file this parser cannot model conservatively (see
+  [Parsing](#parsing)) is reported as a single opaque item,
+  `{"role": "rules-file", "parsed": false, "content": <sanitized file>}`,
+  instead of guessing at its meaning.
+
 Other keys are not emitted. The list was reviewed against the
 configuration reference on 2026-10-31.
 
@@ -134,6 +147,17 @@ configuration reference on 2026-10-31.
   variants. A file with no `hooks` object but other top-level members is
   reported.
 - Nesting deeper than 64 levels fails closed.
+- `.rules` files are [Codex's Starlark-based exec
+  policy](https://developers.openai.com/codex/rules). They are parsed, not
+  executed: a small tokenizer and parser recognize only top-level
+  `prefix_rule(...)` calls built from string and list literals (comments
+  start with `#`), and bail out the moment they see anything else — an
+  unrecognized call or keyword, a duplicate keyword, a non-string or
+  non-list value, `==`, a triple-quoted string, an unsupported escape, a
+  multi-line or unterminated string, or any byte the grammar does not
+  define. On a bail-out the whole file is reported as one opaque item
+  rather than partially interpreted. At most 64 `.rules` files are read
+  per scope.
 
 Reads, symlink handling, limits, and diagnostics are those of the
 [Claude adapter](claude.md#safe-reads): a `.codex` symlink that resolves
@@ -152,3 +176,5 @@ not scanned").
 - [Codex hooks](https://developers.openai.com/codex/hooks)
 - [Codex configuration reference](https://developers.openai.com/codex/config-reference)
 - [Codex config basics](https://learn.chatgpt.com/docs/config-file/config-basic.md)
+- [Codex rules](https://developers.openai.com/codex/rules)
+- [Codex exec policy grammar](https://github.com/openai/codex/blob/main/codex-rs/execpolicy/README.md)

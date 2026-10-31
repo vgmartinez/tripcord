@@ -245,6 +245,124 @@ func TestMCPServerArgsRedactsToolSpecificFlag(t *testing.T) {
 	}
 }
 
+// TestRulesFileNormalized is the discovery-level counterpart of
+// rules_parse_test.go: a project .rules file with two prefix_rule calls
+// is normalized into two permissions items, each carrying project_trust
+// like hooksFile and config do.
+func TestRulesFileNormalized(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(root, ".codex", "rules", "default.rules"),
+		"prefix_rule(pattern = [\"git\", \"add\"], decision = \"allow\")\n"+
+			"prefix_rule(pattern = [\"rm\", \"-rf\"], decision = \"forbidden\", justification = \"destructive\")\n")
+	got := kittest.Discover(t, New(Options{}), root)
+	items := got.Find(".codex/rules/default.rules", model.ConfigKindPermissions)
+	if len(items) != 2 {
+		t.Fatalf("items = %+v, want 2", got.Items)
+	}
+	byDecision := map[string]map[string]any{}
+	for _, item := range items {
+		p := kittest.Payload(t, item)
+		byDecision[p["decision"].(string)] = p
+	}
+	allow, ok := byDecision["allow"]
+	if !ok || allow["role"] != "rule" || allow["project_trust"] != trustUnknown {
+		t.Fatalf("allow rule = %+v", allow)
+	}
+	forbidden, ok := byDecision["forbidden"]
+	if !ok || forbidden["justification"] != "destructive" {
+		t.Fatalf("forbidden rule = %+v", forbidden)
+	}
+}
+
+// TestRulesFileDecisionDefaultsToAllow mirrors Codex's own documented
+// default: a prefix_rule with no decision kwarg allows the command.
+func TestRulesFileDecisionDefaultsToAllow(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(root, ".codex", "rules", "default.rules"), "prefix_rule(pattern = [\"npm\", \"test\"])\n")
+	got := kittest.Discover(t, New(Options{}), root)
+	items := got.Find(".codex/rules/default.rules", model.ConfigKindPermissions)
+	if len(items) != 1 || kittest.Payload(t, items[0])["decision"] != "allow" {
+		t.Fatalf("items = %+v", got.Items)
+	}
+}
+
+// TestRulesFileOpaqueOnUnknownConstruct is the conservative fallback: a
+// construct rules_parse.go does not model (here, a second top-level
+// call Codex's execpolicy actually supports but this parser does not)
+// makes the whole file opaque instead of silently dropping the rule or
+// guessing at its meaning.
+func TestRulesFileOpaqueOnUnknownConstruct(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(root, ".codex", "rules", "default.rules"),
+		"prefix_rule(pattern = [\"git\", \"add\"], decision = \"allow\")\n"+
+			"host_executable(name = \"git\")\n")
+	got := kittest.Discover(t, New(Options{}), root)
+	items := got.Find(".codex/rules/default.rules", model.ConfigKindPermissions)
+	if len(items) != 1 {
+		t.Fatalf("items = %+v, want one opaque item", got.Items)
+	}
+	p := kittest.Payload(t, items[0])
+	if p["role"] != "rules-file" || p["parsed"] != false {
+		t.Fatalf("payload = %+v", p)
+	}
+	if !strings.Contains(p["content"].(string), "host_executable") {
+		t.Fatalf("opaque content dropped the file body: %+v", p)
+	}
+}
+
+// TestRulesFileRedactsSecretsInOpaqueFallback guards the opaque path
+// against the same leak the parsed path is tested for in the discover
+// golden: a secret in a file this parser cannot model must still be
+// redacted, not reported verbatim just because parsing gave up.
+func TestRulesFileRedactsSecretsInOpaqueFallback(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(root, ".codex", "rules", "default.rules"),
+		"prefix_rule(pattern = [\"env\", \"PGPASSWORD=sk-live-secret-token\", \"psql\"]) + unknown\n")
+	got := kittest.Discover(t, New(Options{}), root)
+	items := got.Find(".codex/rules/default.rules", model.ConfigKindPermissions)
+	if len(items) != 1 {
+		t.Fatalf("items = %+v, want one opaque item", got.Items)
+	}
+	raw := string(items[0].Payload)
+	if strings.Contains(raw, "sk-live-secret-token") {
+		t.Fatalf("opaque fallback leaks a secret: %s", raw)
+	}
+}
+
+// TestUserRulesScanned is the ~/.codex/rules/*.rules counterpart of
+// TestUserSkillsScanned: Codex's always-active global rules layer, not
+// gated by project trust.
+func TestUserRulesScanned(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(home, ".codex", "rules", "default.rules"), "prefix_rule(pattern = [\"npm\", \"test\"], decision = \"allow\")\n")
+	root := t.TempDir()
+	got := kittest.Discover(t, New(Options{IncludeUser: true, HomeDir: home, Getenv: kittest.Env()}), root)
+	items := got.Find("~/.codex/rules/default.rules", model.ConfigKindPermissions)
+	if len(items) != 1 {
+		t.Fatalf("items = %+v", got.Items)
+	}
+	if items[0].Harness != model.HarnessCodex || items[0].Scope != model.ScopeUser {
+		t.Fatalf("item = %+v", items[0])
+	}
+}
+
+func TestUserRulesNotScannedWithoutIncludeUser(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(home, ".codex", "rules", "default.rules"), "prefix_rule(pattern = [\"npm\", \"test\"])\n")
+	root := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(root, ".codex", "config.toml"), "sandbox_mode = \"danger-full-access\"\n")
+	got := kittest.Discover(t, New(Options{HomeDir: home, Getenv: kittest.Env()}), root)
+	if len(got.Find("~/.codex/rules/default.rules", model.ConfigKindPermissions)) != 0 {
+		t.Fatalf("items = %+v, want no user-scope rules without IncludeUser", got.Items)
+	}
+}
+
 func TestHostileInputs(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -434,6 +552,11 @@ func FuzzParseConfig(f *testing.F) {
 	if data, err := os.ReadFile("testdata/repo/.codex/hooks.json"); err == nil {
 		f.Add("hooks", data)
 	}
+	for _, path := range []string{"testdata/repo/.codex/rules/default.rules", "testdata/home/.codex/rules/default.rules"} {
+		if data, err := os.ReadFile(path); err == nil {
+			f.Add("rules", data)
+		}
+	}
 	f.Fuzz(func(t *testing.T, kind string, data []byte) {
 		c := kit.NewCollector(model.HarnessCodex, product)
 		for _, scope := range []model.Scope{model.ScopeRepo, model.ScopeUser} {
@@ -442,9 +565,12 @@ func FuzzParseConfig(f *testing.F) {
 				path = "~/.codex/config.toml"
 			}
 			f := &file{Source: c.Source(scope, path, data)}
-			if kind == "hooks" {
+			switch kind {
+			case "hooks":
 				f.hooksFile(data)
-			} else {
+			case "rules":
+				f.rulesFile(data)
+			default:
 				f.config(data)
 			}
 		}
