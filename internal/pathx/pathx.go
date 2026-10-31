@@ -77,7 +77,7 @@ func tooShortToRewrite(home string) bool {
 	// "C:/" (what filepath.Clean produces on Windows itself).
 	if len(home) >= 2 && len(home) <= 3 && home[1] == ':' {
 		c := home[0]
-		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) {
+		if (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') {
 			return false
 		}
 		return len(home) == 2 || home[2] == '\\' || home[2] == '/'
