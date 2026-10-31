@@ -112,6 +112,70 @@ func TestUserSkillsFollowCodexHomeOverride(t *testing.T) {
 	}
 }
 
+// TestProjectTrustExtendsToSubfolders is Follow-up 5: Codex extends a
+// trusted project's trust to its subfolders, so scanning
+// <repo>/sub/dir finds the repo's own trust entry by walking up, not
+// just an exact match on the scanned root.
+func TestProjectTrustExtendsToSubfolders(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	sub := filepath.Join(repo, "sub", "dir")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	kittest.WriteFile(t, filepath.Join(sub, ".codex", "config.toml"), "sandbox_mode = \"danger-full-access\"\n")
+	home := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(home, ".codex", "config.toml"), userConfig(repo))
+	got := kittest.Discover(t, New(Options{IncludeUser: true, HomeDir: home, Getenv: kittest.Env()}), sub)
+	items := got.Find(".codex/config.toml", model.ConfigKindPermissions)
+	if len(items) != 1 || kittest.Payload(t, items[0])["project_trust"] != trustTrusted {
+		t.Fatalf("items = %+v, want the subfolder to inherit the repo's trust", got.Items)
+	}
+}
+
+// TestProjectTrustMostSpecificAncestorWins pins the tie-break when both
+// a repo and one of its subfolders have their own project_trust entry:
+// the more specific (longer) path wins over the shorter ancestor.
+func TestProjectTrustMostSpecificAncestorWins(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	sub := filepath.Join(repo, "sub")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tree := "[projects.\"" + filepath.ToSlash(repo) + "\"]\ntrust_level = \"trusted\"\n" +
+		"[projects.\"" + filepath.ToSlash(sub) + "\"]\ntrust_level = \"untrusted\"\n"
+	kittest.WriteFile(t, filepath.Join(sub, ".codex", "config.toml"), "sandbox_mode = \"danger-full-access\"\n")
+	home := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(home, ".codex", "config.toml"), tree)
+	got := kittest.Discover(t, New(Options{IncludeUser: true, HomeDir: home, Getenv: kittest.Env()}), sub)
+	items := got.Find(".codex/config.toml", model.ConfigKindPermissions)
+	if len(items) != 1 || kittest.Payload(t, items[0])["project_trust"] != trustUntrusted {
+		t.Fatalf("items = %+v, want the more specific (sub) entry to win", got.Items)
+	}
+}
+
+// TestProjectTrustDoesNotExtendToSiblingWithSharedPrefix guards the
+// string-prefix pitfall: "/repo-untrusted" must not match the ancestor
+// entry for "/repo" just because the directory name shares a prefix.
+func TestProjectTrustDoesNotExtendToSiblingWithSharedPrefix(t *testing.T) {
+	t.Parallel()
+	parent := t.TempDir()
+	repo := filepath.Join(parent, "repo")
+	sibling := filepath.Join(parent, "repo-sibling")
+	if err := os.MkdirAll(sibling, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	kittest.WriteFile(t, filepath.Join(sibling, ".codex", "config.toml"), "sandbox_mode = \"danger-full-access\"\n")
+	home := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(home, ".codex", "config.toml"), userConfig(repo))
+	got := kittest.Discover(t, New(Options{IncludeUser: true, HomeDir: home, Getenv: kittest.Env()}), sibling)
+	items := got.Find(".codex/config.toml", model.ConfigKindPermissions)
+	if len(items) != 1 || kittest.Payload(t, items[0])["project_trust"] != trustUnset {
+		t.Fatalf("items = %+v, want no trust inherited from a sibling with a shared name prefix", got.Items)
+	}
+}
+
 func TestTrustFollowsSymlinkedRoot(t *testing.T) {
 	t.Parallel()
 	real := t.TempDir()

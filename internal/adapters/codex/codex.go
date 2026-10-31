@@ -303,30 +303,51 @@ const (
 	trustUnknown = "unknown"
 )
 
-// projectTrust looks up projects.<repoRoot>.trust_level. Keys are
-// absolute paths; both sides are cleaned and symlink-resolved.
+// projectTrust looks up projects.<path>.trust_level for repoRoot or, if
+// repoRoot has no entry of its own, the closest ancestor directory that
+// does: Codex extends a project's trust to its subfolders, so scanning a
+// subdirectory of a trusted repository is trusted too. Keys are absolute
+// paths; both sides are cleaned and symlink-resolved. When more than one
+// ancestor has an entry, the longest (most specific) path wins.
 func projectTrust(tree map[string]any, repoRoot string) string {
 	projects, ok := tree["projects"].(map[string]any)
 	if !ok {
 		return trustUnset
 	}
 	want := canonical(repoRoot)
+	if want == "" {
+		return trustUnset
+	}
+	best, bestLevel := "", trustUnset
 	for key, value := range projects {
-		if canonical(key) != want {
+		projectPath := canonical(key)
+		if projectPath == "" || !isSelfOrDescendant(want, projectPath) {
 			continue
 		}
 		entry, ok := value.(map[string]any)
 		if !ok {
 			continue
 		}
-		switch level, _ := entry["trust_level"].(string); strings.ToLower(level) {
-		case trustTrusted:
-			return trustTrusted
-		case trustUntrusted:
-			return trustUntrusted
+		rawLevel, _ := entry["trust_level"].(string)
+		level := strings.ToLower(rawLevel)
+		if level != trustTrusted && level != trustUntrusted {
+			continue
+		}
+		if len(projectPath) > len(best) {
+			best, bestLevel = projectPath, level
 		}
 	}
-	return trustUnset
+	return bestLevel
+}
+
+// isSelfOrDescendant reports whether path is ancestor itself or a
+// descendant of it, both already canonical (cleaned, symlink-resolved,
+// absolute).
+func isSelfOrDescendant(path, ancestor string) bool {
+	if path == ancestor {
+		return true
+	}
+	return strings.HasPrefix(path, ancestor+string(filepath.Separator))
 }
 
 func canonical(p string) string {
