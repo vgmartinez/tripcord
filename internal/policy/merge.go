@@ -1,0 +1,429 @@
+package policy
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"maps"
+	"path"
+	"slices"
+	"time"
+
+	"github.com/vgmartinez/tripcord/internal/model"
+	"github.com/vgmartinez/tripcord/internal/rules"
+)
+
+// LayerKind is where a policy layer comes from. Layers merge in the
+// order default, org, repo, local: later layers override earlier ones
+// except where an earlier layer locked a value.
+type LayerKind string
+
+const (
+	LayerDefault LayerKind = "default"
+	// LayerOrg is every file reached through extends from the repo policy.
+	LayerOrg   LayerKind = "org"
+	LayerRepo  LayerKind = "repo"
+	LayerLocal LayerKind = "local"
+)
+
+// Origin records which layer and file set a value.
+type Origin struct {
+	Layer  LayerKind
+	Source string
+}
+
+// Layer is one parsed policy file in merge order.
+type Layer struct {
+	Kind   LayerKind
+	Source string
+	File   *File
+}
+
+// RuleCatalog supplies rule base severities for lock checks and rule
+// ids that custom rules must not reuse. *rules.Catalog implements it.
+type RuleCatalog interface {
+	Rule(id string) (*rules.Rule, bool)
+}
+
+// Exception is a validated exceptions entry.
+type Exception struct {
+	Rule   string
+	Path   string
+	SHA256 string
+	Reason string
+	// Expires is the last day the exception applies, at 00:00 UTC.
+	Expires time.Time
+	Origin  Origin
+}
+
+// CustomRule is a compiled custom entry.
+type CustomRule struct {
+	ID string
+	// When is nil when the entry has no precondition.
+	When     *rules.Expr
+	DenyIf   *rules.Expr
+	Message  string
+	Severity model.Severity
+	Origin   Origin
+}
+
+// RuleLock is a locked.rules pattern and the severity overrides in
+// effect when it was declared.
+type RuleLock struct {
+	Pattern   string
+	Origin    Origin
+	overrides map[string]model.Severity
+}
+
+// ModeLock is a locked mode: later layers cannot pick a weaker mode.
+type ModeLock struct {
+	Floor  Mode
+	Origin Origin
+}
+
+// Effective is the merged policy. Provenance maps a value path to the
+// layer that set it. Keys are "mode", "pack.<name>", "harnesses",
+// "rules.include", "rules.severity_overrides.<id>",
+// "rules.exceptions[<i>]" (index into Exceptions), "custom.<id>",
+// "secrets.rulesets", "secrets.store", "privacy.egress",
+// "privacy.redact", "cloud.report_channel", "locked.mode", and
+// "locked.rules[<pattern>]".
+type Effective struct {
+	Mode              Mode
+	Packs             []rules.PackRef
+	Harnesses         []model.Harness
+	Include           []string
+	SeverityOverrides map[string]model.Severity
+	Exceptions        []Exception
+	Custom            []*CustomRule
+	SecretRulesets    []string
+	SecretStore       string
+	Egress            string
+	Redact            bool
+	ReportChannel     []string
+	ModeLock          *ModeLock
+	RuleLocks         []RuleLock
+	Provenance        map[string]Origin
+	Layers            []Origin
+}
+
+var defaultOrigin = Origin{Layer: LayerDefault, Source: "default"}
+
+// defaults is the policy with no files. Every value here is listed as
+// an open question in the pull request that introduced it.
+func defaults() *Effective {
+	e := &Effective{
+		Mode: ModeEnforce,
+		Harnesses: []model.Harness{
+			model.HarnessClaude, model.HarnessCodex, model.HarnessCursor, model.HarnessCopilot,
+			model.HarnessGemini, model.HarnessOpenCode, model.HarnessWindsurf,
+		},
+		Include:           []string{"*"},
+		SeverityOverrides: map[string]model.Severity{},
+		SecretStore:       SecretStoreFingerprintOnly,
+		Egress:            EgressNone,
+		Redact:            true,
+		Provenance:        map[string]Origin{},
+		Layers:            []Origin{defaultOrigin},
+	}
+	for _, k := range []string{"mode", "harnesses", "rules.include", "secrets.store", "privacy.egress", "privacy.redact"} {
+		e.Provenance[k] = defaultOrigin
+	}
+	return e
+}
+
+// Merge applies layers over the defaults. env compiles custom rules.
+// catalog may be nil, in which case no lower layer may override the
+// severity of a locked rule that an upper layer did not override.
+func Merge(env *rules.Env, catalog RuleCatalog, layers []Layer) (*Effective, error) {
+	e := defaults()
+	customIDs := map[string]Origin{}
+	for _, l := range layers {
+		if err := e.apply(env, catalog, l, customIDs); err != nil {
+			return nil, &Error{Source: l.Source, Err: err}
+		}
+	}
+	return e, nil
+}
+
+func (e *Effective) apply(env *rules.Env, catalog RuleCatalog, l Layer, customIDs map[string]Origin) error {
+	f := l.File
+	o := Origin{Layer: l.Kind, Source: l.Source}
+	e.Layers = append(e.Layers, o)
+	var errs []error
+
+	if f.Mode != "" {
+		if lock := e.ModeLock; lock != nil && f.Mode.strength() < lock.Floor.strength() {
+			errs = append(errs, fmt.Errorf("mode %s: locked at %s by %s", f.Mode, lock.Floor, lock.Origin.Source))
+		} else {
+			e.Mode = f.Mode
+			e.Provenance["mode"] = o
+		}
+	}
+	for _, p := range f.Pack {
+		ref, _ := rules.ParsePackRef(p)
+		i := slices.IndexFunc(e.Packs, func(r rules.PackRef) bool { return r.Name == ref.Name })
+		if i >= 0 {
+			e.Packs[i] = ref
+		} else {
+			e.Packs = append(e.Packs, ref)
+		}
+		e.Provenance["pack."+ref.Name] = o
+	}
+	if f.Harnesses != nil {
+		e.Harnesses = make([]model.Harness, len(f.Harnesses))
+		for i, h := range f.Harnesses {
+			e.Harnesses[i] = model.Harness(h)
+		}
+		e.Provenance["harnesses"] = o
+	}
+	if f.Rules.Include != nil {
+		e.Include = slices.Clone(f.Rules.Include)
+		e.Provenance["rules.include"] = o
+	}
+	for _, id := range slices.Sorted(maps.Keys(f.Rules.SeverityOverrides)) {
+		sev := model.Severity(f.Rules.SeverityOverrides[id])
+		if err := e.checkSeverityLock(catalog, id, sev); err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		e.SeverityOverrides[id] = sev
+		e.Provenance["rules.severity_overrides."+id] = o
+	}
+	for _, spec := range f.Rules.Exceptions {
+		if lock, ok := e.ruleLock(spec.Rule); ok {
+			errs = append(errs, fmt.Errorf("rules.exceptions: %s is locked by %s; exceptions must be added there", spec.Rule, lock.Origin.Source))
+			continue
+		}
+		expires, _ := time.Parse(ExpiresLayout, spec.Expires)
+		e.Provenance[fmt.Sprintf("rules.exceptions[%d]", len(e.Exceptions))] = o
+		e.Exceptions = append(e.Exceptions, Exception{
+			Rule: spec.Rule, Path: spec.Path, SHA256: spec.SHA256, Reason: spec.Reason,
+			Expires: expires, Origin: o,
+		})
+	}
+	for _, spec := range f.Custom {
+		if prev, ok := customIDs[spec.ID]; ok {
+			errs = append(errs, fmt.Errorf("custom: %s is already defined in %s", spec.ID, prev.Source))
+			continue
+		}
+		if catalog != nil {
+			if _, ok := catalog.Rule(spec.ID); ok {
+				errs = append(errs, fmt.Errorf("custom: %s is a pack rule id", spec.ID))
+				continue
+			}
+		}
+		c, err := compileCustom(env, spec, o)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		customIDs[spec.ID] = o
+		e.Custom = append(e.Custom, c)
+		e.Provenance["custom."+spec.ID] = o
+	}
+	if s := f.Secrets; s != nil {
+		if s.Rulesets != nil {
+			e.SecretRulesets = slices.Clone(s.Rulesets)
+			e.Provenance["secrets.rulesets"] = o
+		}
+		if s.Store != "" {
+			e.SecretStore = s.Store
+			e.Provenance["secrets.store"] = o
+		}
+	}
+	if p := f.Privacy; p != nil {
+		if p.Egress != "" {
+			e.Egress = p.Egress
+			e.Provenance["privacy.egress"] = o
+		}
+		if p.Redact != nil {
+			e.Redact = *p.Redact
+			e.Provenance["privacy.redact"] = o
+		}
+	}
+	if c := f.Cloud; c != nil && c.ReportChannel != nil {
+		e.ReportChannel = slices.Clone(c.ReportChannel)
+		e.Provenance["cloud.report_channel"] = o
+	}
+	if lk := f.Locked; lk != nil {
+		if lk.Mode != nil {
+			switch {
+			case *lk.Mode:
+				e.ModeLock = &ModeLock{Floor: e.Mode, Origin: o}
+				e.Provenance["locked.mode"] = o
+			case e.ModeLock != nil:
+				errs = append(errs, fmt.Errorf("locked.mode: false cannot unlock the mode locked by %s", e.ModeLock.Origin.Source))
+			}
+		}
+		for _, p := range lk.Rules {
+			e.RuleLocks = append(e.RuleLocks, RuleLock{Pattern: p, Origin: o, overrides: maps.Clone(e.SeverityOverrides)})
+			e.Provenance["locked.rules["+p+"]"] = o
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// checkSeverityLock rejects lowering a locked rule below the severity
+// it had when it was locked: the override then in effect, or else the
+// rule's base severity.
+func (e *Effective) checkSeverityLock(catalog RuleCatalog, id string, sev model.Severity) error {
+	for _, lock := range e.RuleLocks {
+		if !matchID(lock.Pattern, id) {
+			continue
+		}
+		floor, ok := lock.overrides[id]
+		if !ok && catalog != nil {
+			if r, found := catalog.Rule(id); found {
+				floor, ok = r.Severity, true
+			}
+		}
+		if !ok {
+			return fmt.Errorf("rules.severity_overrides.%s: locked by %s and its severity is unknown, so it cannot be overridden here", id, lock.Origin.Source)
+		}
+		if c, _ := sev.Compare(floor); c < 0 {
+			return fmt.Errorf("rules.severity_overrides.%s: %s is below %s, locked by %s", id, sev, floor, lock.Origin.Source)
+		}
+	}
+	return nil
+}
+
+func (e *Effective) ruleLock(id string) (RuleLock, bool) {
+	for _, lock := range e.RuleLocks {
+		if matchID(lock.Pattern, id) {
+			return lock, true
+		}
+	}
+	return RuleLock{}, false
+}
+
+func compileCustom(env *rules.Env, spec CustomSpec, o Origin) (*CustomRule, error) {
+	c := &CustomRule{ID: spec.ID, Message: spec.Message, Severity: model.SeverityHigh, Origin: o}
+	if spec.Severity != "" {
+		c.Severity = model.Severity(spec.Severity)
+	}
+	if spec.When != "" {
+		when, err := env.Compile(spec.When)
+		if err != nil {
+			return nil, fmt.Errorf("custom %s: when: %w", spec.ID, err)
+		}
+		c.When = when
+	}
+	deny, err := env.Compile(spec.DenyIf)
+	if err != nil {
+		return nil, fmt.Errorf("custom %s: deny_if: %w", spec.ID, err)
+	}
+	c.DenyIf = deny
+	return c, nil
+}
+
+// Deny reports whether the rule denies the event in in: when (if set)
+// and deny_if are both true.
+func (c *CustomRule) Deny(ctx context.Context, in *rules.Input) (bool, error) {
+	if c.When != nil {
+		ok, err := c.When.Eval(ctx, in)
+		if err != nil || !ok {
+			return false, err
+		}
+	}
+	return c.DenyIf.Eval(ctx, in)
+}
+
+func matchID(pattern, id string) bool {
+	ok, _ := path.Match(pattern, id)
+	return ok
+}
+
+// RuleLocked reports whether a locked.rules pattern covers id.
+func (e *Effective) RuleLocked(id string) bool {
+	_, ok := e.ruleLock(id)
+	return ok
+}
+
+// Enabled reports whether rule id runs: it matches rules.include, or it
+// is locked. A lower layer that narrows include cannot drop a locked rule.
+func (e *Effective) Enabled(id string) bool {
+	for _, p := range e.Include {
+		if matchID(p, id) {
+			return true
+		}
+	}
+	return e.RuleLocked(id)
+}
+
+// Severity returns the override for id, or base.
+func (e *Effective) Severity(id string, base model.Severity) model.Severity {
+	if sev, ok := e.SeverityOverrides[id]; ok {
+		return sev
+	}
+	return base
+}
+
+// ExceptionStatus is the result of an exception lookup.
+type ExceptionStatus int
+
+const (
+	// ExceptionNone: no exception names this rule and path.
+	ExceptionNone ExceptionStatus = iota
+	// ExceptionActive: an exception matches and suppresses the finding.
+	ExceptionActive
+	// ExceptionExpired: an exception matched by hash but its date passed.
+	ExceptionExpired
+	// ExceptionHashMismatch: an exception names the file but the file changed.
+	ExceptionHashMismatch
+)
+
+func (s ExceptionStatus) String() string {
+	switch s {
+	case ExceptionNone:
+		return "none"
+	case ExceptionActive:
+		return "active"
+	case ExceptionExpired:
+		return "expired"
+	case ExceptionHashMismatch:
+		return "hash-mismatch"
+	default:
+		return fmt.Sprintf("ExceptionStatus(%d)", int(s))
+	}
+}
+
+// Exception looks up an exception for rule on path with content hash
+// sha256 at time now. An exception applies through the end of its
+// expires day in UTC, and only while sha256 matches. When several
+// entries name the rule and path, an active one wins, then expired,
+// then hash mismatch.
+func (e *Effective) Exception(rule, path, sha256 string, now time.Time) (*Exception, ExceptionStatus) {
+	var best *Exception
+	status := ExceptionNone
+	for i := range e.Exceptions {
+		ex := &e.Exceptions[i]
+		if ex.Rule != rule || ex.Path != path {
+			continue
+		}
+		s := ExceptionActive
+		switch {
+		case ex.SHA256 != sha256:
+			s = ExceptionHashMismatch
+		case !now.UTC().Before(ex.Expires.AddDate(0, 0, 1)):
+			s = ExceptionExpired
+		}
+		if best == nil || rank(s) > rank(status) {
+			best, status = ex, s
+		}
+	}
+	return best, status
+}
+
+func rank(s ExceptionStatus) int {
+	switch s {
+	case ExceptionActive:
+		return 3
+	case ExceptionExpired:
+		return 2
+	case ExceptionHashMismatch:
+		return 1
+	default:
+		return 0
+	}
+}
