@@ -95,8 +95,9 @@ nesting level, so prefer it to long regexes over hook commands.
 
 `shell.unpinned(command)` returns what `shell.risks` returns, or `[]`
 when every fetch in the line is pinned (see `shellcmd.Unpinned`): each
-downloader target is an https URL whose path names a 40- or 64-digit
-hex commit or a `sha256:` digest, or, with nothing piped into a shell,
+downloader target is an allowlisted https URL (GitHub raw, archive,
+codeload, or gist; jsDelivr `gh@<sha>`; GitLab `/-/raw/<sha>`; or an
+OCI `blobs`/`manifests` `sha256:` digest) with no userinfo, or, with nothing piped into a shell,
 each download is followed by a `sha256sum`/`sha384sum`/`sha512sum -c`
 (or `shasum -a 256|384|512 -c`) check that stops the line when it
 fails (`&&`, the end of the line, or `set -e`). Package runners, git

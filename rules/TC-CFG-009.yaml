@@ -22,10 +22,11 @@
 #     is an http(s) tarball URL is read as a curl of that URL.
 #
 # Pinned means one of:
-#   - Immutable URL: every downloader target is an https URL whose path
-#     names a 40- or 64-digit hex commit id (a path segment, or the part
-#     after @) or a sha256:<64 hex> digest. A tag, a branch, a release
-#     download, or a version number is not a pin.
+#   - Immutable URL: every downloader target is https, without userinfo
+#     or a trailing-dot host, on an allowlisted host and path position
+#     (GitHub raw/archive/codeload/gist, jsDelivr gh@<sha>, GitLab
+#     /-/raw/<sha>), or an OCI blobs/manifests sha256 digest. A hex
+#     string on any other host, including a release asset, is not a pin.
 #   - Checksum verified before execution: nothing is piped into a
 #     shell, and each download is followed, as the next statement, by
 #     sha256sum, sha384sum, or sha512sum -c (or shasum -a 256, 384, or

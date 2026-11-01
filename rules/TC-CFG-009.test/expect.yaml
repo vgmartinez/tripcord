@@ -5,6 +5,10 @@ positivos:
   copilot-checksum-explicit-sh: high
   copilot-checksum-without-errexit: high
   copilot-curl-pipe-sh: high
+  copilot-evil-host-sha: high
+  copilot-release-asset-sha: high
+  copilot-trailing-dot-host: high
+  copilot-userinfo-host: high
   copilot-download-then-run: high
   copilot-pwsh-iwr-iex: high
   cursor-install-curl-pipe: high

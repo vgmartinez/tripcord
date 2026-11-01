@@ -37,16 +37,23 @@ nesting it cannot follow) unless every fetch in the command is pinned.
 A command is pinned in one of two ways. A command that mixes the two is
 not.
 
-- **Immutable URL.** Every downloader target (`curl`, `wget`, `iwr`,
-  `irm`, `Invoke-WebRequest`, `Invoke-RestMethod`, `Start-BitsTransfer`,
-  a remote `deno run` module, a .NET `DownloadString`) is an `https`
-  URL whose path names a commit or a content digest: a path segment,
-  or the part of one after `@`, that is a 40- or 64-digit hex commit id
-  (`raw.githubusercontent.com/<org>/<repo>/<sha>/install.sh`,
-  `cdn.jsdelivr.net/gh/<org>/<repo>@<sha>/install.sh`), or a
-  `sha256:<64 hex>` digest. Piping such a download into a shell is
-  pinned. A tag, a branch, a release download URL, a version number, a
-  query string (`?ref=<sha>`), and plain `http` are not pins.
+- **Immutable URL.** Every downloader target is `https`, has no
+  userinfo, and its host does not end in a dot. The commit has to sit
+  where that host actually stores an immutable object:
+  `raw.githubusercontent.com/<owner>/<repo>/<sha>/`,
+  `github.com/<owner>/<repo>/raw/<sha>/`,
+  `github.com/<owner>/<repo>/archive/<sha>.tar.gz` or `.zip`,
+  `codeload.github.com` archive paths (`tar.gz`, `zip`,
+  `legacy.tar.gz`, `legacy.zip`), a gist `raw/<sha>/` path,
+  `cdn.jsdelivr.net/gh/<user>/<repo>@<sha>/`, or
+  `gitlab.com/<group>/<project>/-/raw/<sha>/`. A 40- or 64-digit hex
+  commit on one of those paths cannot change. jsDelivr and GitLab are
+  on the list because those exact paths address one commit, as GitHub's
+  raw and archive paths do. A `sha256:<64 hex>` digest counts only
+  after an OCI `blobs` or `manifests` segment. Any other host, a
+  release asset, a tag, a branch, userinfo
+  (`raw.githubusercontent.com@evil.example`), or a trailing-dot host
+  is not a pin. The host match is case-insensitive.
 - **Checksum verified before execution.** Nothing is piped into a
   shell, and each download is followed, as the very next statement, by
   a SHA-2 checksum check (`sha256sum`, `sha384sum`, or `sha512sum` with

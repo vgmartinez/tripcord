@@ -13,10 +13,9 @@ import (
 //
 //   - Immutable URL. Every fetch is a downloader (curl, wget, iwr, irm,
 //     Invoke-WebRequest, Invoke-RestMethod, Start-BitsTransfer) or a
-//     deno run whose every remote target is an https URL that names a
-//     commit or a digest (see immutableURL), or a .NET Download* call
-//     whose every remote URL does. Piping that download into a shell is
-//     pinned.
+//     deno run whose every remote target is an allowlisted https URL
+//     (see immutableURL), or a .NET Download* call whose every remote
+//     URL is. Piping that download into a shell is pinned.
 //   - Checksum. Nothing is piped into a shell or Invoke-Expression, and
 //     each command that fetches is followed, as the next statement of
 //     the same command line, by a SHA-2 checksum check (sha256sum,
@@ -136,24 +135,122 @@ func urlsImmutable(text string) bool {
 	}
 }
 
-// immutableURL reports an https URL whose path names a commit or a
-// content digest, so what it serves cannot change: a path segment, or
-// the part of one after @, that is a 40- or 64-digit hex commit id
-// (raw.githubusercontent.com/o/r/<sha>/x.sh, cdn.jsdelivr.net/gh/o/r@<sha>/x.sh),
-// or a sha256:<64 hex> digest. The query and fragment are not read.
+// immutableURL reports an https URL whose host and path place a commit
+// or an OCI digest where that service treats it as immutable. Any other
+// host, a userinfo, a trailing-dot host, and a non-https URL are
+// rejected: a hex string in the path is not itself a pin.
+//
+//	raw.githubusercontent.com/<owner>/<repo>/<sha>/...
+//	github.com/<owner>/<repo>/raw/<sha>/...
+//	github.com/<owner>/<repo>/archive/<sha>.tar.gz|.zip
+//	codeload.github.com/<owner>/<repo>/<tar.gz|zip|legacy.tar.gz|legacy.zip>/<sha>
+//	gist.githubusercontent.com/<user>/<id>/raw/<sha>/...
+//	gist.github.com/<user>/<id>/raw/<sha>/...
+//	cdn.jsdelivr.net/gh/<user>/<repo>@<sha>/...
+//	gitlab.com/<group>/<project>/-/raw/<sha>/...
+//
+// jsDelivr and GitLab are included because a full commit SHA on those
+// exact paths addresses one stored tree, the same way GitHub's raw and
+// archive paths do. A sha256: digest counts only as an OCI registry
+// blob or manifest (a blobs or manifests segment followed by
+// sha256:<64 hex>), not as a path segment on an arbitrary host.
 func immutableURL(w string) bool {
 	u, err := url.Parse(w)
-	if err != nil || !strings.EqualFold(u.Scheme, "https") || u.Hostname() == "" {
+	if err != nil || u.User != nil || !strings.EqualFold(u.Scheme, "https") {
 		return false
 	}
-	for _, seg := range strings.Split(u.Path, "/") {
-		if _, digest, ok := strings.Cut(seg, "sha256:"); ok && len(digest) == 64 && isHex(digest) {
+	host := u.Hostname()
+	if host == "" || strings.HasSuffix(host, ".") {
+		return false
+	}
+	segs := pathSegments(u.EscapedPath())
+	switch strings.ToLower(host) {
+	case "raw.githubusercontent.com":
+		return len(segs) >= 4 && isCommit(segs[2])
+	case "github.com":
+		return githubImmutable(segs)
+	case "codeload.github.com":
+		return codeloadImmutable(segs)
+	case "gist.githubusercontent.com", "gist.github.com":
+		return len(segs) >= 4 && segs[2] == "raw" && isCommit(segs[3])
+	case "cdn.jsdelivr.net":
+		return jsDelivrImmutable(segs)
+	case "gitlab.com":
+		return gitlabImmutable(segs)
+	default:
+		return ociDigest(segs)
+	}
+}
+
+func pathSegments(path string) []string {
+	var segs []string
+	for _, seg := range strings.Split(path, "/") {
+		if seg != "" {
+			segs = append(segs, seg)
+		}
+	}
+	return segs
+}
+
+func githubImmutable(segs []string) bool {
+	if len(segs) >= 5 && segs[2] == "raw" && isCommit(segs[3]) {
+		return true
+	}
+	return len(segs) == 4 && segs[2] == "archive" && commitFile(segs[3])
+}
+
+func codeloadImmutable(segs []string) bool {
+	if len(segs) != 4 {
+		return false
+	}
+	switch segs[2] {
+	case "tar.gz", "zip", "legacy.tar.gz", "legacy.zip":
+		return isCommit(segs[3])
+	default:
+		return false
+	}
+}
+
+func jsDelivrImmutable(segs []string) bool {
+	if len(segs) < 3 || segs[0] != "gh" {
+		return false
+	}
+	_, version, ok := strings.Cut(segs[2], "@")
+	return ok && isCommit(version)
+}
+
+func gitlabImmutable(segs []string) bool {
+	for i := 0; i+2 < len(segs); i++ {
+		if segs[i] == "-" && segs[i+1] == "raw" && isCommit(segs[i+2]) {
 			return true
 		}
-		for _, part := range strings.Split(seg, "@") {
-			if (len(part) == 40 || len(part) == 64) && isHex(part) {
-				return true
-			}
+	}
+	return false
+}
+
+func ociDigest(segs []string) bool {
+	registry := false
+	for _, seg := range segs {
+		if seg == "blobs" || seg == "manifests" {
+			registry = true
+			continue
+		}
+		digest, ok := strings.CutPrefix(seg, "sha256:")
+		if registry && ok && len(digest) == 64 && isHex(digest) {
+			return true
+		}
+	}
+	return false
+}
+
+func isCommit(s string) bool {
+	return (len(s) == 40 || len(s) == 64) && isHex(s)
+}
+
+func commitFile(name string) bool {
+	for _, ext := range []string{".tar.gz", ".zip"} {
+		if stem, ok := strings.CutSuffix(name, ext); ok {
+			return isCommit(stem)
 		}
 	}
 	return false
