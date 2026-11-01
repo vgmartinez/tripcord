@@ -38,6 +38,7 @@ getMilliseconds
 getMinutes
 getMonth
 getSeconds
+hook.args
 hook.argv
 hook.commands
 in
