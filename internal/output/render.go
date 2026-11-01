@@ -19,6 +19,39 @@ import (
 // not a tripcord.finding/v1 document.
 const diagnosticSchema = "tripcord.diagnostic/v1"
 
+// findingDocument adds the fingerprint mode to a Finding's JSON/JSONL
+// rendering without adding a field to Finding itself, which is the
+// frozen tripcord.finding/v1 wire type. MarshalJSON appends
+// "fingerprintMode" after Finding's own MarshalJSON output (preserving
+// its nil-slice-to-[] normalization), so a finding with no "sig:"
+// discriminator (FingerprintMode is "") renders byte-for-byte as before;
+// tripcord.finding/v1 accepts an unrecognized property on any object
+// (see schemas/tripcord.finding.v1.schema.json), so adding it is not a
+// breaking schema change.
+type findingDocument struct {
+	Finding         model.Finding
+	FingerprintMode string
+}
+
+func (d findingDocument) MarshalJSON() ([]byte, error) {
+	base, err := json.Marshal(d.Finding)
+	if err != nil {
+		return nil, err
+	}
+	if d.FingerprintMode == "" {
+		return base, nil
+	}
+	extra, err := json.Marshal(d.FingerprintMode)
+	if err != nil {
+		return nil, err
+	}
+	out := bytes.TrimSuffix(base, []byte("}"))
+	out = append(out, []byte(`,"fingerprintMode":`)...)
+	out = append(out, extra...)
+	out = append(out, '}')
+	return out, nil
+}
+
 type diagnosticDocument struct {
 	Schema     string `json:"schema"`
 	Incomplete bool   `json:"incomplete"`
@@ -33,7 +66,9 @@ func renderJSONL(writer io.Writer, findings []model.Finding, diags []Diagnostic,
 	encoder := json.NewEncoder(&buffer)
 	encoder.SetEscapeHTML(true)
 	for _, finding := range findings {
-		if err := encoder.Encode(capFinding(publishedFinding(finding, options.RepoRoot))); err != nil {
+		published := capFinding(publishedFinding(finding, options.RepoRoot))
+		doc := findingDocument{Finding: published, FingerprintMode: model.FingerprintMode(published.Evidence)}
+		if err := encoder.Encode(doc); err != nil {
 			return err
 		}
 	}

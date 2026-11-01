@@ -248,6 +248,40 @@ func canonicalFingerprintScope(scope Scope) (Scope, error) {
 	return scope, nil
 }
 
+// k1Marker and s1Marker are the discriminator prefixes
+// internal/adapters/kit.discriminated writes into a ConfigRef.Key when
+// an entry lost a secret to redaction (see docs/fingerprint.md). They
+// are matched as substrings, never parsed: Key is "[...]" JSON holding
+// several parts, of which the discriminator is only the last.
+const (
+	k1Marker = "sig:k1:"
+	s1Marker = "sig:s1:"
+)
+
+// FingerprintMode returns which "sig:" discriminator mode, if any,
+// produced evidence's fingerprint: "k1" when a fingerprint key keyed it,
+// "s1" when the structural discriminator did, or "" when no evidence
+// config key carries either marker at all. The empty case is not an
+// error: an entry that removed nothing to redact (Q2 in the researcher
+// review) has no discriminator and its fingerprint does not depend on
+// the mode, so it is deliberately the same in k1 and s1 runs. Renderers
+// use this to annotate SARIF properties and JSON output with the mode,
+// without hashing the mode itself or changing Fingerprint.
+func FingerprintMode(evidence []Evidence) string {
+	for _, ev := range evidence {
+		if ev.Config == nil {
+			continue
+		}
+		switch {
+		case strings.Contains(ev.Config.Key, k1Marker):
+			return "k1"
+		case strings.Contains(ev.Config.Key, s1Marker):
+			return "s1"
+		}
+	}
+	return ""
+}
+
 func canonicalJSON(v any) ([]byte, error) {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)

@@ -39,6 +39,75 @@ func TestGoldenFormats(t *testing.T) {
 	}
 }
 
+// sigFinding is a finding whose evidence config key carries a "sig:"
+// discriminator, the shape kit.discriminated writes for an entry that
+// redacted a secret (see docs/fingerprint.md).
+func sigFinding(key string) model.Finding {
+	f := findings()[0]
+	f.Evidence = []model.Evidence{{Config: &model.ConfigRef{ID: "cursor:repo:configs/hook.json", Key: key}}}
+	return f
+}
+
+// TestFingerprintModeInOutput is the researcher review's request to emit
+// the k1/s1 fingerprint mode in SARIF properties and in JSON output. A
+// finding with no "sig:" discriminator at all (findings()[1], an event
+// citation with no config) must render exactly as before: Q2 says these
+// are deliberately mode-independent, and the JSON case also pins that
+// findingDocument's MarshalJSON only appends fingerprintMode when it is
+// non-empty, so existing output is unaffected byte for byte.
+func TestFingerprintModeInOutput(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct {
+		key  string
+		want string
+	}{
+		"k1":     {`["mcp","app","sig:k1:0123456789abcdef#0"]`, "k1"},
+		"s1":     {`["mcp","app","sig:s1:env[0]#0"]`, "s1"},
+		"no sig": {`["mcp","app"]`, ""},
+		"no key": {"", ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			input := []model.Finding{sigFinding(tc.key)}
+
+			sarifOut := render(t, FormatSARIF, input)
+			validateSARIF(t, sarifOut)
+			if tc.want == "" {
+				if strings.Contains(sarifOut, "fingerprintMode") {
+					t.Fatalf("SARIF has fingerprintMode for a mode-less finding:\n%s", sarifOut)
+				}
+			} else if !strings.Contains(sarifOut, `"fingerprintMode": "`+tc.want+`"`) {
+				t.Fatalf("SARIF missing fingerprintMode %q:\n%s", tc.want, sarifOut)
+			}
+
+			jsonOut := render(t, FormatJSON, input)
+			validateFindingLines(t, jsonOut)
+			var decoded map[string]any
+			if err := json.Unmarshal([]byte(strings.TrimSpace(jsonOut)), &decoded); err != nil {
+				t.Fatal(err)
+			}
+			got, _ := decoded["fingerprintMode"].(string)
+			if got != tc.want {
+				t.Fatalf("json fingerprintMode = %q, want %q: %s", got, tc.want, jsonOut)
+			}
+		})
+	}
+}
+
+// TestFingerprintModeOmittedByDefault locks the existing golden output
+// (no "sig:" anywhere in the fixture findings) as proof that adding
+// fingerprintMode did not change output for every finding already
+// covered by TestGoldenFormats.
+func TestFingerprintModeOmittedByDefault(t *testing.T) {
+	t.Parallel()
+	for _, format := range []Format{FormatJSON, FormatSARIF} {
+		got := render(t, format, findings())
+		if strings.Contains(got, "fingerprintMode") {
+			t.Fatalf("%s: unexpected fingerprintMode in golden-covered output:\n%s", format, got)
+		}
+	}
+}
+
 func TestFindingsAreSortedDeterministically(t *testing.T) {
 	t.Parallel()
 	left := render(t, FormatJSON, findings())

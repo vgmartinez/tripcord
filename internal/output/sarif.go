@@ -86,8 +86,12 @@ type sarifProperties struct {
 }
 
 type sarifTripcord struct {
-	Scope string `json:"scope"`
-	Path  string `json:"path"`
+	Scope string `json:"scope,omitempty"`
+	Path  string `json:"path,omitempty"`
+	// Mode is the "sig:" discriminator mode that produced
+	// Fingerprint (see model.FingerprintMode): "k1", "s1", or omitted
+	// when the finding's evidence carries no discriminator at all.
+	Mode string `json:"fingerprintMode,omitempty"`
 }
 
 type sarifMessage struct {
@@ -159,6 +163,7 @@ func renderSARIF(writer io.Writer, findings []model.Finding, diags []Diagnostic,
 			return err
 		}
 		ref := locate(finding.Location, options.RepoRoot)
+		fpMode := model.FingerprintMode(finding.Evidence)
 		result := sarifResult{
 			RuleID:  finding.Rule,
 			Level:   level,
@@ -167,8 +172,12 @@ func renderSARIF(writer io.Writer, findings []model.Finding, diags []Diagnostic,
 				"tripcord/fingerprint": finding.Fingerprint,
 			},
 		}
-		if ref.kind != locNone {
-			result.Properties = &sarifProperties{Tripcord: sarifTripcord{Scope: ref.scope, Path: present(ref.path)}}
+		if ref.kind != locNone || fpMode != "" {
+			tripcord := sarifTripcord{Mode: fpMode}
+			if ref.kind != locNone {
+				tripcord.Scope, tripcord.Path = ref.scope, present(ref.path)
+			}
+			result.Properties = &sarifProperties{Tripcord: tripcord}
 		}
 		switch ref.kind {
 		case locNone:

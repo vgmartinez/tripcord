@@ -584,6 +584,45 @@ func TestFingerprintDocMatchesGoldens(t *testing.T) {
 	}
 }
 
+func TestFingerprintMode(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct {
+		evidence []Evidence
+		want     string
+	}{
+		"no evidence":            {nil, ""},
+		"event evidence":         {[]Evidence{{Event: "evt_1"}}, ""},
+		"config with no key":     {[]Evidence{{Config: &ConfigRef{ID: "x"}}}, ""},
+		"config key with no sig": {[]Evidence{{Config: &ConfigRef{ID: "x", Key: `["mcp","app"]`}}}, ""},
+		"k1": {
+			[]Evidence{{Config: &ConfigRef{ID: "x", Key: `["mcp","app","sig:k1:0123456789abcdef#0"]`}}},
+			"k1",
+		},
+		"s1": {
+			[]Evidence{{Config: &ConfigRef{ID: "x", Key: `["mcp","app","sig:s1:env[0]#0"]`}}},
+			"s1",
+		},
+		"s1 with an empty structural part": {
+			[]Evidence{{Config: &ConfigRef{ID: "x", Key: `["mcp","app","sig:s1:#0"]`}}},
+			"s1",
+		},
+		"k1 wins when an earlier evidence item has no sig": {
+			[]Evidence{
+				{Config: &ConfigRef{ID: "x", Key: `["a"]`}},
+				{Config: &ConfigRef{ID: "y", Key: `["mcp","app","sig:k1:0123456789abcdef#0"]`}},
+			},
+			"k1",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			if got := FingerprintMode(tc.evidence); got != tc.want {
+				t.Errorf("FingerprintMode(%+v) = %q, want %q", tc.evidence, got, tc.want)
+			}
+		})
+	}
+}
+
 func assertKeys(t *testing.T, obj map[string]any, want ...string) {
 	t.Helper()
 	if len(obj) != len(want) {
