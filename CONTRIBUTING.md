@@ -104,14 +104,24 @@ Do not remove lines. CI compares the file with the pull request base.
 
 `rules/<ID>.test/positivos/` holds inputs that must trigger the rule and
 `rules/<ID>.test/negativos/` inputs that must not. Each needs at least
-one file. An engine fixture is a JSON config item, or an array of
-them; `sha256` may be left empty. Raw config files are checked later,
-with the harness adapters:
+one fixture. A fixture is either of:
+
+- A directory: a repository tree of real config files, sanitized. The
+  test runs every adapter on it, autodetected as `tripcord scan` does,
+  and fails if the adapters report the tree as incomplete. Prefer this
+  form, with one directory per case, for example
+  `positivos/claude-sessionstart-curl/.claude/settings.json`.
+- A `.json` engine fixture: a config item, or an array of them, with
+  `sha256` optionally left empty. Use it for payloads an adapter would
+  not produce from a real file, such as a field of the wrong type:
 
 ```json
 {"harness": "vscode", "scope": "repo", "path": ".vscode/tasks.json", "sha256": "",
  "kind": "task", "payload": {"label": "setup", "runOptions": {"runOn": "folderOpen"}}}
 ```
+
+Fixture configs use `.invalid` or `example` hosts and placeholder
+secrets only.
 
 Run one rule:
 
