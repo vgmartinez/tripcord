@@ -613,6 +613,27 @@ func TestFingerprintMode(t *testing.T) {
 			},
 			"k1",
 		},
+		// A non-discriminator key part can be arbitrary command or
+		// header text that happens to contain the marker text as a
+		// substring, not at the start of the last element: it must not
+		// be mistaken for a real discriminator. "sig:" + a digest (no
+		// mode) is the actual last part here, the same shape a
+		// genuinely non-discriminated entry gets.
+		"user text containing the s1 marker is not a discriminator": {
+			[]Evidence{{Config: &ConfigRef{ID: "x", Key: `["cmd","echo sig:s1:x[0]","sig:0123456789abcdef"]`}}},
+			"",
+		},
+		// A real s1 entry whose own command text happens to contain
+		// "sig:k1:" must still report s1: only the last element is
+		// ever inspected, and it starts with sig:s1:.
+		"user text containing the k1 marker does not relabel an s1 entry": {
+			[]Evidence{{Config: &ConfigRef{ID: "x", Key: `["cmd","echo sig:k1:deadbeef","sig:0123456789abcdef","sig:s1:env[0]#0"]`}}},
+			"s1",
+		},
+		"key is not a JSON array": {
+			[]Evidence{{Config: &ConfigRef{ID: "x", Key: "sig:s1:env[0]#0"}}},
+			"",
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

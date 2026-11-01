@@ -9,6 +9,7 @@ import (
 
 	"github.com/vgmartinez/tripcord/internal/adapters/kit/kittest"
 	"github.com/vgmartinez/tripcord/internal/model"
+	"github.com/vgmartinez/tripcord/internal/rules"
 )
 
 // keyParts returns the decoded evidence key of the only item of kind in
@@ -124,6 +125,75 @@ func TestS1DiscriminatorIgnoresHeaderSecretShape(t *testing.T) {
 }
 
 var s1Pattern = regexp.MustCompile(`^sig:s1:`)
+
+// hookItem returns the sole ConfigKindHook item in got.
+func hookItem(t *testing.T, got discovery) model.ConfigItem {
+	t.Helper()
+	var found *model.ConfigItem
+	for _, item := range got.Items {
+		if item.Kind != model.ConfigKindHook {
+			continue
+		}
+		if found != nil {
+			t.Fatalf("more than one hook item")
+		}
+		item := item
+		found = &item
+	}
+	if found == nil {
+		t.Fatalf("no hook item")
+	}
+	return *found
+}
+
+// TestFingerprintModeIgnoresMarkerTextInCommand is the researcher
+// review's bug 1: model.FingerprintMode must look only at the LAST
+// element of the evidence key, anchored, never scan the whole key text
+// as a substring. A hook whose command is itself literal text shaped
+// like a discriminator (nothing was actually redacted here) must not be
+// mislabeled: hookAction puts the sanitized command directly into an
+// earlier key part (see kit.Source.Hook), so a command that happens to
+// read "echo sig:s1:x[0]" would, under the old Contains-based check,
+// make a mode-independent finding (Q2) falsely render fingerprintMode
+// "s1" and break its byte-identical output.
+func TestFingerprintModeIgnoresMarkerTextInCommand(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, ".claude", "settings.json"),
+		`{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"echo sig:s1:x[0]"}]}]}}`)
+	got := discover(t, New(Options{}), root)
+	item := hookItem(t, got)
+	key := rules.ConfigEvidenceKey(item)
+	if !strings.Contains(key, "sig:s1:x[0]") {
+		t.Fatalf("test setup: key %q does not contain the marker text", key)
+	}
+	evidence := []model.Evidence{{Config: &model.ConfigRef{ID: "x", Key: key}}}
+	if mode := model.FingerprintMode(evidence); mode != "" {
+		t.Fatalf("FingerprintMode(%q) = %q, want \"\" (nothing was redacted)", key, mode)
+	}
+}
+
+// TestFingerprintModeIgnoresMarkerTextElsewhereInKey is the same bug's
+// other direction: an entry that IS genuinely discriminated in s1 must
+// keep reporting s1 even when its command text happens to contain the
+// literal "sig:k1:" marker, since only the key's last element decides
+// the mode, never a substring match anywhere in it.
+func TestFingerprintModeIgnoresMarkerTextElsewhereInKey(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, ".claude", "settings.json"),
+		`{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"echo sig:k1:deadbeef --token zsM01q"}]}]}}`)
+	got := discover(t, New(Options{}), root)
+	item := hookItem(t, got)
+	key := rules.ConfigEvidenceKey(item)
+	if !strings.Contains(key, "sig:k1:deadbeef") {
+		t.Fatalf("test setup: key %q does not contain the marker text", key)
+	}
+	evidence := []model.Evidence{{Config: &model.ConfigRef{ID: "x", Key: key}}}
+	if mode := model.FingerprintMode(evidence); mode != "s1" {
+		t.Fatalf("FingerprintMode(%q) = %q, want \"s1\"", key, mode)
+	}
+}
 
 // Two hooks that differ only in a redacted header value, or a redacted
 // field other than the action, must not share a key.
