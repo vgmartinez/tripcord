@@ -34,12 +34,13 @@ ceiling. See [policy.md](policy.md).
 | --- | --- |
 | 0 | No finding meets the effective threshold. |
 | 1 | At least one finding meets the effective threshold. |
-| 3 | Invalid flags or format, configuration/policy error, a Git ref `--since` cannot use, an invalid `--output` or `--policy` path, unavailable v0 secret scan, or unknown command. `--help` exits 0. |
+| 3 | Invalid flags or format, configuration/policy error, a Git ref `--since` cannot use, an invalid `--output` or `--policy` path, unavailable v0 secret scan, unknown command, or an incomplete scan (below). `--help` exits 0. |
 | 4 | Internal error, or a failure to start Git or finish writing the output file. |
 
 When an adapter cannot fully read the configuration (malformed, oversized,
-unsafe, or unreadable files, or walk limits reached), scan still writes the
-findings for everything it could read, prints one sanitized diagnostic per
+unsafe, or unreadable files, or walk limits reached), or a rule cannot be
+evaluated on a file (for example it exceeds the CEL cost limit), scan still
+writes the findings for everything it could read and evaluate, prints one sanitized diagnostic per
 problem to stderr, and exits 3 because the scan is incomplete. Exit 3 takes
 precedence over exit 1. The same diagnostics are included in the report:
 JSONL gains a `tripcord.diagnostic/v1` line with `"incomplete": true`,

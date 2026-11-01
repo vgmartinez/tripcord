@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -187,21 +189,45 @@ func TestScanConfigErrorsAreNotMatches(t *testing.T) {
 	items := []model.ConfigItem{
 		item(model.HarnessClaude, ".mcp.json", model.ConfigKindMCPServer, `{"command":42,"tools":["a"]}`),
 		item(model.HarnessClaude, ".mcp.json", model.ConfigKindMCPServer, `{not json`),
+		item(model.HarnessClaude, ".mcp.json", model.ConfigKindMCPServer, `{"command":"sh"}`),
 	}
 	res := engine.ScanConfig(context.Background(), items)
-	if len(res.Matches) != 0 || len(res.Errors) != 2 {
-		t.Fatalf("matches %v errors %v", res.Matches, res.Errors)
+	if len(res.Errors) != 2 {
+		t.Fatalf("errors %v", res.Errors)
+	}
+	if len(res.Matches) == 0 || slices.ContainsFunc(res.Matches, func(m Match) bool { return string(m.Item.Payload) != string(items[2].Payload) }) {
+		t.Fatalf("an error stopped or leaked into the other matches: %v", res.Matches)
+	}
+	for i, e := range res.Errors {
+		if e.Harness != model.HarnessClaude || e.Scope != model.ScopeRepo || e.Path != ".mcp.json" || e.Reason() != "evaluation error" {
+			t.Fatalf("errors[%d] = %+v, reason %q", i, e, e.Reason())
+		}
 	}
 	if res.Errors[0].Rule != "TEST-CFG-002" || res.Errors[1].Rule != "" {
 		t.Fatalf("errors = %v", res.Errors)
 	}
 }
 
+func TestEvalErrorReason(t *testing.T) {
+	for err, want := range map[error]string{
+		ErrCostLimit:                    "cost limit exceeded",
+		fmt.Errorf("x: %w", ErrTimeout): "evaluation timed out",
+		ErrBudget:                       "evaluation budget exhausted",
+		ErrInputLimit:                   "input exceeds size limit",
+		ErrNotBool:                      "expression did not return a bool",
+		context.Canceled:                "scan cancelled",
+		errors.New(`no such overload: "sk-live-secret"`): "evaluation error",
+	} {
+		if got := (EvalError{Err: err}).Reason(); got != want {
+			t.Errorf("Reason(%v) = %q, want %q", err, got, want)
+		}
+	}
+}
+
 // TestScanConfigExtremeNumberIsNotAnError is the engine-level half of
 // the scanner-blinding repro: a payload with a number too large for
 // float64 anywhere in it must not turn into a ConfigInput error, since
-// cmd/tripcord treats any accumulated engine error as fatal for the
-// whole scan and drops every finding, not just the offending item's.
+// cmd/tripcord reports any engine error as an incomplete scan.
 func TestScanConfigExtremeNumberIsNotAnError(t *testing.T) {
 	engine, _ := fixtureEngine(t)
 	items := []model.ConfigItem{

@@ -62,7 +62,8 @@ link.
 
 ## Diagnostics
 
-When discovery is incomplete, every format includes the diagnostics after
+When discovery is incomplete, or a rule could not be evaluated on a file,
+every format includes the diagnostics after
 the same redaction and field cap as finding text. User paths stay under
 `~`. A raw credential in a diagnostic is replaced with `[REDACTED]`.
 

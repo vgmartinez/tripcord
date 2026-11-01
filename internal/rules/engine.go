@@ -2,6 +2,7 @@ package rules
 
 import (
 	"context"
+	"errors"
 
 	"github.com/vgmartinez/tripcord/internal/model"
 )
@@ -88,9 +89,32 @@ func (m Match) Finding(severity model.Severity, decision model.Decision) (model.
 // EvalError is a rule that could not be evaluated for an item. Rule is
 // empty when the item itself was rejected, for example by a size limit.
 type EvalError struct {
-	Rule string
-	Path string
-	Err  error
+	Rule    string
+	Harness model.Harness
+	Scope   model.Scope
+	Path    string
+	Err     error
+}
+
+// Reason is a fixed description of Err for reports. It never includes
+// the error text, which can quote values from the evaluated item.
+func (e EvalError) Reason() string {
+	switch {
+	case errors.Is(e.Err, ErrCostLimit):
+		return "cost limit exceeded"
+	case errors.Is(e.Err, ErrTimeout):
+		return "evaluation timed out"
+	case errors.Is(e.Err, ErrBudget):
+		return "evaluation budget exhausted"
+	case errors.Is(e.Err, ErrInputLimit):
+		return "input exceeds size limit"
+	case errors.Is(e.Err, ErrNotBool):
+		return "expression did not return a bool"
+	case errors.Is(e.Err, context.Canceled), errors.Is(e.Err, context.DeadlineExceeded):
+		return "scan cancelled"
+	default:
+		return "evaluation error"
+	}
 }
 
 func (e EvalError) Error() string {
@@ -124,20 +148,20 @@ func (e *Engine) ScanConfig(ctx context.Context, items []model.ConfigItem) Resul
 				continue
 			}
 			if ctx.Err() != nil {
-				res.Errors = append(res.Errors, EvalError{Rule: r.ID, Path: item.Path, Err: ctxError(ctx)})
+				res.Errors = append(res.Errors, evalError(r.ID, item, ctxError(ctx)))
 				return res
 			}
 			if in == nil {
 				var err error
 				in, err = ConfigInput(item, e.env.Limits())
 				if err != nil {
-					res.Errors = append(res.Errors, EvalError{Path: item.Path, Err: err})
+					res.Errors = append(res.Errors, evalError("", item, err))
 					break
 				}
 			}
 			ok, err := r.When.Eval(ctx, in)
 			if err != nil {
-				res.Errors = append(res.Errors, EvalError{Rule: r.ID, Path: item.Path, Err: err})
+				res.Errors = append(res.Errors, evalError(r.ID, item, err))
 				continue
 			}
 			if !ok {
@@ -145,7 +169,7 @@ func (e *Engine) ScanConfig(ctx context.Context, items []model.ConfigItem) Resul
 			}
 			sev, matched, err := r.SeverityFor(ctx, in)
 			if err != nil {
-				res.Errors = append(res.Errors, EvalError{Rule: r.ID, Path: item.Path, Err: err})
+				res.Errors = append(res.Errors, evalError(r.ID, item, err))
 				continue
 			}
 			if !matched {
@@ -155,4 +179,8 @@ func (e *Engine) ScanConfig(ctx context.Context, items []model.ConfigItem) Resul
 		}
 	}
 	return res
+}
+
+func evalError(rule string, item model.ConfigItem, err error) EvalError {
+	return EvalError{Rule: rule, Harness: item.Harness, Scope: item.Scope, Path: item.Path, Err: err}
 }
