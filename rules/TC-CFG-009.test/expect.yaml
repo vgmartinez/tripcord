@@ -2,6 +2,8 @@
 # internal/rules/fixtures.go, ExpectFile).
 positivos:
   checksum-fetched-sums-after-check: high
+  checksum-fetched-target-symlink-outside: high
+  checksum-fetched-target-symlink-to-sums: high
   checksum-fetched-sums-and: high
   checksum-fetched-sums-semicolon: high
   checksum-run-sums-file: high
@@ -10,6 +12,9 @@ positivos:
   checksum-sums-job-working-directory: high
   checksum-sums-lists-other-file: high
   checksum-sums-malformed: high
+  checksum-sums-symlink-to-fetched-direct: high
+  checksum-sums-symlink-to-fetched-dot: high
+  checksum-sums-symlink-to-fetched-nested: high
   checksum-sums-not-committed: high
   checksum-sums-step-working-directory: high
   checksum-target-curlrc-upper: high

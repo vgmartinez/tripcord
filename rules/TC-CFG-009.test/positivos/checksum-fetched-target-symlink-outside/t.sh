@@ -1,0 +1,1 @@
+/tmp/tripcord-outside-target.sh
