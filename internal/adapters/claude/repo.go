@@ -115,7 +115,7 @@ func classify(rel string, pluginRoots map[string]bool) fileRole {
 		switch {
 		case rest == "hooks/hooks.json":
 			return rolePluginHooks
-		case strings.HasPrefix(rest, "skills/") && base == "SKILL.md":
+		case strings.HasPrefix(rest, "skills/") && base == "skill.md":
 			return roleSkill
 		case strings.HasPrefix(rest, "agents/") && strings.HasSuffix(base, ".md"):
 			return roleAgent

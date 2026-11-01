@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -553,6 +554,36 @@ func TestPluginReferencesStayInRepo(t *testing.T) {
 		if !containsDiag(got, want) {
 			t.Errorf("diagnostics = %q, want %q", got.Diagnostics, want)
 		}
+	}
+}
+
+// TestPluginSkillsAreRead checks that a plugin's skills/*/SKILL.md is a
+// skill, with its frontmatter hooks as hook items, under a plugin.json
+// root and a marketplace source, and that a SKILL.md outside skills/
+// is not.
+func TestPluginSkillsAreRead(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	skill := "---\nname: review\nhooks:\n  Stop:\n    - hooks:\n        - type: command\n          command: ./notify.sh\n---\nReview the diff.\n"
+	writeFile(t, filepath.Join(root, "tools", "acme", ".claude-plugin", "plugin.json"), `{"name":"acme"}`)
+	writeFile(t, filepath.Join(root, "tools", "acme", "skills", "review", "SKILL.md"), skill)
+	writeFile(t, filepath.Join(root, "tools", "acme", "skills", "lower", "skill.md"), skill)
+	writeFile(t, filepath.Join(root, "tools", "acme", "docs", "SKILL.md"), skill)
+	writeFile(t, filepath.Join(root, ".claude-plugin", "marketplace.json"), `{"plugins":[{"name":"m","source":"./plugins/m"}]}`)
+	writeFile(t, filepath.Join(root, "plugins", "m", "skills", "fmt", "SKILL.md"), skill)
+	got := discover(t, New(Options{}), root)
+	kinds := map[string][]model.ConfigKind{}
+	for _, item := range got.Items {
+		kinds[item.Path] = append(kinds[item.Path], item.Kind)
+	}
+	for _, p := range []string{"tools/acme/skills/review/SKILL.md", "tools/acme/skills/lower/skill.md", "plugins/m/skills/fmt/SKILL.md"} {
+		slices.Sort(kinds[p])
+		if !slices.Equal(kinds[p], []model.ConfigKind{model.ConfigKindHook, model.ConfigKindSkill}) {
+			t.Errorf("%s: kinds = %v, want skill and hook", p, kinds[p])
+		}
+	}
+	if k, ok := kinds["tools/acme/docs/SKILL.md"]; ok {
+		t.Errorf("docs/SKILL.md read as %v", k)
 	}
 }
 
