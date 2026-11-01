@@ -10,7 +10,9 @@
 // PowerShell's -Command or positional command, cmd /c, eval, iex, and
 // $( ), backtick, and <( ) substitutions.
 //
-// A payload nested deeper than maxDepth is reported as Nested.
+// A payload nested deeper than maxDepth is reported as Nested. A
+// pipeline into Invoke-Expression is a Pipe only when a command in it
+// fetches: oh-my-posh init pwsh | Invoke-Expression runs local output.
 //
 // Static limits: variables are not expanded, so $URL is not a target
 // and $(echo cur)l is not curl. nohup, xargs, env -S, busybox, and
@@ -97,9 +99,14 @@ func (s *scanner) line(src string, depth int) {
 		s.fetch = true
 	}
 	cmds := split(toks)
+	fetched := make([]bool, len(cmds))
 	for i, c := range cmds {
+		before := s.fetch
+		s.fetch = false
 		s.command(c.words, depth, i < len(cmds)-1)
-		if c.pipeIn && pipeTarget(c.words) && !localPipe(cmds, i) {
+		fetched[i] = s.fetch
+		s.fetch = s.fetch || before
+		if c.pipeIn && pipeTarget(c.words) && !localPipe(cmds, i) && !localExpression(cmds, fetched, i) {
 			s.pipe = true
 		}
 	}
@@ -392,6 +399,25 @@ func localPipe(cmds []command, i int) bool {
 	return len(right) == 1 && bareShells[progName(right[0])]
 }
 
+// localExpression reports a pipeline into Invoke-Expression in which no
+// command fetches, such as oh-my-posh init pwsh | Invoke-Expression: it
+// runs local output, as eval "$(oh-my-posh init bash)" does.
+func localExpression(cmds []command, fetched []bool, i int) bool {
+	w := unwrap(cmds[i].words)
+	if name := progName(w[0]); name != "iex" && name != "invoke-expression" {
+		return false
+	}
+	for j := i - 1; j >= 0; j-- {
+		if fetched[j] {
+			return false
+		}
+		if !cmds[j].pipeIn {
+			break
+		}
+	}
+	return true
+}
+
 // fetches reports a downloader or remote runner with a remote target.
 func fetches(name string, args []string, followed bool) bool {
 	switch name {
@@ -494,6 +520,9 @@ func isScheme(s string) bool {
 
 func isLoopback(host string) bool {
 	host = strings.TrimSuffix(strings.ToLower(host), ".")
+	if i := strings.IndexByte(host, '%'); i >= 0 && strings.Contains(host, ":") {
+		host = host[:i]
+	}
 	if host == "localhost" {
 		return true
 	}
