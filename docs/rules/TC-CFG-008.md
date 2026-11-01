@@ -23,6 +23,13 @@ per-platform fields) is read by `shell.risks` and `shell.locations`:
 - `npx -y`, `pnpm dlx`, `uvx`, `pipx run`, a remote `deno run`
   module, or `git clone` followed by another command;
 - a program or script at a non-loopback URL or UNC share;
+- a PowerShell download into Invoke-Expression whose target is a
+  variable: `iwr $u | iex`, `irm $env:U | iex`, `$x = iwr $u; iex $x`,
+  `IEX (New-Object Net.WebClient).DownloadString($u)`. `shell.risks`
+  reports these as a pipe, not a fetch; the rule counts the pipe when
+  the same command also names `iex` or `Invoke-Expression` and a
+  downloader or a .NET `Download*` call, so `cat x | sh` and
+  `oh-my-posh init pwsh | iex` are not read as network;
 - an HTTP hook (`url`) to a non-loopback host.
 
 **A hook that always allows (Cursor and Copilot).** These harnesses read
@@ -35,6 +42,11 @@ argument. In review it looks like a guard.
 
 Windsurf hooks allow or block by exit code, not JSON, so only the
 network part applies to them.
+
+A Copilot or Cursor session-start hook that fetches is also reported by
+TC-CFG-001. Both findings are kept: TC-CFG-001 is about code fetched at
+session start, this rule about a hook that talks to the network on any
+event.
 
 Not reported:
 
@@ -56,8 +68,8 @@ Not reported:
 - What a hook's script prints. `.cursor/hooks/allow.sh` that always
   allows is not reported, because the scan reads only the hook entry.
 - An allow wrapped in `bash -c '...'` or written with `cat <<EOF`.
-- `iwr $u | iex` is reported by `shell.risks` as a pipe, not a fetch,
-  and is not counted here.
+- A POSIX download from a variable (`curl $u | sh`): the target is not
+  known statically, and the command names no Invoke-Expression.
 - The hook event is not checked: an allow on an event that ignores it
   is still reported.
 
