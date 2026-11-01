@@ -4,7 +4,7 @@
 | --- | --- |
 | Severity | medium |
 | Harnesses | generic (`AGENTS.md`), Claude Code, Gemini CLI, Windsurf, GitHub Copilot, Cursor |
-| Files | TC-CFG-011's repository paths, except `AGENTS.local.md` and `GEMINI.local.md`, plus repository `SKILL.md` files emitted by the Claude and generic adapters, `.claude/commands/**/*.md`, `.claude/agents/**/*.md`, and `.windsurf/rules/**/*.md` |
+| Files | TC-CFG-011's repository paths, except `AGENTS.local.md` and `GEMINI.local.md`, plus every repository `skill` item and emitted Claude `agent` / `command` item (including plugin-root paths), and `.windsurf/rules/**/*.md` |
 | Rule | [`rules/TC-CFG-012.yaml`](../../rules/TC-CFG-012.yaml) |
 
 ## What it detects
@@ -16,15 +16,14 @@ not know whether a session obeyed it.
 
 One finding per file whose raw text has a matching line. Findings carry
 the first matching line number, but no content excerpt. The line starts
-with the verb after optional Markdown (`#`, `>`, a bullet, a number, or
-`**`) and an optional prefix (`please`, `always`, `first`, `you must`,
-`you should`, or `make sure to`). A `do not`, `don't`, `never`, `avoid`,
-or `must not` before the verb in the same clause suppresses the match.
+with the verb after optional Markdown (`#`, `>`, `<!--`, a bullet, a
+number, or `**`) and an optional prefix (`please`, `always`, `first`,
+`you must`, `you should`, or `make sure to`). A negated line does not
+start with one of those forms and is quiet.
 
 Reported when the verb is `read`, `cat`, `cp`, `copy`, `open`, `load`,
 `source`, `print`, `dump`, `collect`, `extract`, `show`, `curl`, `wget`,
-`type`, or `Get-Content`, and the same line
-names one of these within 80 characters:
+`type`, or `Get-Content`, and its direct object names one of these:
 
 | Target | Counts | Does not count |
 | --- | --- | --- |
@@ -32,6 +31,13 @@ names one of these within 80 characters:
 | environment | `printenv`, `process.env`, `os.environ`, the phrase `environment variables` | the word `environment` alone |
 | credentials | `credentials`, `secret`, `secrets`, `api key`, `apikey`, `api_key`, `token`, `password`, `private key`, `AWS_*`, `GITHUB_TOKEN` | |
 | paths | `~/.aws`, `~/.ssh`, `id_rsa` | |
+
+Between a verb and its object, the matcher allows curl/wget flags, one
+URL, a determiner, `contents of` / `values of`, and one quote,
+backtick, `@`, or PowerShell `$env:` prefix. It does not skip arbitrary
+prose. A target followed by a documentation modifier—such as
+`credentials section`, `token count`, `password reset`, or `secrets
+template`—is quiet.
 
 Also reported when the verb is `send`, `post`, `upload`, `exfiltrate`,
 `transmit`, or `forward`, and the same line both names a secret
@@ -51,7 +57,6 @@ Not reported:
 - A secret and an `https://` URL on different lines.
 - An outbound line that does not name a secret (`Post a comment on the
   pull request`, `Upload the coverage report`).
-- User-scope files.
 - User-scope files, referenced files, and `AGENTS.local.md` /
   `GEMINI.local.md`, which no repository adapter emits.
 - A file that only says to follow another document.

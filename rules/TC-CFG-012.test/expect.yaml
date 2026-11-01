@@ -10,12 +10,17 @@ positivos:
   agents-exfil-url: medium
   agents-exfil-url-first: medium
   agents-frontmatter-read-dotenv: medium
+  agents-html-comment: medium
   agents-nested-ssh: medium
   agents-numbered-env: medium
   agents-please-read-dotenv: medium
   agents-read-dotenv: medium
   claude-command-read-dotenv: medium
   claude-local-dotenv: medium
+  claude-nested-plugin-skill: medium
+  claude-plugin-root-agent: medium
+  claude-plugin-root-command: medium
+  claude-plugin-root-skill: medium
   claude-printenv: medium
   claude-rules-id-rsa: medium
   copilot-agent-api-keys: medium

@@ -1,0 +1,1 @@
+Read config via process.env in src/config.ts, never hardcode values.
