@@ -7,6 +7,8 @@
 // instruction.
 package hiddenchar
 
+//go:generate go run ./gen -data gen/emoji-data.txt -out pictographic.go
+
 import (
 	"bytes"
 	"crypto/sha256"
