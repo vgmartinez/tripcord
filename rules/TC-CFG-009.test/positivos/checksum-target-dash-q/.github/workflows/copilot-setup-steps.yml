@@ -1,0 +1,8 @@
+on: workflow_dispatch
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: step0
+        run: "curl -fsSLo -q https://get.tools.example.invalid/t.sh && echo 'abababababababababababababababababababababababababababababababab  -q' | sha256sum -c && sh -q"

@@ -1,6 +1,19 @@
 # The severity each positive fixture must produce (see
 # internal/rules/fixtures.go, ExpectFile).
 positivos:
+  checksum-fetched-sums-after-check: high
+  checksum-fetched-sums-and: high
+  checksum-fetched-sums-semicolon: high
+  checksum-run-sums-file: high
+  checksum-self-sums-and: high
+  checksum-self-sums-semicolon: high
+  checksum-sums-lists-other-file: high
+  checksum-sums-malformed: high
+  checksum-sums-not-committed: high
+  checksum-target-curlrc-upper: high
+  checksum-target-dash-q: high
+  checksum-target-double-dash: high
+  checksum-target-sh-upper: high
   copilot-branch-url-pipe: high
   copilot-checksum-extra-fetch: high
   copilot-checksum-function-override: high
