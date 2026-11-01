@@ -15,6 +15,7 @@ positivos:
   codex-hooks-json-home: high
   copilot-bash-home: high
   copilot-exec-args-tmp: high
+  copilot-exec-numeric-arg: high
   copilot-powershell-temp: high
   cursor-absolute-users: high
   cursor-home-script: high
@@ -31,3 +32,5 @@ positivos:
   shared-skill-tmp: high
   windsurf-home-script: high
   windsurf-powershell-userprofile: high
+negativos:
+  copilot-exec-object-arg: error

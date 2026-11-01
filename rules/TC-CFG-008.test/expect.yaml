@@ -1,0 +1,6 @@
+# What each fixture must produce beyond the rule's single severity (see
+# internal/rules/fixtures.go, ExpectFile): these negatives must fail to
+# evaluate, because hook.argv cannot read an object, list, or null arg.
+negativos:
+  copilot-exec-list-arg: error
+  copilot-exec-null-arg: error

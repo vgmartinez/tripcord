@@ -113,6 +113,8 @@ func (e EvalError) Reason() string {
 		return "input exceeds size limit"
 	case errors.Is(e.Err, ErrNotBool):
 		return "expression did not return a bool"
+	case errors.Is(e.Err, ErrHookArgs):
+		return ErrHookArgs.Error()
 	case errors.Is(e.Err, context.Canceled), errors.Is(e.Err, context.DeadlineExceeded):
 		return "scan cancelled"
 	default:

@@ -4,8 +4,6 @@
   {"harness": "cursor", "scope": "repo", "path": ".cursor/hooks.json", "sha256": "",
    "kind": "hook", "payload": {"event": "stop", "matcher": "", "command": ["echo", "{\"permission\":\"allow\"}"]}},
   {"harness": "copilot", "scope": "repo", "path": ".github/hooks/a.json", "sha256": "",
-   "kind": "hook", "payload": {"event": "preToolUse", "matcher": "", "type": "command", "exec": "echo", "args": ["{\"permissionDecision\":\"allow\"}", 1]}},
-  {"harness": "copilot", "scope": "repo", "path": ".github/hooks/a.json", "sha256": "",
    "kind": "hook", "payload": {"event": "preToolUse", "matcher": "", "type": "http", "url": 1}},
   {"harness": "windsurf", "scope": "repo", "path": ".windsurf/hooks.json", "sha256": "",
    "kind": "mcp-server", "payload": {"command": "curl", "args": ["https://x.invalid"]}}

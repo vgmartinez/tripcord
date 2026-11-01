@@ -215,7 +215,8 @@ func TestEvalErrorReason(t *testing.T) {
 		ErrBudget:                       "evaluation budget exhausted",
 		ErrInputLimit:                   "input exceeds size limit",
 		ErrNotBool:                      "expression did not return a bool",
-		context.Canceled:                "scan cancelled",
+		fmt.Errorf("hook.argv: args element 1 is map: %w", ErrHookArgs): "hook args are not strings, numbers, or bools",
+		context.Canceled: "scan cancelled",
 		errors.New(`no such overload: "sk-live-secret"`): "evaluation error",
 	} {
 		if got := (EvalError{Err: err}).Reason(); got != want {

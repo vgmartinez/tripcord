@@ -13,3 +13,5 @@ positivos:
   claude-skill-two-events: [high, medium]
   shared-agents-skill: high
   shared-github-skill: medium
+negativos:
+  skill-hook-object-arg: error

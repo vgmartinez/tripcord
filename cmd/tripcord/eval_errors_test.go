@@ -211,3 +211,49 @@ func TestScanRuleErrorKeepsOtherFindings(t *testing.T) {
 		}
 	}
 }
+
+// TestScanHookArgsNotReadable checks hook.argv on a Copilot exec hook: a
+// number or bool arg is read as its text, and an object, list, or null
+// arg is an incomplete scan, exit 3, with a diagnostic per rule naming
+// the file and none of its content.
+func TestScanHookArgsNotReadable(t *testing.T) {
+	t.Parallel()
+	hook := func(args string) map[string]string {
+		return map[string]string{".github/hooks/check.json": `{"version": 1, "hooks": {"preToolUse": [{"type": "command", "exec": "bash", "args": ` + args + `}]}}`}
+	}
+	t.Run("number", func(t *testing.T) {
+		t.Parallel()
+		var stdout, stderr bytes.Buffer
+		if code := run([]string{"scan", "--format", "json", writeRepo(t, hook(`["/tmp/x.sh", 1]`))}, &stdout, &stderr); code != int(exitcode.Findings) {
+			t.Fatalf("exit %d, stderr %q", code, stderr.String())
+		}
+		if got, diags := jsonRecords(t, stdout.String()); !slices.Equal(got, []string{"TC-CFG-006"}) || len(diags) != 0 {
+			t.Fatalf("rules = %v, diagnostics = %v", got, diags)
+		}
+	})
+	for name, args := range map[string]string{
+		"object": `["/tmp/argsecret.sh", {"argsecret": 2}]`,
+		"list":   `[["/tmp/argsecret.sh"]]`,
+		"null":   `["/tmp/argsecret.sh", null]`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			root := writeRepo(t, hook(args))
+			for _, format := range scanFormats {
+				var stdout, stderr bytes.Buffer
+				if code := run([]string{"scan", "--format", format, root}, &stdout, &stderr); code != int(exitcode.Config) {
+					t.Fatalf("%s: exit %d, stderr %q", format, code, stderr.String())
+				}
+				report := stdout.String() + stderr.String()
+				for _, id := range []string{"TC-CFG-006", "TC-CFG-008"} {
+					if !strings.Contains(stderr.String(), id+": rule evaluation failed: hook args are not strings, numbers, or bools") {
+						t.Fatalf("%s: no %s diagnostic:\n%s", format, id, stderr.String())
+					}
+				}
+				if !strings.Contains(report, ".github/hooks/check.json") || strings.Contains(report, "argsecret") {
+					t.Fatalf("%s: report:\n%s", format, report)
+				}
+			}
+		})
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -119,6 +120,9 @@ var (
 	ErrBudget     = errors.New("rule evaluation budget exhausted")
 	ErrNotBool    = errors.New("cel expression did not return a bool")
 	ErrInputLimit = errors.New("input exceeds size limit")
+	// ErrHookArgs is hook.argv on args that are not a list of strings,
+	// numbers, and bools.
+	ErrHookArgs = errors.New("hook args are not strings, numbers, or bools")
 )
 
 // Env compiles expressions against the Tripcord variables. It has the
@@ -202,8 +206,10 @@ var shellLocations = cel.Function(shellLocationsName,
 
 // hook.commands(payload) returns the string values of a hook payload's
 // command fields (model.HookCommandFields); a missing or non-string field is
-// skipped. hook.argv(payload) returns [exec or command] + args when
-// args is a list of strings, and [] otherwise. They let a rule read
+// skipped. hook.argv(payload) returns [exec or command] + args, with
+// number and bool args as their text, and [] when there are no args; it
+// is an evaluation error when args is not a list or holds an object,
+// list, or null (see argvList). They let a rule read
 // every command field without restating the list in each clause.
 var hookCommands = cel.Function(hookCommandsName,
 	cel.Overload(overloadHookCommands, []*cel.Type{cel.DynType}, cel.ListType(cel.StringType),
@@ -234,9 +240,9 @@ var hookArgv = cel.Function(hookArgvName,
 			if !found {
 				return empty
 			}
-			list, err := stringList(hookArgvName, args)
+			list, err := argvList(args)
 			if err != nil {
-				return empty
+				return types.WrapErr(err)
 			}
 			program, ok := mapString(m, "exec")
 			if !ok {
@@ -245,6 +251,36 @@ var hookArgv = cel.Function(hookArgvName,
 			return types.NewStringList(types.DefaultTypeAdapter, append([]string{program}, list...))
 		})),
 )
+
+// argvList returns a hook's args as strings. A number or bool is passed
+// to the program as its text, so it is stringified; an object, list, or
+// null element, or args that is not a list, is an error rather than an
+// empty argv, so a rule cannot pass over a hook it could not read.
+func argvList(v ref.Val) ([]string, error) {
+	list, ok := v.(traits.Lister)
+	if !ok {
+		return nil, fmt.Errorf("%s: args is %s, not a list: %w", hookArgvName, v.Type().TypeName(), ErrHookArgs)
+	}
+	var out []string
+	i := 0
+	for it := list.Iterator(); it.HasNext() == types.True; i++ {
+		switch e := it.Next().(type) {
+		case types.String:
+			out = append(out, string(e))
+		case types.Bool:
+			out = append(out, strconv.FormatBool(bool(e)))
+		case types.Int:
+			out = append(out, strconv.FormatInt(int64(e), 10))
+		case types.Uint:
+			out = append(out, strconv.FormatUint(uint64(e), 10))
+		case types.Double:
+			out = append(out, strconv.FormatFloat(float64(e), 'f', -1, 64))
+		default:
+			return nil, fmt.Errorf("%s: args element %d is %s: %w", hookArgvName, i, e.Type().TypeName(), ErrHookArgs)
+		}
+	}
+	return out, nil
+}
 
 func mapString(m traits.Mapper, key string) (string, bool) {
 	v, found := m.Find(types.String(key))

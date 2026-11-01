@@ -106,7 +106,11 @@ It costs what `shell.risks` costs.
 fields (`command`, `exec`, `bash`, `powershell`, `commandWindows`,
 `command_windows`, `windows`, `linux`, `osx`), skipping missing and
 non-string ones. `hook.argv(payload)` returns `[exec or command] +
-args` when `args` is a list of strings, and `[]` otherwise. Use them
+args`, with number and bool args as their text, and `[]` when there are
+no `args`. When `args` is not a list or holds an object, list, or null,
+it is an evaluation error ("hook args are not strings, numbers, or
+bools"), not an empty argv, so the scan reports that rule and file as
+incomplete and exits 3 instead of passing over the hook. Use them
 instead of restating the field list in every clause: a long expression
 is parsed again on every scan.
 
