@@ -85,6 +85,23 @@ func TestScanNeverCreatesKeyFileInCI(t *testing.T) {
 	}
 }
 
+// TestScanPrintsCINoteOnce is the researcher review's request: the docs
+// promise a stderr note in CI when no key source exists at all, and it
+// must actually be printed (one scan, one note), not silently skipped
+// the way a nil error from fpkey.Load previously caused.
+func TestScanPrintsCINoteOnce(t *testing.T) {
+	home := t.TempDir()
+	setKeyEnv(t, home, map[string]string{"CI": "true"})
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"scan", "--format", "text", keyTestRepo(t)}, &stdout, &stderr); code != int(exitcode.OK) {
+		t.Fatalf("exit %d; stderr: %s", code, stderr.String())
+	}
+	note := "CI detected: fingerprint key not created, using s1"
+	if n := strings.Count(stderr.String(), note); n != 1 {
+		t.Fatalf("stderr contains the CI note %d times, want 1:\n%s", n, stderr.String())
+	}
+}
+
 func TestScanEnvKeyNeverPrinted(t *testing.T) {
 	const key = "beeffacebeeffacebeeffacebeeffacebeeffacebeeffacebeeffacebeefface"
 	home := t.TempDir()

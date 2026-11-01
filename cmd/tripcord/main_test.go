@@ -11,7 +11,21 @@ import (
 	"github.com/vgmartinez/tripcord/internal/adapters"
 	"github.com/vgmartinez/tripcord/internal/adapters/claude"
 	"github.com/vgmartinez/tripcord/internal/exitcode"
+	"github.com/vgmartinez/tripcord/internal/fpkey"
 )
+
+// noCINote is a valid fingerprint key, used only so a test about scan
+// output or flag handling does not also need to anticipate the "CI
+// detected" stderr note documented in docs/fingerprint.md's
+// "Fail-closed vs s1 fallback" section. TestMain pins the whole package
+// to CI mode with no key file, and since this round's fix to
+// fpkey.Load now reports that combination instead of silently using s1
+// (the researcher review's bug 3), any test that runs a scan without
+// its own key source sees that note on stderr. TestScanPrintsCINoteOnce
+// in fingerprint_key_test.go is the dedicated test of the note itself.
+// Setting an env var mutates process state, so a caller must set it
+// before calling t.Parallel(), the same rule setKeyEnv documents.
+const noCINote = "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
 
 func TestVersion(t *testing.T) {
 	t.Parallel()
@@ -103,7 +117,7 @@ func TestUnknownCommand(t *testing.T) {
 }
 
 func TestScanTextGolden(t *testing.T) {
-	t.Parallel()
+	t.Setenv(fpkey.EnvVar, noCINote)
 	root := t.TempDir()
 	if err := os.Mkdir(filepath.Join(root, ".git"), 0o700); err != nil {
 		t.Fatal(err)
@@ -119,7 +133,7 @@ func TestScanTextGolden(t *testing.T) {
 }
 
 func TestScanClaudeFixtureJSON(t *testing.T) {
-	t.Parallel()
+	t.Setenv(fpkey.EnvVar, noCINote)
 	root := t.TempDir()
 	if err := os.Mkdir(filepath.Join(root, ".git"), 0o700); err != nil {
 		t.Fatal(err)
@@ -265,7 +279,7 @@ func TestScanFlagErrors(t *testing.T) {
 }
 
 func TestScanFlagsAfterPath(t *testing.T) {
-	t.Parallel()
+	t.Setenv(fpkey.EnvVar, noCINote)
 	dir := outsideGit(t)
 	var stdout, stderr bytes.Buffer
 	if code := run([]string{"scan", dir, "--format", "text"}, &stdout, &stderr); code != int(exitcode.OK) {
@@ -289,6 +303,7 @@ func TestScanScope(t *testing.T) {
 	}
 	home := t.TempDir()
 	setHome(t, home)
+	t.Setenv(fpkey.EnvVar, noCINote)
 	// This test asserts a silent user-scope scan. A runner may export
 	// XDG_CONFIG_HOME outside the temporary home, which is an
 	// informational note on stderr (it does not fail the scan).

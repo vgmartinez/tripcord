@@ -84,6 +84,16 @@ var (
 	// closed (never fall back to s1) so a fingerprint mode never
 	// changes silently.
 	ErrKeyUnusable = errors.New("fingerprint key material is unusable")
+	// ErrCIFallback additionally wraps ErrUnavailable (errors.Is(err,
+	// ErrUnavailable) is true for it, so an existing caller that only
+	// checks for the general case keeps working) for the specific,
+	// common case of CI being detected with no key source at all: Load
+	// never creates a key file there, by design, so the scan always
+	// runs in s1. Its own message is already a complete, actionable
+	// sentence naming the mode, so a caller should print Error()
+	// as-is rather than wrapping it in further "falls back to s1"
+	// phrasing of its own.
+	ErrCIFallback = fmt.Errorf("%w: CI detected: fingerprint key not created, using s1", ErrUnavailable)
 )
 
 // Key is a loaded HMAC key. The zero value and a nil *Key are "no key".
@@ -238,7 +248,7 @@ func Load(opts Options) (*Key, Source, error) {
 		return nil, SourceNone, dirErr
 	}
 	if IsCI(getenv) {
-		return nil, SourceNone, nil
+		return nil, SourceNone, ErrCIFallback
 	}
 	random := opts.Rand
 	if random == nil {

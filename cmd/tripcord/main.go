@@ -588,13 +588,19 @@ func parseScope(value string) (repo, user, managed bool, err error) {
 
 // loadFingerprintKey resolves the fingerprint key (see fpkey.Load). A key
 // file that cannot be read or created is not fatal: the scan continues
-// in s1 mode and note says so. A key that is set but invalid is a
-// configuration error. Neither message carries the key.
+// in s1 mode and note says so. A key that is set but invalid, or
+// existing key material that is broken, is a configuration error.
+// Neither message carries the key.
 func loadFingerprintKey() (key *fpkey.Key, note string, err error) {
 	key, _, err = fpkey.Load(fpkey.Options{})
 	switch {
 	case err == nil:
 		return key, "", nil
+	case errors.Is(err, fpkey.ErrCIFallback):
+		// ErrCIFallback's own message already names the mode and the
+		// reason; print it as-is rather than wrapping it in the
+		// generic ErrUnavailable phrasing below.
+		return nil, err.Error(), nil
 	case errors.Is(err, fpkey.ErrUnavailable):
 		return nil, "fingerprints use the structural s1 discriminator: " + err.Error(), nil
 	default:

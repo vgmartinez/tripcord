@@ -152,6 +152,12 @@ func TestLoadCreatesKeyFileLocally(t *testing.T) {
 	}
 }
 
+// TestLoadNeverCreatesInCI also covers the researcher review's request
+// that CI print an actionable note: Load now reports ErrCIFallback
+// (which still satisfies errors.Is(err, ErrUnavailable), so an existing
+// caller checking only the general case keeps working) instead of a nil
+// error, so a caller such as cmd/tripcord can surface the reason on
+// stderr instead of silently using s1 with no explanation at all.
 func TestLoadNeverCreatesInCI(t *testing.T) {
 	t.Parallel()
 	for _, vars := range []map[string]string{
@@ -159,8 +165,11 @@ func TestLoadNeverCreatesInCI(t *testing.T) {
 	} {
 		home := t.TempDir()
 		k, src, err := Load(Options{Home: home, Getenv: env(vars)})
-		if err != nil || src != SourceNone || k.Present() {
-			t.Fatalf("%v: Load = %v, %v, %v", vars, k, src, err)
+		if !errors.Is(err, ErrCIFallback) || !errors.Is(err, ErrUnavailable) || src != SourceNone || k.Present() {
+			t.Fatalf("%v: Load = %v, %v, %v, want ErrCIFallback", vars, k, src, err)
+		}
+		if !strings.Contains(err.Error(), "s1") {
+			t.Fatalf("%v: CI fallback note does not mention s1: %v", vars, err)
 		}
 		if _, err := os.Stat(filepath.Dir(Path(home))); !errors.Is(err, fs.ErrNotExist) {
 			t.Fatalf("%v: CI created %s: %v", vars, LogicalPath, err)
