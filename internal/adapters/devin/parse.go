@@ -18,31 +18,43 @@ type file struct {
 // blueprint normalizes initialize and maintenance, which run during a
 // build, plus the maintenance text and knowledge entries the doc says
 // are given to the agent at session start. Other keys are left alone.
+// Devin accepts a multi-document YAML stream, same as a Kubernetes
+// manifest: every "---"-separated document is read as part of the
+// blueprint, not just the first.
 func (f *file) blueprint(raw []byte) {
-	tree, warnings, err := kit.DecodeYAML(raw, product)
+	docs, warnings, err := kit.DecodeYAMLDocuments(raw, product)
 	f.WarnAll(warnings)
 	if err != nil {
 		f.Warn("invalid YAML: %v", err)
 		return
 	}
-	obj, ok := tree.(map[string]any)
-	if !ok {
-		f.Warn("blueprint must be a YAML mapping")
+	if len(docs) == 0 {
 		return
 	}
 	if _, valid := hiddenchar.Scan(raw); !valid {
 		f.Warn("%s", kit.InvalidUTF8)
 	}
-	root := mappingNode(raw)
+	for _, doc := range docs {
+		f.document(doc)
+	}
+}
+
+// document normalizes one document of the blueprint stream.
+func (f *file) document(doc kit.YAMLDocument) {
+	obj, ok := doc.Value.(map[string]any)
+	if !ok {
+		f.Warn("blueprint must be a YAML mapping")
+		return
+	}
 	for _, name := range []string{"initialize", "maintenance"} {
 		value, present := obj[name]
 		if !present {
 			continue
 		}
-		f.section(name, value, mapValue(root, name))
+		f.section(name, value, mapValue(doc.Node, name))
 	}
 	if value, present := obj["knowledge"]; present {
-		f.knowledge(value, mapValue(root, "knowledge"))
+		f.knowledge(value, mapValue(doc.Node, "knowledge"))
 	}
 }
 
@@ -208,21 +220,6 @@ func (f *file) instruction(role, text string, line int) {
 	f.MarkLine(before, line)
 	hidden, _ := hiddenchar.Scan([]byte(raw))
 	f.MarkHidden(before, hidden)
-}
-
-func mappingNode(raw []byte) *yaml.Node {
-	var doc yaml.Node
-	if err := yaml.Unmarshal(raw, &doc); err != nil {
-		return nil
-	}
-	if doc.Kind != yaml.DocumentNode || len(doc.Content) != 1 {
-		return nil
-	}
-	m := doc.Content[0]
-	if m.Kind != yaml.MappingNode {
-		return nil
-	}
-	return m
 }
 
 func mapValue(m *yaml.Node, key string) *yaml.Node {

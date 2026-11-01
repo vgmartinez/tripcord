@@ -85,3 +85,4 @@ positivos:
   devcontainer-updatecontent-object: high
   devin-initialize-curl-pipe: high
   devin-maintenance-list-curl: high
+  devin-multi-document-initialize: high

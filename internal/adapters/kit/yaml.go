@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"slices"
 	"strings"
@@ -86,6 +87,54 @@ func DecodeYAML(raw []byte, product string, folded ...string) (any, []string, er
 // expands exponentially still fails closed.
 func DecodeYAMLAliases(raw []byte, product string, limits AliasLimits, folded ...string) (any, []string, error) {
 	return decodeYAML(raw, product, limits, folded...)
+}
+
+// YAMLDocument is one decoded document of a multi-document YAML stream,
+// as returned by DecodeYAMLDocuments: the same tree shape DecodeYAML
+// produces, plus the document's root node so a caller can still resolve
+// a value's source line (see valueLine in the devin adapter).
+type YAMLDocument struct {
+	Value any
+	Node  *yaml.Node
+}
+
+// DecodeYAMLDocuments is DecodeYAML for a YAML stream that may hold more
+// than one "---"-separated document. yaml.Unmarshal, which DecodeYAML
+// uses, decodes only the stream's first document and silently drops the
+// rest with no error; a harness that honors every document in a
+// blueprint, such as Devin's .devin/blueprint.yaml, must decode with
+// yaml.NewDecoder in a loop instead. An empty document is skipped, same
+// as DecodeYAML's doc.Kind == 0 case. Aliases, merge keys, and nesting
+// are bounded the same as DecodeYAML. On an error decoding one document,
+// the documents decoded so far are returned along with the error, so a
+// caller can still act on what parsed before the failure.
+func DecodeYAMLDocuments(raw []byte, product string, folded ...string) ([]YAMLDocument, []string, error) {
+	raw = bytes.TrimPrefix(raw, utf8BOM)
+	dec := yaml.NewDecoder(bytes.NewReader(raw))
+	var docs []YAMLDocument
+	var warnings []string
+	for {
+		var doc yaml.Node
+		if err := dec.Decode(&doc); err != nil {
+			if errors.Is(err, io.EOF) {
+				return docs, warnings, nil
+			}
+			return docs, warnings, err
+		}
+		if doc.Kind == 0 {
+			continue
+		}
+		if doc.Kind != yaml.DocumentNode || len(doc.Content) != 1 {
+			return docs, warnings, errors.New("not one YAML document")
+		}
+		d := &yamlDecoder{product: product, folded: folded}
+		value, err := d.value(doc.Content[0], 0, "")
+		warnings = append(warnings, d.warnings...)
+		if err != nil {
+			return docs, warnings, err
+		}
+		docs = append(docs, YAMLDocument{Value: value, Node: doc.Content[0]})
+	}
 }
 
 func decodeYAML(raw []byte, product string, limits AliasLimits, folded ...string) (any, []string, error) {
