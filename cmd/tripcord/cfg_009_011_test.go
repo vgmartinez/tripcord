@@ -111,3 +111,17 @@ func TestScanHiddenCharsEvidence(t *testing.T) {
 		}
 	}
 }
+
+func TestScanInvalidUTF8OnlyForTCFG011Files(t *testing.T) {
+	t.Parallel()
+	root := writeRepo(t, map[string]string{
+		".claude/skills/fmt/SKILL.md": "# Format\n\xff\n",
+	})
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"scan", "--format", "json", root}, &stdout, &stderr); code != int(exitcode.OK) {
+		t.Fatalf("exit %d, stderr %q", code, stderr.String())
+	}
+	if strings.Contains(stdout.String()+stderr.String(), "not valid UTF-8") {
+		t.Fatalf("non-TC-CFG-011 file diagnosed:\n%s%s", stdout.String(), stderr.String())
+	}
+}

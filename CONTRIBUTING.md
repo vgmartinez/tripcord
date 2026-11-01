@@ -71,8 +71,8 @@ its findings when the rule title does not say why that match fired.
 `evidence: hidden_chars` is the only optional evidence. It adds an
 excerpt naming the file's hidden code points by code point, line, and
 column (see `internal/hiddenchar`), never the text between them, and
-sets the location line to the first one. The excerpt is part of the
-fingerprint.
+sets the location line to the first one. TC-CFG-011 fingerprints the
+file and hidden-code-point sequence, not presentation coordinates.
 
 `when` sees these variables:
 
