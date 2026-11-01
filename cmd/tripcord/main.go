@@ -110,7 +110,7 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return scanConfigError(stderr, err)
 	}
-	env, err := rules.NewEnv(rules.DefaultLimits())
+	env, err := rules.NewEnv(scanLimits())
 	if err != nil {
 		return scanInternalError(stderr, err)
 	}
@@ -647,6 +647,10 @@ func sarifRuleText(catalog *rules.Catalog) map[string]output.RuleText {
 }
 
 func now() time.Time { return time.Now() }
+
+// scanLimits returns the CEL limits for a scan. A test that lowers them
+// must not run in parallel.
+var scanLimits = rules.DefaultLimits
 
 func scanConfigError(stderr io.Writer, err error) int {
 	writeString(stderr, "tripcord scan: "+redactHomeFromError(err)+"\n")
