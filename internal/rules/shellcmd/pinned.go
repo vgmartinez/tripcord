@@ -20,9 +20,11 @@ import (
 //     (or sha384sum, sha512sum, or shasum -a 256|384|512). The file is
 //     not /dev/* or -, and the check has no other flag. It is joined to
 //     the fetch and to whatever runs it only by &&, in one simple list.
-//     A top-level set -e or set -euo pipefail also covers a check on its
-//     own statement, unless the line has a later set +e, a ||, a !, or
-//     a pipe, or the set is inside a subshell, function, or if.
+//     A set -e or set -euo pipefail also covers it (see errexitVerified)
+//     when the set is a foreground top-level command before the first
+//     fetch, and the fetch and the check are each a simple command on
+//     their own, ended by ; or a newline. set +e, eval, source, ., ||,
+//     !, or a pipe anywhere on the line defeats it.
 //
 // Package runners (npx, bunx, pnpm and yarn dlx, uvx, pipx run), git
 // clone, inline python or node code, a variable target, and a .NET
@@ -278,12 +280,7 @@ func verifiedFetches(cmds []command, direct []bool) bool {
 	if !anyDirect(direct) {
 		return true
 	}
-	if topLevelErrexit(cmds) && !checksumDisqualified(cmds) {
-		for i, d := range direct {
-			if d && !checksumFollows(cmds, i) {
-				return false
-			}
-		}
+	if errexitVerified(cmds, direct) {
 		return true
 	}
 	for i, d := range direct {
@@ -303,33 +300,105 @@ func anyDirect(direct []bool) bool {
 	return false
 }
 
-// topLevelErrexit reports a set -e or set -euo pipefail that is not
-// inside (), {}, if/while/for/case, or a function body, and that appears
-// before a direct fetch would rely on it. set +e anywhere defeats it.
-func topLevelErrexit(cmds []command) bool {
-	compound := 0
-	enabled := false
-	for _, c := range cmds {
-		if c.depth == 0 && compound == 0 {
-			on, off := setErrexit(c.words)
-			if off {
-				return false
-			}
-			if on && c.sep != "||" {
-				enabled = true
-			}
-		}
-		compound = adjustCompound(compound, c.words)
+// errexitVerified reports the set -e shape: a foreground top-level set -e
+// before the first direct fetch, and each direct fetch a simple command
+// on its own followed by a check that is also a simple command on its
+// own, each ended by ; or a newline. A fetch or check inside an && or ||
+// list, backgrounded with &, or inside a compound command does not abort
+// on failure, so it does not count. eval, source, ., set +e, ||, !, or a
+// pipe anywhere on the line defeats errexit.
+func errexitVerified(cmds []command, direct []bool) bool {
+	top := topLevel(cmds)
+	if errexitDefeated(cmds) || !errexitBefore(cmds, top, firstDirect(direct)) {
+		return false
 	}
-	return enabled
+	for i, d := range direct {
+		if d && !checksumFollows(cmds, top, i) {
+			return false
+		}
+	}
+	return true
 }
 
-// checksumDisqualified reports a ||, a !, or a pipe anywhere on the
-// line. Those defeat a top-level set -e.
-func checksumDisqualified(cmds []command) bool {
+func firstDirect(direct []bool) int {
+	for i, d := range direct {
+		if d {
+			return i
+		}
+	}
+	return len(direct)
+}
+
+// topLevel reports, for each command, that it is outside (), {},
+// if/while/for/case, and a function body.
+func topLevel(cmds []command) []bool {
+	top := make([]bool, len(cmds))
+	compound := 0
+	for i, c := range cmds {
+		top[i] = c.depth == 0 && compound == 0
+		compound = adjustCompound(compound, c.words)
+	}
+	return top
+}
+
+// errexitBefore reports a set -e or set -euo pipefail that is a
+// foreground simple command at top level, ended by ; or a newline, and
+// that comes before the first direct fetch.
+func errexitBefore(cmds []command, top []bool, fetch int) bool {
+	for i := 0; i < fetch; i++ {
+		on, _ := setErrexit(cmds[i].words)
+		if on && simpleStatement(cmds, top, i) {
+			return true
+		}
+	}
+	return false
+}
+
+// simpleStatement reports a top-level command that is a whole statement
+// on its own: not in a pipeline, not in an && or || list, not
+// backgrounded, and ended by ; or a newline.
+func simpleStatement(cmds []command, top []bool, i int) bool {
+	return top[i] && statementLen(cmds, i) == 1 && cmds[i].sep == opSep && startsStatement(cmds, i) && !reservedStart(cmds[i].words)
+}
+
+// startsStatement reports a command that the previous statement ended
+// with ; or a newline, or that starts the line.
+func startsStatement(cmds []command, i int) bool {
+	return i == 0 || cmds[i-1].sep == opSep
+}
+
+// reservedStart reports a command that begins with a reserved word (if,
+// while, !, {, ...). A check that is an if or while condition does not
+// abort under set -e.
+func reservedStart(words []string) bool {
+	for _, w := range words {
+		if isAssignment(w) {
+			continue
+		}
+		return reserved[w]
+	}
+	return false
+}
+
+// errexitDefeated reports what turns set -e off or keeps a failure from
+// aborting: set +e, eval, source, or . anywhere, and ||, !, or a pipe.
+func errexitDefeated(cmds []command) bool {
 	for _, c := range cmds {
 		if c.pipeIn || c.sep == "||" || hasBang(c.words) {
 			return true
+		}
+		if _, off := setErrexit(c.words); off {
+			return true
+		}
+		w := unwrap(c.words)
+		if len(w) > 1 && progName(w[0]) == "builtin" {
+			w = w[1:]
+		}
+		if len(w) > 0 {
+			switch progName(w[0]) {
+			case "eval", "source", ".":
+				return true
+			}
 		}
 	}
 	return false
@@ -340,7 +409,7 @@ func andListVerified(cmds []command, fetch int) bool {
 		return false
 	}
 	start, end, ok := nextStatement(cmds, fetch)
-	if !ok || end-start != 1 || cmds[start].pipeIn || hasBang(cmds[start].words) || !cleanChecksum(cmds[start].words) {
+	if !ok || end-start != 1 || cmds[start].pipeIn || reservedStart(cmds[start].words) || !cleanChecksum(cmds[start].words) {
 		return false
 	}
 	for j := start; j < len(cmds); j++ {
@@ -351,12 +420,20 @@ func andListVerified(cmds []command, fetch int) bool {
 	return cmds[start].sep == "&&" || cmds[start].sep == ""
 }
 
-func checksumFollows(cmds []command, fetch int) bool {
-	if statementLen(cmds, fetch) != 1 {
+// checksumFollows reports a fetch that is a simple statement followed
+// by a check that is one too. The check may also end the line.
+func checksumFollows(cmds []command, top []bool, fetch int) bool {
+	if !simpleStatement(cmds, top, fetch) {
 		return false
 	}
 	start, end, ok := nextStatement(cmds, fetch)
-	return ok && end-start == 1 && !cmds[start].pipeIn && !hasBang(cmds[start].words) && cleanChecksum(cmds[start].words)
+	if !ok || end-start != 1 || !top[start] || cmds[start].pipeIn || reservedStart(cmds[start].words) {
+		return false
+	}
+	if sep := cmds[start].sep; sep != opSep && sep != "" {
+		return false
+	}
+	return cleanChecksum(cmds[start].words)
 }
 
 func statementLen(cmds []command, i int) int {

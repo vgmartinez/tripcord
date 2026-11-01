@@ -63,10 +63,17 @@ not.
   `shasum -a 256|384|512 -c`). The file is not `-` or under `/dev`, and
   the check has no other flag (`--ignore-missing`, `--quiet`, and the
   rest do not count). It joins the download to the command that runs it
-  only with `&&`. A top-level `set -e` or `set -euo pipefail` also
-  covers a check on the following statement, unless the line later has
-  `set +e`, or has `||`, `!`, or a pipe anywhere. `set -e` inside a
-  subshell, a function, or `if` does not count.
+  only with `&&`. A `set -e` or `set -euo pipefail` also covers the
+  check, under three conditions. The `set` is a foreground top-level
+  command before the first download: not backgrounded with `&`, not in
+  an `&&` or `||` list, and not inside a subshell, a function, or `if`.
+  The download and the check are each a simple command on their own,
+  ended by `;` or a newline: a check inside an `&&` list
+  (`sha256sum -c f && true; sh f`), backgrounded (`sha256sum -c f & sh
+  f`), or used as an `if` or `while` condition does not stop the script
+  when it fails. And the line has no `set +e`, `eval`, `source`, `.`,
+  `||`, `!`, or pipe anywhere, since those can turn errexit off or keep
+  a failure from stopping the script.
 
 Never pinned: package runners (`npx -y`, `bunx`, `pnpm dlx`,
 `yarn dlx`, `uvx`, `pipx run`), tags, `git clone` (including a later

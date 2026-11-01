@@ -5,6 +5,11 @@ positivos:
   copilot-checksum-explicit-sh: high
   copilot-checksum-without-errexit: high
   copilot-curl-pipe-sh: high
+  copilot-errexit-check-backgrounded: high
+  copilot-errexit-check-in-and-list: high
+  copilot-errexit-eval-set-plus-e: high
+  copilot-errexit-set-after-fetch: high
+  copilot-errexit-set-backgrounded: high
   copilot-evil-host-sha: high
   copilot-release-asset-sha: high
   copilot-trailing-dot-host: high

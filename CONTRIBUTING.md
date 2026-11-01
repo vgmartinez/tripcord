@@ -101,8 +101,9 @@ never a `sha256:` digest, which curl and wget do not verify) with no userinfo an
 or `..` path segment (decoded or not), or, with nothing piped into a shell,
 each download is followed by a plain `sha256sum -c <file>`
 (`sha384sum`, `sha512sum`, or `shasum -a 256|384|512`) joined only by
-`&&`, or by the same check under a top-level `set -e` with no `set +e`,
-`||`, `!`, or pipe. Package runners, git
+`&&`, or by the same check as a simple command ended by `;` or a
+newline after a foreground top-level `set -e`, with no `set +e`, `eval`,
+`source`, `.`, `||`, `!`, or pipe. Package runners, git
 clone, variable targets, and version tags are never pinned. It costs
 what `shell.risks` costs.
 
