@@ -1,0 +1,16 @@
+# The severity each positive fixture must produce (see
+# internal/rules/fixtures.go, ExpectFile).
+positivos:
+  copilot-branch-url-pipe: high
+  copilot-checksum-without-errexit: high
+  copilot-curl-pipe-sh: high
+  copilot-download-then-run: high
+  copilot-pwsh-iwr-iex: high
+  cursor-install-curl-pipe: high
+  cursor-start-encoded: high
+  cursor-terminal-wget-pipe: high
+  devcontainer-feature-tarball: high
+  devcontainer-oncreate-array: high
+  devcontainer-postcreate-curl-pipe: high
+  devcontainer-poststart-base64: high
+  devcontainer-updatecontent-object: high

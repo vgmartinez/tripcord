@@ -1,0 +1,11 @@
+# The severity each positive fixture must produce (see
+# internal/rules/fixtures.go, ExpectFile).
+positivos:
+  claude-enabled-plugins: medium
+  claude-extra-marketplace: medium
+  claude-marketplace: medium
+  claude-plugin-manifest: medium
+  opencode-nested-jsonc: medium
+  opencode-npm-plugin: medium
+  opencode-plugin-file: medium
+  opencode-plugins-dir-file: medium
