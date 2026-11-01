@@ -14,9 +14,11 @@ guessable secret could be confirmed by brute force from a published
 report. That part is now one of:
 
 - `sig:k1:<16 hex>`: HMAC-SHA256 of the removed values under the
-  fingerprint key. The same entry with a different secret gets a
-  different fingerprint. Identical duplicates are told apart only by
-  their ordinal in the file, the same rule s1 uses.
+  fingerprint key. The key is the hex text decoded to bytes, so the
+  same key in uppercase and lowercase is one key. The same entry with a
+  different secret gets a different fingerprint. Identical duplicates
+  are told apart only by their ordinal in the file, the same rule s1
+  uses.
 - `sig:s1:<field[n],...>#<ordinal>`: used when no key is available
   (the default in CI). No function of the secret is used. A rotated
   secret, or a secret with a different recognizable shape (a
@@ -32,9 +34,10 @@ The key comes from `TRIPCORD_FINGERPRINT_KEY` or
 `~/.tripcord/fingerprint.key`. A local scan creates that file with mode
 `0600` on first use, writing it atomically so a concurrent scan never
 observes a partial file. A CI scan never creates it. Key material that
-exists but is broken — unreadable, corrupt, too short, a symlink, owned
-by someone else, or wider than its expected permissions (checked on
-Unix; Windows relies on ACLs) — now fails the scan closed with exit 3
+exists but is broken — unreadable, corrupt, too short, not hex, an odd
+number of hex characters, a symlink, owned by someone else, or wider
+than its expected permissions (checked on Unix; Windows relies on
+ACLs) — now fails the scan closed with exit 3
 and an actionable message, instead of silently falling back to `s1`.
 In v0 the key is a file or an environment variable; the OS keychain
 arrives with the v1 store.

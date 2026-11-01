@@ -127,6 +127,24 @@ func TestScanRejectsShortEnvKey(t *testing.T) {
 	}
 }
 
+// TestScanRejectsOddLengthEnvKey: an odd number of hex characters cannot
+// be decoded, so TRIPCORD_FINGERPRINT_KEY must exit 3 rather than be
+// truncated into a different key.
+func TestScanRejectsOddLengthEnvKey(t *testing.T) {
+	const key = "0123456789abcdef0123456789abcdefa" // 33: past the 32-char minimum, and odd
+	if len(key) != 33 {
+		t.Fatalf("key length %d, want 33", len(key))
+	}
+	setKeyEnv(t, t.TempDir(), map[string]string{fpkey.EnvVar: key})
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"scan", keyTestRepo(t)}, &stdout, &stderr); code != int(exitcode.Config) {
+		t.Fatalf("exit %d, want %d; stderr: %s", code, exitcode.Config, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "odd") || strings.Contains(stdout.String()+stderr.String(), key) {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
 func TestScanFallsBackToS1WhenNoKeySourceExists(t *testing.T) {
 	// A fresh home has no env var and no key file at all; a read-only
 	// home means a new key file cannot be created either. Neither

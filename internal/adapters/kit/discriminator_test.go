@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/vgmartinez/tripcord/internal/fpkey"
 	"github.com/vgmartinez/tripcord/internal/model"
 )
 
@@ -208,5 +209,39 @@ func TestStructuralDiscriminatorUsesNoValue(t *testing.T) {
 	}
 	if got := StructuralDiscriminator(map[string]any{"clean": "nothing here"}); got != "" {
 		t.Fatalf("field with no marker produced a part: %q", got)
+	}
+}
+
+// TestK1HexCaseKeepsFingerprint: the HMAC key is the decoded hex, so the
+// same key written in uppercase and lowercase produces the same evidence
+// key and the same fingerprint.
+func TestK1HexCaseKeepsFingerprint(t *testing.T) {
+	t.Parallel()
+	fingerprint := func(text string) (key, fp string) {
+		t.Helper()
+		k, err := fpkey.New(text)
+		if err != nil {
+			t.Fatal(err)
+		}
+		c := NewCollector(model.HarnessCodex, "Codex")
+		c.SetHome("/home/dev")
+		c.SetFingerprintKey(k)
+		s := c.Source(model.ScopeRepo, ".mcp.json", nil)
+		s.MCPServers(map[string]any{"app": dockerServer("zsX01q", "zsY01q")}, "mcpServers")
+		key = EvidenceKey(sigParts(t, c)[0])
+		fp, err = model.Fingerprint("TC-TEST-006", model.Location{
+			Harness: model.HarnessCodex,
+			Scope:   model.ScopeRepo,
+			Path:    ".mcp.json",
+		}, []model.Evidence{{Config: &model.ConfigRef{ID: "codex:repo:.mcp.json", Key: key}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return key, fp
+	}
+	lowerKey, lowerFP := fingerprint(testKey)
+	upperKey, upperFP := fingerprint(strings.ToUpper(testKey))
+	if lowerKey != upperKey || lowerFP != upperFP {
+		t.Fatalf("case changed the key or fingerprint\n lower %s %s\n upper %s %s", lowerKey, lowerFP, upperKey, upperFP)
 	}
 }

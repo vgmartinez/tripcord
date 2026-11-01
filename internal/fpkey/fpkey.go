@@ -44,10 +44,12 @@ const (
 	// LogicalPath is the key file's home-relative name, used in
 	// messages so no absolute home path is printed.
 	LogicalPath = LogicalDir + "/fingerprint.key"
-	// MinKeyBytes is the shortest accepted key, counted as decoded hex
-	// bytes: TRIPCORD_FINGERPRINT_KEY and a key file must both be a hex
-	// string (0-9, a-f, A-F) of at least MinKeyBytes*2 characters after
-	// trimming surrounding space.
+	// MinKeyBytes is the shortest accepted key, counted after the hex
+	// text is decoded: TRIPCORD_FINGERPRINT_KEY and a key file must both
+	// be an even-length hex string (0-9, a-f, A-F) of at least
+	// MinKeyBytes*2 characters after trimming surrounding space. The
+	// decoded bytes, not the hex text, key the HMAC, so uppercase and
+	// lowercase spellings of the same key are one key.
 	MinKeyBytes = 16
 	// minKeyHexChars is MinKeyBytes expressed as hex text length.
 	minKeyHexChars = MinKeyBytes * 2
@@ -78,8 +80,9 @@ const (
 
 var (
 	// ErrInvalid reports a key that is set but unusable: not a hex
-	// string, shorter than minKeyHexChars, or a key file larger than
-	// the size cap or not exactly generatedKeyBytes*2 hex characters.
+	// string, an odd number of hex characters, shorter than
+	// minKeyHexChars, or a key file larger than the size cap or not
+	// exactly generatedKeyBytes*2 hex characters.
 	ErrInvalid = errors.New("fingerprint key is invalid")
 	// ErrUnavailable reports that no key source exists at all: the
 	// home directory could not be determined, or a new key file could
@@ -111,26 +114,36 @@ type Key struct {
 	secret []byte
 }
 
+// hexAlphabet is the character class New accepts. The error text quotes
+// it verbatim, so the message and the check cannot drift apart.
+const hexAlphabet = "0-9, a-f, A-F"
+
 // New returns a key over secret after trimming surrounding space, the
 // same normalization the env var and the key file get, so the same text
-// in either place is the same key. secret must be a hex string (0-9,
-// a-f, A-F; `openssl rand -hex 32` is the documented way to generate
-// one) of at least minKeyHexChars characters once trimmed, or New
-// returns ErrInvalid: a key that is some other shape is more likely to
-// be truncated or corrupted than intentional, and must fail closed
-// rather than silently produce different fingerprints than before. The
-// hex text itself, not its decoded bytes, is what keys the HMAC (see
-// Sum), so a key already accepted here keeps producing the same
-// fingerprints it always has.
+// in either place is the same key. secret must be a hex string
+// (hexAlphabet; `openssl rand -hex 32` is the documented way to generate
+// one) of at least minKeyHexChars characters once trimmed, and that
+// length must be even, or New returns ErrInvalid: a key that is some
+// other shape is more likely to be truncated or corrupted than
+// intentional, and must fail closed rather than silently produce
+// different fingerprints. The decoded bytes, not the hex text, key the
+// HMAC (see Sum), so "AB" and "ab" are the same key.
 func New(secret string) (*Key, error) {
 	trimmed := strings.TrimSpace(secret)
 	if len(trimmed) < minKeyHexChars {
 		return nil, fmt.Errorf("%w: shorter than %d hex characters (%d bytes)", ErrInvalid, minKeyHexChars, MinKeyBytes)
 	}
 	if !isHex(trimmed) {
-		return nil, fmt.Errorf("%w: must be a hex string (0-9, a-f)", ErrInvalid)
+		return nil, fmt.Errorf("%w: must be a hex string (%s)", ErrInvalid, hexAlphabet)
 	}
-	return &Key{secret: []byte(trimmed)}, nil
+	if len(trimmed)%2 != 0 {
+		return nil, fmt.Errorf("%w: odd number of hex characters", ErrInvalid)
+	}
+	decoded, err := hex.DecodeString(trimmed)
+	if err != nil {
+		return nil, fmt.Errorf("%w: must be a hex string (%s)", ErrInvalid, hexAlphabet)
+	}
+	return &Key{secret: decoded}, nil
 }
 
 // isHex reports whether every character of s is a hex digit. s is never

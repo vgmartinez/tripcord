@@ -247,12 +247,12 @@ anyone looking them up by number:
   32 bytes (`openssl rand -hex 32`) is what this document recommends for
   a hand-written key too.
 - **Key format is hex-only**, for both `TRIPCORD_FINGERPRINT_KEY` and a
-  key file. The hex text itself, not its decoded bytes, keys the HMAC,
-  so this is purely an input-validation tightening: any key that was
-  already hex (every key this document's examples ever produced) keeps
-  giving the same fingerprints it always has. A key file additionally
-  has an exact-length rule a human-set env var does not; see
-  "Fingerprint key" above.
+  key file, and the length must be even. The HMAC key is those
+  characters decoded to bytes, not the hex text itself, so `AB` and
+  `ab` are the same key and produce the same fingerprints. An odd
+  number of hex characters cannot be decoded and the scan exits 3. A
+  key file additionally has an exact-length rule a human-set env var
+  does not; see "Fingerprint key" above.
 - **s1 granularity** is top-level payload field plus index
   (`field[n]`), not a deeper structural path into nested values; see
   "Secret discriminator" above.
@@ -274,17 +274,21 @@ anyone looking them up by number:
 
 1. `TRIPCORD_FINGERPRINT_KEY`, when set and non-empty. Surrounding white
    space is trimmed. The remaining text must be a hex string (`0-9`,
-   `a-f`, `A-F`) of at least 32 characters (16 bytes), or the scan
-   exits 3. Example: `openssl rand -hex 32` (32 bytes is also what a
-   generated key file holds; see point 3).
+   `a-f`, `A-F`) of at least 32 characters (16 bytes) and an even
+   number of characters, or the scan exits 3. The HMAC key is that text
+   decoded to bytes, so uppercase and lowercase are the same key. An
+   odd length (33 characters, for example) cannot be decoded and is
+   rejected rather than truncated. Example: `openssl rand -hex 32` (32
+   bytes is also what a generated key file holds; see point 3).
 2. `~/.tripcord/fingerprint.key`, when it exists. It holds the key text
-   with the same trimming and hex format, but a stricter length rule: a
-   key file's content must be exactly 64 hex characters, optionally
-   followed by one trailing newline — exactly what point 3 writes.
-   Nothing else legitimately writes this file, so any other length or
-   any non-hex character means the file is truncated or corrupted, and
-   the scan exits 3 rather than silently using it as a different, but
-   still "valid", key.
+   with the same trimming, hex alphabet, and decoded-bytes rule, but a
+   stricter length rule: a key file's content must be exactly 64 hex
+   characters, optionally followed by one trailing newline — exactly
+   what point 3 writes. Nothing else legitimately writes this file, so
+   any other length or any non-hex character means the file is
+   truncated or corrupted, and the scan exits 3 rather than silently
+   using it as a different, but still "valid", key. Uppercase hex of
+   that length is accepted and matches the same key in lowercase.
 3. Otherwise, outside CI, a new key file: 32 random bytes, hex-encoded,
    written atomically (see "Concurrent creation" below) with mode
    `0600` in a `0700` `~/.tripcord` directory. In CI (see "CI
@@ -333,12 +337,13 @@ message instead of falling back to s1:
 - `~/.tripcord` exists but is not a directory, or is itself a symlink.
 - The key file's content is not exactly 64 hex characters (optionally
   followed by one newline), is longer than the 4096-byte read cap, or
-  otherwise fails `New`'s hex-format and minimum-length validation (the
-  same check `TRIPCORD_FINGERPRINT_KEY` gets, less the exact-length
-  rule; see "Fingerprint key" above). This also catches a corrupted or
-  truncated key file — 40 random bytes, or the first half of a real key
-  — that previously passed as a different, silently-accepted key
-  instead of failing the scan closed.
+  otherwise fails `New`'s validation (the same check
+  `TRIPCORD_FINGERPRINT_KEY` gets, less the exact-length rule; see
+  "Fingerprint key" above): not hex (`0-9`, `a-f`, `A-F`), shorter than
+  32 hex characters, or an odd number of hex characters. This also
+  catches a corrupted or truncated key file — 40 random bytes, or the
+  first half of a real key — that previously passed as a different,
+  silently-accepted key instead of failing the scan closed.
 - On Unix, `~/.tripcord` is owned by someone other than the current
   user, or is writable by group or other (mode `&0o022 != 0`); the key
   file is owned by someone other than the current user, or is readable

@@ -47,6 +47,48 @@ func TestNewTrimsAndRejectsShortKeys(t *testing.T) {
 	}
 }
 
+// TestNewHexCaseIsTheSameKey is the researcher review's normalization:
+// the HMAC key is the decoded bytes, so uppercase and lowercase
+// spellings of one hex string produce the same discriminator and
+// therefore the same fingerprint.
+func TestNewHexCaseIsTheSameKey(t *testing.T) {
+	t.Parallel()
+	lower, err := New(secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	upper, err := New(strings.ToUpper(secret))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mixedText := strings.ToUpper(secret[:16]) + secret[16:]
+	mixed, err := New(mixedText)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := lower.Sum("tripcord.sig.k1", []string{"zsM01q"}, 16)
+	for name, k := range map[string]*Key{"upper": upper, "mixed": mixed} {
+		if got := k.Sum("tripcord.sig.k1", []string{"zsM01q"}, 16); got != want {
+			t.Fatalf("%s Sum = %s, want %s (same fingerprint discriminator)", name, got, want)
+		}
+	}
+	if lower.Sum("tripcord.sig.k1", []string{"other"}, 16) == want {
+		t.Fatal("a different secret kept the discriminator")
+	}
+}
+
+func TestNewRejectsOddLengthHex(t *testing.T) {
+	t.Parallel()
+	odd := secret + "a"
+	_, err := New(odd)
+	if !errors.Is(err, ErrInvalid) {
+		t.Fatalf("err = %v, want ErrInvalid", err)
+	}
+	if !strings.Contains(err.Error(), "odd") || strings.Contains(err.Error(), odd) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
 func TestSum(t *testing.T) {
 	t.Parallel()
 	k, _ := New(secret)
@@ -534,6 +576,9 @@ func TestLoadRejectsBadEnvKey(t *testing.T) {
 		"too short":         "tooshort",
 		"not hex":           strings.Repeat("g", minKeyHexChars),
 		"not hex, one char": secret[:len(secret)-1] + "g",
+		// Long enough to pass the minimum, even in its hex digits, but
+		// not decodable: an odd length must be exit 3, not a key.
+		"odd length": secret + "a",
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -544,6 +589,12 @@ func TestLoadRejectsBadEnvKey(t *testing.T) {
 			if strings.Contains(err.Error(), value) {
 				t.Fatalf("error names the key: %v", err)
 			}
+			if name == "not hex" && !strings.Contains(err.Error(), "("+hexAlphabet+")") {
+				t.Fatalf("charset in the error = %q, want (%s)", err.Error(), hexAlphabet)
+			}
+			if name == "odd length" && !strings.Contains(err.Error(), "odd") {
+				t.Fatalf("odd-length error = %q", err.Error())
+			}
 		})
 	}
 	// A longer-than-a-file hex key is fine for the env var: there is no
@@ -551,6 +602,17 @@ func TestLoadRejectsBadEnvKey(t *testing.T) {
 	longer := secret + secret
 	if _, src, err := Load(Options{Home: t.TempDir(), Getenv: env(map[string]string{EnvVar: longer})}); err != nil || src != SourceEnv {
 		t.Fatalf("Load = %v, %v, want a valid longer hex key accepted", src, err)
+	}
+	upper, src, err := Load(Options{Home: t.TempDir(), Getenv: env(map[string]string{EnvVar: strings.ToUpper(secret)})})
+	if err != nil || src != SourceEnv {
+		t.Fatalf("Load = %v, %v, want uppercase hex accepted", src, err)
+	}
+	lower, err := New(secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if upper.Sum("d", []string{"x"}, 16) != lower.Sum("d", []string{"x"}, 16) {
+		t.Fatal("uppercase env key is a different key than the same hex in lowercase")
 	}
 }
 
