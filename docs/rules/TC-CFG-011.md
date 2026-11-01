@@ -3,8 +3,8 @@
 | | |
 | --- | --- |
 | Severity | high |
-| Harnesses | generic (`AGENTS.md`), Claude Code, Gemini CLI, Windsurf, GitHub Copilot, Cursor |
-| Files | `AGENTS.md`, `CLAUDE.md`, `CLAUDE.local.md`, `GEMINI.md` (any depth), nested `.claude/rules/**/*.md`, `.cursor/rules/**/*.md(c)`, and `.windsurfrules`, plus root `.cursorrules`, `.github/copilot-instructions.md`, `.github/instructions/**/*.md`, and `.github/agents/**/*.agent.md` (repository scope) |
+| Harnesses | generic (`AGENTS.md`), Claude Code, Gemini CLI, Windsurf, GitHub Copilot, Cursor, Devin |
+| Files | `AGENTS.md`, `CLAUDE.md`, `CLAUDE.local.md`, `GEMINI.md` (any depth), nested `.claude/rules/**/*.md`, `.cursor/rules/**/*.md(c)`, and `.windsurfrules`, plus root `.cursorrules`, `.github/copilot-instructions.md`, `.github/instructions/**/*.md`, `.github/agents/**/*.agent.md`, and the maintenance commands and knowledge entries of `.devin/blueprint.yaml` (repository scope) |
 | Rule | [`rules/TC-CFG-011.yaml`](../../rules/TC-CFG-011.yaml) |
 
 ## What it detects

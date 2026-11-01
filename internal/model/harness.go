@@ -3,7 +3,7 @@ package model
 import "fmt"
 
 // Harness is a coding-agent product id, or a non-harness surface that
-// rules attach findings to. Product ids are the seven agents. vscode,
+// rules attach findings to. Product ids are the eight agents. vscode,
 // devcontainer, and generic are surfaces; IsProduct reports the split.
 type Harness string
 
@@ -15,6 +15,7 @@ const (
 	HarnessGemini   Harness = "gemini"
 	HarnessOpenCode Harness = "opencode"
 	HarnessWindsurf Harness = "windsurf"
+	HarnessDevin    Harness = "devin"
 )
 
 // Surfaces used by rules that are not harness products.
@@ -32,6 +33,7 @@ var productHarnesses = []Harness{
 	HarnessGemini,
 	HarnessOpenCode,
 	HarnessWindsurf,
+	HarnessDevin,
 }
 
 var surfaces = []Harness{
@@ -43,7 +45,7 @@ var surfaces = []Harness{
 // String returns the wire value.
 func (h Harness) String() string { return string(h) }
 
-// IsProduct reports whether h is one of the seven coding-agent harnesses.
+// IsProduct reports whether h is one of the eight coding-agent harnesses.
 func (h Harness) IsProduct() bool {
 	return harnessListed(productHarnesses, h)
 }

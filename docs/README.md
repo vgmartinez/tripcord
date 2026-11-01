@@ -25,7 +25,9 @@ and GitHub Copilot adapters.
 [adapters/windsurf.md](adapters/windsurf.md) document the Gemini CLI,
 OpenCode, and Windsurf adapters, and
 [adapters/devcontainer.md](adapters/devcontainer.md) the Dev Container
-adapter (`devcontainer`).
+adapter (`devcontainer`), and
+[adapters/devin.md](adapters/devin.md) the Devin blueprint adapter
+(`devin`).
 [adapters/generic.md](adapters/generic.md) documents the shared-files
 adapter (`generic`) and which adapter owns a file several harnesses read.
 

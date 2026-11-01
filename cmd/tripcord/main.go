@@ -25,6 +25,7 @@ import (
 	"github.com/vgmartinez/tripcord/internal/adapters/copilot"
 	"github.com/vgmartinez/tripcord/internal/adapters/cursor"
 	"github.com/vgmartinez/tripcord/internal/adapters/devcontainer"
+	"github.com/vgmartinez/tripcord/internal/adapters/devin"
 	"github.com/vgmartinez/tripcord/internal/adapters/gemini"
 	"github.com/vgmartinez/tripcord/internal/adapters/generic"
 	"github.com/vgmartinez/tripcord/internal/adapters/opencode"
@@ -161,6 +162,7 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 		gemini.New(gemini.Options{SkipRepo: !repoScope, IncludeUser: userScope, IncludeManaged: managedScope, FingerprintKey: key}),
 		opencode.New(opencode.Options{SkipRepo: !repoScope, IncludeUser: userScope, IncludeManaged: managedScope, FingerprintKey: key}),
 		windsurf.New(windsurf.Options{SkipRepo: !repoScope, IncludeUser: userScope, IncludeManaged: managedScope, FingerprintKey: key}),
+		devin.New(devin.Options{SkipRepo: !repoScope, FingerprintKey: key}),
 		devcontainer.New(devcontainer.Options{SkipRepo: !repoScope, FingerprintKey: key}),
 		generic.New(generic.Options{SkipRepo: !repoScope, IncludeUser: userScope, FingerprintKey: key}),
 	)

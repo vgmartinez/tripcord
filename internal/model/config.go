@@ -92,6 +92,10 @@ type ConfigItem struct {
 	// or between them. It is set by the adapter, for rule evaluation and
 	// the finding's excerpt only.
 	Hidden HiddenChars `json:"-"`
+	// Line is the 1-based line of this entry in Path. It is display-only:
+	// fingerprints do not hash a finding's line. Zero means the adapter
+	// did not record one.
+	Line int `json:"-"`
 }
 
 // HiddenChars is what internal/hiddenchar found in one file. Runs holds

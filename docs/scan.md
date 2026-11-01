@@ -13,7 +13,7 @@ the only mode that requires Git.
 | `--config` | Scan executable configuration. This is the v0 default. |
 | `--secrets` (v1) | Not available. Secret scanning lands in v1; v0 supports `--config` only. |
 | `--all` (v1) | Not available. Secret scanning lands in v1; v0 supports `--config` only. |
-| `--harness claude,codex,cursor,copilot,gemini,opencode,windsurf,devcontainer,generic,...` | Restrict discovery to comma-separated harnesses. `generic` is the shared-files adapter (skills, `AGENTS.md`, `.vscode/`); `devcontainer` reports Dev Container configuration, which every harness that opens the repository in a container runs. With no value, installed adapters autodetect their files. A harness that also loads files another adapter owns pulls that adapter in, for example `--harness cursor` also runs `claude` and `generic`; an informational note on stderr says so. `.vscode/tasks.json` is read under any value, because the editor runs its folder-open tasks whichever agent is in use; a harness-limited scan reads only that shared file, not the skills or `AGENTS.md`. |
+| `--harness claude,codex,cursor,copilot,gemini,opencode,windsurf,devin,devcontainer,generic,...` | Restrict discovery to comma-separated harnesses. `generic` is the shared-files adapter (skills, `AGENTS.md`, `.vscode/`); `devcontainer` reports Dev Container configuration, which every harness that opens the repository in a container runs; `devin` reads `.devin/blueprint.yaml`. With no value, installed adapters autodetect their files. A harness that also loads files another adapter owns pulls that adapter in, for example `--harness cursor` also runs `claude` and `generic`; an informational note on stderr says so. `.vscode/tasks.json` is read under any value, because the editor runs its folder-open tasks whichever agent is in use; a harness-limited scan reads only that shared file, not the skills or `AGENTS.md`. |
 | `--scope repo\|user\|managed\|all` | Choose which configuration to read. `repo` (the default) does not read the home directory or system settings. `user` and `managed` read those locations and skip the repository. `all` reads every scope. |
 | `--format text\|json\|sarif\|md\|gha` | Select human text, JSONL finding documents, SARIF 2.1.0, Markdown, or GitHub Actions annotations. Default: `text`. |
 | `--output <path\|->` | Write output to a new private (`0600`) local file or `-` for stdout (default). A symlink is rejected. The destination is replaced only after the result is complete. |
@@ -70,7 +70,8 @@ exit code or the report. See the adapter docs ([claude](adapters/claude.md),
 [codex](adapters/codex.md), [cursor](adapters/cursor.md),
 [copilot](adapters/copilot.md), [gemini](adapters/gemini.md),
 [opencode](adapters/opencode.md), [windsurf](adapters/windsurf.md),
-[devcontainer](adapters/devcontainer.md), [generic](adapters/generic.md)) and
+[devcontainer](adapters/devcontainer.md), [devin](adapters/devin.md),
+[generic](adapters/generic.md)) and
 [output.md](output.md).
 
 ## Rule evaluation

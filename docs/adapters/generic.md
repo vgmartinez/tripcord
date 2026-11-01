@@ -29,6 +29,7 @@ the [Codex adapter](codex.md), since nothing else reads it.
 | `.mcp.json` | claude | Copilot CLI |
 | `.claude/settings.json`, `.claude/settings.local.json` | claude | Copilot CLI and Cursor (third-party hooks) |
 | `CLAUDE.md`, `.claude/skills` | claude | OpenCode (fallback) |
+| `.devin/blueprint.yaml` | devin | Devin, during a snapshot build |
 | `.devcontainer/devcontainer.json` | devcontainer | Codespaces, Copilot cloud agents, VS Code, Cursor |
 | `AGENTS.override.md` | codex | none |
 

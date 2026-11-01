@@ -3,8 +3,8 @@
 | | |
 | --- | --- |
 | Severity | high |
-| Harnesses | Copilot (coding agent), Cursor (cloud agents), dev containers |
-| Files | `.github/workflows/copilot-setup-steps.yml`, `.cursor/environment.json`, `.devcontainer/devcontainer.json`, `.devcontainer/<name>/devcontainer.json`, `.devcontainer.json` (repository scope) |
+| Harnesses | Copilot (coding agent), Cursor (cloud agents), dev containers, Devin |
+| Files | `.github/workflows/copilot-setup-steps.yml`, `.cursor/environment.json`, `.devcontainer/devcontainer.json`, `.devcontainer/<name>/devcontainer.json`, `.devcontainer.json`, `.devin/blueprint.yaml` (repository scope) |
 | Rule | [`rules/TC-CFG-009.yaml`](../../rules/TC-CFG-009.yaml) |
 
 ## What it detects
@@ -26,6 +26,11 @@ Commands read:
   commands. `initializeCommand` runs on the host before the container
   starts, so is the most sensitive lifecycle command. An `http(s)`
   tarball Feature is read as a `curl` of its URL.
+- Devin: each `initialize` and `maintenance` command in
+  `.devin/blueprint.yaml`, whether the section is a string or a list
+  whose entries are strings or mappings with `run`. `uses` steps are
+  not read. The command is taken as written; the rule does not assume
+  the build shell enables errexit.
 
 Each command is read by `shell.unpinned`, which reports the same
 risks as `shell.risks` (see [TC-CFG-001](TC-CFG-001.md): a fetch, a
@@ -174,8 +179,6 @@ too-deeply nested payloads.
 
 ## Limits
 
-- Devin's `.devin/blueprint.yaml` is not read: no adapter normalizes
-  it yet.
 - `RUN` lines of a Dockerfile and OCI Feature references
   (`ghcr.io/devcontainers/features/node:1`) are not read. OCI Feature
   tags are not flagged.
@@ -206,6 +209,12 @@ jobs:
 
 ```json
 {"postCreateCommand": "npx -y @acme/bootstrap"}
+```
+
+```yaml
+# .devin/blueprint.yaml
+initialize: |
+  curl https://x | sh
 ```
 
 Not reported, with `t.sh.sha256` committed at the repository root and
@@ -243,4 +252,5 @@ committed script.
 - [GitHub: customize the Copilot coding agent's environment](https://docs.github.com/en/copilot/how-tos/use-copilot-agents/coding-agent/customize-the-agent-environment)
 - [Cursor cloud agents](https://cursor.com/docs/cloud-agent)
 - [Dev Container metadata reference](https://containers.dev/implementors/json_reference/)
+- [Devin environment blueprints](https://docs.devin.ai/onboard-devin/environment/blueprints)
 - [WorkOS: the npm worm and coding-agent config](https://workos.com/blog/npm-worm-coding-agent-config-credentials)

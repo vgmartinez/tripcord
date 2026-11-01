@@ -83,3 +83,5 @@ positivos:
   devcontainer-postcreate-curl-pipe: high
   devcontainer-poststart-base64: high
   devcontainer-updatecontent-object: high
+  devin-initialize-curl-pipe: high
+  devin-maintenance-list-curl: high

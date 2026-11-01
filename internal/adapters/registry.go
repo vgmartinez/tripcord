@@ -35,7 +35,7 @@ type SharedReader interface {
 }
 
 // AdapterHarness reports whether h can name an installed adapter.
-// The seven product harnesses can. generic can: it is the shared adapter
+// The eight product harnesses can. generic can: it is the shared adapter
 // for skill files that more than one product reads. devcontainer can: it
 // owns the Dev Container files that cloud agents and editors run. vscode
 // is a finding surface, not an adapter.

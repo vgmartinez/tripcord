@@ -10,7 +10,9 @@
 # .github/agents/**/*.agent.md, and .cursor/rules/**/*.md(c), plus
 # repository SKILL.md files that the Claude and generic adapters emit,
 # .claude/commands/**/*.md, .claude/agents/**/*.md, and
-# .windsurf/rules/**/*.md. AGENTS.local.md and GEMINI.local.md are not
+# .windsurf/rules/**/*.md, and maintenance commands and knowledge
+# contents in .devin/blueprint.yaml (the doc surfaces those to the
+# agent). AGENTS.local.md and GEMINI.local.md are not
 # included because no repository adapter emits them.
 # The match is on the raw whole file, including frontmatter. The raw view
 # is evaluation-only; findings contain only the line number, never text.
@@ -55,15 +57,16 @@ pack: tripcord/core
 title: "Agent instructions ask to read secrets or send them out"
 severity: medium
 evidence: instruction_match
-harness: [claude, copilot, cursor, gemini, windsurf, generic]
+harness: [claude, copilot, cursor, gemini, windsurf, generic, devin]
 files: ["**"]
 when: |
   config.kind in ["instructions", "skill"] && config.scope == "repo" &&
     has(payload.content) && type(payload.content) == string &&
     (config.kind == "skill" || (has(payload.role) && payload.role in ["agent", "command"]) ||
-      config.path.matches(r'''(?i)((^|/)(AGENTS|CLAUDE(\.local)?)\.md|(^|/)GEMINI\.md|(^|/)\.claude/rules/.+\.md|(^|/)\.claude/(commands|agents)/.+\.md|(^|/)\.claude/skills/.+/SKILL\.md|(^|/)\.agents/skills/.+/SKILL\.md|(^|/)\.github/skills/.+/SKILL\.md|(^|/)\.windsurfrules|^\.cursorrules|^\.github/copilot-instructions\.md|^\.github/instructions/.+\.md|^\.github/agents/.+\.agent\.md|(^|/)\.cursor/rules/.+\.mdc?|(^|/)\.windsurf/rules/.+\.md)$''')) &&
+      config.path.matches(r'''(?i)((^|/)(AGENTS|CLAUDE(\.local)?)\.md|(^|/)GEMINI\.md|(^|/)\.claude/rules/.+\.md|(^|/)\.claude/(commands|agents)/.+\.md|(^|/)\.claude/skills/.+/SKILL\.md|(^|/)\.agents/skills/.+/SKILL\.md|(^|/)\.github/skills/.+/SKILL\.md|(^|/)\.windsurfrules|^\.cursorrules|^\.github/copilot-instructions\.md|^\.github/instructions/.+\.md|^\.github/agents/.+\.agent\.md|(^|/)\.cursor/rules/.+\.mdc?|(^|/)\.windsurf/rules/.+\.md|(^|/)\.devin/blueprint\.yaml)$''')) &&
     instruction.first_match_line(payload.content) > 0
 fix: "Delete the instruction that reads the environment, a dotenv file, or credentials, or that sends them to an outbound sink. Keep notes that only name .env.example or tell the agent not to reveal secrets. To accept a reviewed file, add a policy exception for this rule and file."
 refs:
   - https://novee.security/blog/breaking-ai-agent-sandboxes/
   - https://fidelius.blisslabs.dev/research/ai-coding-agents-api-keys-env/
+  - https://docs.devin.ai/onboard-devin/environment/blueprints

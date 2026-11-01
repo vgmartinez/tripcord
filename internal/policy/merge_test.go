@@ -97,7 +97,7 @@ func wantErr(t *testing.T, err error, substr string) {
 
 func TestDefaults(t *testing.T) {
 	e := mustMerge(t, nil)
-	if e.Mode != ModeEnforce || e.FailOn != model.SeverityHigh || len(e.Harnesses) != 7 || !e.Enabled("TC-CFG-001", model.HarnessClaude) || e.Egress != EgressNone || !e.Redact {
+	if e.Mode != ModeEnforce || e.FailOn != model.SeverityHigh || len(e.Harnesses) != 8 || !e.Enabled("TC-CFG-001", model.HarnessClaude) || !e.HarnessEnabled(model.HarnessDevin) || e.Egress != EgressNone || !e.Redact {
 		t.Fatalf("defaults = %+v", e)
 	}
 	if e.Provenance["mode"].Layer != LayerDefault {

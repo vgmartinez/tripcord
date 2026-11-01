@@ -250,6 +250,27 @@ func (s *Source) WarnAll(warnings []string) {
 	}
 }
 
+// Len is how many items this source's collector holds.
+func (s *Source) Len() int { return len(s.c.items) }
+
+// MarkLine sets the 1-based source line of the item added after before
+// items were present. A rejected add does not move the count, and no
+// line is recorded.
+func (s *Source) MarkLine(before, line int) {
+	if line < 1 || len(s.c.items) <= before {
+		return
+	}
+	s.c.items[len(s.c.items)-1].Line = line
+}
+
+// MarkHidden attaches hidden code points to the item added after before.
+func (s *Source) MarkHidden(before int, hidden model.HiddenChars) {
+	if len(s.c.items) <= before {
+		return
+	}
+	s.c.items[len(s.c.items)-1].Hidden = hidden
+}
+
 // Add emits one item. key is sanitized, has a content digest of the full
 // sanitized payload appended (see PayloadDigest), then a discriminator
 // over every raw value sanitization removed while building the entry

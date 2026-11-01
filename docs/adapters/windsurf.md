@@ -103,7 +103,8 @@ adapter.
   hooks in `.devin/config.json` and `.devin/config.local.json`) and the
   rest of the Devin Local configuration (rules, skills, MCP,
   `~/.config/devin/config.json`). `.devin/hooks.json` is only a legacy
-  compatibility read; a full `devin` harness is later work.
+  compatibility read. `.devin/blueprint.yaml` is the [Devin](devin.md)
+  adapter.
 - Windsurf editor settings (`settings.json`, terminal auto-execution
   allow and deny lists).
 

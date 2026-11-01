@@ -14,6 +14,7 @@ import (
 	"github.com/vgmartinez/tripcord/internal/adapters/copilot"
 	"github.com/vgmartinez/tripcord/internal/adapters/cursor"
 	"github.com/vgmartinez/tripcord/internal/adapters/devcontainer"
+	"github.com/vgmartinez/tripcord/internal/adapters/devin"
 	"github.com/vgmartinez/tripcord/internal/adapters/gemini"
 	"github.com/vgmartinez/tripcord/internal/adapters/generic"
 	"github.com/vgmartinez/tripcord/internal/adapters/opencode"
@@ -50,6 +51,7 @@ func adapterDiscover(ctx context.Context, root string) ([]model.ConfigItem, erro
 		gemini.New(gemini.Options{IncludeUser: user, HomeDir: home, Getenv: getenv}),
 		opencode.New(opencode.Options{IncludeUser: user, HomeDir: home, Getenv: getenv}),
 		windsurf.New(windsurf.Options{IncludeUser: user, HomeDir: home, Getenv: getenv}),
+		devin.New(devin.Options{}),
 		devcontainer.New(devcontainer.Options{}),
 		generic.New(generic.Options{IncludeUser: user, HomeDir: home}),
 	)

@@ -16,5 +16,6 @@ positivos:
   cursor-legacy-cursorrules: high
   cursor-rules-md: high
   cursor-rule-frontmatter-isolate: high
+  devin-maintenance-zero-width: high
   gemini-embedding: high
   windsurfrules-tags: high

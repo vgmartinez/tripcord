@@ -43,6 +43,7 @@ positivos:
   copilot-instructions-secrets: medium
   cursor-legacy-prod: medium
   cursor-rule-env-local: medium
+  devin-knowledge-read-dotenv: medium
   gemini-process-env: medium
   skill-read-dotenv: medium
   windsurf-os-environ: medium

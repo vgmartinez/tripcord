@@ -24,6 +24,10 @@
 #     string, array, or object form; and initializeCommand, which runs
 #     on the host before the container starts. A Feature whose reference
 #     is an http(s) tarball URL is read as a curl of that URL.
+#   - Devin: each initialize and maintenance command in
+#     .devin/blueprint.yaml, as a string or as the run of a list entry.
+#     uses steps are not read. The shell is the command as written:
+#     nothing injects set -e.
 #
 # Pinned means one of:
 #   - Immutable URL: every downloader target is https, without userinfo
@@ -54,14 +58,14 @@
 # Package runners (npx -y, uvx, pnpm dlx, ...), git clone (including a
 # later sha checkout), tags, and a variable target are never pinned.
 #
-# Not read: Devin's .devin/blueprint.yaml (no adapter reads it), RUN
-# lines of a Dockerfile, OCI Feature references (ghcr.io/...:1), and
-# what a fetched script does. OCI Feature tags are not flagged.
+# Not read: RUN lines of a Dockerfile, OCI Feature references
+# (ghcr.io/...:1), a blueprint uses: action, and what a fetched script
+# does. OCI Feature tags are not flagged.
 id: TC-CFG-009
 pack: tripcord/core
 title: "Environment setup runs code fetched from an unpinned source"
 severity: high
-harness: [copilot, cursor, devcontainer]
+harness: [copilot, cursor, devcontainer, devin]
 files: ["**"]
 when: |
   config.kind == "env-setup" && config.scope == "repo" && has(payload.setting) && (
@@ -81,11 +85,15 @@ when: |
     (config.harness == "devcontainer" && payload.setting == "features" &&
       has(payload.feature) && type(payload.feature) == string &&
       payload.feature.matches(r'''(?i)^https?://''') &&
-      shell.unpinned(["curl", payload.feature]).size() > 0)
+      shell.unpinned(["curl", payload.feature]).size() > 0) ||
+    (config.harness == "devin" && payload.setting in ["initialize", "maintenance"] &&
+      has(payload.command) && type(payload.command) == string &&
+      shell.unpinned(payload.command, config.checksum_files, config.checksum_symlinks).size() > 0)
   )
 fix: "Commit the setup script to the repository and run it from there, or pin what it downloads: fetch an https URL that names a commit, or download to a file and check its SHA-256 (sha256sum -c) before running it, with && so a mismatch stops setup."
 refs:
   - https://docs.github.com/en/copilot/how-tos/use-copilot-agents/coding-agent/customize-the-agent-environment
   - https://cursor.com/docs/cloud-agent
   - https://containers.dev/implementors/json_reference/
+  - https://docs.devin.ai/onboard-devin/environment/blueprints
   - https://workos.com/blog/npm-worm-coding-agent-config-credentials

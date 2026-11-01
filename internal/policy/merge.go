@@ -165,7 +165,7 @@ func defaults(d Defaults) *Effective {
 		FailOn: d.FailOn,
 		Harnesses: []model.Harness{
 			model.HarnessClaude, model.HarnessCodex, model.HarnessCursor, model.HarnessCopilot,
-			model.HarnessGemini, model.HarnessOpenCode, model.HarnessWindsurf,
+			model.HarnessGemini, model.HarnessOpenCode, model.HarnessWindsurf, model.HarnessDevin,
 		},
 		Include:           []string{"*"},
 		SeverityOverrides: map[string]model.Severity{},

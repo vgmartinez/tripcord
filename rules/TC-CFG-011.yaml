@@ -24,14 +24,15 @@ pack: tripcord/core
 title: "Hidden Unicode in an agent instructions file"
 severity: high
 evidence: hidden_chars
-harness: [claude, copilot, cursor, gemini, windsurf, generic]
+harness: [claude, copilot, cursor, gemini, windsurf, generic, devin]
 files: ["**"]
 when: |
   config.kind == "instructions" && config.scope == "repo" && config.hidden_chars > 0 &&
-    config.path.matches(r'''(?i)((^|/)(AGENTS|CLAUDE|GEMINI)(\.local)?\.md|(^|/)\.claude/rules/.+\.md|(^|/)\.windsurfrules|^\.cursorrules|^\.github/copilot-instructions\.md|^\.github/instructions/.+\.md|^\.github/agents/.+\.agent\.md|(^|/)\.cursor/rules/.+\.mdc?)$''')
+    config.path.matches(r'''(?i)((^|/)(AGENTS|CLAUDE|GEMINI)(\.local)?\.md|(^|/)\.claude/rules/.+\.md|(^|/)\.windsurfrules|^\.cursorrules|^\.github/copilot-instructions\.md|^\.github/instructions/.+\.md|^\.github/agents/.+\.agent\.md|(^|/)\.cursor/rules/.+\.mdc?|(^|/)\.devin/blueprint\.yaml)$''')
 fix: "Remove the hidden code points (the finding names each one's line and column), then review the instructions as they read without them. If a non-Latin script needs a direction mark, use U+200E or U+200F."
 refs:
   - https://trojansource.codes/
   - https://www.unicode.org/reports/tr9/
   - https://www.unicode.org/charts/PDF/UE0000.pdf
   - https://embracethered.com/blog/posts/2024/hiding-and-finding-text-with-unicode-tags/
+  - https://docs.devin.ai/onboard-devin/environment/blueprints

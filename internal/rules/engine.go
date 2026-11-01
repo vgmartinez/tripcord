@@ -84,6 +84,10 @@ func (m Match) Finding(severity model.Severity, decision model.Decision) (model.
 			loc.Line = &line
 		}
 	}
+	if loc.Line == nil && m.Item.Line > 0 {
+		line := m.Item.Line
+		loc.Line = &line
+	}
 	fp, err := model.Fingerprint(m.Rule.ID, loc, evidence)
 	if err != nil {
 		return model.Finding{}, err

@@ -172,7 +172,7 @@ func InstructionPath(rel string) bool {
 	case "agents.md", "agents.local.md", "claude.md", "claude.local.md", "gemini.md", "gemini.local.md", ".windsurfrules":
 		return true
 	}
-	if p == ".cursorrules" || p == ".github/copilot-instructions.md" {
+	if p == ".cursorrules" || p == ".github/copilot-instructions.md" || p == ".devin/blueprint.yaml" || strings.HasSuffix(p, "/.devin/blueprint.yaml") {
 		return true
 	}
 	if under(p, ".claude/rules/") && strings.HasSuffix(p, ".md") {

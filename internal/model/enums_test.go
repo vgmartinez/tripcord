@@ -17,6 +17,7 @@ func TestHarnessCatalog(t *testing.T) {
 		{HarnessGemini, true},
 		{HarnessOpenCode, true},
 		{HarnessWindsurf, true},
+		{HarnessDevin, true},
 		{SurfaceVSCode, false},
 		{SurfaceDevcontainer, false},
 		{SurfaceGeneric, false},
@@ -41,7 +42,7 @@ func TestHarnessCatalog(t *testing.T) {
 			t.Fatalf("%s product=%v valid=%v", tc.id, got.IsProduct(), got.Valid())
 		}
 	}
-	for _, id := range []Harness{"", "devin", "jules", "Claude"} {
+	for _, id := range []Harness{"", "jules", "Claude"} {
 		if id.Valid() {
 			t.Fatalf("%q is valid", id)
 		}
