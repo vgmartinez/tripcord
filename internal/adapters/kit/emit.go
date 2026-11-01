@@ -90,8 +90,16 @@ func (s *Source) Hook(event, matcher string, hook map[string]any, actionFields [
 	payload["matcher"] = matcher
 	hookType, _ := hook["type"].(string)
 	_, action := hookAction(payload, actionFields)
-	s.Add(model.ConfigKindHook, []string{"hook", event, matcher, hookType, action}, payload)
+	s.AddDetect(model.ConfigKindHook, []string{"hook", event, matcher, hookType, action}, payload, hook, hookKeep...)
 }
+
+// hookKeep and mcpKeep are the fields whose sanitized payload value
+// stays in the detection view (see Source.AddDetect): the redacted maps
+// and the fields Hook and MCPServers set themselves.
+var (
+	hookKeep = []string{"headers", "env", "header_keys", "env_keys", "event", "matcher"}
+	mcpKeep  = []string{"env", "headers", "http_headers", "env_http_headers", "env_keys", "header_keys", "http_headers_keys", "env_http_headers_keys", "name"}
+)
 
 // redactMaps replaces each named object field of payload with its
 // RedactValues form and records its key names as "<name>_keys" (env keys
@@ -155,7 +163,7 @@ func (s *Source) MCPServers(value any, what string) {
 		s.redactMaps(server, payload, "env", "headers", "http_headers", "env_http_headers")
 		s.redactToolArgs(payload)
 		payload["name"] = name
-		s.Add(model.ConfigKindMCPServer, []string{"mcp", name}, payload)
+		s.AddDetect(model.ConfigKindMCPServer, []string{"mcp", name}, payload, server, mcpKeep...)
 	}
 }
 

@@ -267,5 +267,5 @@ func (f *file) opaque(event string, value any) {
 		where += "." + event
 	}
 	f.Warn("%s has an unrecognized shape; it is reported as an opaque hook", where)
-	f.Add(model.ConfigKindHook, []string{"hook", event, "opaque"}, map[string]any{"event": event, "opaque": true, "value": f.SafeValue("", value)})
+	f.AddDetect(model.ConfigKindHook, []string{"hook", event, "opaque"}, map[string]any{"event": event, "opaque": true, "value": f.SafeValue("", value)}, map[string]any{"value": value})
 }

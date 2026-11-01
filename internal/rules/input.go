@@ -19,20 +19,28 @@ type Input struct {
 
 // ConfigInput binds config, payload, and, for task items, task.
 // payload is the decoded JSON payload, or an empty map when there is none.
+// It is the item's Detect view when the adapter kept one, so rules match
+// the text as the file wrote it; a finding is still built from the
+// sanitized Payload alone (see Match.Finding), so no rule can put the
+// raw text in a report.
 func ConfigInput(item model.ConfigItem, limits Limits) (*Input, error) {
 	id, err := item.ID()
 	if err != nil {
 		return nil, err
 	}
-	if len(item.Payload) > limits.MaxInputBytes {
-		return nil, fmt.Errorf("config %s: payload is %d bytes: %w", item.Path, len(item.Payload), ErrInputLimit)
+	src := []byte(item.Payload)
+	if item.Detect != nil {
+		src = item.Detect
+	}
+	if n := max(len(item.Payload), len(src)); n > limits.MaxInputBytes {
+		return nil, fmt.Errorf("config %s: payload is %d bytes: %w", item.Path, n, ErrInputLimit)
 	}
 	var payload any = map[string]any{}
-	if len(bytes.TrimSpace(item.Payload)) > 0 {
-		dec := json.NewDecoder(bytes.NewReader(item.Payload))
+	if len(bytes.TrimSpace(src)) > 0 {
+		dec := json.NewDecoder(bytes.NewReader(src))
 		dec.UseNumber()
 		if err := dec.Decode(&payload); err != nil {
-			return nil, fmt.Errorf("config %s: payload: %w", item.Path, err)
+			return nil, fmt.Errorf("config %s: payload is not valid JSON", item.Path)
 		}
 		payload = normalizeNumbers(payload)
 	}

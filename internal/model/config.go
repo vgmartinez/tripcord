@@ -3,6 +3,7 @@ package model
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"regexp"
 	"strings"
 )
@@ -59,7 +60,25 @@ type ConfigItem struct {
 	SHA256  string          `json:"sha256"`
 	Kind    ConfigKind      `json:"kind"`
 	Payload json.RawMessage `json:"payload,omitempty"`
+	// Detect is the entry as the file wrote it, before sanitization,
+	// for rule evaluation only: sanitizing can hide what follows a URL,
+	// so rules match the raw text while every report, key, and
+	// fingerprint is built from Payload. It is nil when the adapter
+	// keeps no raw view, and rules then read Payload.
+	Detect DetectPayload `json:"-"`
 }
+
+// DetectPayload is an unsanitized JSON payload (see ConfigItem.Detect).
+// It has no JSON form and prints as a placeholder under every fmt verb,
+// so formatting or encoding a ConfigItem cannot put it in a report, a
+// log, or a diagnostic.
+type DetectPayload []byte
+
+// Format writes a placeholder, never the payload.
+func (DetectPayload) Format(f fmt.State, _ rune) { _, _ = io.WriteString(f, "[unsanitized payload]") }
+
+// MarshalJSON encodes null, never the payload.
+func (DetectPayload) MarshalJSON() ([]byte, error) { return []byte("null"), nil }
 
 // String returns the wire value.
 func (s Scope) String() string { return string(s) }
@@ -175,6 +194,9 @@ func (c ConfigItem) Validate() error {
 	}
 	if len(c.Payload) > 0 && !json.Valid(c.Payload) {
 		return fmt.Errorf("config: payload is not valid JSON")
+	}
+	if len(c.Detect) > 0 && !json.Valid(c.Detect) {
+		return fmt.Errorf("config: detect payload is not valid JSON")
 	}
 	return nil
 }

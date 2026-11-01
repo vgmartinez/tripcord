@@ -76,8 +76,13 @@ func emitTask(s *kit.Source, task map[string]any) {
 	payload["run_on"] = runOn
 	payload["folder_open"] = strings.EqualFold(runOn, "folderOpen")
 	command := commandText(task["command"])
-	s.Add(model.ConfigKindTask, []string{"task", label, command}, payload)
+	s.AddDetect(model.ConfigKindTask, []string{"task", label, command}, payload, task, taskKeep...)
 }
+
+// taskKeep are the task fields whose sanitized value stays in the
+// detection view (see kit.Source.AddDetect): the objects that carry
+// redacted env values, and the fields emitTask sets itself.
+var taskKeep = append([]string{"env", "env_keys", "options", "label", "run_on", "folder_open"}, platformKeys...)
 
 // safeTaskObject sanitizes a task or options object and redacts the
 // values of options.env, keeping its key names as env_keys.

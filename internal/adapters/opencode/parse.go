@@ -102,7 +102,7 @@ func (f *file) mcp(value any) {
 			f.Warn("MCP server %q command must be an array of strings", name)
 		}
 		payload["name"] = name
-		f.Add(model.ConfigKindMCPServer, []string{"mcp", name}, payload)
+		f.AddDetect(model.ConfigKindMCPServer, []string{"mcp", name}, payload, server, "environment", "headers", "env_keys", "header_keys", "name")
 	}
 }
 

@@ -121,6 +121,12 @@ func (s *src) warnAll(warnings []string) {
 // (and therefore never share a fingerprint): see kit.Source.Add, which
 // this mirrors.
 func (s *src) add(kind model.ConfigKind, key []string, payload map[string]any, removed []string) {
+	s.addDetect(kind, key, payload, removed, nil)
+}
+
+// addDetect is add with the entry as the file wrote it, for rules to
+// evaluate: see kit.Source.AddDetect, whose raw and keep it takes.
+func (s *src) addDetect(kind model.ConfigKind, key []string, payload map[string]any, removed []string, raw map[string]any, keep ...string) {
 	if s.signer == nil {
 		c := kit.NewCollector(s.c.harness, "Claude Code")
 		c.SetHome(s.c.home)
@@ -128,12 +134,15 @@ func (s *src) add(kind model.ConfigKind, key []string, payload map[string]any, r
 	}
 	sig := s.signer.EntrySignature(payload, removed)
 	payload["key"] = evidenceKey(append(s.safeKey(key), sig...))
-	raw, err := json.Marshal(payload)
+	encoded, err := json.Marshal(payload)
 	if err != nil {
 		s.warn("cannot encode %s entry: %v", kind, err)
 		return
 	}
-	item := model.ConfigItem{Harness: s.c.harness, Scope: s.scope, Path: s.path, SHA256: s.sha, Kind: kind, Payload: raw}
+	item := model.ConfigItem{Harness: s.c.harness, Scope: s.scope, Path: s.path, SHA256: s.sha, Kind: kind, Payload: encoded}
+	if raw != nil {
+		item.Detect = kit.DetectView(payload, raw, append(keep, "key"))
+	}
 	if err := item.Validate(); err != nil {
 		s.warn("cannot represent entry: %v", err)
 		return
@@ -320,6 +329,7 @@ func (s *src) settingsObject(obj map[string]any) {
 		value := obj[name]
 		payload := map[string]any{"setting": name}
 		var removed []string
+		var raw map[string]any
 		switch name {
 		case "env":
 			envObj, ok := value.(map[string]any)
@@ -335,13 +345,17 @@ func (s *src) settingsObject(obj map[string]any) {
 			// --token flag in awsAuthRefresh, a marketplace URL with
 			// userinfo in extraKnownMarketplaces, ...). Sanitize it
 			// the same way a hook's fields are sanitized.
+			raw = map[string]any{"value": value}
+			if command := commandOf(value); command != "" {
+				raw["command"] = command
+			}
 			value, removed = s.safePayloadValue(name, value)
 		}
 		payload["value"] = value
 		if command := commandOf(value); command != "" {
 			payload["command"] = s.safeString(command)
 		}
-		s.add(kind, []string{"setting", name}, payload, removed)
+		s.addDetect(kind, []string{"setting", name}, payload, removed, raw)
 	}
 }
 
@@ -431,7 +445,7 @@ func (s *src) hook(event, matcher string, hook map[string]any) {
 	if raw, ok := hook[field].(string); ok && raw != "" {
 		action = raw
 	}
-	s.add(model.ConfigKindHook, []string{"hook", event, matcher, hookType, action}, payload, removed)
+	s.addDetect(model.ConfigKindHook, []string{"hook", event, matcher, hookType, action}, payload, removed, hook, "headers", "header_keys", "event", "matcher")
 }
 
 // safePayloadValue sanitizes value and returns the raw secret substrings
@@ -591,7 +605,7 @@ func (s *src) mcpServers(value any, project string) {
 			payload["project"] = project
 			key = []string{"mcp", project, name}
 		}
-		s.add(model.ConfigKindMCPServer, key, payload, removed)
+		s.addDetect(model.ConfigKindMCPServer, key, payload, removed, server, "env", "env_keys", "headers", "header_keys", "name", "project")
 	}
 }
 

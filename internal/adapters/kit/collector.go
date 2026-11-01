@@ -18,6 +18,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
+	"slices"
 	"sort"
 	"strings"
 
@@ -219,6 +221,21 @@ func (s *Source) WarnAll(warnings []string) {
 // already be sanitized by this Source, and nothing else may be sanitized
 // between building one entry and adding it.
 func (s *Source) Add(kind model.ConfigKind, key []string, payload map[string]any) {
+	s.add(kind, key, payload, nil, nil)
+}
+
+// AddDetect is Add with the entry as the file wrote it, for rules to
+// evaluate (see model.ConfigItem.Detect). raw is the source object: each
+// of its fields replaces the sanitized field of the same name in a copy
+// of the final payload, except the names in keep, which keep their
+// payload value: redacted maps, and fields the adapter sets itself
+// (event, matcher, name), which a raw field must not override. raw is
+// not sanitized, memoized, hashed, or part of the key.
+func (s *Source) AddDetect(kind model.ConfigKind, key []string, payload, raw map[string]any, keep ...string) {
+	s.add(kind, key, payload, raw, keep)
+}
+
+func (s *Source) add(kind model.ConfigKind, key []string, payload, rawFields map[string]any, keep []string) {
 	removed := s.removed
 	s.removed = nil
 	defer func() { s.removed = nil }()
@@ -238,11 +255,36 @@ func (s *Source) Add(kind model.ConfigKind, key []string, payload map[string]any
 		return
 	}
 	item := model.ConfigItem{Harness: s.harness, Scope: s.scope, Path: s.path, SHA256: s.sha, Kind: kind, Payload: raw}
+	if rawFields != nil {
+		keep = append(slices.Clone(keep), "key")
+		for name := range s.fields {
+			keep = append(keep, name)
+		}
+		item.Detect = DetectView(payload, rawFields, keep)
+	}
 	if err := item.Validate(); err != nil {
 		s.Warn("cannot represent entry: %v", err)
 		return
 	}
 	s.c.items = append(s.c.items, item)
+}
+
+// DetectView encodes payload with each field of raw in place of the
+// sanitized one, except the names in keep (see Source.AddDetect). It
+// returns nil when the view cannot be encoded, so rules fall back to the
+// sanitized payload.
+func DetectView(payload, raw map[string]any, keep []string) model.DetectPayload {
+	view := maps.Clone(payload)
+	for k, v := range raw {
+		if !slices.Contains(keep, k) {
+			view[k] = v
+		}
+	}
+	out, err := json.Marshal(view)
+	if err != nil {
+		return nil
+	}
+	return out
 }
 
 // EntrySignature returns the "sig:" key parts Add would append for
