@@ -210,7 +210,7 @@ func isAssignment(w string) bool {
 	}
 	for i := 0; i < eq; i++ {
 		c := w[i]
-		if c != '_' && !(c >= 'A' && c <= 'Z') && !(c >= 'a' && c <= 'z') && !(i > 0 && isDigit(c)) {
+		if c != '_' && (c < 'A' || c > 'Z') && (c < 'a' || c > 'z') && (i == 0 || !isDigit(c)) {
 			return false
 		}
 	}
@@ -501,7 +501,7 @@ func isDomain(h string) bool {
 		}
 		for i := 0; i < len(l); i++ {
 			c := l[i]
-			if !(c >= 'a' && c <= 'z') && !isDigit(c) && c != '-' {
+			if (c < 'a' || c > 'z') && !isDigit(c) && c != '-' {
 				return false
 			}
 		}
@@ -511,7 +511,7 @@ func isDomain(h string) bool {
 		return false
 	}
 	for i := 0; i < len(tld); i++ {
-		if !(tld[i] >= 'a' && tld[i] <= 'z') {
+		if tld[i] < 'a' || tld[i] > 'z' {
 			return false
 		}
 	}
