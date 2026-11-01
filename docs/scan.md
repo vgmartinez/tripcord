@@ -33,11 +33,18 @@ ceiling. See [policy.md](policy.md).
 Findings on an entry that lost a secret to redaction are fingerprinted
 with a keyed HMAC (`k1`) when a fingerprint key is available, and with a
 structural discriminator that never hashes the secret (`s1`) when it is
-not. The key comes from `TRIPCORD_FINGERPRINT_KEY` (set it from a secret
-in CI) or `~/.tripcord/fingerprint.key`. A local scan creates that file
-with mode `0600` on first use; a scan in CI (`CI` or `GITHUB_ACTIONS`
-set) never does, so CI defaults to `s1`. The key is never printed. See
-[fingerprint.md](fingerprint.md#secret-discriminator).
+not. The key comes from `TRIPCORD_FINGERPRINT_KEY` (recommended: set it
+from a secret in CI, a GitHub Actions secret for example) or
+`~/.tripcord/fingerprint.key`. A local scan creates that file with mode
+`0600` on first use, atomically; a scan in CI never does, so CI defaults
+to `s1` unless `TRIPCORD_FINGERPRINT_KEY` is set. CI is detected from
+`CI`, `GITHUB_ACTIONS`, `JENKINS_URL`, `TF_BUILD`, `CODEBUILD_BUILD_ID`,
+`TEAMCITY_VERSION`, `BUILDKITE`, `GITLAB_CI`, or `CIRCLECI`. Key material
+that exists but is broken (unreadable, corrupt, too short, a symlink, or
+— on Unix — owned by someone else or wider than its expected
+permissions) fails the scan closed with exit 3 rather than silently
+using `s1`. The key is never printed. See
+[fingerprint.md](fingerprint.md#fingerprint-key).
 
 ## Exit codes
 
@@ -45,7 +52,7 @@ set) never does, so CI defaults to `s1`. The key is never printed. See
 | --- | --- |
 | 0 | No finding meets the effective threshold. |
 | 1 | At least one finding meets the effective threshold. |
-| 3 | Invalid flags or format, configuration/policy error, a Git ref `--since` cannot use, an invalid `--output` or `--policy` path, an invalid fingerprint key (`TRIPCORD_FINGERPRINT_KEY` or `~/.tripcord/fingerprint.key` shorter than 16 bytes), unavailable v0 secret scan, unknown command, or an incomplete scan (below). `--help` exits 0. |
+| 3 | Invalid flags or format, configuration/policy error, a Git ref `--since` cannot use, an invalid `--output` or `--policy` path, an invalid or unreadable fingerprint key (`TRIPCORD_FINGERPRINT_KEY` or `~/.tripcord/fingerprint.key` shorter than 16 bytes, corrupt, a symlink, or — on Unix — wrongly owned or too permissive; see [fingerprint.md](fingerprint.md#fail-closed-vs-s1-fallback)), unavailable v0 secret scan, unknown command, or an incomplete scan (below). `--help` exits 0. |
 | 4 | Internal error, or a failure to start Git or finish writing the output file. |
 
 When an adapter cannot fully read the configuration (malformed, oversized,

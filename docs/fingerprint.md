@@ -94,30 +94,64 @@ secrets.
 ## Secret discriminator
 
 An entry that lost nothing to redaction has no secret discriminator,
-and its key and fingerprint are the same in both modes. An entry that
-lost one or more values gets one last key part. Its text names the mode,
-so a k1 key and an s1 key for the same entry never collide, and a
-baseline recorded in one mode never matches a secret-bearing finding
-from the other. The public fingerprint format stays `tcf_` plus 16 hex
-characters. The mode is visible in the evidence key, not in the
-fingerprint.
+and its key and fingerprint are the same in both modes (see "Q2:
+findings with nothing redacted" below). An entry that lost one or more
+values gets one last key part. Its text names the mode, so a k1 key and
+an s1 key for the same entry never collide, and a baseline recorded in
+one mode never matches a secret-bearing finding from the other. The
+public fingerprint format stays `tcf_` plus 16 hex characters. The mode
+is visible in the evidence key, not in the fingerprint; see "Reporting
+the mode" below for where it is surfaced instead.
 
 | Mode | When | Key part | Different secret | Rotated secret | Identical duplicates |
 | --- | --- | --- | --- | --- | --- |
-| `k1` | A fingerprint key is set | `sig:k1:` + the first 16 hex characters of HMAC-SHA256(key, `tripcord.sig.k1` NUL JSON(removed values)) | Different fingerprint | Different fingerprint | Same fingerprint when the secrets are equal too |
+| `k1` | A fingerprint key is set | `sig:k1:` + the first 16 hex characters of HMAC-SHA256(key, `tripcord.sig.k1` NUL JSON(removed values)) | Different fingerprint | Different fingerprint | Told apart only by the ordinal |
 | `s1` | No key (the default in CI) | `sig:s1:` + `field[n],...` + `#` + ordinal | Same fingerprint | Same fingerprint | Told apart only by the ordinal |
 
-In s1, `field[n]` is the top-level payload field each removed value came
-from (`args`, `env`, `command`, `headers`, `content`, ...; passed through
-the output redactor) and `n` counts earlier removals from that field, in
-removal order. The ordinal counts earlier entries of the same file
-(harness, scope, path, and kind) whose key up to and including the
-`sig:s1:` part was identical, in the order the file lists them. No hash
-or other function of a removed value is used. s1 therefore keeps a
-baseline stable when a secret is rotated, which is what a baseline
-wants. Two entries that are identical after sanitizing get `#0`, `#1`,
-... in file order, so reordering such duplicates swaps their
-fingerprints.
+In s1, `field[n]` is the top-level field of the final sanitized payload
+(`args`, `env`, `command`, `headers`, `content`, ...; passed through the
+output redactor, and memoized per field name since the same small set of
+names recurs across every entry) under which `[REDACTED]` still appears,
+and `n` counts earlier occurrences within that field, walking a map in
+sorted key order and an array by index. It counts the *markers left in
+the payload*, never how many sanitization passes produced them: a
+provider-shaped secret (`ghp_`, `sk-`, `xoxb`, `AKIA`, a JWT, ...) and a
+generic one that redact to the same shape get the same `field[n]` list,
+because some adapters' redaction pipelines run more than one pass over
+the same value and a provider-recognizable shape can match a pass a
+generic one does not, even though both passes leave exactly one
+`[REDACTED]` marker in the payload. Counting passes instead of markers
+would have let s1 leak which kind of credential a value looked like, and
+let rotating a secret to a different recognizable shape change the
+fingerprint even though nothing about the finding changed; neither is
+acceptable for a mode whose whole purpose is to never depend on the
+secret's content. `internal/adapters/conformance` and the Claude adapter
+each test this directly: the same position gets the same discriminator
+across 13 secret shapes (a generic string and twelve provider-shaped
+ones) and, independently, every adapter and harness.
+
+The ordinal — `#` plus a number, present in both modes — counts earlier
+entries of the same file (harness, scope, path, and kind) whose key up
+to and including the `sig:k1:`/`sig:s1:` part was identical, in the
+order the file lists them. It is the same rule in both modes so k1 and
+s1 behave identically here: two entries that are identical after
+sanitizing get `#0`, `#1`, ... in file order, so reordering such
+duplicates swaps their fingerprints, whether or not a key is set.
+
+No hash or other function of a removed value is used in s1. s1 therefore
+keeps a baseline stable when a secret is rotated, which is what a
+baseline wants.
+
+A payload can show `sig:s1:#0` — an ordinal with no `field[n]` part at
+all — when every value a sanitizer removed from the entry was deleted
+outright rather than replaced with a marker: `kit.StripURLSecrets`
+removes a URL's userinfo, query, and fragment rather than leaving
+`[REDACTED]` in their place, so an entry whose only redaction was that
+kind of URL component has a `Removal` (feeding k1) but no `[REDACTED]`
+marker anywhere in the final payload (feeding s1's scan). Both modes
+still produce a key — s1's structural part is simply empty — so this
+entry is never confused with one that removed nothing at all; it keeps
+a secret discriminator, just with no field list.
 
 In k1 the HMAC is over the removed values only, in removal order, so the
 same server with a different secret gets a different fingerprint, and
@@ -125,34 +159,208 @@ the key never has to leave the machine or CI secret store for that to
 hold. The same key text gives the same fingerprints everywhere, so a
 team that shares one key (for example as a CI secret and in each
 developer's key file) gets matching fingerprints locally and in CI.
-Without a shared key, local scans (k1 with a per-machine key) and CI
-scans (s1) do not match on secret-bearing entries, by design.
 
 Neither mode depends on the home directory: removed values are
 home-normalized in user scope before they are recorded, and the key file
 location only decides which key is used.
 
+### Local k1 vs CI s1
+
+Without a shared key, a local scan (k1 with a per-machine key) and a CI
+scan (s1, the default when `TRIPCORD_FINGERPRINT_KEY` is unset there)
+will not match on secret-bearing entries: different modes produce
+different `sig:` text by design, so a finding whose evidence carries a
+discriminator gets a different fingerprint in each. This is accepted and
+documented, not a bug to work around; sharing
+`TRIPCORD_FINGERPRINT_KEY` as a CI secret (see "Fingerprint key" above)
+is how a team gets matching fingerprints everywhere instead.
+
+Two consequences worth calling out:
+
+- A finding whose evidence carries **no** discriminator at all — nothing
+  was redacted (Q2 below) — has the same fingerprint in every mode, so
+  it is unaffected by this gap. Only secret-bearing findings diverge.
+- Comparing fingerprints computed in different modes without realizing
+  it — for example, a baseline recorded locally in k1 checked against a
+  CI run in s1 — makes every secret-bearing finding look new, even one
+  that was already triaged. v0 has no baseline or suppression feature
+  built on top of fingerprints yet (see "Baselines and the fingerprint
+  mode" below), so `tripcord scan` cannot warn about this today; treat a
+  mismatched mode as a known limitation until that lands, and prefer a
+  shared key over relying on fingerprints to compare across modes.
+
+### Reporting the mode
+
+The fingerprint itself never encodes which mode produced it — k1 and s1
+both still render as `tcf_` plus 16 hex characters — but every finding's
+evidence already carries the mode as the `sig:k1:`/`sig:s1:` prefix in
+`evidence[].config.key` (see "Secret discriminator" above), and the
+rendered output surfaces it explicitly too, as `fingerprintMode`:
+
+- **SARIF**: each `result.properties.tripcord` object gets a
+  `fingerprintMode` string property (`"k1"` or `"s1"`), alongside the
+  existing `scope`/`path` properties. It is present whenever any of the
+  finding's evidence carries a discriminator, even for a finding with no
+  `location` to report `scope`/`path` for.
+- **JSON / JSON Lines**: each finding object gets a top-level
+  `"fingerprintMode"` string field. `tripcord.finding/v1` allows
+  additional properties, so this does not require a schema version
+  bump.
+
+In both formats, a finding whose evidence carries no discriminator (Q2)
+omits `fingerprintMode` entirely rather than emitting an empty string,
+so existing consumers that do not know about this field see byte-for-byte
+unchanged output for those findings. Text, Markdown, and GitHub Actions
+output do not currently surface the mode.
+
+### Baselines and the fingerprint mode
+
+v0 has no baseline comparison or suppression feature keyed by
+fingerprint; `internal/policy`'s exception mechanism suppresses a rule
+by a hash of the whole config file's content, which is unrelated to
+per-finding fingerprints or their mode. When a baseline feature is
+built, it should record each stored fingerprint's `fingerprintMode`
+alongside it and warn when a fingerprint being compared against the
+baseline carries a different mode than the one it was recorded with —
+considering only fingerprints whose evidence carries a `sig:` (Q2: a
+mode-independent finding has nothing to warn about, by construction).
+See "Questions for Researcher" in the pull request that introduced this
+section for the open question tracking that work.
+
+### Design decisions, for quick reference
+
+A few choices here were open questions during review; each is already
+reflected in the behavior described above, cross-referenced here for
+anyone looking them up by number:
+
+- **Findings with nothing redacted** (no `sig:` at all) are deliberately
+  mode-independent: the same fingerprint in k1 and s1, since there is no
+  secret to discriminate on either way. See "Reporting the mode" above
+  and `model.FingerprintMode`'s doc comment.
+- **Key file permissions** are enforced whenever the file is read, not
+  only when it is created; see "Fail-closed vs s1 fallback" above.
+- **Minimum key length** stays 16 bytes (`MinKeyBytes`). A freshly
+  created key file always gets 32 random bytes, and 32 bytes
+  (`openssl rand -hex 32`) is what this document recommends for a
+  hand-written key too.
+- **s1 granularity** is top-level payload field plus index
+  (`field[n]`), not a deeper structural path into nested values; see
+  "Secret discriminator" above.
+- **No `init` subcommand** exists in v0 to create the key explicitly;
+  `tripcord scan` keeps creating it on first use outside CI. A later
+  `init` command will create the key file as one of its steps.
+- **A redacted value recorded more than once for the same occurrence**
+  (for example, a hook's generic header-processing path and its
+  header-specific path both recording the same removed value) no longer
+  inflates the s1 discriminator: counting `[REDACTED]` markers left in
+  the final payload, rather than how many sanitization passes fired,
+  fixes this by construction (see "Secret discriminator" above). This
+  already changes some fingerprints once, in this PR; see
+  `docs/release-notes.md`.
+
 ### Fingerprint key
 
 `tripcord scan` resolves the key once, in this order:
 
-1. `TRIPCORD_FINGERPRINT_KEY`, when set and non-empty. In CI, set it
-   from a secret. Surrounding white space is trimmed. It must be at
-   least 16 bytes, or the scan exits 3. Example: `openssl rand -hex 32`.
+1. `TRIPCORD_FINGERPRINT_KEY`, when set and non-empty. Surrounding white
+   space is trimmed. It must be at least 16 bytes, or the scan exits 3.
+   Example: `openssl rand -hex 32` (32 bytes is also what a generated
+   key file holds; see point 3).
 2. `~/.tripcord/fingerprint.key`, when it exists. It holds the key text
    with the same trimming and minimum length.
 3. Otherwise, outside CI, a new key file: 32 random bytes, hex-encoded,
-   created with `O_EXCL` and mode `0600` in a `0700` `~/.tripcord`
-   directory. In CI (`CI` or `GITHUB_ACTIONS` set to anything other than
-   empty, `0`, or `false`) the file is never created and the scan runs
-   in s1.
+   written atomically (see "Concurrent creation" below) with mode
+   `0600` in a `0700` `~/.tripcord` directory. In CI (see "CI
+   detection" below) the file is never created and the scan runs in s1.
 
-If the key file cannot be read or created (no home directory, a
-read-only home, ...), the scan continues in s1 and says so on stderr.
-The key is never printed: no output format, diagnostic, error message,
-or log carries it, and Go's formatting of the key type prints a fixed
-placeholder. In v0 the key is a file or an environment variable. The OS
-keychain arrives with the v1 store.
+**In CI, set `TRIPCORD_FINGERPRINT_KEY` from a secret** (a GitHub
+Actions repository or organization secret, for example) rather than
+relying on s1 by default. This gives CI the same k1 keyed discriminator
+developers get locally, so a baseline built in CI and one built on a
+developer's machine agree on secret-bearing findings too, as long as
+both sides have the same key text. Without a shared key, local k1 and CI
+s1 fingerprints for a secret-bearing entry will not match; see "Local k1
+vs CI s1" below. Never put the key itself in a workflow file, a log
+statement, or a committed secret-scanning allowlist; a GitHub Actions
+secret is read into the environment only for the job that declares it.
+
+No entropy check is performed on the key text beyond `MinKeyBytes`
+(`"correct horse battery staple and a few more bytes"` would pass): a
+short, low-entropy key weakens the keyed discriminator's guarantee that
+a different secret produces a different k1 fingerprint. Generate the key
+with a CSPRNG (`openssl rand -hex 32`, or just let `tripcord scan`
+create `~/.tripcord/fingerprint.key` for you) rather than typing one by
+hand.
+
+#### Fail-closed vs s1 fallback
+
+`tripcord scan` only ever falls back to s1 silently-by-design when there
+is **no key source at all**: neither `TRIPCORD_FINGERPRINT_KEY` nor an
+existing `~/.tripcord/fingerprint.key`, and either CI is detected (see
+below) or a new key file could not be generated or created for an
+environmental reason (no home directory, a read-only home, a full disk,
+...). The scan continues in s1 and says so on stderr; nothing here is
+fatal.
+
+Once key material exists, the scan never silently changes fingerprint
+mode. Any of the following make the scan **exit 3** with an actionable
+message instead of falling back to s1:
+
+- `~/.tripcord/fingerprint.key` exists but cannot be read, is not a
+  regular file (for example a directory), or is a symlink (including a
+  broken one, which gets its own "broken symlink" message).
+- `~/.tripcord` exists but is not a directory, or is itself a symlink.
+- The key file's content is shorter than `MinKeyBytes`, longer than the
+  4096-byte read cap, or otherwise fails `New`'s validation (the same
+  check `TRIPCORD_FINGERPRINT_KEY` gets).
+- On Unix, `~/.tripcord` is owned by someone other than the current
+  user, or is writable by group or other (mode `&0o022 != 0`); the key
+  file is owned by someone other than the current user, or is readable
+  or writable by group or other at all (mode `&0o077 != 0`, so only
+  `0600` and narrower are accepted).
+
+None of these messages name the home directory; they refer to
+`~/.tripcord` and `~/.tripcord/fingerprint.key` literally, the same way
+this document does. The key's bytes are never printed either: no output
+format, diagnostic, error message, or log carries it, and Go's
+formatting of the key type prints a fixed placeholder (see
+`fpkey.Key.Format`/`String`/`GoString`/`MarshalJSON`). In v0 the key is
+a file or an environment variable. The OS keychain arrives with the v1
+store; a future `init` subcommand will create the key file
+explicitly, but until it lands, `tripcord scan` keeps creating it on
+first use outside CI as described above.
+
+**Windows** reports every file's mode as a fixed `0666`/`0777` rather
+than real Unix-style permissions, so the permission and ownership checks
+above are skipped there entirely (`checkDirSecurity`/`checkFileSecurity`
+are no-ops on Windows). Protecting `%USERPROFILE%\.tripcord\fingerprint.key`
+on Windows relies on NTFS ACLs — the file inherits whatever access its
+containing directory grants — rather than on anything `tripcord` checks
+itself. The symlink and not-a-regular-file checks still apply on
+Windows.
+
+#### CI detection
+
+A key file is only ever created outside CI. CI is detected from any of
+these environment variables being set to anything other than empty,
+`"0"`, or `"false"`: `CI`, `GITHUB_ACTIONS`, `JENKINS_URL`, `TF_BUILD`
+(Azure Pipelines), `CODEBUILD_BUILD_ID` (AWS CodeBuild),
+`TEAMCITY_VERSION`, `BUILDKITE`, `GITLAB_CI`, `CIRCLECI`. Running on an
+unrecognized CI system without one of these set behaves like a
+non-CI environment: `tripcord scan` will try to create a key file there
+on first use, so set `TRIPCORD_FINGERPRINT_KEY` explicitly in that case
+instead of relying on auto-detection.
+
+#### Concurrent creation
+
+Key file creation is atomic: `tripcord scan` writes the random key to a
+temporary file in `~/.tripcord`, flushes it to disk, and publishes it
+with a hard link to `fingerprint.key`, which atomically fails rather
+than truncating or racing if the destination already exists. A process
+that loses that race reads the file the winner just finished instead, so
+every concurrent `tripcord scan` invocation against the same home
+directory agrees on one key, and none ever observes a partially written
+file.
 
 ## Canonical JSON
 

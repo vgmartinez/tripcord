@@ -86,12 +86,23 @@ that field does not round-trip. The location path is the display path
 above, and so is the path inside a managed config id, not a second copy
 of the stored path. The fingerprint is the one stored on the finding.
 
+A finding whose evidence carries a `sig:k1:`/`sig:s1:` discriminator
+also gets a top-level `"fingerprintMode"` field (`"k1"` or `"s1"`); a
+finding with nothing redacted omits it. See
+[fingerprint.md](fingerprint.md#reporting-the-mode).
+
 ## SARIF
 
 A managed path under a home directory uses `uriBaseId` `USERHOME`.
 Any other managed path uses `MANAGED`. `properties.tripcord.path` and
 a logical location's `name` and `fullyQualifiedName` use the same field
 cap as other displayed text.
+
+A finding whose evidence carries a `sig:k1:`/`sig:s1:` discriminator
+gets `properties.tripcord.fingerprintMode` (`"k1"` or `"s1"`), present
+even on a result with no location (and so no `scope`/`path`
+properties); a finding with nothing redacted omits it. See
+[fingerprint.md](fingerprint.md#reporting-the-mode).
 
 Rule `fullDescription`, `help`, and `helpUri` come from `Options.Rules`
 when that rule is present and the field is set. Otherwise they come
