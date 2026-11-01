@@ -6,8 +6,8 @@
 # Read, in repository scope:
 #   - OpenCode: each entry of plugin in opencode.json(c) (an npm package
 #     OpenCode installs and loads), and each JS/TS file directly inside
-#     .opencode/plugin/ or .opencode/plugins/. Custom tools
-#     (.opencode/tool/) are not read.
+#     .opencode/plugin/, .opencode/plugins/, .opencode/tool/, or
+#     .opencode/tools/.
 #   - Claude Code: a .claude-plugin/plugin.json manifest, each plugin of
 #     a .claude-plugin/marketplace.json, and in shared
 #     .claude/settings.json an enabledPlugins entry set to true or a
@@ -29,7 +29,7 @@ when: |
   config.kind == "plugin" && config.scope == "repo" && (
     (config.harness == "opencode" && (
       (has(payload.setting) && payload.setting == "plugin") ||
-      (has(payload.role) && payload.role == "plugin"))) ||
+      (has(payload.role) && payload.role in ["plugin", "tool"]))) ||
     (config.harness == "claude" && has(payload.setting) &&
       !config.path.matches(r'''(?i)(^|/)settings\.local\.json$''') && (
         payload.setting in ["plugin", "marketplace"] ||

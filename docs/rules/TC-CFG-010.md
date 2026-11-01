@@ -4,7 +4,7 @@
 | --- | --- |
 | Severity | medium |
 | Harnesses | OpenCode, Claude Code |
-| Files | `opencode.json`, `opencode.jsonc`, `.opencode/plugin/*`, `.opencode/plugins/*`, `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `.claude/settings.json` (any depth, repository scope) |
+| Files | `opencode.json`, `opencode.jsonc`, `.opencode/plugin/*`, `.opencode/plugins/*`, `.opencode/tool/*`, `.opencode/tools/*`, `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `.claude/settings.json` (any depth, repository scope) |
 | Rule | [`rules/TC-CFG-010.yaml`](../../rules/TC-CFG-010.yaml) |
 
 ## What it detects
@@ -19,8 +19,8 @@ Reported, once per plugin entry:
 
 - OpenCode: each entry of `plugin` in `opencode.json` or
   `opencode.jsonc` (an npm package OpenCode installs and loads), and
-  each JS/TS file directly inside `.opencode/plugin/` or
-  `.opencode/plugins/`.
+  each JS/TS file directly inside `.opencode/plugin/`,
+  `.opencode/plugins/`, `.opencode/tool/`, or `.opencode/tools/`.
 - Claude Code: a `.claude-plugin/plugin.json` manifest, each plugin
   listed in a `.claude-plugin/marketplace.json`, and in the shared
   `.claude/settings.json` an `enabledPlugins` object with at least one
@@ -31,8 +31,8 @@ Not reported:
 - `.claude/settings.local.json`, which is personal.
 - `enabledPlugins` entries that are all `false`, and an empty
   `extraKnownMarketplaces`.
-- OpenCode custom tools (`.opencode/tool/`) and files nested below a
-  plugin directory, which OpenCode does not load.
+- OpenCode files nested below a plugin or tool directory, which
+  OpenCode does not load.
 - User-scope plugins.
 
 ## Why medium
