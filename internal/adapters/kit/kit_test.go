@@ -13,8 +13,9 @@ import (
 	"github.com/vgmartinez/tripcord/internal/model"
 )
 
-// testKey is the k1 fingerprint key the kit tests use.
-const testKey = "kit-test-fingerprint-key-0123456789"
+// testKey is the k1 fingerprint key the kit tests use. fpkey.New
+// requires a hex string, so this is 64 hex characters.
+const testKey = "fee1deadfee1deadfee1deadfee1deadfee1deadfee1deadfee1deadfee1dead"
 
 // source is a k1 source: the tests that expect entries differing only in
 // a secret to get different keys use it.

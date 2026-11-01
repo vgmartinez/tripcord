@@ -13,7 +13,10 @@ import (
 	"testing"
 )
 
-const secret = "fpkey-test-secret-value-0123456789"
+// secret is a valid key for these tests: 64 hex characters, matching
+// both New's minimum length and a generated key file's exact length, so
+// it can also be written as a key file's content.
+const secret = "0ddba11a0ddba11a0ddba11a0ddba11a0ddba11a0ddba11a0ddba11a0ddba11a"
 
 func env(vars map[string]string) func(string) string {
 	return func(name string) string { return vars[name] }
@@ -44,7 +47,10 @@ func TestNewTrimsAndRejectsShortKeys(t *testing.T) {
 func TestSum(t *testing.T) {
 	t.Parallel()
 	k, _ := New(secret)
-	other, _ := New(secret + "-other")
+	other, err := New("f00dbabef00dbabef00dbabef00dbabef00dbabef00dbabef00dbabef00dbabe")
+	if err != nil {
+		t.Fatal(err)
+	}
 	first := k.Sum("d", []string{"a", "b"}, 16)
 	for range 200 {
 		if got := k.Sum("d", []string{"a", "b"}, 16); got != first {
@@ -310,13 +316,80 @@ func TestLoadFailsClosedOnLoosePermissions(t *testing.T) {
 	})
 }
 
+// TestLoadRejectsBadKeyFile is the researcher review's bug 2: New
+// previously only checked length, so corrupted key file content could
+// silently become a "valid" key with a different fingerprint than the
+// one actually on disk, instead of failing the scan closed. A key file
+// must be exactly generatedKeyBytes*2 hex characters (what createKeyFile
+// always writes), optionally followed by one newline; anything else
+// wraps ErrInvalid.
 func TestLoadRejectsBadKeyFile(t *testing.T) {
 	t.Parallel()
-	home := t.TempDir()
-	writeRaw(t, home, "short\n")
-	_, _, err := Load(Options{Home: home, Getenv: env(nil)})
-	if !errors.Is(err, ErrInvalid) || strings.Contains(err.Error(), "short\n") {
-		t.Fatalf("err = %v", err)
+	for name, content := range map[string]string{
+		"too short":                   "short\n",
+		"truncated hex (half length)": secret[:len(secret)/2] + "\n",
+		// 64 bytes of non-hex "binary" content: the same length a
+		// genuine key file has, but not decodable as hex. Printable
+		// so the test and its failure message stay readable; actual
+		// corruption need not be printable to trip the same check.
+		"not hex, same length as a real key":                      strings.Repeat("g", generatedKeyBytes*2) + "\n",
+		"no trailing newline, otherwise valid but one char short": secret[:len(secret)-1],
+		"trailing garbage after a valid key":                      secret + "x\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			home := t.TempDir()
+			writeRaw(t, home, content)
+			_, src, err := Load(Options{Home: home, Getenv: env(nil)})
+			if !errors.Is(err, ErrInvalid) || src != SourceNone {
+				t.Fatalf("Load = %v, %v, want ErrInvalid", src, err)
+			}
+			if strings.Contains(err.Error(), strings.TrimSpace(content)) {
+				t.Fatalf("error names the key content: %v", err)
+			}
+		})
+	}
+	// The one exact match must still work: this is the control case
+	// proving the table above fails for the right reason, not because
+	// every key is rejected.
+	t.Run("exactly valid is accepted", func(t *testing.T) {
+		t.Parallel()
+		home := t.TempDir()
+		writeRaw(t, home, secret+"\n")
+		if _, _, err := Load(Options{Home: home, Getenv: env(nil)}); err != nil {
+			t.Fatalf("Load = %v", err)
+		}
+	})
+}
+
+// TestLoadRejectsBadEnvKey is TestLoadRejectsBadKeyFile's env var
+// counterpart: TRIPCORD_FINGERPRINT_KEY must also be a hex string, at
+// least minKeyHexChars long, though (unlike a key file) it is not
+// required to be exactly generatedKeyBytes*2 characters, since a human
+// may reasonably set a longer one.
+func TestLoadRejectsBadEnvKey(t *testing.T) {
+	t.Parallel()
+	for name, value := range map[string]string{
+		"too short":         "tooshort",
+		"not hex":           strings.Repeat("g", minKeyHexChars),
+		"not hex, one char": secret[:len(secret)-1] + "g",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			_, src, err := Load(Options{Home: t.TempDir(), Getenv: env(map[string]string{EnvVar: value})})
+			if !errors.Is(err, ErrInvalid) || src != SourceNone {
+				t.Fatalf("Load = %v, %v, want ErrInvalid", src, err)
+			}
+			if strings.Contains(err.Error(), value) {
+				t.Fatalf("error names the key: %v", err)
+			}
+		})
+	}
+	// A longer-than-a-file hex key is fine for the env var: there is no
+	// exact-length requirement there.
+	longer := secret + secret
+	if _, src, err := Load(Options{Home: t.TempDir(), Getenv: env(map[string]string{EnvVar: longer})}); err != nil || src != SourceEnv {
+		t.Fatalf("Load = %v, %v, want a valid longer hex key accepted", src, err)
 	}
 }
 

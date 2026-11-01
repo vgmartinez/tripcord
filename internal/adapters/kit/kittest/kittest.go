@@ -214,8 +214,10 @@ func Env(pairs ...string) func(string) string {
 }
 
 // TestFingerprintKey is the k1 fingerprint key adapter tests use. It is
-// a fixed test value, never a real key.
-const TestFingerprintKey = "kittest-fingerprint-key-0123456789abcdef"
+// a fixed test value, never a real key. fpkey.New requires a hex
+// string, so this is 64 hex characters, matching a generated key file's
+// length, even though no test here reads it from a file.
+const TestFingerprintKey = "cafef00dcafef00dcafef00dcafef00dcafef00dcafef00dcafef00dcafef00d"
 
 // FingerprintKey returns TestFingerprintKey as a key, for adapter
 // options in tests that expect k1 semantics.

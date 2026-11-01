@@ -86,7 +86,7 @@ func TestScanNeverCreatesKeyFileInCI(t *testing.T) {
 }
 
 func TestScanEnvKeyNeverPrinted(t *testing.T) {
-	const key = "zsKey-env-fingerprint-key-0123456789"
+	const key = "beeffacebeeffacebeeffacebeeffacebeeffacebeeffacebeeffacebeefface"
 	home := t.TempDir()
 	setKeyEnv(t, home, map[string]string{"CI": "true", fpkey.EnvVar: key})
 	out := scanAllFormats(t, keyTestRepo(t), exitcode.OK)
@@ -166,6 +166,30 @@ func TestScanFailsClosedOnBrokenKeyMaterial(t *testing.T) {
 				t.Fatal(err)
 			}
 		},
+		// Researcher review bug 2: a corrupt key file previously gave
+		// rc=0 with a silently different fingerprint instead of exit 3.
+		"key file is 20 truncated hex characters": func(t *testing.T, home string) {
+			t.Helper()
+			if err := os.MkdirAll(filepath.Dir(fpkey.Path(home)), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(fpkey.Path(home), []byte("0123456789abcdef0123\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"key file is 40 bytes of non-hex binary-shaped content": func(t *testing.T, home string) {
+			t.Helper()
+			if err := os.MkdirAll(filepath.Dir(fpkey.Path(home)), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			junk := make([]byte, 40)
+			for i := range junk {
+				junk[i] = byte('g' + i%5) // printable, never a hex digit
+			}
+			if err := os.WriteFile(fpkey.Path(home), junk, 0o600); err != nil {
+				t.Fatal(err)
+			}
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			home := t.TempDir()
@@ -193,7 +217,7 @@ func TestScanFailsClosedOnLoosePermissions(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(fpkey.Path(home)), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(fpkey.Path(home), []byte("zsK01q-loose-perm-key-0123456789\n"), 0o644); err != nil {
+	if err := os.WriteFile(fpkey.Path(home), []byte("beeffacebeeffacebeeffacebeeffacebeeffacebeeffacebeeffacebeefface\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	setKeyEnv(t, home, nil)

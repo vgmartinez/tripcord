@@ -43,21 +43,33 @@ const (
 	// LogicalPath is the key file's home-relative name, used in
 	// messages so no absolute home path is printed.
 	LogicalPath = LogicalDir + "/fingerprint.key"
-	// MinKeyBytes is the shortest accepted key after trimming space.
+	// MinKeyBytes is the shortest accepted key, counted as decoded hex
+	// bytes: TRIPCORD_FINGERPRINT_KEY and a key file must both be a hex
+	// string (0-9, a-f, A-F) of at least MinKeyBytes*2 characters after
+	// trimming surrounding space.
 	MinKeyBytes = 16
+	// minKeyHexChars is MinKeyBytes expressed as hex text length.
+	minKeyHexChars = MinKeyBytes * 2
 	// maxKeyFileBytes caps the key file read.
 	maxKeyFileBytes = 4096
 	// generatedKeyBytes is the random key length a new file gets; it is
 	// stored hex-encoded, so the file holds twice as many characters.
 	// 32 bytes is also what the docs recommend for a hand-written key.
+	// A key file's content must be exactly this many hex characters
+	// (generatedKeyBytes*2), optionally followed by one "\n": unlike
+	// TRIPCORD_FINGERPRINT_KEY, nothing but Load's own createKeyFile
+	// should ever produce this file's content, so an exact length is
+	// safe to require and catches truncation or corruption that a
+	// looser minimum-length check would silently accept.
 	generatedKeyBytes = 32
 	placeholder       = "fpkey.Key([redacted])"
 	tempFilePattern   = ".fingerprint.key.*.tmp"
 )
 
 var (
-	// ErrInvalid reports a key that is set but unusable (too short, or
-	// a key file larger than the size cap).
+	// ErrInvalid reports a key that is set but unusable: not a hex
+	// string, shorter than minKeyHexChars, or a key file larger than
+	// the size cap or not exactly generatedKeyBytes*2 hex characters.
 	ErrInvalid = errors.New("fingerprint key is invalid")
 	// ErrUnavailable reports that no key source exists at all: the
 	// home directory could not be determined, or a new key file could
@@ -81,13 +93,37 @@ type Key struct {
 
 // New returns a key over secret after trimming surrounding space, the
 // same normalization the env var and the key file get, so the same text
-// in either place is the same key.
+// in either place is the same key. secret must be a hex string (0-9,
+// a-f, A-F; `openssl rand -hex 32` is the documented way to generate
+// one) of at least minKeyHexChars characters once trimmed, or New
+// returns ErrInvalid: a key that is some other shape is more likely to
+// be truncated or corrupted than intentional, and must fail closed
+// rather than silently produce different fingerprints than before. The
+// hex text itself, not its decoded bytes, is what keys the HMAC (see
+// Sum), so a key already accepted here keeps producing the same
+// fingerprints it always has.
 func New(secret string) (*Key, error) {
 	trimmed := strings.TrimSpace(secret)
-	if len(trimmed) < MinKeyBytes {
-		return nil, fmt.Errorf("%w: shorter than %d bytes", ErrInvalid, MinKeyBytes)
+	if len(trimmed) < minKeyHexChars {
+		return nil, fmt.Errorf("%w: shorter than %d hex characters (%d bytes)", ErrInvalid, minKeyHexChars, MinKeyBytes)
+	}
+	if !isHex(trimmed) {
+		return nil, fmt.Errorf("%w: must be a hex string (0-9, a-f)", ErrInvalid)
 	}
 	return &Key{secret: []byte(trimmed)}, nil
+}
+
+// isHex reports whether every character of s is a hex digit. s is never
+// empty when called: callers check length first.
+func isHex(s string) bool {
+	for _, r := range s {
+		switch {
+		case r >= '0' && r <= '9', r >= 'a' && r <= 'f', r >= 'A' && r <= 'F':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // Present reports whether k holds a key.
@@ -304,7 +340,22 @@ func readKeyFile(path string) (*Key, error) {
 	if len(raw) > maxKeyFileBytes {
 		return nil, fmt.Errorf("%w: %s is larger than %d bytes", ErrInvalid, LogicalPath, maxKeyFileBytes)
 	}
-	k, err := New(string(raw))
+	// Unlike New's general minimum-length rule for
+	// TRIPCORD_FINGERPRINT_KEY, a key FILE's content must match
+	// createKeyFile's output exactly: nothing legitimate ever writes
+	// anything else here, so an exact length catches truncation (a
+	// short write, a half-copied backup) or other corruption that a
+	// looser check would silently accept as a valid, but different,
+	// key, changing fingerprints without anyone noticing.
+	text := strings.TrimSuffix(string(raw), "\n")
+	if len(text) != generatedKeyBytes*2 || !isHex(text) {
+		return nil, fmt.Errorf(
+			"%w: %s must be exactly %d hex characters, optionally followed by one newline; "+
+				"it may be truncated or corrupted. Delete it to let the next local scan generate "+
+				"a fresh one, or replace it with the output of `openssl rand -hex %d`",
+			ErrInvalid, LogicalPath, generatedKeyBytes*2, generatedKeyBytes)
+	}
+	k, err := New(text)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", LogicalPath, err)
 	}
