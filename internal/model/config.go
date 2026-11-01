@@ -93,6 +93,10 @@ type HiddenChars struct {
 	Total    int
 }
 
+// String counts the hidden code points, so a formatted ConfigItem stays
+// printable with %s.
+func (h HiddenChars) String() string { return strconv.Itoa(h.Total) + " hidden code points" }
+
 // HiddenRun is a run of consecutive hidden code points: the first one,
 // its 1-based line and column (in code points), and the run's length.
 type HiddenRun struct {
