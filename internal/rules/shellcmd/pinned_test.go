@@ -57,7 +57,8 @@ func TestUnpinned(t *testing.T) {
 		// Checksum verified before running.
 		{"curl -fsSLo i.sh " + branchURL + " && echo \"" + sum + "  i.sh\" | sha256sum -c - && sh i.sh", nil},
 		{"curl -fsSLo i.sh " + branchURL + " && echo \"" + sum + "  i.sh\" | sha256sum -c && sh i.sh", nil},
-		{"curl -fsSLo i.sh " + branchURL + " && printf '%s  i.sh\\n' " + sum + " | sha256sum --check - && sh i.sh", nil},
+		{"curl -fsSLo i.sh " + branchURL + " && printf '%s  i.sh\\n' " + sum + " | sha256sum --check - && sh i.sh", []string{Fetch}},
+		{"curl -fsSLo i.sh " + branchURL + " && printf '" + sum + "  i.sh\\n' | sha256sum --check - && sh i.sh", nil},
 		{"curl -fsSLo i.sh " + branchURL + " && echo \"" + sum + "  i.sh\" | shasum -a 256 -c && sh i.sh", nil},
 		{"set -e; curl -fsSLo i.sh " + branchURL + "; echo \"" + sum + "  i.sh\" | sha256sum -c -; sh i.sh", nil},
 		{"set -e\ncurl -fsSLo i.sh " + branchURL + "\necho \"" + sum + "  i.sh\" | sha256sum -c\nsh i.sh", nil},
@@ -75,11 +76,12 @@ func TestUnpinned(t *testing.T) {
 		{"curl -fsSLo i.sh " + branchURL + " && sha256sum -c - && sh i.sh", []string{Fetch}},
 		{"curl -fsSLo i.sh " + branchURL + " && sha256sum -c && sh i.sh", []string{Fetch}},
 		{"curl -fsSLo i.sh " + branchURL + " && echo \"" + sum + "  i.sh\" | sha256sum -c - && echo ok | sh", []string{Fetch, Pipe}},
-		{"curl -fsSLo i.sh " + branchURL + " && sha512sum --check i.sh.sha512 && bash i.sh", nil},
+		{"curl -fsSLo i.sh " + branchURL + " && sha512sum --check i.sh.sha512 && bash i.sh", []string{Fetch}},
+		{"curl -fsSLo i.sh " + branchURL + " && sha256sum --check i.sh.sha256 && bash i.sh", nil},
 		{"curl -fsSLo i.sh " + branchURL + " && shasum -a 256 -c sums.txt && sh i.sh", nil},
 		{"set -euo pipefail\ncurl -fsSLo i.sh " + branchURL + "\nsha256sum -c sums.txt\nsh i.sh", nil},
 		{"curl -fsSLo t.tgz " + branchURL + " && sha256sum -c sums.txt", nil},
-		{"bash -c 'curl -fsSLo i.sh " + branchURL + " && sha256sum -c sums && sh i.sh'", nil},
+		{"bash -c 'curl -fsSLo i.sh " + branchURL + " && sha256sum -c sums && sh i.sh'", []string{Fetch}},
 		{"curl -fsSLo i.sh " + branchURL + "\nsha256sum -c sums.txt\nsh i.sh", []string{Fetch}},
 		{"curl -fsSLo i.sh " + branchURL + " && sha256sum -c sums.txt || true; sh i.sh", []string{Fetch}},
 		{"curl -fsSLo i.sh " + branchURL + " && sh i.sh && sha256sum -c sums.txt", []string{Fetch}},
@@ -144,6 +146,8 @@ func TestUnpinnedArgv(t *testing.T) {
 		{[]string{"bash", "-c", "curl -fsSL " + commitURL + " | sh"}, nil},
 		{[]string{"bash", "-c", "curl -fsSL " + branchURL + " | sh"}, []string{Fetch, Pipe}},
 		{[]string{"bash", "-c", "curl -fsSLo i.sh " + branchURL + " && sha256sum -c s && sh i.sh"}, nil},
+		{[]string{"bash", "-c", "curl -fsSLo i.sh " + branchURL + " && sha256sum -c s && sh i.sh", "x"}, []string{Fetch}},
+		{[]string{"bash", "-c", "trap 'sh i.sh' EXIT; curl -fsSLo i.sh " + branchURL + " && sha256sum -c s && sh i.sh"}, []string{Fetch}},
 		{nil, nil},
 	}
 	for _, tc := range cases {

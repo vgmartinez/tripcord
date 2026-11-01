@@ -1,3 +1,3 @@
 {
-  "install": "curl -fsSLo t.sh https://get.tools.example.invalid/t.sh && printf '%s  t.sh\\n' abababababababababababababababababababababababababababababababab | sha256sum --check - && sh t.sh"
+  "install": "curl -fsSLo t.sh https://get.tools.example.invalid/t.sh && printf 'abababababababababababababababababababababababababababababababab  t.sh\\n' | sha256sum --check - && sh t.sh"
 }

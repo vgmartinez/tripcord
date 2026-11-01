@@ -101,11 +101,8 @@ func AnalyzeArgv(argv []string) Result {
 type scanner struct {
 	fetch, pipe, encoded, nested bool
 	work                         int
-	// direct is set when the command just read fetches by itself, not
-	// through a payload it wraps (see Unpinned). unpinned records a
-	// fetch whose target is not an immutable URL, and unverified one
-	// that no checksum check follows.
-	direct, unpinned, unverified bool
+	// unpinned records a fetch whose target is not an immutable URL.
+	unpinned bool
 	// tainted maps a lower-case PowerShell variable name to what was
 	// assigned to it: taintFetch, taintDecoded, or both.
 	tainted map[string]int
@@ -147,8 +144,6 @@ func (s *scanner) risks() []string {
 // whether the line decodes a payload (see commandDecodes) in a command or
 // in a substitution, so a caller learns that without reading it again.
 func (s *scanner) line(src string, depth int, ps bool) (decodes bool) {
-	// A payload's fetches are its own commands', not the wrapper's.
-	defer func() { s.direct = false }()
 	s.work += len(src) + 1
 	if strings.TrimSpace(src) == "" {
 		return false
@@ -168,7 +163,6 @@ func (s *scanner) line(src string, depth int, ps bool) (decodes bool) {
 	}
 	if dotNetDownload(src) {
 		s.fetch = true
-		s.unverified = true
 		if !urlsImmutable(src) {
 			s.unpinned = true
 		}
@@ -177,20 +171,16 @@ func (s *scanner) line(src string, depth int, ps bool) (decodes bool) {
 	}
 	cmds := split(toks)
 	fetched := make([]bool, len(cmds))
-	direct := make([]bool, len(cmds))
 	for i, c := range cmds {
 		before := s.fetch
-		s.fetch, s.direct = false, false
+		s.fetch = false
 		s.command(c.words, depth, i < len(cmds)-1)
-		fetched[i], direct[i] = s.fetch, s.direct
+		fetched[i] = s.fetch
 		s.fetch = s.fetch || before
 		if c.pipeIn && pipeTarget(c.words) && !commandIsIEX(c.words) && !localPipe(cmds, i) {
 			s.pipe = true
 		}
 		decodes = decodes || commandDecodes(c.words)
-	}
-	if !verifiedFetches(cmds, direct) {
-		s.unverified = true
 	}
 	for start := 0; start < len(cmds); {
 		end := start + 1
@@ -381,12 +371,9 @@ func (s *scanner) command(words []string, depth int, followed bool) {
 		s.line(strings.Join(args, " "), depth+1, true)
 	default:
 		if fetches(name, args, followed) {
-			s.fetch, s.direct = true, true
+			s.fetch = true
 			if !immutableTargets(name, args) {
 				s.unpinned = true
-			}
-			if !downloaderNames[name] {
-				s.unverified = true
 			}
 		} else if downloaderNames[name] && variableTarget(args) {
 			s.unpinned = true
