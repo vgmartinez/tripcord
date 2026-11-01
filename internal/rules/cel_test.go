@@ -389,7 +389,7 @@ func TestHookCommands(t *testing.T) {
 			`hook.argv(payload) == ["a.sh", "x"]`:                true,
 		},
 		`{"exec":"node","command":"ignored","args":["/tmp/x.js"]}`: {
-			`hook.argv(payload) == ["node", "/tmp/x.js"]`:       true,
+			`hook.argv(payload) == ["node", "/tmp/x.js"]`:     true,
 			`shell.locations(hook.argv(payload)) == ["temp"]`: true,
 		},
 		`{"args":["x.sh", 1],"url":"https://x.invalid"}`: {
