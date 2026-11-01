@@ -218,7 +218,9 @@ output do not currently surface the mode.
 v0 has no baseline comparison or suppression feature keyed by
 fingerprint; `internal/policy`'s exception mechanism suppresses a rule
 by a hash of the whole config file's content, which is unrelated to
-per-finding fingerprints or their mode. When a baseline feature is
+per-finding fingerprints or their mode.
+
+**TODO (deferred to the baselines PR):** when a baseline feature is
 built, it should record each stored fingerprint's `fingerprintMode`
 alongside it and warn when a fingerprint being compared against the
 baseline carries a different mode than the one it was recorded with —
@@ -239,10 +241,18 @@ anyone looking them up by number:
   and `model.FingerprintMode`'s doc comment.
 - **Key file permissions** are enforced whenever the file is read, not
   only when it is created; see "Fail-closed vs s1 fallback" above.
-- **Minimum key length** stays 16 bytes (`MinKeyBytes`). A freshly
-  created key file always gets 32 random bytes, and 32 bytes
-  (`openssl rand -hex 32`) is what this document recommends for a
-  hand-written key too.
+- **Minimum key length** stays 16 bytes (`MinKeyBytes`), expressed as 32
+  hex characters once the hex-format requirement is applied. A freshly
+  created key file always gets 32 random bytes (64 hex characters), and
+  32 bytes (`openssl rand -hex 32`) is what this document recommends for
+  a hand-written key too.
+- **Key format is hex-only**, for both `TRIPCORD_FINGERPRINT_KEY` and a
+  key file. The hex text itself, not its decoded bytes, keys the HMAC,
+  so this is purely an input-validation tightening: any key that was
+  already hex (every key this document's examples ever produced) keeps
+  giving the same fingerprints it always has. A key file additionally
+  has an exact-length rule a human-set env var does not; see
+  "Fingerprint key" above.
 - **s1 granularity** is top-level payload field plus index
   (`field[n]`), not a deeper structural path into nested values; see
   "Secret discriminator" above.
@@ -263,15 +273,23 @@ anyone looking them up by number:
 `tripcord scan` resolves the key once, in this order:
 
 1. `TRIPCORD_FINGERPRINT_KEY`, when set and non-empty. Surrounding white
-   space is trimmed. It must be at least 16 bytes, or the scan exits 3.
-   Example: `openssl rand -hex 32` (32 bytes is also what a generated
-   key file holds; see point 3).
+   space is trimmed. The remaining text must be a hex string (`0-9`,
+   `a-f`, `A-F`) of at least 32 characters (16 bytes), or the scan
+   exits 3. Example: `openssl rand -hex 32` (32 bytes is also what a
+   generated key file holds; see point 3).
 2. `~/.tripcord/fingerprint.key`, when it exists. It holds the key text
-   with the same trimming and minimum length.
+   with the same trimming and hex format, but a stricter length rule: a
+   key file's content must be exactly 64 hex characters, optionally
+   followed by one trailing newline — exactly what point 3 writes.
+   Nothing else legitimately writes this file, so any other length or
+   any non-hex character means the file is truncated or corrupted, and
+   the scan exits 3 rather than silently using it as a different, but
+   still "valid", key.
 3. Otherwise, outside CI, a new key file: 32 random bytes, hex-encoded,
    written atomically (see "Concurrent creation" below) with mode
    `0600` in a `0700` `~/.tripcord` directory. In CI (see "CI
-   detection" below) the file is never created and the scan runs in s1.
+   detection" below) the file is never created and the scan runs in s1,
+   printing a note on stderr (see "Fail-closed vs s1 fallback" below).
 
 **In CI, set `TRIPCORD_FINGERPRINT_KEY` from a secret** (a GitHub
 Actions repository or organization secret, for example) rather than
@@ -284,13 +302,13 @@ vs CI s1" below. Never put the key itself in a workflow file, a log
 statement, or a committed secret-scanning allowlist; a GitHub Actions
 secret is read into the environment only for the job that declares it.
 
-No entropy check is performed on the key text beyond `MinKeyBytes`
-(`"correct horse battery staple and a few more bytes"` would pass): a
-short, low-entropy key weakens the keyed discriminator's guarantee that
-a different secret produces a different k1 fingerprint. Generate the key
-with a CSPRNG (`openssl rand -hex 32`, or just let `tripcord scan`
-create `~/.tripcord/fingerprint.key` for you) rather than typing one by
-hand.
+No entropy check is performed on the key text beyond the hex-format and
+minimum-length checks above (64 repetitions of the same hex digit would
+pass): a short, low-entropy key weakens the keyed discriminator's
+guarantee that a different secret produces a different k1 fingerprint.
+Generate the key with a CSPRNG (`openssl rand -hex 32`, or just let
+`tripcord scan` create `~/.tripcord/fingerprint.key` for you) rather
+than typing one by hand.
 
 #### Fail-closed vs s1 fallback
 
@@ -300,7 +318,10 @@ existing `~/.tripcord/fingerprint.key`, and either CI is detected (see
 below) or a new key file could not be generated or created for an
 environmental reason (no home directory, a read-only home, a full disk,
 ...). The scan continues in s1 and says so on stderr; nothing here is
-fatal.
+fatal. In CI specifically, the note is always the same sentence, so a
+log can be grepped for it: `CI detected: fingerprint key not created,
+using s1`. It is printed once per scan, on the first fingerprint-key
+resolution, the same as every other reason to fall back to s1.
 
 Once key material exists, the scan never silently changes fingerprint
 mode. Any of the following make the scan **exit 3** with an actionable
@@ -310,14 +331,24 @@ message instead of falling back to s1:
   regular file (for example a directory), or is a symlink (including a
   broken one, which gets its own "broken symlink" message).
 - `~/.tripcord` exists but is not a directory, or is itself a symlink.
-- The key file's content is shorter than `MinKeyBytes`, longer than the
-  4096-byte read cap, or otherwise fails `New`'s validation (the same
-  check `TRIPCORD_FINGERPRINT_KEY` gets).
+- The key file's content is not exactly 64 hex characters (optionally
+  followed by one newline), is longer than the 4096-byte read cap, or
+  otherwise fails `New`'s hex-format and minimum-length validation (the
+  same check `TRIPCORD_FINGERPRINT_KEY` gets, less the exact-length
+  rule; see "Fingerprint key" above). This also catches a corrupted or
+  truncated key file — 40 random bytes, or the first half of a real key
+  — that previously passed as a different, silently-accepted key
+  instead of failing the scan closed.
 - On Unix, `~/.tripcord` is owned by someone other than the current
   user, or is writable by group or other (mode `&0o022 != 0`); the key
   file is owned by someone other than the current user, or is readable
   or writable by group or other at all (mode `&0o077 != 0`, so only
-  `0600` and narrower are accepted).
+  `0600` and narrower are accepted). A directory or file owned by uid 0
+  gets its own message naming the likely cause and the fix: running
+  `sudo tripcord scan` once with `HOME` preserved (macOS's default, and
+  some Linux configurations) creates `~/.tripcord` as root, and every
+  later unprivileged run then fails this check until someone runs
+  `sudo chown -R $USER ~/.tripcord`.
 
 None of these messages name the home directory; they refer to
 `~/.tripcord` and `~/.tripcord/fingerprint.key` literally, the same way
@@ -354,13 +385,24 @@ instead of relying on auto-detection.
 #### Concurrent creation
 
 Key file creation is atomic: `tripcord scan` writes the random key to a
-temporary file in `~/.tripcord`, flushes it to disk, and publishes it
-with a hard link to `fingerprint.key`, which atomically fails rather
-than truncating or racing if the destination already exists. A process
-that loses that race reads the file the winner just finished instead, so
-every concurrent `tripcord scan` invocation against the same home
-directory agrees on one key, and none ever observes a partially written
-file.
+temporary file (`.fingerprint.key.*.tmp`) in `~/.tripcord`, flushes it
+to disk, and publishes it with a hard link to `fingerprint.key`, which
+atomically fails rather than truncating or racing if the destination
+already exists. A process that loses that race reads the file the
+winner just finished instead, so every concurrent `tripcord scan`
+invocation against the same home directory agrees on one key, and none
+ever observes a partially written file. After the link, the directory
+itself is fsynced too (best-effort; a failure here does not undo the
+key file the link already published), so the new directory entry is not
+left to a crash-dependent filesystem ordering.
+
+A process killed (`SIGKILL`, a hard crash) between creating its
+temporary file and removing it again leaves that file behind forever
+otherwise. Every `tripcord scan` that finds `~/.tripcord` already
+there, not only the path that goes on to create a new key, sweeps any
+`.fingerprint.key.*.tmp` file older than a few minutes: old enough that
+it cannot still be a concurrent run's in-progress write, so deleting it
+is always safe.
 
 ## Canonical JSON
 
