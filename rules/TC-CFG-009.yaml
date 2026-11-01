@@ -13,6 +13,10 @@
 # see TC-CFG-001) unless every fetch in the command is pinned:
 #   - Copilot: the run of each step of the copilot-setup-steps job in
 #     .github/workflows/copilot-setup-steps.yml. uses steps are not read.
+#     The effective shell is step, then job defaults.run.shell, then
+#     workflow defaults.run.shell, then GitHub's bash -eo pipefail.
+#     Built-in bash and sh are fail-closed; "bash {0}" is not, and a
+#     script that starts with set +e turns errexit off.
 #   - Cursor: the install and start strings and each terminal command
 #     of .cursor/environment.json.
 #   - Dev containers: onCreateCommand, updateContentCommand,

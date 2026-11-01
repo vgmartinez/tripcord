@@ -11,6 +11,8 @@ positivos:
   copilot-userinfo-host: high
   copilot-download-then-run: high
   copilot-pwsh-iwr-iex: high
+  copilot-set-plus-e: high
+  copilot-step-shell-overrides-job: high
   cursor-install-curl-pipe: high
   cursor-start-encoded: high
   cursor-terminal-wget-pipe: high

@@ -77,9 +77,12 @@ too-deeply nested payloads.
 - `RUN` lines of a Dockerfile and OCI Feature references
   (`ghcr.io/devcontainers/features/node:1`) are not read. OCI Feature
   tags are not flagged.
-- A Copilot step with no `shell` declaration runs under `bash -e`, so a
-  checksum check on its own line stops setup when it fails. A step that
-  explicitly declares another shell needs `set -e` or `&&`.
+- Copilot's effective shell is the step's `shell`, then the job's
+  `defaults.run.shell`, then the workflow's, then GitHub's default
+  `bash --noprofile --norc -eo pipefail {0}`. The built-in names `bash`
+  and `sh` are also fail-closed (`sh -e {0}`). A custom template such
+  as `bash {0}` is not, and a step whose script starts with `set +e`
+  turns errexit back off.
 - Variables are not expanded, and the script a setup command fetches
   is not read.
 - The checksum itself is not compared with anything: the rule checks

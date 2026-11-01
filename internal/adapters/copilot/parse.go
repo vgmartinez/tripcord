@@ -2,6 +2,7 @@ package copilot
 
 import (
 	"encoding/json"
+	"strings"
 
 	"github.com/vgmartinez/tripcord/internal/adapters/kit"
 	"github.com/vgmartinez/tripcord/internal/model"
@@ -181,14 +182,14 @@ func (f *file) setupSteps(raw []byte) {
 			f.Warn("jobs.%s.steps entry must be a mapping", setupJob)
 			continue
 		}
-		f.step(step)
+		f.step(step, job, workflow)
 	}
 }
 
 // step emits one setup step, keyed by its id, name, uses, or run (the
 // first present). env values are redacted; with inputs are sanitized and
 // secret-looking ones redacted.
-func (f *file) step(step map[string]any) {
+func (f *file) step(step, job, workflow map[string]any) {
 	payload := map[string]any{"setting": "step", "job": setupJob}
 	for _, name := range kit.SortedKeys(step) {
 		payload[name] = f.safeWithEnv(name, step[name])
@@ -213,12 +214,70 @@ func (f *file) step(step map[string]any) {
 		return
 	}
 	rawRun := run
-	if _, hasShell := step["shell"]; !hasShell {
-		// Copilot runs a step without shell under bash -e. Model the
-		// fail-closed default for the Detect-only command analysis.
+	if shell, ok := effectiveShell(step, job, workflow); ok && shellErrexit(shell) {
+		// GitHub runs the default, bash, and sh with errexit. The
+		// Detect view shows that; set +e in the script turns it off
+		// again when the command is read.
 		rawRun = "set -e; " + run
 	}
 	f.AddDetect(model.ConfigKindEnvSetup, key, payload, map[string]any{"run": rawRun})
+}
+
+// effectiveShell is the shell GitHub uses: the step's shell, then the
+// job's defaults.run.shell, then the workflow's, then the platform
+// default. ok is false when a shell key is present but not a string.
+func effectiveShell(step, job, workflow map[string]any) (string, bool) {
+	if shell, ok := step["shell"].(string); ok {
+		return shell, true
+	}
+	if _, present := step["shell"]; present {
+		return "", false
+	}
+	if shell, ok := defaultsRunShell(job); ok {
+		return shell, true
+	}
+	if shell, ok := defaultsRunShell(workflow); ok {
+		return shell, true
+	}
+	return "", true
+}
+
+func defaultsRunShell(scope map[string]any) (string, bool) {
+	defaults, _ := scope["defaults"].(map[string]any)
+	run, _ := defaults["run"].(map[string]any)
+	shell, ok := run["shell"].(string)
+	return shell, ok
+}
+
+// shellErrexit reports whether GitHub runs this shell with -e. The
+// default and the built-in names bash and sh do. A custom template such
+// as "bash {0}" does only when its command before {0} passes -e.
+func shellErrexit(shell string) bool {
+	shell = strings.TrimSpace(shell)
+	switch shell {
+	case "", "bash", "sh":
+		return true
+	case "pwsh", "powershell", "python", "cmd":
+		return false
+	}
+	template := shell
+	if !strings.Contains(template, "{0}") {
+		template += " {0}"
+	}
+	before, _, _ := strings.Cut(template, "{0}")
+	fields := strings.Fields(before)
+	if len(fields) < 2 {
+		return false
+	}
+	for _, arg := range fields[1:] {
+		if arg == "-o" {
+			continue
+		}
+		if len(arg) > 1 && arg[0] == '-' && arg[1] != '-' && strings.Contains(arg, "e") {
+			return true
+		}
+	}
+	return false
 }
 
 func (f *file) safeWithEnv(name string, value any) any {
