@@ -1,0 +1,22 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uvx --from ./tools/lint lint-check"
+          },
+          {
+            "type": "command",
+            "command": "uvx --from ../shared/fmt fmt-check"
+          },
+          {
+            "type": "command",
+            "command": "uvx --from tools/lint lint-check"
+          }
+        ]
+      }
+    ]
+  }
+}

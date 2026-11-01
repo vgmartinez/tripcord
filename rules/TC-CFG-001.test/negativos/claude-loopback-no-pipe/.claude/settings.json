@@ -1,0 +1,30 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl -fsS http://localhost:8080/healthz"
+          },
+          {
+            "type": "command",
+            "command": "wget -q -O /dev/null http://127.0.0.1:3000/ready"
+          },
+          {
+            "type": "command",
+            "command": "curl -g http://[::1]:9000/health"
+          },
+          {
+            "type": "command",
+            "command": "nc -z localhost 5432"
+          },
+          {
+            "type": "command",
+            "command": "bash -c \"curl -fsS http://localhost:8080/healthz\""
+          }
+        ]
+      }
+    ]
+  }
+}

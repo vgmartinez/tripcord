@@ -1,0 +1,18 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./scripts/x.sh | sh"
+          },
+          {
+            "type": "command",
+            "command": "../tools/gen-env.sh --quiet | bash"
+          }
+        ]
+      }
+    ]
+  }
+}

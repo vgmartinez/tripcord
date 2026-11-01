@@ -3,12 +3,22 @@
 # 2026 planted one that piped a remote script to a shell.
 #
 # A downloader counts only in command position: at the start of a
-# segment, or after sudo, env, a pipe, &&, ||, ;, or $(. It also needs a
-# URL or other network target (a host, an address, a remote package
-# spec, -y/--yes, or the package argument of dlx, uvx, or pipx run).
-# A bare curl or wget word in an argument, or inside quotes, does not.
-# A pipe to a shell does, including base64 -d | sh, unless the pipe
-# itself is inside quotes.
+# segment, or after sudo, env, a shell's -c/-Command//c, a pipe, &&, ||,
+# ;, or $(. It also needs a URL or other network target (a host, an
+# address, a remote package spec, -y/--yes, or the package argument of
+# dlx, uvx, or pipx run, pinned or not). A bare curl or wget word in an
+# argument, or inside quotes, does not.
+#
+# The payload of bash -c "...", sh -c '...', powershell -Command "...",
+# and cmd /c "..." is read again without its outer quotes, so it counts
+# the same as the Copilot bash field. Quotes inside it still hide a pipe.
+#
+# Any unquoted pipe to a shell counts, including base64 -d | bash after
+# another pipe. Two local forms do not: ./script.sh | sh (a relative
+# script and nothing else), and a downloader whose only target is
+# loopback (localhost, 127.0.0.0/8, [::1]) with no pipe to a shell.
+# localhost@host and localhost.host are not loopback. uvx --from a
+# local path (./, ../, /, or a relative directory) runs local code.
 #
 # npx and bunx of a remote spec count without -y (evil@latest,
 # @scope/name@version, a URL, or a git spec). A bare local name
@@ -48,9 +58,13 @@ when: |
         (has(payload.command) && type(payload.command) == string ? payload.command :
           has(payload.exec) && type(payload.exec) == string ? payload.exec : "") +
         " " + payload.args.join(" ") : ""
-    ].exists(c, c.matches(r'''(?is)^(?:[^|'"]|'(?:\\.|[^'])*'|"(?:\\.|[^"])*")*\|[ \t]*(?:sudo[ \t]+(?:-[A-Za-z-]+[ \t]+)*)?(?:[^\s;&|]*[/\\])?(?:invoke-expression|powershell|pwsh|bash|dash|zsh|ash|ksh|iex|sh)(?:\.exe)?(?:$|[\s;&|'"\x60])''') ||
-      c.matches(r'''(?is)^(?:(?:[^;&|('"\n]|'(?:\\.|[^'])*'|"(?:\\.|[^"])*")*(?:\|\||&&|[;&|\n(]|\$\()[ \t]*)*(?:[ \t]*(?:sudo|env)(?:[ \t]+(?:-[A-Za-z-]+|[A-Za-z_][A-Za-z0-9_]*=[^\s;&|'" ]+))*[ \t]+)?(?:[^\s;&|'"()]*[/\\])?(?:(?:curl|wget|iwr|irm|nc|ncat|iex|invoke-webrequest|invoke-restmethod|invoke-expression)(?:\.exe)?(?:[ \t]+\S+)*?[ \t]+['"]?(?:https?://|[0-9]{1,3}(?:\.[0-9]{1,3}){3}|localhost|(?:[a-z0-9-]+\.)+[a-z]{2,})|python3?(?:\.exe)?[ \t]+-c\b[\s\S]*?(?:urllib|requests)|node(?:\.exe)?[ \t]+(?:-e|--eval)\b[\s\S]*?(?:fetch|\bhttps?\b)|(?:pnpm|yarn)(?:\.cmd|\.exe)?[ \t]+dlx(?:[ \t]+-[^\s;&|'" ]+)*[ \t]+[^\s;&|'"-]|uvx(?:\.exe)?(?:[ \t]+-[^\s;&|'" ]+)*[ \t]+[^\s;&|'"-]|pipx(?:\.exe)?[ \t]+run(?:[ \t]+-[^\s;&|'" ]+)*[ \t]+[^\s;&|'"-]|deno(?:\.exe)?[ \t]+run(?:[ \t]+-[^\s;&|'" ]+)*[ \t]+['"]?(?:https?://|npm:|jsr:)|git(?:\.exe)?[ \t]+clone(?:[ \t]+[^\s;&|'" ]+)+[ \t]*(?:&&|[;&|])[ \t]*\S)''') ||
-      (!c.contains("--no-install") && c.matches(r'''(?is)^(?:(?:[^;&|('"\n]|'(?:\\.|[^'])*'|"(?:\\.|[^"])*")*(?:\|\||&&|[;&|\n(]|\$\()[ \t]*)*(?:[ \t]*(?:sudo|env)(?:[ \t]+(?:-[A-Za-z-]+|[A-Za-z_][A-Za-z0-9_]*=[^\s;&|'" ]+))*[ \t]+)?(?:[^\s;&|'"()]*[/\\])?(?:npx|bunx)(?:\.cmd|\.exe)?(?:[ \t]+[^\s;&|'" ]+)*[ \t]+(?:-y\b|--yes(?:=true)?\b|\S*(?:https?://|git\+|git://|github:|gist:|gitlab:|bitbucket:|npm:|jsr:)|@[^\s;&|'" ]+|[^\s;&|'" @]+@(?:latest|next|[0-9]))''')))
+    ].exists(c0, [c0, c0.matches(r'''(?is)(?:^|[;&|(\s])(?:[^\s;&|'"()]*[/\\])?(?:(?:ba|z|da|k|a|c|tc|fi)?sh|cmd|powershell|pwsh)(?:\.exe)?(?:[ \t]+[-/][^\s;&|'"]+)*?[ \t]+(?:-[a-z]*c|-command|/c|/k)[ \t]+[']''') ? c0.replace("'", " ") :
+      c0.matches(r'''(?is)(?:^|[;&|(\s])(?:[^\s;&|'"()]*[/\\])?(?:(?:ba|z|da|k|a|c|tc|fi)?sh|cmd|powershell|pwsh)(?:\.exe)?(?:[ \t]+[-/][^\s;&|'"]+)*?[ \t]+(?:-[a-z]*c|-command|/c|/k)[ \t]+["]''') ? c0.replace("\"", " ") : ""].exists(c1,
+    [c1.contains("--no-install") ? c1.replace("npx", "_").replace("bunx", "_") : c1].exists(c2,
+    [(c2.matches(r'''(?i)uvx\b[^;&|\n]*?[ \t]--from[ \t=]+['"]?[\w.-]*[/\\]''') && c2.split("uvx").size() == 2 ? c2.replace("uvx", "_") : c2)
+      .replace("://localhost", "://~").replace("://127.", "://^").replace(" 127.", " ^")].exists(c,
+    (c.matches(r'''(?is)^(?:[^'"]|'(?:\\.|[^'])*'|"(?:\\.|[^"])*")*?(?:[^'"|]|'(?:\\.|[^'])*'|"(?:\\.|[^"])*")\|[ \t]*(?:sudo[ \t]+(?:-[A-Za-z-]+[ \t]+)*)?(?:[^\s;&|]*[/\\])?(?:invoke-expression|powershell|pwsh|iex|cmd|(?:ba|z|da|k|a|c|tc|fi)?sh)(?:\.exe)?(?:$|[\s;&|'"\x60])''') && !c.matches(r'''(?s)^\s*\.\.?/[^\s;&|'"]*(?:[ \t]+[^\s;&|'"$()\x60]+)*[ \t]*\|[ \t]*(?:sudo[ \t]+)?(?:ba|z|da|k|a)?sh\s*$''')) ||
+      c.matches(r'''(?is)^(?:(?:[^;&|('"\n]|'(?:\\.|[^'])*'|"(?:\\.|[^"])*")*(?:\|\||&&|[;&|\n(]|\$\()[ \t]*)*[ \t]*(?:(?:sudo|env)(?:[ \t]+(?:-[A-Za-z-]+|[A-Za-z_][A-Za-z0-9_]*=[^\s;&|'" ]+))*[ \t]+|(?:[^\s;&|'"()]*[/\\])?(?:(?:ba|z|da|k|a|c|tc|fi)?sh|cmd|powershell|pwsh)(?:\.exe)?(?:[ \t]+[-/][^\s;&|'"]+)*?[ \t]+(?:-[a-z]*c|-command|/c|/k)[ \t]+)*(?:[^\s;&|'"()]*[/\\])?(?:(?:curl|wget|iwr|irm|nc|ncat|iex|invoke-webrequest|invoke-restmethod|invoke-expression)(?:\.exe)?(?:[ \t]+\S+)*?[ \t]+['"]?(?:https?://(?:[^~^\[]|~(?:[\w.@-]|:[^/\s?#]*@)|\^[0-9.]*(?:[a-z_@-]|:[^/\s?#]*@)|\[(?:[^:]|:[^:]|::[^1]|::1(?:[^\]]|\][^/\s?#]*@)))|[0-9]{1,3}(?:\.[0-9]{1,3}){3}|\^[0-9.]*[a-z_-]|(?:[a-z0-9-]+\.)+[a-z]{2,})|python3?(?:\.exe)?[ \t]+-c\b[\s\S]*?(?:urllib|requests)|node(?:\.exe)?[ \t]+(?:-e|--eval)\b[\s\S]*?(?:fetch|\bhttps?\b)|(?:pnpm|yarn)(?:\.cmd|\.exe)?[ \t]+dlx(?:[ \t]+-[^\s;&|'" ]+)*[ \t]+[^\s;&|'"-]|uvx(?:\.exe)?(?:[ \t]+-[^\s;&|'" ]+)*[ \t]+[^\s;&|'"-]|pipx(?:\.exe)?[ \t]+run(?:[ \t]+-[^\s;&|'" ]+)*[ \t]+[^\s;&|'"-]|deno(?:\.exe)?[ \t]+run(?:[ \t]+-[^\s;&|'" ]+)*[ \t]+['"]?(?:https?://|npm:|jsr:)|git(?:\.exe)?[ \t]+clone(?:[ \t]+[^\s;&|'" ]+)+[ \t]*(?:&&|[;&|])[ \t]*\S|(?:npx|bunx)(?:\.cmd|\.exe)?(?:[ \t]+[^\s;&|'" ]+)*[ \t]+(?:-y\b|--yes(?:=true)?\b|\S*(?:https?://|git\+|git://|github:|gist:|gitlab:|bitbucket:|npm:|jsr:)|@[^\s;&|'" ]+|[^\s;&|'" @]+@(?:latest|next|[0-9])))''')))))
 fix: "Do not fetch code in a SessionStart or Setup hook. Commit the script to the repository, pin what it installs by version and hash, and run it explicitly."
 refs:
   - https://workos.com/blog/npm-worm-coding-agent-config-credentials
