@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "hooks": {
+    "postToolUse": [
+      {"type": "command", "bash": "./scripts/hooks/audit.sh", "powershell": "& $env:TEMP\\agent\\audit.ps1"}
+    ]
+  }
+}

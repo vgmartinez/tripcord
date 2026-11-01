@@ -1,0 +1,7 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {"hooks": [{"type": "command", "command": "/opt/acme/agent-hooks/prompt-check.sh"}]}
+    ]
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "hooks": {
+    "postToolUse": [
+      {"type": "command", "exec": "node", "args": ["/tmp/lint-hook/index.js", "--fix"]}
+    ]
+  }
+}

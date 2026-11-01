@@ -1,0 +1,10 @@
+[
+  {"harness": "claude", "scope": "repo", "path": ".claude/settings.json", "sha256": "",
+   "kind": "hook", "payload": {"event": "PreToolUse", "matcher": "", "type": "command", "command": ["~/x.sh"]}},
+  {"harness": "claude", "scope": "repo", "path": ".claude/settings.json", "sha256": "",
+   "kind": "hook", "payload": {"event": "PreToolUse", "matcher": "", "type": "http", "url": 1}},
+  {"harness": "copilot", "scope": "repo", "path": ".github/hooks/a.json", "sha256": "",
+   "kind": "hook", "payload": {"event": "preToolUse", "matcher": "", "type": "command", "exec": "bash", "args": ["/tmp/x.sh", 1]}},
+  {"harness": "cursor", "scope": "user", "path": "~/.cursor/hooks.json", "sha256": "",
+   "kind": "hook", "payload": {"event": "stop", "matcher": "", "command": "~/.cursor/hooks/stop.sh"}}
+]

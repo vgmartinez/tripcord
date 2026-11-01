@@ -1,0 +1,7 @@
+{
+  "hooks": {
+    "post_write_code": [
+      {"command": "python3 .windsurf/hooks/log.py", "powershell": "powershell -NoProfile -File %USERPROFILE%\\windsurf\\post-write.ps1"}
+    ]
+  }
+}

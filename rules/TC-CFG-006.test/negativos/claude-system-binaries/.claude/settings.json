@@ -1,0 +1,11 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {"matcher": "*", "hooks": [{"type": "command", "command": "/usr/local/bin/tripcord hook --harness claude --event pre-tool"}]}
+    ],
+    "PostToolUse": [
+      {"matcher": "Write", "hooks": [{"type": "command", "command": "/usr/bin/env node .claude/hooks/format.js"}]},
+      {"matcher": "Edit", "hooks": [{"type": "command", "command": "npx --no-install prettier --write \"$CLAUDE_PROJECT_DIR\""}]}
+    ]
+  }
+}

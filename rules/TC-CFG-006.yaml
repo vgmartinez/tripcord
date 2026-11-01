@@ -1,0 +1,86 @@
+# A hook in shared config runs whatever its target holds at that
+# moment. When the target is outside the repository (the home
+# directory, a temporary directory, another absolute path, or above the
+# project) or behind a URL, the reviewed config stays the same while
+# the code it runs changes. The npm worm of August 2026 persisted this
+# way: a committed hook pointing at a script it had planted elsewhere.
+#
+# Every hook any adapter normalizes is in scope: Claude settings,
+# plugin hooks, and agent, command, and skill frontmatter; Codex
+# hooks.json and config.toml; Copilot hook files and agents; Cursor and
+# Windsurf hooks.json; Gemini settings; and hooks in shared skills.
+# settings.local.json files are personal and are not read.
+#
+# shell.locations (see internal/rules/shellcmd) reads each command field
+# as shell.risks does and classifies the program of every simple
+# command, and the script an interpreter is given (bash x.sh, python
+# x.py, node x.js, pwsh -File x.ps1, source x). Relative paths and
+# $CLAUDE_PROJECT_DIR, $CLAUDE_PLUGIN_ROOT, $GEMINI_PROJECT_DIR,
+# $CURSOR_PROJECT_DIR, and $PWD are inside the project. A binary
+# without a script extension under a system directory (/usr/local/bin,
+# /opt/homebrew/bin, C:\Program Files) is not a script outside the
+# repository. Arguments are not read: cat ~/.ssh/config runs cat.
+#
+# High: a hook url (an HTTP hook) or a program that is a non-loopback
+#   URL or a UNC share; a program or script under the home directory
+#   or a temporary directory.
+# Medium: a program or script at another absolute path, or one that
+#   climbs above the project directory (../x.sh).
+#
+# Not read: whether a script inside the repository is committed (the
+# scan does not run git), $VAR paths other than the ones above, and
+# what the script itself does.
+id: TC-CFG-006
+pack: tripcord/core
+title: "Hook runs a script outside the repository or at a remote URL"
+severity: high
+severity_when:
+  - severity: high
+    when: |
+      (has(payload.url) && type(payload.url) == string && "network" in shell.locations(payload.url)) ||
+        [
+          has(payload.command) && type(payload.command) == string ? payload.command : "",
+          has(payload.exec) && type(payload.exec) == string ? payload.exec : "",
+          has(payload.bash) && type(payload.bash) == string ? payload.bash : "",
+          has(payload.powershell) && type(payload.powershell) == string ? payload.powershell : "",
+          has(payload.commandWindows) && type(payload.commandWindows) == string ? payload.commandWindows : "",
+          has(payload.command_windows) && type(payload.command_windows) == string ? payload.command_windows : "",
+          has(payload.windows) && type(payload.windows) == string ? payload.windows : "",
+          has(payload.linux) && type(payload.linux) == string ? payload.linux : "",
+          has(payload.osx) && type(payload.osx) == string ? payload.osx : ""
+        ].exists(c, shell.locations(c).exists(l, l in ["network", "home", "temp"])) ||
+        (has(payload.args) && type(payload.args) == list && payload.args.all(a, type(a) == string) &&
+          shell.locations([
+            has(payload.exec) && type(payload.exec) == string ? payload.exec :
+              has(payload.command) && type(payload.command) == string ? payload.command : ""
+          ] + payload.args).exists(l, l in ["network", "home", "temp"]))
+  - severity: medium
+    when: |
+      [
+        has(payload.command) && type(payload.command) == string ? payload.command : "",
+        has(payload.exec) && type(payload.exec) == string ? payload.exec : "",
+        has(payload.bash) && type(payload.bash) == string ? payload.bash : "",
+        has(payload.powershell) && type(payload.powershell) == string ? payload.powershell : "",
+        has(payload.commandWindows) && type(payload.commandWindows) == string ? payload.commandWindows : "",
+        has(payload.command_windows) && type(payload.command_windows) == string ? payload.command_windows : "",
+        has(payload.windows) && type(payload.windows) == string ? payload.windows : "",
+        has(payload.linux) && type(payload.linux) == string ? payload.linux : "",
+        has(payload.osx) && type(payload.osx) == string ? payload.osx : ""
+      ].exists(c, shell.locations(c).size() > 0) ||
+        (has(payload.args) && type(payload.args) == list && payload.args.all(a, type(a) == string) &&
+          shell.locations([
+            has(payload.exec) && type(payload.exec) == string ? payload.exec :
+              has(payload.command) && type(payload.command) == string ? payload.command : ""
+          ] + payload.args).size() > 0)
+harness: [claude, codex, copilot, cursor, gemini, windsurf, generic]
+files: ["**"]
+when: |
+  config.kind == "hook" && config.scope == "repo" &&
+    !config.path.matches(r'''(^|/)settings\.local\.json$''')
+fix: "Commit the script to the repository and reference it by a project-relative path, such as \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/check.sh, so that review covers what the hook runs. Replace an HTTP hook to a remote host with a committed command hook."
+refs:
+  - https://workos.com/blog/npm-worm-coding-agent-config-credentials
+  - https://code.claude.com/docs/en/hooks
+  - https://cursor.com/docs/hooks
+  - https://docs.github.com/en/copilot/reference/hooks-reference
+  - https://docs.windsurf.com/windsurf/cascade/hooks

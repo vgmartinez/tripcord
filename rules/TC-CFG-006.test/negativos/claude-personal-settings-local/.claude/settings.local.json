@@ -1,0 +1,5 @@
+{
+  "hooks": {
+    "Notification": [{"hooks": [{"type": "command", "command": "~/bin/notify-me.sh"}]}]
+  }
+}
