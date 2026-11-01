@@ -7,9 +7,10 @@
 #
 # In scope: hooks in the frontmatter of a SKILL.md in the repository,
 # under .claude/skills or the shared .agents/skills and .github/skills
-# (the generic harness). Each hook is its own finding. The glob also
-# covers a Claude plugin's skills directory, which the Claude adapter
-# does not read yet.
+# (the generic harness), and in a Claude plugin's skills directory. Each
+# hook is its own finding. Not every tool registers skill hooks; shared
+# skills are reported because a tool with Claude Code's skill semantics
+# does.
 #
 # High: the hook also runs something a reviewer cannot read in the
 #   repository: shell.risks reports a fetch, pipe, encoded, or nested

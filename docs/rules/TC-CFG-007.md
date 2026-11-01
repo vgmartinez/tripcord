@@ -18,8 +18,10 @@ configuration does not see them.
 
 Each hook in the frontmatter is one finding, reported on the `SKILL.md`
 path. Skills are read from `.claude/skills` (the Claude adapter, at any
-depth, so `packages/web/.claude/skills` counts) and from the shared
-`.agents/skills` and `.github/skills` (the generic adapter).
+depth, so `packages/web/.claude/skills` counts, and from the `skills/`
+directory of a Claude plugin in the repository) and from the shared
+`.agents/skills` and `.github/skills` (the generic adapter). Shared
+skills are reported with the same severities as Claude skills.
 
 | Hook | Severity |
 | --- | --- |
@@ -41,9 +43,11 @@ Not reported:
 
 ## Limits
 
-- Skills in a Claude plugin's `skills/` directory are covered by the
-  rule's glob, but the Claude adapter does not read them yet, so they
-  are not reported.
+- Not every tool registers hooks from a skill's frontmatter. A shared
+  skill under `.agents/skills` or `.github/skills` is reported because
+  any tool that loads it with Claude Code's skill semantics registers
+  the hooks, but a tool that ignores the `hooks` key never runs them.
+  The finding says the hook is declared, not that every tool runs it.
 - What the hook's script does. Only the hook entry is read.
 
 ## Examples
