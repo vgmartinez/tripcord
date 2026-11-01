@@ -32,6 +32,8 @@ func TestScan(t *testing.T) {
 		{"isolates", "\u2066\u2067\u2068\u2069", []model.HiddenRun{run(0x2066, 1, 1, 4)}, 1, 4, true},
 		{"zero-width run", "a\u200B\u200C\u200D\u2060b", []model.HiddenRun{run(0x200B, 1, 2, 4)}, 1, 4, true},
 		{"emoji ZWJ sequence", "👨\u200D👩", nil, 0, 0, true},
+		{"emoji with FE0F", "❤\uFE0F\u200D🔥", nil, 0, 0, true},
+		{"black cat", "🐈\u200D⬛", nil, 0, 0, true},
 		{"ZWJ beside ASCII", "a\u200Db", []model.HiddenRun{run(0x200D, 1, 2, 1)}, 1, 1, true},
 		{"lone ZWJ", "\u200D", []model.HiddenRun{run(0x200D, 1, 1, 1)}, 1, 1, true},
 		{"tags", "ok\U000E0069\U000E0067\U000E006E\n", []model.HiddenRun{run(0xE0069, 1, 3, 3)}, 1, 3, true},
@@ -85,19 +87,16 @@ func reference(b []byte) (points []point, valid bool) {
 	b = bytes.TrimPrefix(b, bom)
 	for i, line := range bytes.Split(b, []byte("\n")) {
 		col := 1
-		prev := rune(-1)
-		for len(line) > 0 {
-			r, size := utf8.DecodeRune(line)
+		for off := 0; off < len(line); {
+			r, size := utf8.DecodeRune(line[off:])
 			if r == utf8.RuneError && size == 1 {
 				valid = false
-				r = -1
 			}
-			if isCounted(r, prev, nextRune(line[size:])) {
+			if countedAt(line, off) {
 				points = append(points, point{r, i + 1, col})
 			}
-			line = line[size:]
+			off += size
 			col++
-			prev = r
 		}
 	}
 	return points, valid

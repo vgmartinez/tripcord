@@ -28,8 +28,10 @@ The whole file is read as bytes, frontmatter included. A U+FEFF that
 starts the file is a byte order mark and is not counted; one anywhere
 else is.
 
-A U+200D zero-width joiner between two emoji code points is a normal
-emoji ZWJ sequence and is not reported. A U+200D beside ASCII, or at
+A U+200D between two Extended_Pictographic characters is a normal emoji
+ZWJ sequence and is not reported. U+FE0F and skin tones
+(U+1F3FB-U+1F3FF) may sit between the joiner and either character, so
+sequences such as 🏳️‍🌈 and 🐈‍⬛ are quiet. A U+200D beside ASCII, or at
 the start or end of a file, is reported.
 
 Not reported:

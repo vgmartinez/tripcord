@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"path"
 	"strings"
-	"unicode"
 	"unicode/utf8"
 
 	"github.com/vgmartinez/tripcord/internal/model"
@@ -62,10 +61,8 @@ func Scan(b []byte) (model.HiddenChars, bool) {
 	b, _ = bytes.CutPrefix(b, bom)
 	line, col := 1, 1
 	inRun, stored := false, false
-	prev := rune(-1)
-	for len(b) > 0 {
-		r, size := utf8.DecodeRune(b)
-		b = b[size:]
+	for i := 0; i < len(b); {
+		r, size := utf8.DecodeRune(b[i:])
 		switch {
 		case r == utf8.RuneError && size == 1:
 			valid = false
@@ -73,9 +70,9 @@ func Scan(b []byte) (model.HiddenChars, bool) {
 		case r == '\n':
 			line, col = line+1, 1
 			inRun = false
-			prev = r
+			i += size
 			continue
-		case isCounted(r, prev, nextRune(b)):
+		case countedAt(b, i):
 			out.Total++
 			out.Sequence = append(out.Sequence, r)
 			switch {
@@ -93,27 +90,61 @@ func Scan(b []byte) (model.HiddenChars, bool) {
 			inRun = false
 		}
 		col++
-		prev = r
+		i += size
 	}
 	return out, valid
 }
 
-// isCounted excludes the joiner in an emoji ZWJ sequence. In every other
-// context U+200D can hide or split an instruction and remains reportable.
-func isCounted(r, prev, next rune) bool {
+// countedAt reports a hidden code point. U+200D is not counted inside an
+// emoji ZWJ sequence: the code points around it, skipping U+FE0F and
+// skin tones U+1F3FB-U+1F3FF, are both Extended_Pictographic.
+func countedAt(b []byte, i int) bool {
+	r, size := utf8.DecodeRune(b[i:])
 	if Class(r) == "" {
 		return false
 	}
-	return r != 0x200D || !isEmoji(prev) || !isEmoji(next)
+	if r != 0x200D {
+		return true
+	}
+	before := pictographic(skipEmojiMods(b[:i], false))
+	after := pictographic(skipEmojiMods(b[i+size:], true))
+	return !before || !after
 }
 
-func nextRune(b []byte) rune {
-	r, _ := utf8.DecodeRune(b)
-	return r
+func skipEmojiMods(b []byte, forward bool) rune {
+	for len(b) > 0 {
+		var r rune
+		var size int
+		if forward {
+			r, size = utf8.DecodeRune(b)
+			b = b[size:]
+		} else {
+			r, size = utf8.DecodeLastRune(b)
+			b = b[:len(b)-size]
+		}
+		if r == 0xFE0F || r >= 0x1F3FB && r <= 0x1F3FF {
+			continue
+		}
+		return r
+	}
+	return utf8.RuneError
 }
 
-func isEmoji(r rune) bool {
-	return r >= 0x1F000 && r <= 0x1FAFF || (r >= 0x2600 && r <= 0x27BF && unicode.Is(unicode.So, r))
+func pictographic(r rune) bool {
+	lo, hi := 0, len(extendedPictographicRanges)/2
+	for lo < hi {
+		mid := (lo + hi) / 2
+		start, end := extendedPictographicRanges[mid*2], extendedPictographicRanges[mid*2+1]
+		switch {
+		case r < start:
+			hi = mid
+		case r > end:
+			lo = mid + 1
+		default:
+			return true
+		}
+	}
+	return false
 }
 
 // FingerprintKey is a safe representation of a hidden-code-point sequence
