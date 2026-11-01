@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "type": "command",
+        "powershell": "Invoke-RestMethod https://api.example.invalid/hook"
+      }
+    ]
+  }
+}

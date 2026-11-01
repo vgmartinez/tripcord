@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "echo": {
+      "command": "echo 'a|sh'"
+    }
+  }
+}

@@ -74,6 +74,7 @@ func TestCheckRuleFixturesFailures(t *testing.T) {
 		"positive does not trigger": {map[string]string{"positivos/a.json": quiet, "negativos/b.json": quiet}, "did not trigger"},
 		"negative triggers":         {map[string]string{"positivos/a.json": trigger, "negativos/b.json": trigger}, "negative fixture triggered"},
 		"positive out of scope":     {map[string]string{"positivos/a.json": outOfScope, "negativos/b.json": quiet}, "no item matches"},
+		"negative out of scope":     {map[string]string{"positivos/a.json": trigger, "negativos/b.json": outOfScope}, "no item matches"},
 		"no negatives":              {map[string]string{"positivos/a.json": trigger}, "negativos"},
 		"empty negatives":           {map[string]string{"positivos/a.json": trigger, "negativos/.keep": ""}, "at least one fixture"},
 		"non-json file":             {map[string]string{"positivos/a.json": trigger, "negativos/tasks.yaml": "x: 1"}, "ConfigItem document or a directory"},
@@ -110,7 +111,6 @@ func TestCheckRuleFixturesFailures(t *testing.T) {
 		writeFile(t, filepath.Join(dir, rule.ID+TestDirSuffix, "positivos/a.json"), "["+trigger+","+quiet+"]")
 		writeFile(t, filepath.Join(dir, rule.ID+TestDirSuffix, "positivos/repo/.mcp.json"), `{"mcpServers":{"a":{"command":"sh"}}}`)
 		writeFile(t, filepath.Join(dir, rule.ID+TestDirSuffix, "negativos/b.json"), quiet)
-		writeFile(t, filepath.Join(dir, rule.ID+TestDirSuffix, "negativos/c.json"), outOfScope)
 		writeFile(t, filepath.Join(dir, rule.ID+TestDirSuffix, "negativos/repo/.mcp.json"), `{"mcpServers":{"a":{"command":"node"}}}`)
 		if err := CheckRuleFixtures(context.Background(), env, dir, rule, adapterDiscover); err != nil {
 			t.Fatal(err)

@@ -39,24 +39,30 @@ and CEL cannot read files, use the network, or run commands.
 ```yaml
 id: TC-CFG-002
 pack: tripcord/core
-title: "VS Code task that runs when the folder opens"
+title: "VS Code task that runs when the folder opens (also Cursor and Windsurf)"
 severity: high                       # low | medium | high | critical
-harness: [vscode, cursor, windsurf]
+harness: [vscode]
 files: [".vscode/tasks.json"]        # repo-relative or ~/ globs; ** is allowed
 when: >-
   has(task.runOptions) && has(task.runOptions.runOn) &&
     task.runOptions.runOn == "folderOpen"
-fix: "Remove runOn: folderOpen or move the task to an explicit script"
+fix: "Remove runOn: folderOpen or move the task to an explicit script. Cursor and Windsurf open this same .vscode/tasks.json."
 refs:
   - https://workos.com/blog/npm-worm-coding-agent-config-credentials
 ```
 
-Every key is required. `refs` needs at least one https link to the
-incident or to official documentation; a rule without `refs` is not
-accepted. `pack` is the pack name, `<namespace>/<name>`. The version
-lives only in `rules/pack.yaml` (for example `tripcord/core@2026.11`);
-a rule inherits it. `rules/REGISTRY` is what stops a rule id from being
-reused.
+Every key except `severity_when` is required. `refs` needs at least one
+https link to the incident or to official documentation; a rule without
+`refs` is not accepted. `pack` is the pack name, `<namespace>/<name>`.
+The version lives only in `rules/pack.yaml` (for example
+`tripcord/core@2026.11`); a rule inherits it. `rules/REGISTRY` is what
+stops a rule id from being reused.
+
+`severity` is the fallback, and the floor a policy lock refuses to
+lower. `severity_when` is an optional list of `{severity, when}`
+clauses tried in order. The first true clause is that match's
+severity, so one permissions object can be high and another medium.
+A policy severity override replaces the per-match result.
 
 `when` sees these variables:
 
@@ -111,6 +117,10 @@ one fixture. A fixture is either of:
   and fails if the adapters report the tree as incomplete. Prefer this
   form, with one directory per case, for example
   `positivos/claude-sessionstart-curl/.claude/settings.json`.
+  A directory named `_home` is that fixture's home directory, with user
+  scope on and an empty environment, so a host `COPILOT_HOME` or
+  `XDG_CONFIG_HOME` cannot redirect it. Use it for user-scope files such
+  as `~/.copilot/mcp-config.json`.
 - A `.json` engine fixture: a config item, or an array of them, with
   `sha256` optionally left empty. Use it for payloads an adapter would
   not produce from a real file, such as a field of the wrong type:
@@ -119,6 +129,10 @@ one fixture. A fixture is either of:
 {"harness": "vscode", "scope": "repo", "path": ".vscode/tasks.json", "sha256": "",
  "kind": "task", "payload": {"label": "setup", "runOptions": {"runOn": "folderOpen"}}}
 ```
+
+A positive and a negative both fail when no discovered item is inside
+the rule's harness and file globs. A negative that only holds an
+out-of-scope file would otherwise pass without testing `when`.
 
 Fixture configs use `.invalid` or `example` hosts and placeholder
 secrets only.

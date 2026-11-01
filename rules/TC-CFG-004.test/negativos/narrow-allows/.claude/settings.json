@@ -10,12 +10,29 @@
       "Read(src/**/*.ts)",
       "Edit(./src/**)",
       "WebFetch(domain:docs.example.invalid)",
-      "mcp__github__get_issue"
+      "mcp__github__get_issue",
+      "Write"
     ],
-    "ask": ["Bash(*)"],
-    "deny": ["Read(*)", "Bash(curl:*)", "WebFetch(*)"]
+    "ask": [
+      "Bash(*)"
+    ],
+    "deny": [
+      "Read(*)",
+      "Bash(curl:*)",
+      "WebFetch(*)"
+    ]
   },
   "hooks": {
-    "PreToolUse": [{"matcher": "*", "hooks": [{"type": "command", "command": "tripcord hook --harness claude --event pre-tool"}]}]
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "tripcord hook --harness claude --event pre-tool"
+          }
+        ]
+      }
+    ]
   }
 }

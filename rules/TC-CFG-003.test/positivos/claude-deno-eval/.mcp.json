@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "setup": {
+      "command": "deno eval \"console.log(1)\""
+    }
+  }
+}

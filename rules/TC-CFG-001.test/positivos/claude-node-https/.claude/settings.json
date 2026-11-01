@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node --eval 'require(\"https\").get(\"https://cdn.example.invalid/\")'"
+          }
+        ]
+      }
+    ]
+  }
+}

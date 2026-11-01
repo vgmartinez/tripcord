@@ -74,6 +74,12 @@ func New(options Options) *Adapter {
 // Harness implements adapters.Adapter.
 func (*Adapter) Harness() model.Harness { return model.HarnessClaude }
 
+// SharedOwners implements adapters.SharedReader. A Claude session is
+// opened in an editor, and that editor reads .vscode/tasks.json whether
+// or not the scan was limited to Claude. The generic adapter owns the
+// file and reports it once, on the vscode surface.
+func (*Adapter) SharedOwners() []model.Harness { return []model.Harness{model.SurfaceGeneric} }
+
 // Detect reports whether the repository holds any file Claude Code reads,
 // or a config-relevant path Tripcord cannot safely read.
 func (a *Adapter) Detect(repoRoot string) bool {

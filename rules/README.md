@@ -9,10 +9,20 @@ embedded in the binary.
 
 | Rule | Detects |
 | --- | --- |
-| TC-CFG-001 | SessionStart or Setup hook in shared config that runs curl, wget, or a remote npx |
-| TC-CFG-002 | `.vscode/tasks.json` task with `runOptions.runOn: folderOpen` |
-| TC-CFG-003 | MCP stdio server in an `mcp.json` launched through a shell or a pipe to sh |
-| TC-CFG-004 | `permissions.allow` with a broad wildcard such as `Bash(*)` in shared config |
+| TC-CFG-001 | SessionStart or Setup hook, in shared config, that downloads or runs code from the network. The downloader has to be in command position and have a URL or other network target. A pipe to a shell counts on its own. |
+| TC-CFG-002 | `.vscode/tasks.json` task with `runOptions.runOn: folderOpen`. Reported once, on the vscode surface, including `tripcord scan --harness claude`, because Cursor and Windsurf open the same file. |
+| TC-CFG-003 | MCP server normalized by any adapter whose command is a shell, a pipe to a shell, or an inline interpreter (`python -c`, `node -e`/`--eval`, `perl -e`, `ruby -e`, `deno eval`). |
+| TC-CFG-004 | `permissions.allow` in shared Claude settings. A broad exec wildcard is high. A broad read or write is medium. One permissions object is one finding, at the first matching severity. |
+
+`severity` is the fallback and the floor a policy lock uses.
+`severity_when`, when a rule has it, is tried in order and the first
+true clause is the severity of that match. A policy severity override
+replaces the per-match result.
+
+Static matching does not expand `$VAR`, `$(echo cur)l`, or `c''url`,
+and it does not unwrap an `env`, `busybox`, or `$SHELL` wrapper around
+an MCP command. Nested `.vscode/tasks.json` files and `.code-workspace`
+tasks are out of scope.
 
 The format, the id registry, and fixtures are described in
 [CONTRIBUTING.md](../CONTRIBUTING.md#rules).

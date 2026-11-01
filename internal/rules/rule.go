@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/url"
@@ -30,17 +31,29 @@ const MaxRuleBytes = 64 << 10
 //	refs:
 //	  - https://example.com/incident
 //
-// Every key is required and unknown keys are rejected.
+// Every key except severity_when is required, and unknown keys are
+// rejected. severity is the fallback. severity_when, when present, is
+// tried in order and the first true clause replaces the fallback for
+// that match, so one rule can report high for one config item and
+// medium for another. A policy severity override still replaces the
+// result.
 type Spec struct {
-	ID       string   `yaml:"id"`
-	Pack     string   `yaml:"pack"`
-	Title    string   `yaml:"title"`
-	Severity string   `yaml:"severity"`
-	Harness  []string `yaml:"harness"`
-	Files    []string `yaml:"files"`
-	When     string   `yaml:"when"`
-	Fix      string   `yaml:"fix"`
-	Refs     []string `yaml:"refs"`
+	ID           string         `yaml:"id"`
+	Pack         string         `yaml:"pack"`
+	Title        string         `yaml:"title"`
+	Severity     string         `yaml:"severity"`
+	SeverityWhen []SeverityWhen `yaml:"severity_when"`
+	Harness      []string       `yaml:"harness"`
+	Files        []string       `yaml:"files"`
+	When         string         `yaml:"when"`
+	Fix          string         `yaml:"fix"`
+	Refs         []string       `yaml:"refs"`
+}
+
+// SeverityWhen is one per-match severity clause.
+type SeverityWhen struct {
+	Severity string `yaml:"severity"`
+	When     string `yaml:"when"`
 }
 
 // ParseSpec decodes and validates one rule document. It does not
@@ -72,6 +85,14 @@ func (s *Spec) Validate() error {
 	}
 	if _, err := model.ParseSeverity(s.Severity); err != nil {
 		return err
+	}
+	for i, clause := range s.SeverityWhen {
+		if _, err := model.ParseSeverity(clause.Severity); err != nil {
+			return fmt.Errorf("severity_when[%d]: %w", i, err)
+		}
+		if strings.TrimSpace(clause.When) == "" {
+			return fmt.Errorf("severity_when[%d]: when is required", i)
+		}
 	}
 	if len(s.Harness) == 0 {
 		return errors.New("harness needs at least one entry")
@@ -139,17 +160,24 @@ func validateRef(ref string) error {
 	return nil
 }
 
+// SeverityClause is a compiled per-match severity.
+type SeverityClause struct {
+	Severity model.Severity
+	When     *Expr
+}
+
 // Rule is a validated rule with its expression compiled.
 type Rule struct {
-	ID       string
-	Pack     PackRef
-	Title    string
-	Severity model.Severity
-	Harness  []model.Harness
-	Files    []string
-	Fix      string
-	Refs     []string
-	When     *Expr
+	ID           string
+	Pack         PackRef
+	Title        string
+	Severity     model.Severity
+	SeverityWhen []SeverityClause
+	Harness      []model.Harness
+	Files        []string
+	Fix          string
+	Refs         []string
+	When         *Expr
 }
 
 // Compile validates spec and compiles its when expression in env.
@@ -166,22 +194,49 @@ func Compile(spec *Spec, manifest PackRef, env *Env) (*Rule, error) {
 	if err != nil {
 		return nil, fmt.Errorf("when: %w", err)
 	}
+	clauses := make([]SeverityClause, len(spec.SeverityWhen))
+	for i, clause := range spec.SeverityWhen {
+		expr, err := env.Compile(clause.When)
+		if err != nil {
+			return nil, fmt.Errorf("severity_when[%d]: %w", i, err)
+		}
+		sev, _ := model.ParseSeverity(clause.Severity)
+		clauses[i] = SeverityClause{Severity: sev, When: expr}
+	}
 	sev, _ := model.ParseSeverity(spec.Severity)
 	harness := make([]model.Harness, len(spec.Harness))
 	for i, h := range spec.Harness {
 		harness[i] = model.Harness(h)
 	}
 	return &Rule{
-		ID:       spec.ID,
-		Pack:     manifest,
-		Title:    spec.Title,
-		Severity: sev,
-		Harness:  harness,
-		Files:    append([]string(nil), spec.Files...),
-		Fix:      spec.Fix,
-		Refs:     append([]string(nil), spec.Refs...),
-		When:     when,
+		ID:           spec.ID,
+		Pack:         manifest,
+		Title:        spec.Title,
+		Severity:     sev,
+		SeverityWhen: clauses,
+		Harness:      harness,
+		Files:        append([]string(nil), spec.Files...),
+		Fix:          spec.Fix,
+		Refs:         append([]string(nil), spec.Refs...),
+		When:         when,
 	}, nil
+}
+
+// SeverityFor reports the severity of one match. Clauses are tried in
+// the order they are written; the first true one wins. The rule severity
+// is the fallback when none match. A clause that fails to evaluate is an
+// error, the same as the rule's when expression.
+func (r *Rule) SeverityFor(ctx context.Context, in *Input) (model.Severity, error) {
+	for _, clause := range r.SeverityWhen {
+		ok, err := clause.When.Eval(ctx, in)
+		if err != nil {
+			return "", err
+		}
+		if ok {
+			return clause.Severity, nil
+		}
+	}
+	return r.Severity, nil
 }
 
 // Applies reports whether item is in scope for r: its harness is listed

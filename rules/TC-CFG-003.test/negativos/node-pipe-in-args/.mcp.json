@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "filter": {
+      "command": "node",
+      "args": [
+        "s.js",
+        "--filter",
+        "a|sh"
+      ]
+    }
+  }
+}

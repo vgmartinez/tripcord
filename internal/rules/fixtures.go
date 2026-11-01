@@ -36,7 +36,9 @@ type DiscoverFunc func(ctx context.Context, root string) ([]model.ConfigItem, er
 // CheckRuleFixtures runs rule against packDir/<ID>.test/. Every fixture
 // in positivos/ must produce at least one match and every fixture in
 // negativos/ must produce none. Evaluation errors fail either kind.
-// Each directory needs at least one fixture.
+// Each directory needs at least one fixture, and that fixture must
+// contain an item inside the rule's harness and file globs. A negative
+// whose items are all out of scope would pass without testing when.
 //
 // A fixture is a .json engine fixture or a subdirectory holding a raw
 // repository tree, which discover normalizes. A nil discover rejects
@@ -111,7 +113,10 @@ func checkFixture(ctx context.Context, engine *Engine, rule *Rule, file string, 
 	if len(items) == 0 {
 		return fmt.Errorf("%s: no config items", file)
 	}
-	if positive && !slices.ContainsFunc(items, rule.Applies) {
+	// A positive that never enters the rule's harness and file globs did
+	// not test the rule. A negative in the same position passes without
+	// exercising the expression, so it is rejected too.
+	if !slices.ContainsFunc(items, rule.Applies) {
 		return fmt.Errorf("%s: no item matches the rule's harness and files", file)
 	}
 	res := engine.ScanConfig(ctx, items)

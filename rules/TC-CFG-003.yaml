@@ -1,31 +1,56 @@
-# A stdio MCP server is a process the agent starts. When the command is
-# a shell, or its arguments pipe into sh, the "server" is an arbitrary
-# script that runs whenever the MCP client starts it: the persistence
-# payload Novee showed at DEF CON 34.
+# A stdio MCP server is a process the agent starts. When its command is
+# a shell, or an interpreter started with an inline-code flag, or the
+# command string pipes into a shell, the "server" is an arbitrary script.
+# Novee showed that persistence payload at DEF CON 34.
 #
-# The command is a shell when its first word, with any directory and an
-# .exe suffix removed, is a POSIX, Windows, or fish/csh shell. A pipe to
-# sh is "| sh" (or bash, zsh, dash, ksh), optionally through sudo,
-# anywhere in the command and its arguments. Wrappers such as env,
-# nohup, or busybox are not unwrapped.
+# Every MCP server any adapter normalizes is in scope: .mcp.json,
+# .cursor/mcp.json, .vscode/mcp.json, Codex mcp_servers, Gemini
+# mcpServers, OpenCode's command array, Copilot mcp-config.json, and
+# Windsurf mcp_config.json.
+#
+# A pipe counts only in the command string, or because the command is
+# itself a shell (sh -c and the other shells). A literal argument of a
+# non-shell executable, such as node server.js --filter 'a|sh', does not.
+# Inline interpreters are python -c, node -e/--eval, perl -e, ruby -e,
+# and deno eval, whether the flag is in the command string or in args.
+#
+# Not matched: an env, busybox, or $SHELL wrapper around the real
+# command. Those stay a static-matching limit.
 id: TC-CFG-003
 pack: tripcord/core
-title: "MCP stdio server launched through a shell or a pipe to sh"
+title: "MCP server launched through a shell, a pipe to sh, or an inline interpreter"
 severity: high
-harness: [claude, cursor, vscode]
-files:
-  - "**/.mcp.json"
-  - "**/mcp.json"
-when: >-
+harness: [claude, codex, copilot, cursor, gemini, opencode, windsurf, vscode]
+files: ["**"]
+when: |
   config.kind == "mcp-server" &&
-    has(payload.command) && type(payload.command) == string &&
-    (!has(payload.type) || payload.type == "stdio") &&
+    (!has(payload.type) || (type(payload.type) == string && payload.type in ["", "stdio", "local"])) &&
     (
-      payload.command.matches(r'''(?i)^\s*([^\s]*[/\\])?(sh|bash|zsh|dash|ksh|mksh|ash|fish|csh|tcsh|cmd|powershell|pwsh)(\.exe)?(\s|$)''') ||
-      (payload.command + (has(payload.args) && type(payload.args) == list && payload.args.all(a, type(a) == string) ? " " + payload.args.join(" ") : ""))
-        .matches(r'''(^|[^|])\|[ \t]*(sudo[ \t]+(-[^\s]*[ \t]+)*)?([^\s|]*/)?(sh|bash|zsh|dash|ksh)($|[\s;&|)])''')
+      (has(payload.command) && type(payload.command) == string && (
+        payload.command.matches(r'''(?i)^\s*([^\s]*[/\\])?(sh|bash|zsh|dash|cmd|powershell|pwsh)(\.exe)?(\s|$)''') ||
+        payload.command.matches(r'''(?is)^(?:[^|'"]|'(?:\\.|[^'])*'|"(?:\\.|[^"])*")*\|[ \t]*(?:sudo[ \t]+(?:-[A-Za-z-]+[ \t]+)*)?(?:[^\s;&|]*[/\\])?(?:sh|bash|zsh|dash|powershell|pwsh)(?:\.exe)?(?:$|[\s;&|'"\x60])''') ||
+        payload.command.matches(r'''(?i)^\s*([^\s]*[/\\])?python3?(\.exe)?[ \t]+-c(\s|$)''') ||
+        payload.command.matches(r'''(?i)^\s*([^\s]*[/\\])?(perl|ruby)(\.exe)?[ \t]+-e(\s|$)''') ||
+        payload.command.matches(r'''(?i)^\s*([^\s]*[/\\])?node(\.exe)?[ \t]+(-e|--eval)(\s|$)''') ||
+        payload.command.matches(r'''(?i)^\s*([^\s]*[/\\])?deno(\.exe)?[ \t]+eval(\s|$)''') ||
+        (has(payload.args) && type(payload.args) == list && payload.args.all(a, type(a) == string) && (
+          (payload.command.matches(r'''(?i)^\s*([^\s]*[/\\])?python3?(\.exe)?$''') && payload.args.exists(a, a == "-c")) ||
+          (payload.command.matches(r'''(?i)^\s*([^\s]*[/\\])?node(\.exe)?$''') && payload.args.exists(a, a == "-e" || a == "--eval")) ||
+          (payload.command.matches(r'''(?i)^\s*([^\s]*[/\\])?perl(\.exe)?$''') && payload.args.exists(a, a == "-e")) ||
+          (payload.command.matches(r'''(?i)^\s*([^\s]*[/\\])?ruby(\.exe)?$''') && payload.args.exists(a, a == "-e")) ||
+          (payload.command.matches(r'''(?i)^\s*([^\s]*[/\\])?deno(\.exe)?$''') && payload.args.exists(a, a == "eval"))
+        ))
+      )) ||
+      (has(payload.command) && type(payload.command) == list && payload.command.all(a, type(a) == string) && (
+        payload.command.exists(a, a.matches(r'''(?i)^([^\s]*[/\\])?(sh|bash|zsh|dash|cmd|powershell|pwsh)(\.exe)?$''')) ||
+        (payload.command.exists(a, a.matches(r'''(?i)^([^\s]*[/\\])?python3?(\.exe)?$''')) && payload.command.exists(a, a == "-c")) ||
+        (payload.command.exists(a, a.matches(r'''(?i)^([^\s]*[/\\])?node(\.exe)?$''')) && payload.command.exists(a, a == "-e" || a == "--eval")) ||
+        (payload.command.exists(a, a.matches(r'''(?i)^([^\s]*[/\\])?perl(\.exe)?$''')) && payload.command.exists(a, a == "-e")) ||
+        (payload.command.exists(a, a.matches(r'''(?i)^([^\s]*[/\\])?ruby(\.exe)?$''')) && payload.command.exists(a, a == "-e")) ||
+        (payload.command.exists(a, a.matches(r'''(?i)^([^\s]*[/\\])?deno(\.exe)?$''')) && payload.command.exists(a, a == "eval"))
+      ))
     )
-fix: "Point command at the server binary and pass its arguments in args, without a shell or a downloaded script."
+fix: "Point command at the server binary and pass its arguments in args, without a shell, an inline interpreter, or a downloaded script."
 refs:
   - https://novee.security/blog/breaking-ai-agent-sandboxes/
   - https://code.visualstudio.com/docs/agents/reference/mcp-configuration

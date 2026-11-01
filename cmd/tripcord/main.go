@@ -212,7 +212,11 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 		if _, status := effective.Exception(match.Rule.ID, match.Item.Path, match.Item.SHA256, now()); status == policy.ExceptionActive {
 			continue
 		}
-		finding, err := match.Finding(effective.Severity(match.Rule.ID, match.Rule.Severity), decision(effective.Mode))
+		base := match.Severity
+		if base == "" {
+			base = match.Rule.Severity
+		}
+		finding, err := match.Finding(effective.Severity(match.Rule.ID, base), decision(effective.Mode))
 		if err != nil {
 			return scanInternalError(stderr, err)
 		}

@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "setup": {
+      "command": "ruby",
+      "args": [
+        "-e",
+        "puts 1"
+      ]
+    }
+  }
+}

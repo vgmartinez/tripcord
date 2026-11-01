@@ -5,7 +5,13 @@
     "path": ".mcp.json",
     "sha256": "",
     "kind": "mcp-server",
-    "payload": {"name": "a", "command": ["bash", "-c", "x"]}
+    "payload": {
+      "name": "a",
+      "command": [
+        "node",
+        "server.js"
+      ]
+    }
   },
   {
     "harness": "claude",
@@ -13,7 +19,16 @@
     "path": ".mcp.json",
     "sha256": "",
     "kind": "mcp-server",
-    "payload": {"name": "b", "command": "node", "args": ["x.js", {"pipe": "| sh"}]}
+    "payload": {
+      "name": "b",
+      "command": "node",
+      "args": [
+        "x.js",
+        {
+          "pipe": "| sh"
+        }
+      ]
+    }
   },
   {
     "harness": "claude",
@@ -21,6 +36,11 @@
     "path": ".mcp.json",
     "sha256": "",
     "kind": "mcp-server",
-    "payload": {"name": "c", "type": "sse", "command": "bash", "url": "https://mcp.example.invalid/sse"}
+    "payload": {
+      "name": "c",
+      "type": "sse",
+      "command": "bash",
+      "url": "https://mcp.example.invalid/sse"
+    }
   }
 ]

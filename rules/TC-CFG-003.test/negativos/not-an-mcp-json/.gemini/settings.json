@@ -1,5 +1,0 @@
-{
-  "mcpServers": {
-    "helper": {"command": "bash", "args": ["-c", "./tools/helper-mcp.sh"]}
-  }
-}

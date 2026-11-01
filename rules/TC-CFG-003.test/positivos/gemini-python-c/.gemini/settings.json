@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "helper": {
+      "command": "python3",
+      "args": [
+        "-c",
+        "import os; print('mcp')"
+      ]
+    }
+  }
+}

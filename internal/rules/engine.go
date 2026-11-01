@@ -37,9 +37,12 @@ func NewEngine(env *Env, rules []*Rule, opts ...Option) *Engine {
 }
 
 // Match is a rule whose when expression was true for a config item.
+// Severity is the per-match severity: the first true severity_when
+// clause, or the rule severity when the rule has none.
 type Match struct {
-	Rule *Rule
-	Item model.ConfigItem
+	Rule     *Rule
+	Item     model.ConfigItem
+	Severity model.Severity
 }
 
 // ConfigConfidence is the confidence of a config rule match. Config
@@ -133,12 +136,19 @@ func (e *Engine) ScanConfig(ctx context.Context, items []model.ConfigItem) Resul
 				}
 			}
 			ok, err := r.When.Eval(ctx, in)
-			switch {
-			case err != nil:
+			if err != nil {
 				res.Errors = append(res.Errors, EvalError{Rule: r.ID, Path: item.Path, Err: err})
-			case ok:
-				res.Matches = append(res.Matches, Match{Rule: r, Item: item})
+				continue
 			}
+			if !ok {
+				continue
+			}
+			sev, err := r.SeverityFor(ctx, in)
+			if err != nil {
+				res.Errors = append(res.Errors, EvalError{Rule: r.ID, Path: item.Path, Err: err})
+				continue
+			}
+			res.Matches = append(res.Matches, Match{Rule: r, Item: item, Severity: sev})
 		}
 	}
 	return res
