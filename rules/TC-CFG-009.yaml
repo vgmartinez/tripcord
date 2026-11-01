@@ -33,16 +33,14 @@
 #     not verify it), and a hex string on any other host, including a
 #     release asset, is not a pin,
 #     nor is a path with a . or .. segment (also %2e%2e, .%2E).
-#   - Checksum verified before execution: the next statement is
-#     sha256sum -c <file> (sha384sum, sha512sum, or shasum -a 256|384|512),
-#     or echo/printf piped straight into it with no file or - (a
-#     two-command pipeline, the check last), with no other flag and no
-#     /dev file, joined only by &&. A set -e or
-#     set -euo pipefail counts too when it is a foreground top-level
-#     command before the first fetch, the fetch and the check are each a
-#     simple command ended by ; or a newline (not in an &&/|| list, not
-#     backgrounded, not an if condition), and the line has no set +e,
-#     eval, source, ., ||, !, or other pipe.
+#   - Checksum verified before execution: the whole script parses under
+#     the checksum grammar (docs/rules/TC-CFG-009.md): only curl/wget to
+#     a literal file, sha256sum -c <sums> or shasum -a 256 -c <sums>,
+#     echo|printf '<64 hex>  <file>' | sha256sum -c [-] naming the
+#     fetched and run file, sh/bash <fetched file>, a leading set -e,
+#     cd/mkdir/chmod/rm, and export/NAME=literal, joined by ;, newlines,
+#     or &&. Each run follows a check that stops it on failure. Anything
+#     else (trap, eval, functions, subshells, ||, $, ...) gives no credit.
 # Package runners (npx -y, uvx, pnpm dlx, ...), git clone (including a
 # later sha checkout), tags, and a variable target are never pinned.
 #

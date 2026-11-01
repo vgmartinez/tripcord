@@ -58,28 +58,75 @@ not.
   percent-encoded in any case (`%2e%2e`, `.%2E`): curl and wget resolve
   it before the request, so `<sha>/../main/` fetches `main`. The host
   match is case-insensitive.
-- **Checksum verified before execution.** The next statement is
-  `sha256sum -c <file>` (or `sha384sum`, `sha512sum`, or
-  `shasum -a 256|384|512 -c`), or `echo` or `printf` piped straight
-  into that check with no file or `-`
-  (`echo "<sha256>  t.sh" | sha256sum -c -`). The pipe is a pipeline of
-  exactly those two commands: the check is its last command, so the
-  pipeline fails when the check fails, with or without `pipefail`. A
-  longer pipeline (`| tee log`), `cat` or another command feeding the
-  sums, and `-` without a pipe do not count. The file is not under
-  `/dev`, and the check has no other flag (`--ignore-missing`, `--quiet`, and the
-  rest do not count). It joins the download to the command that runs it
-  only with `&&`. A `set -e` or `set -euo pipefail` also covers the
-  check, under three conditions. The `set` is a foreground top-level
-  command before the first download: not backgrounded with `&`, not in
-  an `&&` or `||` list, and not inside a subshell, a function, or `if`.
-  The download and the check are each a simple command on their own,
-  ended by `;` or a newline: a check inside an `&&` list
-  (`sha256sum -c f && true; sh f`), backgrounded (`sha256sum -c f & sh
-  f`), or used as an `if` or `while` condition does not stop the script
-  when it fails. And the line has no `set +e`, `eval`, `source`, `.`,
-  `||`, `!`, or pipe other than the `echo | sha256sum -c` of a check, since those can turn errexit off or keep
-  a failure from stopping the script.
+- **Checksum verified before execution.** The whole script (the step,
+  the string, or the payload of an exact `["sh"|"bash", "-c", script]`
+  array) parses under the checksum grammar below. The grammar is an
+  allowlist: anything it does not list gives no checksum credit, and
+  the fetch is reported. An unusual script that is in fact safe can be
+  reported. That is the intended trade-off.
+
+### The checksum grammar
+
+Every command in the script is one of these forms:
+
+| Form | Accepted | Notes |
+| --- | --- | --- |
+| Fetch | `curl -o <file> <url>`, `wget -O <file> <url>` | Exactly one `http(s)` URL and one literal output file. curl options: `-f -s -S -L -k` (clustered, `-o` last), `--fail`, `--silent`, `--show-error`, `--location`, `--create-dirs`, `--compressed`, `--fail-with-body`, `--no-progress-meter`, `--tlsv1.2`, `--tlsv1.3`, `--http1.1`, `--retry`, `--retry-delay`, `--retry-max-time`, `--connect-timeout`, `--max-time`, `--proto`, `--proto-redir`, `--output`. wget options: `-q`, `-nv`, `--quiet`, `--no-verbose`, `--https-only`, `--tries`, `--timeout`, `--output-document`. The file's base name does not start with a dot (`.curlrc`, `.wgetrc`) and is not a command the grammar runs (`sha256sum`, `sh`, ...). |
+| Check | `sha256sum -c <sums>`, `shasum -a 256 -c <sums>` | `--check` is the long form of `-c`. No other option. `<sums>` is literal, not `-` or `/dev/*`, and not a file the script fetches. |
+| Entry check | `echo '<64 hex>  <file>' \| sha256sum -c [-]` | Or `printf '<64 hex>  <file>\n'`, or `shasum -a 256 -c [-]`. The text is parsed: exactly one entry, 64 hex digits, two spaces or ` *`, and a file that is not `-` or `/dev/*`. No `echo` option, no `printf` conversion, and no escape except a final `\n`. It covers only the file it names. The pipe is exactly these two commands, the check last, so it fails when the check fails without `pipefail`. |
+| Run | `sh <file>`, `bash <file>` | `<file>` is a file the script fetched; no shell option. Arguments after it are passed to the script. |
+| Errexit | `set -e`, `set -eu`, `set -euo pipefail`, `set -eo pipefail`, `set -o errexit` | Only before every other command, each a statement of its own. A `set` anywhere else gives no credit. |
+| Files | `cd`, `mkdir`, `chmod`, `rm` | Literal arguments. `cd` only before the first fetch, check, or run. |
+| Variables | `export NAME=literal`, `export NAME`, `NAME=literal` | Not a prefix of another command (`FOO=1 curl ...`). Names that change what runs or what it loads are refused: `PATH`, `ENV`, `IFS`, `HOME`, `CDPATH`, `SHELLOPTS`, `PS4`, `CURL_HOME`, `WGETRC`, `SYSTEM_WGETRC`, `XDG_CONFIG_HOME`, `GLIBC_TUNABLES`, and names starting with `BASH`, `LD_`, `DYLD_`, `PERL`, `PYTHON`, `NODE_`, `RUBY`, or `GCONV`. |
+
+Syntax:
+
+- Statements are joined by `;`, a newline, or `&&`. A newline may
+  follow `&&`. `#` starts a comment at the start of a word. The only
+  pipe is the one of an entry check.
+- Command names are literal: not quoted, not escaped, no path
+  (`/usr/bin/curl`), no variable.
+- Unquoted words use letters, digits, and `_-./:=+,@%^`. Double quotes
+  may not hold `$`, a backquote, `\`, or `!`. Single quotes may hold
+  anything.
+- Anything else gives no credit: another command (`trap`, `eval`,
+  `source`, `.`, `alias`, `shopt`, `exec`, `true`, `:`, `npm`, ...), a
+  function, a subshell, `{ }`, `if`/`while`/`for`/`case`, `||`, `&`, a
+  redirection, `$`, a backquote, a backslash outside single quotes, a
+  glob, `~`, or a carriage return.
+
+Order:
+
+- Each run of a file comes after a check that covers it, with no fetch
+  between the check and the run. The check stops the run when it
+  fails: it is in the same `&&` list, or the script starts with
+  `set -e` and the check is a statement of its own.
+- Each fetch is followed by a check that covers its file before the
+  file is fetched again, and that fails the script: a statement of its
+  own under `set -e`, or part of the script's last statement.
+- A plain check (`sha256sum -c <sums>`) covers any file, because the
+  sums file is not read. An entry check covers only the file it names.
+
+Copilot steps whose effective shell is fail-closed are read with a
+leading `set -e`, so a check on its own line counts there.
+
+Accepted:
+
+```sh
+curl -fsSLo t.sh https://get.tools.example.invalid/t.sh && sha256sum -c t.sh.sha256 && sh t.sh
+```
+
+```sh
+set -euo pipefail
+curl -fsSLo t.sh https://get.tools.example.invalid/t.sh
+echo "<sha256>  t.sh" | sha256sum -c -
+sh t.sh
+```
+
+Not accepted: `trap 'sh t.sh' EXIT` anywhere, `echo set -e`, `\set +e`,
+`sha256sum() { :; }`, `echo "<sha256>  /dev/null" | sha256sum -c`,
+`echo "<sha256>  other.sh" | sha256sum -c && sh t.sh`, and
+`printf '%s  t.sh\n' <sha256> | sha256sum -c`.
 
 Never pinned: package runners (`npx -y`, `bunx`, `pnpm dlx`,
 `yarn dlx`, `uvx`, `pipx run`), tags, `git clone` (including a later
@@ -98,8 +145,8 @@ too-deeply nested payloads.
   `defaults.run.shell`, then the workflow's, then GitHub's default
   `bash --noprofile --norc -eo pipefail {0}`. The built-in names `bash`
   and `sh` are also fail-closed (`sh -e {0}`). A custom template such
-  as `bash {0}` is not, and a step whose script starts with `set +e`
-  turns errexit back off.
+  as `bash {0}` is not. A step that runs `set +e` or anything else
+  outside the checksum grammar gets no checksum credit.
 - Variables are not expanded, and the script a setup command fetches
   is not read.
 - The checksum itself is not compared with anything: the rule checks
@@ -144,7 +191,9 @@ Not reported:
 Commit the setup script to the repository and run it from there. If it
 must be downloaded, fetch an `https` URL that names a commit,
 or download it to a file and check its SHA-256 (`sha256sum -c`) before
-running it, joined with `&&` so a mismatch stops setup.
+running it, joined with `&&` so a mismatch stops setup. Keep that script
+to the checksum grammar: move anything else to a separate step or to a
+committed script.
 
 ## References
 

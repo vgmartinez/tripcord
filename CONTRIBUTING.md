@@ -98,13 +98,11 @@ when every fetch in the line is pinned (see `shellcmd.Unpinned`): each
 downloader target is an allowlisted https URL (GitHub raw, archive,
 codeload, or gist; jsDelivr `gh@<sha>`; or GitLab `/-/raw/<sha>`;
 never a `sha256:` digest, which curl and wget do not verify) with no userinfo and no `.`
-or `..` path segment (decoded or not), or, with nothing piped into a shell,
-each download is followed by a plain `sha256sum -c <file>`
-(`sha384sum`, `sha512sum`, or `shasum -a 256|384|512`), or by `echo`
-or `printf` piped straight into that check with no file or `-`, joined only by
-`&&`, or by the same check as a simple command ended by `;` or a
-newline after a foreground top-level `set -e`, with no `set +e`, `eval`,
-`source`, `.`, `||`, `!`, or other pipe. Package runners, git
+or `..` path segment (decoded or not), or the whole line is a script
+the checksum grammar accepts (see `checksumScript` and
+`docs/rules/TC-CFG-009.md`): literal curl/wget fetches, `sha256sum -c`
+checks that cover them, `sh`/`bash` runs of the fetched files, a leading
+`set -e`, and a few file and variable commands, with nothing else. Package runners, git
 clone, variable targets, and version tags are never pinned. It costs
 what `shell.risks` costs.
 
