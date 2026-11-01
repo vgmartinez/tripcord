@@ -3,37 +3,78 @@
 # asking. Novee cites Codex's own threat model, where
 # danger-full-access removes the sandbox that approvals rely on.
 #
-# Claude Code: permissions.defaultMode "bypassPermissions" in shared
-# .claude/settings.json. settings.local.json is personal and is not part
-# of this rule's files.
-# Codex: top-level sandbox_mode = "danger-full-access" in a project
-# .codex/config.toml. A [profiles.<name>] table is not read: Codex
-# ignores profile and profiles in a project config (the adapter marks
-# them ignored_in_project), so a project cannot select one.
+# Claude Code (shared .claude/settings.json; settings.local.json is
+# personal and is not part of this rule's files):
+#   permissions.defaultMode "bypassPermissions" is high. With
+#   skipDangerousModePermissionPrompt true in the same file it is still
+#   one high finding, on permissions, titled for the pair: the adapter's
+#   rule view flags each setting with whether the other is set, and the
+#   skip setting is not reported on its own when bypass is set.
+#   skipDangerousModePermissionPrompt true without bypassPermissions is
+#   medium: it removes the warning for anyone who switches the mode on.
+# Codex (project .codex/config.toml): sandbox_mode "danger-full-access"
+#   or approval_policy "never", at the top level or in a
+#   [profiles.<name>] table, is high. Profiles are evaluated like the top
+#   level, whether or not Codex reads them from a project config
+#   (ignored_in_project is not consulted): the file is still shared and
+#   copied.
+# Gemini CLI (shared .gemini/settings.json): yolo approval mode
+#   (general.defaultApprovalMode "yolo") or auto-accept (tools.autoAccept,
+#   or the older flat autoAccept, true) is high.
 #
-# Values are compared exactly, as both harnesses read them.
+# Values are compared exactly, as the harnesses read them.
 id: TC-CFG-005
 pack: tripcord/core
-title: "Shared config turns off approvals (bypassPermissions or danger-full-access)"
+title: "Shared config turns off approvals"
 severity: high
 severity_when:
   - severity: high
+    title: "Shared config turns off approvals and the bypass-mode warning (bypassPermissions with skipDangerousModePermissionPrompt)"
+    when: |
+      config.harness == "claude" && has(payload.setting) && payload.setting == "permissions" &&
+        has(payload.value) && type(payload.value) == map &&
+        has(payload.value.defaultMode) && payload.value.defaultMode == "bypassPermissions" &&
+        has(payload.skip_dangerous_mode_prompt) && payload.skip_dangerous_mode_prompt == true
+  - severity: high
+    title: "Shared config turns off approvals (bypassPermissions)"
     when: |
       config.harness == "claude" && has(payload.setting) && payload.setting == "permissions" &&
         has(payload.value) && type(payload.value) == map &&
         has(payload.value.defaultMode) && payload.value.defaultMode == "bypassPermissions"
-  - severity: high
+  - severity: medium
+    title: "Shared config skips the bypass-mode warning (skipDangerousModePermissionPrompt)"
     when: |
-      config.harness == "codex" && has(payload.setting) && payload.setting == "sandbox_mode" &&
-        has(payload.value) && payload.value == "danger-full-access"
-harness: [claude, codex]
+      config.harness == "claude" && has(payload.setting) && payload.setting == "skipDangerousModePermissionPrompt" &&
+        has(payload.value) && payload.value == true &&
+        !(has(payload.bypass_permissions) && payload.bypass_permissions == true)
+  - severity: high
+    title: "Shared config turns off approvals (danger-full-access or approval_policy never)"
+    when: |
+      config.harness == "codex" && has(payload.setting) && has(payload.value) && (
+        (payload.setting == "sandbox_mode" && payload.value == "danger-full-access") ||
+        (payload.setting == "approval_policy" && payload.value == "never") ||
+        (payload.setting == "profiles" && type(payload.value) == map && (
+          (has(payload.value.sandbox_mode) && payload.value.sandbox_mode == "danger-full-access") ||
+          (has(payload.value.approval_policy) && payload.value.approval_policy == "never"))))
+  - severity: high
+    title: "Shared config turns off approvals (yolo or auto-accept)"
+    when: |
+      config.harness == "gemini" && has(payload.setting) && has(payload.value) && (
+        (payload.setting == "autoAccept" && payload.value == true) ||
+        (payload.setting == "general" && type(payload.value) == map &&
+          has(payload.value.defaultApprovalMode) && payload.value.defaultApprovalMode == "yolo") ||
+        (payload.setting == "tools" && type(payload.value) == map &&
+          has(payload.value.autoAccept) && payload.value.autoAccept == true))
+harness: [claude, codex, gemini]
 files:
   - "**/.claude/settings.json"
   - "**/.codex/config.toml"
+  - "**/.gemini/settings.json"
 when: |
   config.kind == "permissions" && config.scope == "repo"
-fix: "Remove the mode from the shared file. Claude Code: delete permissions.defaultMode bypassPermissions, or use acceptEdits with a narrow allow list. Codex: use sandbox_mode workspace-write. Anyone who needs the mode can pass it on their own command line."
+fix: "Remove the mode from the shared file. Claude Code: delete permissions.defaultMode bypassPermissions and skipDangerousModePermissionPrompt, or use acceptEdits with a narrow allow list. Codex: use sandbox_mode workspace-write and an approval_policy other than never, in profiles too. Gemini CLI: remove the yolo approval mode and autoAccept. Anyone who needs the mode can pass it on their own command line."
 refs:
   - https://novee.security/blog/breaking-ai-agent-sandboxes/
   - https://code.claude.com/docs/en/settings
   - https://learn.chatgpt.com/docs/config-file/config-basic.md
+  - https://geminicli.com/docs/get-started/configuration/

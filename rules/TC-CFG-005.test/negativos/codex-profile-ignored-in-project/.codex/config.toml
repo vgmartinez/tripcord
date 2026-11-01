@@ -1,7 +1,0 @@
-# Codex ignores profiles in a project config; this only documents a
-# profile for people to copy into ~/.codex/config.toml.
-sandbox_mode = "workspace-write"
-
-[profiles.yolo]
-sandbox_mode = "danger-full-access"
-approval_policy = "never"

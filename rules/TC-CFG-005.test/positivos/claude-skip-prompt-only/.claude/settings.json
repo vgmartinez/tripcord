@@ -1,0 +1,4 @@
+{
+  "permissions": {"defaultMode": "acceptEdits"},
+  "skipDangerousModePermissionPrompt": true
+}

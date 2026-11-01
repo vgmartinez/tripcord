@@ -5,8 +5,22 @@
    "kind": "permissions", "payload": {"setting": "permissions", "value": {"defaultMode": 1}}},
   {"harness": "claude", "scope": "repo", "path": ".claude/settings.json", "sha256": "",
    "kind": "permissions", "payload": {"setting": "permissions"}},
+  {"harness": "claude", "scope": "repo", "path": ".claude/settings.json", "sha256": "",
+   "kind": "permissions", "payload": {"setting": "skipDangerousModePermissionPrompt", "value": "true"}},
+  {"harness": "claude", "scope": "repo", "path": ".claude/settings.json", "sha256": "",
+   "kind": "permissions", "payload": {"setting": "skipDangerousModePermissionPrompt", "value": true, "bypass_permissions": true}},
   {"harness": "codex", "scope": "repo", "path": ".codex/config.toml", "sha256": "",
    "kind": "permissions", "payload": {"setting": "sandbox_mode", "value": ["danger-full-access"]}},
+  {"harness": "codex", "scope": "repo", "path": ".codex/config.toml", "sha256": "",
+   "kind": "permissions", "payload": {"setting": "profiles", "profile": "x", "value": "danger-full-access"}},
+  {"harness": "codex", "scope": "repo", "path": ".codex/config.toml", "sha256": "",
+   "kind": "permissions", "payload": {"setting": "profiles", "profile": "x", "value": {"approval_policy": ["never"]}}},
   {"harness": "codex", "scope": "user", "path": "~/.codex/config.toml", "sha256": "",
-   "kind": "permissions", "payload": {"setting": "sandbox_mode", "value": "danger-full-access"}}
+   "kind": "permissions", "payload": {"setting": "sandbox_mode", "value": "danger-full-access"}},
+  {"harness": "gemini", "scope": "repo", "path": ".gemini/settings.json", "sha256": "",
+   "kind": "permissions", "payload": {"setting": "general", "value": "yolo"}},
+  {"harness": "gemini", "scope": "repo", "path": ".gemini/settings.json", "sha256": "",
+   "kind": "permissions", "payload": {"setting": "tools", "value": {"autoAccept": "true"}}},
+  {"harness": "gemini", "scope": "user", "path": "~/.gemini/settings.json", "sha256": "",
+   "kind": "permissions", "payload": {"setting": "autoAccept", "value": true}}
 ]
