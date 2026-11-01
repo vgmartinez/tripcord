@@ -30,9 +30,10 @@ import (
 // -e is on and the check is a statement of its own. Each fetch is
 // covered by a later check that fails the script: a statement of its
 // own under set -e, or in the script's last statement. A form 3 check
-// covers only the file it names, and a sums file may not be a fetch
-// target. Unusual scripts are not credited; that is the intended
-// trade-off.
+// covers only the file it names. The sums file of a form 2 check is
+// never a fetch target and never run (names compared case-insensitively),
+// so a fetched file is only ever a run script or a form 3 file. Unusual
+// scripts are not credited; that is the intended trade-off.
 func checksumScript(src string) bool {
 	lists, ok := parseScript(src)
 	if !ok {
@@ -90,6 +91,16 @@ func checkElements(els []element, last int) bool {
 		case kindCheck, kindRun, kindOther:
 		}
 	}
+	for _, e := range els {
+		if e.kind != kindCheck || e.sums == "" {
+			continue
+		}
+		for _, o := range els {
+			if (o.kind == kindFetch || o.kind == kindRun) && strings.EqualFold(o.file, e.sums) {
+				return false
+			}
+		}
+	}
 	covers := func(c element, file string) bool {
 		return c.kind == kindCheck && (c.file == "" || c.file == file)
 	}
@@ -130,9 +141,6 @@ func checkElements(els []element, last int) bool {
 		case kindCheck:
 			if e.file != "" {
 				used[e.file] = true
-			}
-			if e.sums != "" {
-				used[e.sums] = true
 			}
 		case kindSet, kindOther:
 		}
@@ -201,7 +209,7 @@ var grammarCommands = map[string]bool{
 	"mkdir": true, "chmod": true, "rm": true,
 }
 
-var plainFilename = regexp.MustCompile(`^[A-Za-z0-9_-][A-Za-z0-9._-]*$`)
+var plainFilename = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9._-]*$`)
 
 var unsafeFilename = map[string]bool{
 	"curlrc": true, "_curlrc": true, "wgetrc": true, ".wgetrc": true,
@@ -288,7 +296,7 @@ func fetchTarget(name string, args []gword) (string, bool) {
 	if targets != 1 || urls != 1 || !plainFile(target) {
 		return "", false
 	}
-	if grammarCommands[target] || unsafeFilename[target] {
+	if grammarCommands[strings.ToLower(target)] {
 		return "", false
 	}
 	return target, true
@@ -397,10 +405,12 @@ func checksumEntry(c gcmd) (string, bool) {
 	return m[1], true
 }
 
-// plainFile reports a filename in the current directory. In particular
-// paths cannot plant curlrc, ld.so.preload, or another loader config.
+// plainFile reports a filename in the current directory that is not an
+// option. In particular paths cannot plant curlrc, ld.so.preload, or
+// another loader config. Names are compared case-insensitively, since
+// macOS and Windows file systems are.
 func plainFile(f string) bool {
-	return plainFilename.MatchString(f) && !unsafeFilename[f]
+	return plainFilename.MatchString(f) && !unsafeFilename[strings.ToLower(f)]
 }
 
 func plainFiles(args []gword) bool {
