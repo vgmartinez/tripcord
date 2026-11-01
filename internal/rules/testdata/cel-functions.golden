@@ -52,6 +52,7 @@ replace
 reverse
 shell.locations
 shell.risks
+shell.unpinned
 size
 split
 startsWith

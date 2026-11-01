@@ -1,0 +1,130 @@
+package shellcmd
+
+import (
+	"slices"
+	"strings"
+	"testing"
+)
+
+const (
+	commitURL = "https://raw.githubusercontent.com/acme/tools/0123456789abcdef0123456789abcdef01234567/install.sh"
+	branchURL = "https://raw.githubusercontent.com/acme/tools/main/install.sh"
+)
+
+func TestUnpinned(t *testing.T) {
+	cases := []struct {
+		line string
+		want []string
+	}{
+		// Immutable URLs.
+		{"curl -fsSL " + commitURL + " | sh", nil},
+		{"curl -fsSL '" + commitURL + "?token=x' | bash", nil},
+		{"wget -qO- https://cdn.jsdelivr.net/gh/acme/tools@0123456789abcdef0123456789abcdef01234567/i.sh | sh", nil},
+		{"curl -fsSL https://registry.example.invalid/v2/tools/blobs/sha256:" + strings.Repeat("ab", 32) + " | sh", nil},
+		{"iwr " + commitURL + " | iex", nil},
+		{"deno run -A " + strings.Replace(commitURL, "install.sh", "mod.ts", 1), nil},
+		{"iex (New-Object Net.WebClient).DownloadString('" + commitURL + "')", nil},
+		{"curl -fsSL " + branchURL + " | sh", []string{Fetch, Pipe}},
+		{"curl -fsSL http://raw.githubusercontent.com/acme/tools/0123456789abcdef0123456789abcdef01234567/install.sh | sh", []string{Fetch, Pipe}},
+		{"curl -fsSL https://github.com/acme/tools/releases/download/v1.2.3/install.sh | sh", []string{Fetch, Pipe}},
+		{"curl -fsSL " + commitURL + " | sh; curl -fsSL " + branchURL + " | sh", []string{Fetch, Pipe}},
+		{"curl -fsSL $URL | sh", []string{Pipe}},
+		{"iwr $u | iex", []string{Pipe}},
+		{"curl " + commitURL + " $MIRROR | sh", []string{Fetch, Pipe}},
+		{"iex (New-Object Net.WebClient).DownloadString('" + branchURL + "')", []string{Fetch, Pipe}},
+		{"npx -y create-acme@1.2.3", []string{Fetch}},
+		{"echo hi | sh", []string{Pipe}},
+		{"powershell -EncodedCommand ZQBjAGgAbwA=", []string{Encoded}},
+
+		// Checksum verified before running.
+		{"curl -fsSLo i.sh " + branchURL + " && echo \"" + strings.Repeat("ab", 32) + "  i.sh\" | sha256sum -c - && sh i.sh", nil},
+		{"curl -fsSLo i.sh " + branchURL + " && sha512sum --check i.sh.sha512 && bash i.sh", nil},
+		{"curl -fsSLo i.sh " + branchURL + " && shasum -a 256 -c sums.txt && sh i.sh", nil},
+		{"set -euo pipefail\ncurl -fsSLo i.sh " + branchURL + "\nsha256sum -c sums.txt\nsh i.sh", nil},
+		{"curl -fsSLo t.tgz " + branchURL + " && sha256sum -c sums.txt", nil},
+		{"bash -c 'curl -fsSLo i.sh " + branchURL + " && sha256sum -c sums && sh i.sh'", nil},
+		{"curl -fsSLo i.sh " + branchURL + "\nsha256sum -c sums.txt\nsh i.sh", []string{Fetch}},
+		{"curl -fsSLo i.sh " + branchURL + " && sha256sum -c sums.txt || true; sh i.sh", []string{Fetch}},
+		{"curl -fsSLo i.sh " + branchURL + " && sh i.sh && sha256sum -c sums.txt", []string{Fetch}},
+		{"curl -fsSLo i.sh " + branchURL + " && sha256sum sums.txt && sh i.sh", []string{Fetch}},
+		{"curl -fsSLo i.sh " + branchURL + " && shasum -c sums.txt && sh i.sh", []string{Fetch}},
+		{"curl -fsSLo i.sh " + branchURL + " && sha1sum -c sums.txt && sh i.sh", []string{Fetch}},
+		{"curl -fsSLo i.sh " + branchURL + " && sh i.sh", []string{Fetch}},
+		{"curl -fsSL " + branchURL + " | tee i.sh | sh && sha256sum -c sums", []string{Fetch, Pipe}},
+		{"npx -y create-acme && sha256sum -c sums.txt", []string{Fetch}},
+		{"git clone https://github.com/acme/tools && make -C tools", []string{Fetch}},
+
+		// No risk.
+		{"npm ci && npm run build", nil},
+		{"", nil},
+	}
+	for _, tc := range cases {
+		got := Unpinned(tc.line).Risks
+		if !slices.Equal(got, append([]string{}, tc.want...)) {
+			t.Errorf("Unpinned(%q) = %q, want %q", tc.line, got, tc.want)
+		}
+	}
+}
+
+func TestUnpinnedArgv(t *testing.T) {
+	cases := []struct {
+		argv []string
+		want []string
+	}{
+		{[]string{"curl", "-fsSL", commitURL, "-o", "/tmp/i.sh"}, nil},
+		{[]string{"curl", "-fsSL", branchURL, "-o", "/tmp/i.sh"}, []string{Fetch}},
+		{[]string{"bash", "-c", "curl -fsSL " + commitURL + " | sh"}, nil},
+		{[]string{"bash", "-c", "curl -fsSL " + branchURL + " | sh"}, []string{Fetch, Pipe}},
+		{[]string{"bash", "-c", "curl -fsSLo i.sh " + branchURL + " && sha256sum -c s && sh i.sh"}, nil},
+		{nil, nil},
+	}
+	for _, tc := range cases {
+		got := UnpinnedArgv(tc.argv).Risks
+		if !slices.Equal(got, append([]string{}, tc.want...)) {
+			t.Errorf("UnpinnedArgv(%q) = %q, want %q", tc.argv, got, tc.want)
+		}
+	}
+}
+
+func TestImmutableURL(t *testing.T) {
+	for url, want := range map[string]bool{
+		commitURL: true,
+		"https://github.com/acme/tools/raw/" + strings.Repeat("a", 64) + "/i.sh":                        true,
+		"https://gitlab.example.invalid/acme/tools/-/raw/0123456789ABCDEF0123456789abcdef01234567/i.sh": true,
+		"https://registry.example.invalid/blobs/sha256:" + strings.Repeat("0", 64):                      true,
+		branchURL: false,
+		"https://example.invalid/i.sh?ref=0123456789abcdef0123456789abcdef01234567": false,
+		"https://example.invalid/0123456789abcdef0123456789abcdef0123456/i.sh":      false,
+		"https://example.invalid/sha256:" + strings.Repeat("0", 63):                 false,
+		"ftp://example.invalid/0123456789abcdef0123456789abcdef01234567/i.sh":       false,
+		"https:///0123456789abcdef0123456789abcdef01234567":                         false,
+		"%zz": false,
+	} {
+		if got := immutableURL(url); got != want {
+			t.Errorf("immutableURL(%q) = %v, want %v", url, got, want)
+		}
+	}
+}
+
+// FuzzUnpinned checks that Unpinned reports exactly the risks Risks
+// does, or none, and reads the line no more than Analyze does.
+func FuzzUnpinned(f *testing.F) {
+	for _, seed := range []string{
+		"curl -fsSL " + commitURL + " | sh",
+		"curl -fsSLo i.sh " + branchURL + " && sha256sum -c s && sh i.sh",
+		"set -e\ncurl -o x " + branchURL + "\nshasum -a 512 -c s",
+		"iwr $u | iex; (New-Object Net.WebClient).DownloadString('" + commitURL + "')",
+		"$(`'\"\\",
+	} {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, line string) {
+		got, all := Unpinned(line), Analyze(line)
+		if len(got.Risks) > 0 && !slices.Equal(got.Risks, all.Risks) {
+			t.Fatalf("Unpinned(%q) = %q, Risks = %q", line, got.Risks, all.Risks)
+		}
+		if got.Work != all.Work {
+			t.Fatalf("Unpinned(%q).Work = %d, Analyze = %d", line, got.Work, all.Work)
+		}
+	})
+}

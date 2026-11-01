@@ -87,6 +87,16 @@ fetch piped into Invoke-Expression), `"encoded"` (`powershell
 backticks, and `eval`, and costs one unit per byte it reads at each
 nesting level, so prefer it to long regexes over hook commands.
 
+`shell.unpinned(command)` returns what `shell.risks` returns, or `[]`
+when every fetch in the line is pinned (see `shellcmd.Unpinned`): each
+downloader target is an https URL whose path names a 40- or 64-digit
+hex commit or a `sha256:` digest, or, with nothing piped into a shell,
+each download is followed by a `sha256sum`/`sha384sum`/`sha512sum -c`
+(or `shasum -a 256|384|512 -c`) check that stops the line when it
+fails (`&&`, the end of the line, or `set -e`). Package runners, git
+clone, variable targets, and version tags are never pinned. It costs
+what `shell.risks` costs.
+
 `shell.locations(command)` reads the line the same way and returns
 where the programs it runs live: the program of each simple command,
 and the script an interpreter is given (`bash x.sh`, `python x.py`,

@@ -127,7 +127,7 @@ var (
 
 // Env compiles expressions against the Tripcord variables. It has the
 // CEL standard library, the cel-go strings extension, shell.risks,
-// shell.locations, hook.commands, and hook.argv. None can read files, the network, the clock, or the
+// shell.unpinned, shell.locations, hook.commands, and hook.argv. None can read files, the network, the clock, or the
 // environment. matches() uses Go's RE2 engine and the shell functions a
 // single pass of the shellcmd reader; all run in linear time.
 type Env struct {
@@ -144,6 +144,7 @@ func NewEnv(limits Limits) (*Env, error) {
 		cel.Variable(VarEvent, cel.MapType(cel.StringType, cel.DynType)),
 		ext.Strings(),
 		shellRisks,
+		shellUnpinned,
 		shellLocations,
 		hookCommands,
 		hookArgs,
@@ -177,6 +178,29 @@ var shellRisks = cel.Function(shellRisksName,
 				return types.WrapErr(err)
 			}
 			return newRisksList(shellcmd.AnalyzeArgv(argv))
+		})),
+)
+
+// shell.unpinned(command) and shell.unpinned([program, arg, ...]) are
+// shell.risks, or an empty list when every fetch in the command is
+// pinned by an immutable URL or a checksum check (see
+// shellcmd.Unpinned).
+var shellUnpinned = cel.Function(shellUnpinnedName,
+	cel.Overload(overloadShellUnpinnedString, []*cel.Type{cel.StringType}, cel.ListType(cel.StringType),
+		cel.UnaryBinding(func(v ref.Val) ref.Val {
+			s, ok := v.(types.String)
+			if !ok {
+				return types.MaybeNoSuchOverloadErr(v)
+			}
+			return newRisksList(shellcmd.Unpinned(string(s)))
+		})),
+	cel.Overload(overloadShellUnpinnedList, []*cel.Type{cel.ListType(cel.DynType)}, cel.ListType(cel.StringType),
+		cel.UnaryBinding(func(v ref.Val) ref.Val {
+			argv, err := stringList(shellUnpinnedName, v)
+			if err != nil {
+				return types.WrapErr(err)
+			}
+			return newRisksList(shellcmd.UnpinnedArgv(argv))
 		})),
 )
 
@@ -322,6 +346,9 @@ const (
 	shellRisksName               = "shell.risks"
 	overloadShellRisksString     = "shell_risks_string"
 	overloadShellRisksList       = "shell_risks_list"
+	shellUnpinnedName            = "shell.unpinned"
+	overloadShellUnpinnedString  = "shell_unpinned_string"
+	overloadShellUnpinnedList    = "shell_unpinned_list"
 	shellLocationsName           = "shell.locations"
 	overloadShellLocationsString = "shell_locations_string"
 	overloadShellLocationsList   = "shell_locations_list"
@@ -362,7 +389,7 @@ func shellCost(result ref.Val) *uint64 {
 type costEstimator struct{}
 
 func (costEstimator) CallCost(function, _ string, _ []ref.Val, result ref.Val) *uint64 {
-	if function != shellRisksName && function != shellLocationsName {
+	if function != shellRisksName && function != shellUnpinnedName && function != shellLocationsName {
 		return nil
 	}
 	return shellCost(result)

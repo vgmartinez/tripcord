@@ -309,11 +309,14 @@ func closeParen(src string, i int) int {
 // command is one simple command. pipeIn is set when its standard input
 // is the previous command's output. stmt numbers the statement it is in:
 // a statement runs to ;, &&, ||, &, or a newline, so the commands of
-// curl x | sh and of iex (iwr x) share one.
+// curl x | sh and of iex (iwr x) share one. sep is the operator that
+// ended the statement, set on its last command: ";" (also a newline),
+// "&&", "||", "&", or "" at the end of the line.
 type command struct {
 	words  []string
 	pipeIn bool
 	stmt   int
+	sep    string
 }
 
 // split groups tokens into simple commands and drops redirection
@@ -354,6 +357,9 @@ func split(toks []token) []command {
 		default:
 			stmt++
 			end(false)
+			if n := len(cmds); n > 0 && cmds[n-1].stmt == stmt-1 && cmds[n-1].sep == "" {
+				cmds[n-1].sep = t.op
+			}
 		}
 	}
 	end(false)
