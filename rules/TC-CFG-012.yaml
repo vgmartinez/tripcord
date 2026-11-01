@@ -1,31 +1,38 @@
 # An instructions file can tell the agent to read the environment, a
-# dotenv file, or credentials, or to send that data to an https URL.
+# dotenv file, or credentials, or to send that data to an outbound sink.
 # The model follows the file. This is a heuristic over the text, not a
 # proof that a session did either thing.
 #
 # Read, in repository scope, the same paths as TC-CFG-011:
-# AGENTS.md, CLAUDE.md, CLAUDE.local.md, and GEMINI.md at any depth,
+# AGENTS.md, CLAUDE.md, and CLAUDE.local.md at any depth,
 # .claude/rules/**/*.md, .windsurfrules, .cursorrules,
 # .github/copilot-instructions.md, .github/instructions/**/*.md,
-# .github/agents/**/*.agent.md, and .cursor/rules/**/*.md(c).
-# The match is on payload.content. Claude stores the whole file there.
-# The other adapters store the body when a frontmatter block parses, so
-# a hit that lives only in that frontmatter is not visible to this rule.
+# .github/agents/**/*.agent.md, and .cursor/rules/**/*.md(c), plus
+# repository SKILL.md files that the Claude and generic adapters emit,
+# .claude/commands/**/*.md, .claude/agents/**/*.md, and
+# .windsurf/rules/**/*.md. AGENTS.local.md and GEMINI.local.md are not
+# included because no repository adapter emits them.
+# The match is on the raw whole file, including frontmatter. The raw view
+# is evaluation-only; findings contain only the line number, never text.
 #
-# A line matches when it begins with a verb (optionally after a
-# blockquote, a bullet, or a number) and, within the same line, names a
-# secret target. The read verbs are read, cat, open, load, source,
-# print, dump, collect, extract, and show. The targets are .env (also
-# .env.local, .env.development, .env.production, .env.prod, and
-# .env.dev), printenv, process.env, os.environ, the phrase "environment
-# variables", credentials, secret or secrets, an api key, ~/.aws,
-# ~/.ssh, and id_rsa. .env.example, .env.sample, .env.template, and
-# .envrc do not count.
+# A line matches when a verb follows optional Markdown (#, >, bullet,
+# number, or **) and an optional prefix (please, always, first, you
+# must/should, make sure to), and then names a secret target. A negation
+# (do not, don't, never, avoid, must not) before that verb in the same
+# clause does not match. The read verbs are read, cat, cp, copy, open,
+# load, source, print, dump, collect, extract, show, curl, wget, type,
+# and Get-Content. The targets are .env (also .env.local,
+# .env.development, .env.production, .env.prod, and .env.dev),
+# printenv, process.env, os.environ, "environment variables",
+# credentials, secret(s), api key, token, password, private key,
+# ~/.aws, ~/.ssh, id_rsa, and AWS_*/GITHUB_TOKEN-style environment
+# variables. .env.example, .env.sample, .env.template, and .envrc do
+# not count.
 #
 # A line also matches when it begins with send, post, upload,
 # exfiltrate, transmit, or forward and, on that same line, both names a
-# secret (.env with the same suffixes, secret, credential, or api key)
-# and contains https://. The two may come in either order.
+# secret and an outbound sink: an http(s) URL, webhook, curl/wget with
+# -d/--data/-F/POST, gist, pastebin, Slack, Discord, or "... to".
 #
 # Medium: the wording is ordinary setup prose as often as it is an
 # exfiltration instruction, and scan mode cannot see whether a session
@@ -35,14 +42,15 @@ id: TC-CFG-012
 pack: tripcord/core
 title: "Agent instructions ask to read secrets or send them out"
 severity: medium
+evidence: instruction_match
 harness: [claude, copilot, cursor, gemini, windsurf, generic]
 files: ["**"]
 when: |
-  config.kind == "instructions" && config.scope == "repo" &&
+  config.kind in ["instructions", "skill"] && config.scope == "repo" &&
     has(payload.content) && type(payload.content) == string &&
-    config.path.matches(r'''(?i)((^|/)(AGENTS|CLAUDE|GEMINI)(\.local)?\.md|(^|/)\.claude/rules/.+\.md|(^|/)\.windsurfrules|^\.cursorrules|^\.github/copilot-instructions\.md|^\.github/instructions/.+\.md|^\.github/agents/.+\.agent\.md|(^|/)\.cursor/rules/.+\.mdc?)$''') &&
-    payload.content.matches(r'''(?im)^[ \t]*(?:>+[ \t]*|(?:[-*+]|\d+[.)])[ \t]+)*(?:read|cat|open|load|source|print|dump|collect|extract|show)\b[^\n]{0,80}?(?:\.env(?:\.(?:local|production|development|prod|dev))?(?:\.?(?:[^\w.]|$)|$)|\bprintenv\b|\bprocess\.env\b|\bos\.environ\b|environment variables|\bcredentials\b|\bsecrets?\b|api[_ ]?keys?\b|~/\.aws|~/\.ssh|\bid_rsa\b)|^[ \t]*(?:>+[ \t]*|(?:[-*+]|\d+[.)])[ \t]+)*(?:send|post|upload|exfiltrate|transmit|forward)\b[^\n]{0,160}(?:\.env(?:\.(?:local|production|development|prod|dev))?(?:\.?(?:[^\w.]|$)|$)|\b(?:secrets?|credentials?)\b|api[_ ]?keys?\b)[^\n]{0,160}https://|^[ \t]*(?:>+[ \t]*|(?:[-*+]|\d+[.)])[ \t]+)*(?:send|post|upload|exfiltrate|transmit|forward)\b[^\n]{0,160}https://[^\n]{0,160}(?:\.env(?:\.(?:local|production|development|prod|dev))?(?:\.?(?:[^\w.]|$)|$)|\b(?:secrets?|credentials?)\b|api[_ ]?keys?\b)''')
-fix: "Delete the instruction that reads the environment, a dotenv file, or credentials, or that sends them to a URL. Keep notes that only name .env.example or tell the agent not to reveal secrets. To accept a reviewed file, add a policy exception for this rule and file."
+    config.path.matches(r'''(?i)((^|/)(AGENTS|CLAUDE(\.local)?)\.md|(^|/)GEMINI\.md|(^|/)\.claude/rules/.+\.md|(^|/)\.claude/(commands|agents)/.+\.md|(^|/)\.claude/skills/.+/SKILL\.md|(^|/)\.agents/skills/.+/SKILL\.md|(^|/)\.github/skills/.+/SKILL\.md|(^|/)\.windsurfrules|^\.cursorrules|^\.github/copilot-instructions\.md|^\.github/instructions/.+\.md|^\.github/agents/.+\.agent\.md|(^|/)\.cursor/rules/.+\.mdc?|(^|/)\.windsurf/rules/.+\.md)$''') &&
+    instruction.first_match_line(payload.content) > 0
+fix: "Delete the instruction that reads the environment, a dotenv file, or credentials, or that sends them to an outbound sink. Keep notes that only name .env.example or tell the agent not to reveal secrets. To accept a reviewed file, add a policy exception for this rule and file."
 refs:
   - https://novee.security/blog/breaking-ai-agent-sandboxes/
   - https://fidelius.blisslabs.dev/research/ai-coding-agents-api-keys-env/

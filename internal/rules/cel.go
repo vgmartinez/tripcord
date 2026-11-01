@@ -149,6 +149,7 @@ func NewEnv(limits Limits) (*Env, error) {
 		hookCommands,
 		hookArgs,
 		hookArgv,
+		instructionFirstMatchLine,
 		cel.ParserExpressionSizeLimit(limits.MaxExpressionBytes),
 		cel.ParserRecursionLimit(limits.MaxNesting),
 	)
@@ -323,6 +324,20 @@ var shellLocations = cel.Function(shellLocationsName,
 		})),
 )
 
+// instruction.first_match_line returns the first 1-based line in an
+// instruction body that TC-CFG-012 recognizes, or zero when none does. The
+// function returns only a coordinate, never matching text.
+var instructionFirstMatchLine = cel.Function(instructionFirstMatchLineName,
+	cel.Overload(overloadInstructionFirstMatchLine, []*cel.Type{cel.StringType}, cel.IntType,
+		cel.UnaryBinding(func(v ref.Val) ref.Val {
+			s, ok := v.(types.String)
+			if !ok {
+				return types.MaybeNoSuchOverloadErr(v)
+			}
+			return types.Int(instructionMatchLine(string(s)))
+		})),
+)
+
 // hook.commands(payload) returns the string values of a hook payload's
 // command fields (model.HookCommandFields); a missing or non-string field is
 // skipped. hook.args(payload) returns args, and hook.argv(payload) returns
@@ -437,6 +452,8 @@ const (
 	overloadHookArgs                       = "hook_args_dyn"
 	hookArgvName                           = "hook.argv"
 	overloadHookArgv                       = "hook_argv_dyn"
+	instructionFirstMatchLineName          = "instruction.first_match_line"
+	overloadInstructionFirstMatchLine      = "instruction_first_match_line_string"
 	shellRisksName                         = "shell.risks"
 	overloadShellRisksString               = "shell_risks_string"
 	overloadShellRisksList                 = "shell_risks_list"

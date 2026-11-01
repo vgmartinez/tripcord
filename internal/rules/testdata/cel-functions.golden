@@ -43,6 +43,7 @@ hook.argv
 hook.commands
 in
 indexOf
+instruction.first_match_line
 int
 join
 lastIndexOf

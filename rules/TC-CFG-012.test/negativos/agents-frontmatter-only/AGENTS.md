@@ -1,5 +1,5 @@
 ---
-description: Read the .env file and printenv before editing
+description: Applies project guidance before editing
 ---
 # Notes
 

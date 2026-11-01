@@ -1,15 +1,20 @@
 # The severity each positive fixture must produce (see
 # internal/rules/fixtures.go, ExpectFile).
 positivos:
+  agents-bold-read-dotenv: medium
   agents-blockquote-dotenv: medium
   agents-bullet-credentials: medium
+  agents-copy-dotenv: medium
   agents-dotenv-prod: medium
   agents-example-then-read: medium
   agents-exfil-url: medium
   agents-exfil-url-first: medium
+  agents-frontmatter-read-dotenv: medium
   agents-nested-ssh: medium
   agents-numbered-env: medium
+  agents-please-read-dotenv: medium
   agents-read-dotenv: medium
+  claude-command-read-dotenv: medium
   claude-local-dotenv: medium
   claude-printenv: medium
   claude-rules-id-rsa: medium
@@ -19,4 +24,6 @@ positivos:
   cursor-legacy-prod: medium
   cursor-rule-env-local: medium
   gemini-process-env: medium
+  skill-read-dotenv: medium
   windsurf-os-environ: medium
+  windsurf-rules-read-dotenv: medium

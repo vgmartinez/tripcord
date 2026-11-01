@@ -1,3 +1,3 @@
 # Setup
 
-Read the .env file.
+Read the setup guide.

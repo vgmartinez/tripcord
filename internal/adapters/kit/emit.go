@@ -228,13 +228,11 @@ const (
 // points (see internal/hiddenchar) are located in the whole raw file,
 // frontmatter included, and an instruction file that is not valid UTF-8
 // is a diagnostic. The content is kept for Unicode and instruction
-// checks, with URL secrets stripped (and the
-// home directory rewritten in user scope). When the file has a closed
-// frontmatter block, content is the body only: the frontmatter is emitted
-// sanitized as its own field, and its raw text can hold MCP server env
-// values that content must not carry. It returns the parsed
-// frontmatter, or nil, so the caller can emit hooks or servers it
-// declares. folded is passed to DecodeYAML.
+// checks, with URL secrets stripped (and the home directory rewritten in user
+// scope). When a frontmatter block parses, the sanitized payload retains only
+// its body, but rules receive the whole original Markdown through Detect.
+// It returns the parsed frontmatter, or nil, so the caller can emit hooks or
+// servers it declares. folded is passed to DecodeYAML.
 func (s *Source) Markdown(kind model.ConfigKind, role string, raw []byte, mode Frontmatter, folded ...string) map[string]any {
 	text := raw
 	if _, body, found, err := splitFrontmatter(raw); found && err == nil {
@@ -262,7 +260,7 @@ func (s *Source) Markdown(kind model.ConfigKind, role string, raw []byte, mode F
 		s.Warn("%s", InvalidUTF8)
 	}
 	before := len(s.c.items)
-	s.Add(kind, []string{role}, payload)
+	s.AddDetect(kind, []string{role}, payload, map[string]any{"content": string(raw)}, "role", "frontmatter")
 	if len(s.c.items) > before {
 		s.c.items[len(s.c.items)-1].Hidden = hidden
 	}

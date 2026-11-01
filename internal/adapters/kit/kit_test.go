@@ -606,6 +606,9 @@ func TestMarkdownLooseFrontmatter(t *testing.T) {
 	if strings.Contains(payload, "secret") || !strings.Contains(payload, `"globs":"*.ts"`) {
 		t.Fatalf("payload = %s", payload)
 	}
+	if !strings.Contains(string(c.Items()[0].Detect), "sig=secret") {
+		t.Fatalf("detect = %s", c.Items()[0].Detect)
+	}
 }
 
 // TestMarkdownHiddenChars checks that hidden code points are located in

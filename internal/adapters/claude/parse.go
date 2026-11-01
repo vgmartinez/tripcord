@@ -733,7 +733,7 @@ func (s *src) markdown(kind model.ConfigKind, role string, raw []byte) {
 		s.warn("%s", kit.InvalidUTF8)
 	}
 	before := len(s.c.items)
-	s.add(kind, []string{role}, payload, nil)
+	s.addDetect(kind, []string{role}, payload, nil, map[string]any{"content": string(raw)}, "role", "frontmatter")
 	if len(s.c.items) > before {
 		s.c.items[len(s.c.items)-1].Hidden = hidden
 	}

@@ -56,10 +56,13 @@ type Spec struct {
 	Evidence     string         `yaml:"evidence"`
 }
 
-// EvidenceHiddenChars is the evidence value that puts an item's hidden
-// code points in the finding's excerpt and its first line in the
-// location.
-const EvidenceHiddenChars = "hidden_chars"
+// EvidenceHiddenChars puts an item's hidden code points in the finding's
+// excerpt and its first line in the location. EvidenceInstructionMatch puts
+// the first matched instruction line in the location without exposing text.
+const (
+	EvidenceHiddenChars      = "hidden_chars"
+	EvidenceInstructionMatch = "instruction_match"
+)
 
 // SeverityWhen is one per-match severity clause. Title, when set,
 // replaces the rule title on the findings of that clause, for a match
@@ -138,8 +141,8 @@ func (s *Spec) Validate() error {
 	if len(s.Refs) == 0 {
 		return errors.New("refs needs at least one incident or official documentation link")
 	}
-	if s.Evidence != "" && s.Evidence != EvidenceHiddenChars {
-		return fmt.Errorf("evidence %q: want %s or nothing", s.Evidence, EvidenceHiddenChars)
+	if s.Evidence != "" && s.Evidence != EvidenceHiddenChars && s.Evidence != EvidenceInstructionMatch {
+		return fmt.Errorf("evidence %q: want %s, %s, or nothing", s.Evidence, EvidenceHiddenChars, EvidenceInstructionMatch)
 	}
 	for _, ref := range s.Refs {
 		if err := validateRef(ref); err != nil {

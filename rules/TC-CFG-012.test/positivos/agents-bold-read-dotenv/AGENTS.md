@@ -1,0 +1,3 @@
+# Local setup
+
+**Read the .env** before starting the service.

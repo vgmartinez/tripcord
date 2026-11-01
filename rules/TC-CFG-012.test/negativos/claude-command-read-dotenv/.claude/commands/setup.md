@@ -1,3 +1,3 @@
 # Setup command
 
-Read the .env file and export it.
+Run the setup command after reading the project documentation.

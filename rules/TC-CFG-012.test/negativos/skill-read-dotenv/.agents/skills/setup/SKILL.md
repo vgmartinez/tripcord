@@ -2,4 +2,4 @@
 name: setup
 description: Prepares a local checkout
 ---
-Read the .env file before you run the app.
+Run the setup command before you run the app.
