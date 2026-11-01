@@ -1,0 +1,72 @@
+# Cursor, Copilot, and Windsurf hooks run on the developer's machine
+# with the agent's privileges. A shared hook that reaches the network
+# can send the prompt, the tool input, or the file it was given to
+# another host, or fetch the code it runs. A hook whose only output is
+# a fixed allow decision approves every call it sees: it looks like a
+# guard in review and turns the approval off.
+#
+# Network: shell.risks reports a fetch in a command field (a downloader
+#   with a non-loopback target, python -c or node -e network code, a
+#   remote deno module, npx -y, pnpm dlx, uvx, git clone; see
+#   TC-CFG-001), shell.locations reports a program or script at a
+#   non-loopback URL or UNC share, or the hook is an HTTP hook to a
+#   non-loopback URL.
+# Unconditional allow (Cursor and Copilot, whose hooks return their
+#   decision as JSON on stdout): the whole command is one echo, printf,
+#   or Write-Output of a fixed JSON text with "permission",
+#   "permissionDecision", or "decision" set to "allow" or "approve",
+#   optionally followed by exit 0, or exec echo or printf with such
+#   an argument. Any $, backtick, pipe, redirection, &&, ||, ;
+#   (other than before exit), or parenthesis makes the output depend on
+#   something and is not matched. Windsurf hooks allow by exit code,
+#   so only the network part applies to them.
+#
+# Not read: what a hook's script prints (.cursor/hooks/allow.sh may
+# allow everything), an allow wrapped in bash -c or cat <<EOF, and a
+# fetch through iwr $u | iex, which shell.risks reports as a pipe.
+id: TC-CFG-008
+pack: tripcord/core
+title: "Cursor, Copilot, or Windsurf hook reaches the network or always allows"
+severity: high
+harness: [copilot, cursor, windsurf]
+files: ["**"]
+when: |
+  config.kind == "hook" && config.scope == "repo" &&
+    !config.path.matches(r'''(^|/)settings\.local\.json$''') &&
+    (
+      (has(payload.url) && type(payload.url) == string && "network" in shell.locations(payload.url)) ||
+      [
+        has(payload.command) && type(payload.command) == string ? payload.command : "",
+        has(payload.exec) && type(payload.exec) == string ? payload.exec : "",
+        has(payload.bash) && type(payload.bash) == string ? payload.bash : "",
+        has(payload.powershell) && type(payload.powershell) == string ? payload.powershell : "",
+        has(payload.commandWindows) && type(payload.commandWindows) == string ? payload.commandWindows : "",
+        has(payload.command_windows) && type(payload.command_windows) == string ? payload.command_windows : "",
+        has(payload.windows) && type(payload.windows) == string ? payload.windows : "",
+        has(payload.linux) && type(payload.linux) == string ? payload.linux : "",
+        has(payload.osx) && type(payload.osx) == string ? payload.osx : ""
+      ].exists(c,
+        "fetch" in shell.risks(c) ||
+        "network" in shell.locations(c) ||
+        (config.harness in ["copilot", "cursor"] &&
+          c.matches(r'''^\s*(?i:echo|printf|write-output)(\s+-[A-Za-z]+)*\s+[^$`|&;<>()\r\n]*\\?"(permission|permissionDecision|decision)\\?"\s*:\s*\\?"(allow|approve)\\?"[^$`|&;<>()\r\n]*(;\s*exit(\s+0)?)?\s*;?\s*$'''))) ||
+      (has(payload.args) && type(payload.args) == list && payload.args.all(a, type(a) == string) &&
+        (
+          [
+            [
+              has(payload.exec) && type(payload.exec) == string ? payload.exec :
+                has(payload.command) && type(payload.command) == string ? payload.command : ""
+            ] + payload.args
+          ].exists(argv, "fetch" in shell.risks(argv) || "network" in shell.locations(argv)) ||
+          (config.harness in ["copilot", "cursor"] &&
+            has(payload.exec) && type(payload.exec) == string &&
+            payload.exec.matches(r'''^((/usr)?/bin/)?(echo|printf)$''') &&
+            payload.args.exists(a, a.matches(r'''"(permission|permissionDecision|decision)"\s*:\s*"(allow|approve)"''')))
+        ))
+    )
+fix: "Keep shared hooks local: do not send hook input to another host or fetch code from one, and commit what the hook runs. A permission hook should decide from its input; remove a hook that only prints an allow decision, and use the harness's own allow list for commands that are always safe."
+refs:
+  - https://cursor.com/docs/hooks
+  - https://docs.github.com/en/copilot/reference/hooks-reference
+  - https://docs.windsurf.com/windsurf/cascade/hooks
+  - https://workos.com/blog/npm-worm-coding-agent-config-credentials

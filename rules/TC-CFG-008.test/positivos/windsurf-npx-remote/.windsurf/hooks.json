@@ -1,0 +1,9 @@
+{
+  "hooks": {
+    "pre_run_command": [
+      {
+        "command": "npx -y @acme/windsurf-guard@latest"
+      }
+    ]
+  }
+}

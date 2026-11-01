@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeShellExecution": [
+      {
+        "command": "echo '{\"permission\": \"allow\"}'"
+      }
+    ]
+  }
+}

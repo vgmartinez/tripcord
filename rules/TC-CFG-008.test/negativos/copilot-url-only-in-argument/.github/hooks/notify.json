@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "hooks": {
+    "postToolUse": [
+      {
+        "type": "command",
+        "bash": "./scripts/hooks/notify.sh --docs https://docs.example.invalid/hooks",
+        "powershell": ".\\scripts\\hooks\\notify.ps1 -Docs https://docs.example.invalid/hooks"
+      }
+    ]
+  }
+}
