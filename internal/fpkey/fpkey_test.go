@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // secret is a valid key for these tests: 64 hex characters, matching
@@ -191,6 +192,39 @@ func TestLoadReadsExistingFileInCI(t *testing.T) {
 	k, src, err := Load(Options{Home: home, Getenv: env(map[string]string{"CI": "true"})})
 	if err != nil || src != SourceFile || k.Sum("d", nil, 16) != want.Sum("d", nil, 16) {
 		t.Fatalf("Load = %v, %v", src, err)
+	}
+}
+
+// TestLoadRemovesStaleTempFiles covers the researcher review's fix 5: a
+// process killed between createKeyFile creating its temporary file and
+// its own deferred cleanup removing it leaves that file behind forever
+// otherwise. Load sweeps one old enough to be orphaned on every call
+// that finds the key directory, not only when it is about to create a
+// new key itself.
+func TestLoadRemovesStaleTempFiles(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	writeKey(t, home, secret)
+	dir := filepath.Dir(Path(home))
+	stale := filepath.Join(dir, ".fingerprint.key.stale0123.tmp")
+	fresh := filepath.Join(dir, ".fingerprint.key.fresh4567.tmp")
+	for _, path := range []string{stale, fresh} {
+		if err := os.WriteFile(path, []byte("leftover"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old := time.Now().Add(-staleTempFileAge - time.Minute)
+	if err := os.Chtimes(stale, old, old); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := Load(Options{Home: home, Getenv: env(nil)}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(stale); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("stale temp file was not removed: %v", err)
+	}
+	if _, err := os.Stat(fresh); err != nil {
+		t.Fatalf("fresh temp file was removed: %v", err)
 	}
 }
 

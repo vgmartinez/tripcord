@@ -32,6 +32,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 const (
@@ -64,6 +65,15 @@ const (
 	generatedKeyBytes = 32
 	placeholder       = "fpkey.Key([redacted])"
 	tempFilePattern   = ".fingerprint.key.*.tmp"
+	// staleTempFileAge is how old a leftover temporary key file
+	// (tempFilePattern) must be before Load removes it. createKeyFile's
+	// own deferred cleanup removes its temporary file in the normal
+	// case; a process killed (SIGKILL, a hard crash) between creating
+	// it and that deferred cleanup running leaves it behind forever
+	// otherwise. A threshold well past any realistic creation time
+	// means a file this old is safe to assume orphaned, never one a
+	// concurrent Load is still writing.
+	staleTempFileAge = 5 * time.Minute
 )
 
 var (
@@ -231,6 +241,7 @@ func Load(opts Options) (*Key, Source, error) {
 	dirErr := checkKeyDir(dir)
 	switch {
 	case dirErr == nil:
+		cleanStaleTempFiles(dir)
 		k, err := readKeyFile(path)
 		switch {
 		case err == nil:
@@ -288,6 +299,26 @@ func IsCI(getenv func(string) string) bool {
 		}
 	}
 	return false
+}
+
+// cleanStaleTempFiles best-effort removes any leftover temporary key
+// file (tempFilePattern) in dir older than staleTempFileAge. It never
+// reports an error: Load only ever reads or creates fingerprint.key
+// itself, so a failure to sweep these orphans is not fatal to it, and
+// leaving one behind for another pass to find is always safe.
+func cleanStaleTempFiles(dir string) {
+	matches, err := filepath.Glob(filepath.Join(dir, tempFilePattern))
+	if err != nil {
+		return
+	}
+	cutoff := time.Now().Add(-staleTempFileAge)
+	for _, path := range matches {
+		info, err := os.Lstat(path)
+		if err != nil || info.ModTime().After(cutoff) {
+			continue
+		}
+		_ = os.Remove(path)
+	}
 }
 
 // checkKeyDir reports whether dir is safe to hold the key file: it must
@@ -414,6 +445,18 @@ func createKeyFile(path string, random io.Reader) (*Key, bool, error) {
 			return k, false, err
 		}
 		return nil, false, fmt.Errorf("%w: cannot create %s", ErrUnavailable, LogicalPath)
+	}
+	// fsync the directory too, not just the file's own contents above:
+	// on most filesystems the directory entry the link just added is
+	// otherwise only guaranteed durable once the directory itself is
+	// flushed, so a crash right after Link could, on some filesystems,
+	// leave the link missing even though the file's bytes are safe on
+	// disk. Best-effort: a directory that cannot be fsynced (an
+	// unusual filesystem, a permission quirk) does not invalidate the
+	// key file Link already published.
+	if d, err := os.Open(dir); err == nil {
+		_ = d.Sync()
+		_ = d.Close()
 	}
 	k, err := New(text)
 	return k, true, err
