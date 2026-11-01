@@ -10,6 +10,8 @@
 // PowerShell's -Command or positional command, cmd /c, eval, iex, and
 // $( ), backtick, and <( ) substitutions.
 //
+// A payload nested deeper than maxDepth is reported as Nested.
+//
 // Static limits: variables are not expanded, so $URL is not a target
 // and $(echo cur)l is not curl. nohup, xargs, env -S, busybox, and
 // start /b are not unwrapped. A script a hook calls is not read.
@@ -32,13 +34,16 @@ const (
 	Pipe = "pipe"
 	// Encoded is a PowerShell -EncodedCommand, an opaque payload.
 	Encoded = "encoded"
+	// Nested is a payload nested deeper than the reader follows. It is
+	// reported rather than skipped, so nesting cannot hide a fetch.
+	Nested = "nested"
 )
 
 // maxDepth bounds how far nested payloads are read.
 const maxDepth = 8
 
 // Risks reports the risks in a command line, in the order Fetch, Pipe,
-// Encoded, each at most once.
+// Encoded, Nested, each at most once.
 func Risks(line string) []string {
 	var s scanner
 	s.line(line, 0)
@@ -56,7 +61,7 @@ func RisksArgv(argv []string) []string {
 }
 
 type scanner struct {
-	fetch, pipe, encoded bool
+	fetch, pipe, encoded, nested bool
 }
 
 func (s *scanner) risks() []string {
@@ -70,11 +75,18 @@ func (s *scanner) risks() []string {
 	if s.encoded {
 		out = append(out, Encoded)
 	}
+	if s.nested {
+		out = append(out, Nested)
+	}
 	return out
 }
 
 func (s *scanner) line(src string, depth int) {
-	if depth > maxDepth || strings.TrimSpace(src) == "" {
+	if strings.TrimSpace(src) == "" {
+		return
+	}
+	if depth > maxDepth {
+		s.nested = true
 		return
 	}
 	toks, subs := lex(src)
