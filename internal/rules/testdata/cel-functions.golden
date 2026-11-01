@@ -38,6 +38,8 @@ getMilliseconds
 getMinutes
 getMonth
 getSeconds
+hook.argv
+hook.commands
 in
 indexOf
 int

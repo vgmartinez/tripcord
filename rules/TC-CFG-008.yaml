@@ -35,34 +35,17 @@ when: |
     !config.path.matches(r'''(^|/)settings\.local\.json$''') &&
     (
       (has(payload.url) && type(payload.url) == string && "network" in shell.locations(payload.url)) ||
-      [
-        has(payload.command) && type(payload.command) == string ? payload.command : "",
-        has(payload.exec) && type(payload.exec) == string ? payload.exec : "",
-        has(payload.bash) && type(payload.bash) == string ? payload.bash : "",
-        has(payload.powershell) && type(payload.powershell) == string ? payload.powershell : "",
-        has(payload.commandWindows) && type(payload.commandWindows) == string ? payload.commandWindows : "",
-        has(payload.command_windows) && type(payload.command_windows) == string ? payload.command_windows : "",
-        has(payload.windows) && type(payload.windows) == string ? payload.windows : "",
-        has(payload.linux) && type(payload.linux) == string ? payload.linux : "",
-        has(payload.osx) && type(payload.osx) == string ? payload.osx : ""
-      ].exists(c,
+      hook.commands(payload).exists(c,
         "fetch" in shell.risks(c) ||
         "network" in shell.locations(c) ||
         (config.harness in ["copilot", "cursor"] &&
           c.matches(r'''^\s*(?i:echo|printf|write-output)(\s+-[A-Za-z]+)*\s+[^$`|&;<>()\r\n]*\\?"(permission|permissionDecision|decision)\\?"\s*:\s*\\?"(allow|approve)\\?"[^$`|&;<>()\r\n]*(;\s*exit(\s+0)?)?\s*;?\s*$'''))) ||
-      (has(payload.args) && type(payload.args) == list && payload.args.all(a, type(a) == string) &&
-        (
-          [
-            [
-              has(payload.exec) && type(payload.exec) == string ? payload.exec :
-                has(payload.command) && type(payload.command) == string ? payload.command : ""
-            ] + payload.args
-          ].exists(argv, "fetch" in shell.risks(argv) || "network" in shell.locations(argv)) ||
-          (config.harness in ["copilot", "cursor"] &&
-            has(payload.exec) && type(payload.exec) == string &&
-            payload.exec.matches(r'''^((/usr)?/bin/)?(echo|printf)$''') &&
-            payload.args.exists(a, a.matches(r'''"(permission|permissionDecision|decision)"\s*:\s*"(allow|approve)"''')))
-        ))
+      "fetch" in shell.risks(hook.argv(payload)) ||
+      "network" in shell.locations(hook.argv(payload)) ||
+      (config.harness in ["copilot", "cursor"] &&
+        has(payload.exec) && type(payload.exec) == string &&
+        payload.exec.matches(r'''^((/usr)?/bin/)?(echo|printf)$''') &&
+        hook.argv(payload).exists(a, a.matches(r'''"(permission|permissionDecision|decision)"\s*:\s*"(allow|approve)"''')))
     )
 fix: "Keep shared hooks local: do not send hook input to another host or fetch code from one, and commit what the hook runs. A permission hook should decide from its input; remove a hook that only prints an allow decision, and use the harness's own allow list for commands that are always safe."
 refs:

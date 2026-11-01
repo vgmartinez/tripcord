@@ -29,24 +29,10 @@ severity_when:
   - severity: high
     when: |
       (has(payload.url) && type(payload.url) == string && "network" in shell.locations(payload.url)) ||
-        [
-          has(payload.command) && type(payload.command) == string ? payload.command : "",
-          has(payload.exec) && type(payload.exec) == string ? payload.exec : "",
-          has(payload.bash) && type(payload.bash) == string ? payload.bash : "",
-          has(payload.powershell) && type(payload.powershell) == string ? payload.powershell : "",
-          has(payload.commandWindows) && type(payload.commandWindows) == string ? payload.commandWindows : "",
-          has(payload.command_windows) && type(payload.command_windows) == string ? payload.command_windows : "",
-          has(payload.windows) && type(payload.windows) == string ? payload.windows : "",
-          has(payload.linux) && type(payload.linux) == string ? payload.linux : "",
-          has(payload.osx) && type(payload.osx) == string ? payload.osx : ""
-        ].exists(c, shell.risks(c).size() > 0 || shell.locations(c).exists(l, l in ["network", "home", "temp"])) ||
-        (has(payload.args) && type(payload.args) == list && payload.args.all(a, type(a) == string) &&
-          [
-            [
-              has(payload.exec) && type(payload.exec) == string ? payload.exec :
-                has(payload.command) && type(payload.command) == string ? payload.command : ""
-            ] + payload.args
-          ].exists(argv, shell.risks(argv).size() > 0 || shell.locations(argv).exists(l, l in ["network", "home", "temp"])))
+        hook.commands(payload).exists(c,
+          shell.risks(c).size() > 0 || shell.locations(c).exists(l, l in ["network", "home", "temp"])) ||
+        shell.risks(hook.argv(payload)).size() > 0 ||
+        shell.locations(hook.argv(payload)).exists(l, l in ["network", "home", "temp"])
   - severity: medium
     when: "true"
 harness: [claude, generic]

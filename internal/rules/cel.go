@@ -121,8 +121,8 @@ var (
 )
 
 // Env compiles expressions against the Tripcord variables. It has the
-// CEL standard library, the cel-go strings extension, shell.risks, and
-// shell.locations. None can read files, the network, the clock, or the
+// CEL standard library, the cel-go strings extension, shell.risks,
+// shell.locations, hook.commands, and hook.argv. None can read files, the network, the clock, or the
 // environment. matches() uses Go's RE2 engine and the shell functions a
 // single pass of the shellcmd reader; all run in linear time.
 type Env struct {
@@ -140,6 +140,8 @@ func NewEnv(limits Limits) (*Env, error) {
 		ext.Strings(),
 		shellRisks,
 		shellLocations,
+		hookCommands,
+		hookArgv,
 		cel.ParserExpressionSizeLimit(limits.MaxExpressionBytes),
 		cel.ParserRecursionLimit(limits.MaxNesting),
 	)
@@ -197,7 +199,70 @@ var shellLocations = cel.Function(shellLocationsName,
 		})),
 )
 
+// hookCommandFields are the payload fields an adapter puts a hook's
+// command line in, in the order hook.commands returns them.
+var hookCommandFields = []string{"command", "exec", "bash", "powershell", "commandWindows", "command_windows", "windows", "linux", "osx"}
+
+// hook.commands(payload) returns the string values of a hook payload's
+// command fields (hookCommandFields); a missing or non-string field is
+// skipped. hook.argv(payload) returns [exec or command] + args when
+// args is a list of strings, and [] otherwise. They let a rule read
+// every command field without restating the list in each clause.
+var hookCommands = cel.Function(hookCommandsName,
+	cel.Overload(overloadHookCommands, []*cel.Type{cel.DynType}, cel.ListType(cel.StringType),
+		cel.UnaryBinding(func(v ref.Val) ref.Val {
+			m, ok := v.(traits.Mapper)
+			if !ok {
+				return types.NewStringList(types.DefaultTypeAdapter, nil)
+			}
+			var out []string
+			for _, k := range hookCommandFields {
+				if s, ok := mapString(m, k); ok {
+					out = append(out, s)
+				}
+			}
+			return types.NewStringList(types.DefaultTypeAdapter, out)
+		})),
+)
+
+var hookArgv = cel.Function(hookArgvName,
+	cel.Overload(overloadHookArgv, []*cel.Type{cel.DynType}, cel.ListType(cel.StringType),
+		cel.UnaryBinding(func(v ref.Val) ref.Val {
+			empty := types.NewStringList(types.DefaultTypeAdapter, nil)
+			m, ok := v.(traits.Mapper)
+			if !ok {
+				return empty
+			}
+			args, found := m.Find(types.String("args"))
+			if !found {
+				return empty
+			}
+			list, err := stringList(hookArgvName, args)
+			if err != nil {
+				return empty
+			}
+			program, ok := mapString(m, "exec")
+			if !ok {
+				program, _ = mapString(m, "command")
+			}
+			return types.NewStringList(types.DefaultTypeAdapter, append([]string{program}, list...))
+		})),
+)
+
+func mapString(m traits.Mapper, key string) (string, bool) {
+	v, found := m.Find(types.String(key))
+	if !found {
+		return "", false
+	}
+	s, ok := v.(types.String)
+	return string(s), ok
+}
+
 const (
+	hookCommandsName             = "hook.commands"
+	overloadHookCommands         = "hook_commands_dyn"
+	hookArgvName                 = "hook.argv"
+	overloadHookArgv             = "hook_argv_dyn"
 	shellRisksName               = "shell.risks"
 	overloadShellRisksString     = "shell_risks_string"
 	overloadShellRisksList       = "shell_risks_list"

@@ -381,6 +381,36 @@ func TestShellLocations(t *testing.T) {
 	}
 }
 
+func TestHookCommands(t *testing.T) {
+	env := testEnv(t)
+	for payload, want := range map[string]map[string]bool{
+		`{"command":"a.sh","bash":"b.sh","powershell":1,"osx":"c.sh","args":["x"]}`: {
+			`hook.commands(payload) == ["a.sh", "b.sh", "c.sh"]`: true,
+			`hook.argv(payload) == ["a.sh", "x"]`:                true,
+		},
+		`{"exec":"node","command":"ignored","args":["/tmp/x.js"]}`: {
+			`hook.argv(payload) == ["node", "/tmp/x.js"]`:       true,
+			`shell.locations(hook.argv(payload)) == ["temp"]`: true,
+		},
+		`{"args":["x.sh", 1],"url":"https://x.invalid"}`: {
+			`hook.commands(payload).size() == 0`:          true,
+			`hook.argv(payload).size() == 0`:              true,
+			`shell.risks(hook.argv(payload)).size() == 0`: true,
+		},
+		`{"exec":"bash","args":"x.sh"}`: {
+			`hook.argv(payload).size() == 0`: true,
+		},
+	} {
+		in := taskInput(t, env.Limits(), payload)
+		for src, w := range want {
+			got, err := compileT(t, env, src).Eval(context.Background(), in)
+			if err != nil || got != w {
+				t.Errorf("%s on %s = %v, %v; want %v", src, payload, got, err, w)
+			}
+		}
+	}
+}
+
 // TestShellLocationsCost checks that shell.locations is charged like
 // shell.risks: by the bytes read at every level.
 func TestShellLocationsCost(t *testing.T) {

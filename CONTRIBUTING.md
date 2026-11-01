@@ -101,6 +101,14 @@ variables, substitutions, and programs on `PATH` have no location.
 Arguments are not read, so `cat ~/.ssh/config` is not a home program.
 It costs what `shell.risks` costs.
 
+`hook.commands(payload)` returns the string values of a hook's command
+fields (`command`, `exec`, `bash`, `powershell`, `commandWindows`,
+`command_windows`, `windows`, `linux`, `osx`), skipping missing and
+non-string ones. `hook.argv(payload)` returns `[exec or command] +
+args` when `args` is a list of strings, and `[]` otherwise. Use them
+instead of restating the field list in every clause: a long expression
+is parsed again on every scan.
+
 Reading a field that is missing makes the whole expression false, not
 an error. That fails open for negations and deny rules:
 `!(payload.tools.size() > 0)` would be false for a server with no
