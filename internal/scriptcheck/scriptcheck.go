@@ -8,9 +8,11 @@
 // directory, the directory that holds the harness's config directory
 // (.claude, .cursor, .github, .windsurf, .devin, .codex, .gemini, or
 // .agents), and a Copilot hook's relative cwd. A symlink is resolved
-// with filepath.EvalSymlinks: a target outside the repository is reported
-// by that target's location class, and a link that does not resolve counts
-// as missing, as does any other lookup error. A hook in a file with no
+// with filepath.EvalSymlinks on the whole path, so a symlink in a parent
+// directory counts as well as a symlink in the last component. A target
+// outside the repository is reported by that target's location class, and
+// a link that does not resolve counts as missing, as does any other lookup
+// error. A hook in a file with no
 // such directory, such as a Claude plugin's hooks/hooks.json, is not
 // checked, nor is a script ProjectScripts leaves out (see shellcmd).
 package scriptcheck
@@ -34,8 +36,10 @@ var configDirs = []string{".claude", ".cursor", ".github", ".windsurf", ".devin"
 
 // Annotate sets MissingScripts and ScriptLocations on every repository
 // hook in items. root is the scanned repository. A lookup error, including
-// a broken symlink, counts as missing. A symlink whose target resolves
-// outside root is recorded by the target's location class, not by its path.
+// a broken symlink, counts as missing. A path that resolves outside root,
+// through a symlink in any component, is recorded by the target's location
+// class, not by its path. root is resolved first so a repository whose own
+// path contains a symlink is not reported as outside itself.
 func Annotate(root string, items []model.ConfigItem) error {
 	resolvedRoot, err := filepath.EvalSymlinks(root)
 	if err != nil {
@@ -71,15 +75,8 @@ func lookupScript(root, rel string) (class string, missing bool) {
 		return "", true
 	}
 	abs := filepath.Join(root, cleaned)
-	info, err := os.Lstat(abs)
-	if err != nil {
+	if _, err := os.Stat(abs); err != nil {
 		return "", true
-	}
-	if info.Mode()&os.ModeSymlink == 0 {
-		if _, err := os.Stat(abs); err != nil {
-			return "", true
-		}
-		return "", false
 	}
 	resolved, err := filepath.EvalSymlinks(abs)
 	if err != nil {

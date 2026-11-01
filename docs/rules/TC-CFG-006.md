@@ -83,7 +83,9 @@ holds the harness's config directory (`.claude`, `.cursor`, `.github`,
 `.windsurf`, `.devin`, `.codex`, `.gemini`, `.agents`), so a hook in
 `packages/web/.claude/settings.json` resolves `./x.sh` to
 `packages/web/x.sh`. A Copilot hook's relative `cwd` is joined to it.
-The lookup resolves a symlink with `filepath.EvalSymlinks`. A target
+The lookup calls `os.Stat` and then `filepath.EvalSymlinks` on the whole
+path, so a symlink in a parent directory counts as well as a symlink in
+the last component. A target
 outside the repository is reported as a script outside the repo, at the
 severity of that target: home or a temporary directory is high, and any
 other absolute path, including a system path such as `/etc/passwd`, is

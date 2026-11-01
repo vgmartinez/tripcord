@@ -31,8 +31,9 @@
 #   see internal/scriptcheck). It is resolved against the directory that
 #   holds the harness's config directory and a Copilot hook's relative
 #   cwd. Any error looking the script up, including a broken symlink,
-#   counts as missing. A symlink that resolves outside the repository is
-#   config.script_locations, at the target's class: home or temp is high,
+#   counts as missing. A symlink in any path component that resolves
+#   outside the repository is config.script_locations, at the target's
+#   class: home or temp is high,
 #   and any other absolute path, including a system path, is medium. A
 #   line with a backslash, anything after cd, a bare operand without a
 #   directory or extension (node server), and $CLAUDE_PLUGIN_ROOT paths

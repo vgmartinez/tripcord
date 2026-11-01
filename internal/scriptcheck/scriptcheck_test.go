@@ -114,3 +114,126 @@ func TestAnnotate(t *testing.T) {
 		}
 	}
 }
+
+func TestSymlinkedDirectories(t *testing.T) {
+	probe := filepath.Join(t.TempDir(), "probe")
+	if err := os.Symlink("/tmp", probe); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	tmpFile := filepath.Join("/tmp", "tripcord-scriptcheck-x.sh")
+	if err := os.WriteFile(tmpFile, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Remove(tmpFile) })
+	nested := filepath.Join("/tmp", "tripcord-scriptcheck-b")
+	if err := os.MkdirAll(nested, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(nested, "x.sh"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(nested) })
+
+	repo := func(t *testing.T) string {
+		t.Helper()
+		root := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(root, ".claude"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		return root
+	}
+	check := func(t *testing.T, root, command string, missing int, class string) {
+		t.Helper()
+		items := []model.ConfigItem{hook(".claude/settings.json", `{"command":`+command+`}`)}
+		if err := Annotate(root, items); err != nil {
+			t.Fatal(err)
+		}
+		if int(items[0].MissingScripts) != missing || !slices.Equal(items[0].ScriptLocations, loc(class)) {
+			t.Fatalf("missing %d class %v, want missing %d class %q", items[0].MissingScripts, items[0].ScriptLocations, missing, class)
+		}
+	}
+
+	t.Run("directory to tmp", func(t *testing.T) {
+		root := repo(t)
+		if err := os.Symlink("/tmp", filepath.Join(root, "scripts")); err != nil {
+			t.Fatal(err)
+		}
+		check(t, root, `"./scripts/tripcord-scriptcheck-x.sh"`, 0, "temp")
+	})
+	t.Run("directory to etc", func(t *testing.T) {
+		if _, err := os.Stat("/etc/passwd"); err != nil {
+			t.Skip(err)
+		}
+		root := repo(t)
+		if err := os.Symlink("/etc", filepath.Join(root, "scripts")); err != nil {
+			t.Fatal(err)
+		}
+		check(t, root, `"./scripts/passwd"`, 0, "absolute")
+	})
+	t.Run("dotdot", func(t *testing.T) {
+		root := repo(t)
+		if err := os.Symlink("/tmp/..", filepath.Join(root, "a")); err != nil {
+			t.Fatal(err)
+		}
+		check(t, root, `"./a/tmp/tripcord-scriptcheck-b/x.sh"`, 0, "temp")
+	})
+	t.Run("nested link", func(t *testing.T) {
+		outside := t.TempDir()
+		if err := os.WriteFile(filepath.Join(outside, "x.sh"), nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		root := repo(t)
+		if err := os.MkdirAll(filepath.Join(root, "a"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(outside, filepath.Join(root, "a", "b")); err != nil {
+			t.Fatal(err)
+		}
+		check(t, root, `"./a/b/x.sh"`, 0, outsideClass(filepath.Join(outside, "x.sh")))
+	})
+	t.Run("chain", func(t *testing.T) {
+		root := repo(t)
+		if err := os.Symlink("/tmp", filepath.Join(root, "c")); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink("c", filepath.Join(root, "b")); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink("b", filepath.Join(root, "a")); err != nil {
+			t.Fatal(err)
+		}
+		check(t, root, `"./a/tripcord-scriptcheck-x.sh"`, 0, "temp")
+	})
+	t.Run("project dir", func(t *testing.T) {
+		root := repo(t)
+		if err := os.Symlink("/tmp", filepath.Join(root, "scripts")); err != nil {
+			t.Fatal(err)
+		}
+		check(t, root, `"\"$CLAUDE_PROJECT_DIR\"/scripts/tripcord-scriptcheck-x.sh"`, 0, "temp")
+	})
+	t.Run("bash", func(t *testing.T) {
+		root := repo(t)
+		if err := os.Symlink("/tmp", filepath.Join(root, "scripts")); err != nil {
+			t.Fatal(err)
+		}
+		check(t, root, `"bash scripts/tripcord-scriptcheck-x.sh"`, 0, "temp")
+	})
+	t.Run("root is a symlink", func(t *testing.T) {
+		real := repo(t)
+		if err := os.WriteFile(filepath.Join(real, ".claude", "present.sh"), nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		link := filepath.Join(t.TempDir(), "repo")
+		if err := os.Symlink(real, link); err != nil {
+			t.Fatal(err)
+		}
+		check(t, link, `".claude/present.sh"`, 0, "")
+	})
+}
+
+func loc(class string) []string {
+	if class == "" {
+		return nil
+	}
+	return []string{class}
+}
