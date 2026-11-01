@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/vgmartinez/tripcord/internal/adapters/kit/kittest"
 	"github.com/vgmartinez/tripcord/internal/model"
 )
 
@@ -40,7 +41,7 @@ func discoverSettings(t *testing.T, settings string) discovery {
 	t.Helper()
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, ".claude", "settings.json"), settings)
-	return discover(t, New(Options{}), root)
+	return discover(t, New(Options{FingerprintKey: kittest.FingerprintKey()}), root)
 }
 
 // The payload digest must be computed over the sanitized entry, never
@@ -101,7 +102,7 @@ func TestMCPKeysDiscriminateRedactedEnv(t *testing.T) {
 	mcpKey := func(env string) string {
 		root := t.TempDir()
 		writeFile(t, filepath.Join(root, ".mcp.json"), `{"mcpServers":{"x":{"command":"x","env":`+env+`}}}`)
-		return strings.Join(keyParts(t, discover(t, New(Options{}), root), model.ConfigKindMCPServer), "\x00")
+		return strings.Join(keyParts(t, discover(t, New(Options{FingerprintKey: kittest.FingerprintKey()}), root), model.ConfigKindMCPServer), "\x00")
 	}
 	if mcpKey(`{"API_TOKEN":"one"}`) == mcpKey(`{"API_TOKEN":"two"}`) {
 		t.Error("MCP servers differing only in a redacted env value share a key")

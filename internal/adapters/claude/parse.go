@@ -14,6 +14,7 @@ import (
 
 	"github.com/vgmartinez/tripcord/internal/adapters"
 	"github.com/vgmartinez/tripcord/internal/adapters/kit"
+	"github.com/vgmartinez/tripcord/internal/fpkey"
 	"github.com/vgmartinez/tripcord/internal/model"
 	"github.com/vgmartinez/tripcord/internal/output"
 	"github.com/vgmartinez/tripcord/internal/pathx"
@@ -59,10 +60,12 @@ type collector struct {
 	home    string
 	items   []model.ConfigItem
 	diags   []adapters.Diagnostic
+	// key selects kit's k1 discriminator; nil selects s1.
+	key *fpkey.Key
 }
 
-func newCollector() *collector {
-	return &collector{harness: model.HarnessClaude}
+func newCollector(key *fpkey.Key) *collector {
+	return &collector{harness: model.HarnessClaude, key: key}
 }
 
 func (c *collector) warn(scope model.Scope, path, format string, args ...any) {
@@ -92,8 +95,8 @@ type src struct {
 	// sanitization is the same pipeline, so signer trusts them rather
 	// than redacting each one a second time.
 	outputs map[string]bool
-	// signer computes every entry's kit.Source.EntrySignature, one
-	// source per file so its Sanitize memo spans the file's entries.
+	// signer computes every entry's kit.Source.EntryKey, one source per
+	// file so its Sanitize memo and s1 ordinals span the file's entries.
 	signer *kit.Source
 }
 
@@ -110,30 +113,29 @@ func (s *src) warnAll(warnings []string) {
 	}
 }
 
-// add emits one item. payload["key"] is the content-derived evidence key;
-// it never encodes a position in the file. kit.Source.EntrySignature's
-// parts are always appended: a digest of the payload as kit sanitizes it
-// (so a value this adapter keeps raw never feeds the fingerprint), and a
-// discriminator over removed, every raw value this adapter's own
-// sanitization removed while building the entry, plus what kit's
-// removed. Two entries whose caller-supplied key parts match, but whose
+// add emits one item. payload["key"] is the content-derived evidence key
+// from kit.Source.EntryKey: the sanitized key, a digest of the payload as
+// kit sanitizes it (so a value this adapter keeps raw never feeds the
+// fingerprint), and a discriminator over removed, every raw value this
+// adapter's own sanitization removed while building the entry, tagged
+// with its payload field, plus what kit's removed. Two entries whose caller-supplied key parts match, but whose
 // other fields differ, even only in redacted text, never share a key
 // (and therefore never share a fingerprint): see kit.Source.Add, which
 // this mirrors.
-func (s *src) add(kind model.ConfigKind, key []string, payload map[string]any, removed []string) {
+func (s *src) add(kind model.ConfigKind, key []string, payload map[string]any, removed []kit.Removal) {
 	s.addDetect(kind, key, payload, removed, nil)
 }
 
 // addDetect is add with the entry as the file wrote it, for rules to
 // evaluate: see kit.Source.AddDetect, whose raw and keep it takes.
-func (s *src) addDetect(kind model.ConfigKind, key []string, payload map[string]any, removed []string, raw map[string]any, keep ...string) {
+func (s *src) addDetect(kind model.ConfigKind, key []string, payload map[string]any, removed []kit.Removal, raw map[string]any, keep ...string) {
 	if s.signer == nil {
 		c := kit.NewCollector(s.c.harness, "Claude Code")
 		c.SetHome(s.c.home)
+		c.SetFingerprintKey(s.c.key)
 		s.signer = c.SourceSHA(s.scope, s.path, s.sha).TrustSanitized(func(v string) bool { return s.outputs[v] })
 	}
-	sig := s.signer.EntrySignature(payload, removed)
-	payload["key"] = evidenceKey(append(s.safeKey(key), sig...))
+	payload["key"] = evidenceKey(s.signer.EntryKey(kind, s.safeKey(key), payload, removed))
 	encoded, err := json.Marshal(payload)
 	if err != nil {
 		s.warn("cannot encode %s entry: %v", kind, err)
@@ -204,7 +206,7 @@ var (
 // tool-specific flags, URL userinfo, credential assignments) inside
 // value, using the same table as the output-side DefaultRedactor. It
 // returns the redacted text and the raw secret substrings it removed,
-// for kit.KeyDiscriminator.
+// for the k1 discriminator.
 func redactCommandSecrets(value string) (string, []string) {
 	var removed []string
 	value = bearerToken.ReplaceAllStringFunc(value, func(m string) string {
@@ -220,7 +222,7 @@ func redactCommandSecrets(value string) (string, []string) {
 // anywhere inside value, not only when the whole value is one URL (so a
 // command such as "curl '<url>?sig=...' | sh" is covered, not just a bare
 // "url" hook field). It returns the rewritten text and the raw removed
-// substrings, for kit.KeyDiscriminator.
+// substrings, for the k1 discriminator.
 func stripEmbeddedURLSecrets(value string) (string, []string) {
 	var removed []string
 	value = embeddedURL.ReplaceAllStringFunc(value, func(m string) string {
@@ -235,7 +237,7 @@ func stripEmbeddedURLSecrets(value string) (string, []string) {
 
 // sanitizeResult is the outcome of sanitizing one string: the safe text to
 // store or display, and the raw secret substrings that were removed to
-// produce it (never stored; only hashed by kit.KeyDiscriminator).
+// produce it (never stored; only HMAC'd by the k1 discriminator).
 type sanitizeResult struct {
 	value   string
 	removed []string
@@ -355,7 +357,7 @@ func (s *src) settingsObject(obj map[string]any) {
 		if command := commandOf(value); command != "" {
 			payload["command"] = s.safeString(command)
 		}
-		s.addDetect(kind, []string{"setting", name}, payload, removed, raw)
+		s.addDetect(kind, []string{"setting", name}, payload, kit.Removed("value", removed...), raw)
 	}
 }
 
@@ -421,20 +423,20 @@ func (s *src) hooks(value any) {
 
 func (s *src) hook(event, matcher string, hook map[string]any) {
 	payload := map[string]any{}
-	var removed []string
+	var removed []kit.Removal
 	// Sorted so removed is the same on every run. Every field's removed
 	// text counts, not only the action's: two hooks may differ only in a
 	// redacted secondary field.
 	for _, k := range sortedKeys(hook) {
 		sanitized, itemRemoved := s.safePayloadValue(k, hook[k])
 		payload[k] = sanitized
-		removed = append(removed, itemRemoved...)
+		removed = append(removed, kit.Removed(k, itemRemoved...)...)
 	}
 	if headers, ok := hook["headers"].(map[string]any); ok {
 		var headerRemoved []string
 		payload["headers"], headerRemoved = redactValues(headers)
 		payload["header_keys"] = sortedKeys(headers)
-		removed = append(removed, headerRemoved...)
+		removed = append(removed, kit.Removed("headers", headerRemoved...)...)
 	}
 	payload["event"] = event
 	payload["matcher"] = matcher
@@ -449,7 +451,7 @@ func (s *src) hook(event, matcher string, hook map[string]any) {
 }
 
 // safePayloadValue sanitizes value and returns the raw secret substrings
-// it removed, for kit.KeyDiscriminator. For an array (an MCP server's
+// it removed, for the k1 discriminator. For an array (an MCP server's
 // "args", for example), three two-element shapes are recognized, since
 // neither element alone carries both the flag and its value for
 // commandSecretFlag or bearerToken to match on a single string:
@@ -506,7 +508,7 @@ func (s *src) safePayloadValue(key string, value any) (any, []string) {
 	case map[string]any:
 		out := make(map[string]any, len(v))
 		var removed []string
-		// Sorted so removed, and therefore kit.KeyDiscriminator, is the same
+		// Sorted so removed, and therefore the discriminator, is the same
 		// on every run despite Go's randomized map iteration order.
 		for _, name := range sortedKeys(v) {
 			sanitized, itemRemoved := s.safePayloadValue(name, v[name])
@@ -580,24 +582,24 @@ func (s *src) mcpServers(value any, project string) {
 			continue
 		}
 		payload := map[string]any{}
-		var removed []string
+		var removed []kit.Removal
 		for _, k := range sortedKeys(server) {
 			sanitized, itemRemoved := s.safePayloadValue(k, server[k])
 			payload[k] = sanitized
-			removed = append(removed, itemRemoved...)
+			removed = append(removed, kit.Removed(k, itemRemoved...)...)
 		}
-		removed = append(removed, redactToolArgs(payload)...)
+		removed = append(removed, kit.Removed("args", redactToolArgs(payload)...)...)
 		if env, ok := server["env"].(map[string]any); ok {
 			var envRemoved []string
 			payload["env"], envRemoved = redactValues(env)
 			payload["env_keys"] = sortedKeys(env)
-			removed = append(removed, envRemoved...)
+			removed = append(removed, kit.Removed("env", envRemoved...)...)
 		}
 		if headers, ok := server["headers"].(map[string]any); ok {
 			var headerRemoved []string
 			payload["headers"], headerRemoved = redactValues(headers)
 			payload["header_keys"] = sortedKeys(headers)
-			removed = append(removed, headerRemoved...)
+			removed = append(removed, kit.Removed("headers", headerRemoved...)...)
 		}
 		payload["name"] = name
 		key := []string{"mcp", name}
@@ -711,7 +713,7 @@ func secretKey(name string) bool {
 // removed), hosts, booleans, numbers, and other non-secrets. A value is
 // replaced with [REDACTED] when its name looks like a secret or the value
 // matches output.DefaultRedactor. Sinks redact again. It also returns
-// the raw text it removed, in key order, for kit.KeyDiscriminator.
+// the raw text it removed, in key order, for the k1 discriminator.
 func redactValues(m map[string]any) (map[string]any, []string) {
 	out := make(map[string]any, len(m))
 	var removed []string
@@ -760,8 +762,8 @@ func redactString(value string, removed *[]string) string {
 	return value
 }
 
-// removedText is the text a whole redacted value contributes to
-// kit.KeyDiscriminator.
+// removedText is the text a whole redacted value contributes to the k1
+// discriminator.
 func removedText(value any) string {
 	if text, ok := value.(string); ok {
 		return text
@@ -776,7 +778,7 @@ func removedText(value any) string {
 // userinfo too) and, if so, returns it without userinfo, query, or
 // fragment. The host and path stay so a rule can see where a proxy or
 // base URL points. removedRaw is the exact userinfo, query, and fragment
-// text that was removed (NUL-joined), used only by kit.KeyDiscriminator; it
+// text that was removed (NUL-joined), used only by the k1 discriminator; it
 // is never stored or displayed.
 func stripURLSecrets(raw string) (stripped, removedRaw string, ok bool) {
 	u, err := url.Parse(raw)
@@ -806,9 +808,10 @@ func stripURLSecrets(raw string) (stripped, removedRaw string, ok bool) {
 // user-scope ~/.agents/skills every harness that follows the agent
 // skills standard shares. home is the scanning machine's home directory,
 // used to rewrite it as "~" in content when scope is ScopeUser (see
-// src.tildeHome); callers outside user scope may pass "".
-func NormalizeSkill(harness model.Harness, scope model.Scope, path, home string, raw []byte) ([]model.ConfigItem, []adapters.Diagnostic) {
-	c := &collector{harness: harness, home: home}
+// src.tildeHome); callers outside user scope may pass "". key selects
+// the k1 discriminator, nil the s1 one.
+func NormalizeSkill(harness model.Harness, scope model.Scope, path, home string, key *fpkey.Key, raw []byte) ([]model.ConfigItem, []adapters.Diagnostic) {
+	c := &collector{harness: harness, home: home, key: key}
 	newSrc(c, scope, path, raw).markdown(model.ConfigKindSkill, "skill", raw)
 	return c.items, c.diags
 }

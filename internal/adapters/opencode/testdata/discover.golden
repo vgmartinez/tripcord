@@ -7,7 +7,7 @@
       "sha256": "6306ddb37b060d40ba5d569ee5dba238c43cda9b48f5cea0f45b5201c4e16f4c",
       "kind": "mcp-server",
       "payload": {
-        "key": "[\"mcp\",\"corp\",\"sig:777b6f2185176cdd\",\"sig:56b26b04\"]",
+        "key": "[\"mcp\",\"corp\",\"sig:777b6f2185176cdd\",\"sig:s1:url[0]#0\"]",
         "name": "corp",
         "type": "remote",
         "url": "https://mcp.corp.example/"
@@ -155,7 +155,7 @@
       "sha256": "04d11c1fa5bc9be5afe5f1b98f90068388fa77afb46be559cde15b089c312aea",
       "kind": "instructions",
       "payload": {
-        "key": "[\"command\",\"deploy\",\"sig:9194250ea67f1591\",\"sig:94105c4c\"]",
+        "key": "[\"command\",\"deploy\",\"sig:9194250ea67f1591\",\"sig:s1:template[0]#0\"]",
         "name": "deploy",
         "role": "command",
         "setting": "command",
@@ -203,7 +203,7 @@
           "DB_HOST": "localhost",
           "DB_TOKEN": "[REDACTED]"
         },
-        "key": "[\"mcp\",\"local-db\",\"sig:1f13f45145ff8d13\",\"sig:dda580a7\"]",
+        "key": "[\"mcp\",\"local-db\",\"sig:1f13f45145ff8d13\",\"sig:s1:command[0],environment[0],DB_TOKEN[0],[0]#0\"]",
         "name": "local-db",
         "type": "local"
       }
@@ -221,7 +221,7 @@
         "headers": {
           "Authorization": "[REDACTED]"
         },
-        "key": "[\"mcp\",\"remote\",\"sig:08a4eeb9ff685511\",\"sig:2ceb0a59\"]",
+        "key": "[\"mcp\",\"remote\",\"sig:08a4eeb9ff685511\",\"sig:s1:headers[0],url[0],Authorization[0]#0\"]",
         "name": "remote",
         "type": "remote",
         "url": "https://mcp.example.com/sse"
@@ -307,7 +307,7 @@
           "--token",
           "[REDACTED]"
         ],
-        "key": "[\"mcp\",\"home\",\"sig:2a010dee006c0e2c\",\"sig:646907f4\"]",
+        "key": "[\"mcp\",\"home\",\"sig:2a010dee006c0e2c\",\"sig:s1:command[0],[0]#0\"]",
         "name": "home",
         "type": "local"
       }

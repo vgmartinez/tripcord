@@ -199,7 +199,7 @@ func TestMCPSecretsSeparateFingerprints(t *testing.T) {
 	key := func(secret string) string {
 		root := t.TempDir()
 		kittest.WriteFile(t, filepath.Join(root, "opencode.json"), `{"mcp":{"a":{"type":"local","command":["docker","login","-p","`+secret+`"]}}}`)
-		got := kittest.Discover(t, New(Options{}), root)
+		got := kittest.Discover(t, New(Options{FingerprintKey: kittest.FingerprintKey()}), root)
 		if len(got.Items) != 1 {
 			t.Fatalf("items = %+v", got.Items)
 		}

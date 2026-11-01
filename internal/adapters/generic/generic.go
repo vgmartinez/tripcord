@@ -16,6 +16,7 @@ import (
 	"github.com/vgmartinez/tripcord/internal/adapters"
 	"github.com/vgmartinez/tripcord/internal/adapters/claude"
 	"github.com/vgmartinez/tripcord/internal/adapters/kit"
+	"github.com/vgmartinez/tripcord/internal/fpkey"
 	"github.com/vgmartinez/tripcord/internal/model"
 )
 
@@ -44,6 +45,9 @@ type Options struct {
 	// one harness still reads it, without the skills and AGENTS.md the
 	// harness may not load. IncludeUser is ignored.
 	TasksOnly bool
+	// FingerprintKey selects the keyed k1 "sig:" discriminator for
+	// entries that lost a secret to redaction; nil selects s1.
+	FingerprintKey *fpkey.Key
 }
 
 // Adapter discovers shared files.
@@ -92,6 +96,7 @@ func (a *Adapter) Discover(ctx context.Context, repoRoot string) ([]model.Config
 		return nil, err
 	}
 	c := kit.NewCollector(model.SurfaceGeneric, product)
+	c.SetFingerprintKey(a.options.FingerprintKey)
 	if a.options.IncludeUser && !a.options.TasksOnly {
 		if err := a.discoverUser(ctx, c); err != nil {
 			return nil, err
@@ -128,7 +133,7 @@ func (a *Adapter) discoverRepo(ctx context.Context, repoRoot string, c *kit.Coll
 		}
 		switch classify(rel) {
 		case roleSkill:
-			c.Append(claude.NormalizeSkill(model.SurfaceGeneric, model.ScopeRepo, rel, "", raw))
+			c.Append(claude.NormalizeSkill(model.SurfaceGeneric, model.ScopeRepo, rel, "", a.options.FingerprintKey, raw))
 		case roleAgents:
 			c.Source(model.ScopeRepo, rel, raw).Markdown(model.ConfigKindInstructions, "agents", raw, kit.LooseFrontmatter)
 		case roleTasks:
@@ -164,7 +169,7 @@ func (a *Adapter) discoverUser(ctx context.Context, c *kit.Collector) error {
 		if !ok {
 			continue
 		}
-		c.Append(claude.NormalizeSkill(model.SurfaceGeneric, model.ScopeUser, dir.Logical+"/"+rel, home, raw))
+		c.Append(claude.NormalizeSkill(model.SurfaceGeneric, model.ScopeUser, dir.Logical+"/"+rel, home, a.options.FingerprintKey, raw))
 	}
 	return nil
 }

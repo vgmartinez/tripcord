@@ -110,7 +110,9 @@ func (s *Source) redactMaps(raw, payload map[string]any, names ...string) {
 		if !ok {
 			continue
 		}
+		restore := s.enterField(name)
 		payload[name] = s.RedactValues(m)
+		restore()
 		keysName := name + "_keys"
 		if name == "headers" {
 			keysName = "header_keys"
@@ -194,7 +196,9 @@ func (s *Source) redactToolArgs(payload map[string]any) {
 	if len(removed) == 0 {
 		return
 	}
+	restore := s.enterField("args")
 	s.recordRemoved(removed...)
+	restore()
 	out := make([]any, len(args))
 	for i, arg := range args {
 		if _, isString := arg.(string); isString {
@@ -233,7 +237,9 @@ func (s *Source) Markdown(kind model.ConfigKind, role string, raw []byte, mode F
 		text = body
 	}
 	content, removed := stripEmbeddedURLSecrets(string(text))
+	restore := s.enterField("content")
 	s.recordRemoved(removed...)
+	restore()
 	payload := map[string]any{"role": role, "content": s.tildeHome(content)}
 	meta := s.frontmatter(raw, mode, folded)
 	if meta != nil {

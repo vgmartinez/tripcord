@@ -21,7 +21,7 @@ func TestRulesFileOpaqueRedactsFlagValueLiterals(t *testing.T) {
 			"prefix_rule(pattern = [\"aws\", \"configure\", \"--secret-access-key\", \""+secret+"\"]) + unknown\n"+
 				"prefix_rule(pattern = ['gh', '--token', 'GH"+secret+"'])\n"+
 				"# kept: \"--verbose\"\n")
-		got := kittest.Discover(t, New(Options{}), root)
+		got := kittest.Discover(t, New(Options{FingerprintKey: kittest.FingerprintKey()}), root)
 		items := got.Find(".codex/rules/default.rules", model.ConfigKindPermissions)
 		if len(items) != 1 {
 			t.Fatalf("items = %+v, want one opaque item", got.Items)

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/vgmartinez/tripcord/internal/adapters/kit/kittest"
 	"github.com/vgmartinez/tripcord/internal/model"
 )
 
@@ -257,8 +258,8 @@ func TestPluginKeyDiscriminatorSeparatesSecrets(t *testing.T) {
 			rootA, rootB := t.TempDir(), t.TempDir()
 			writeFile(t, filepath.Join(rootA, tc.path), tc.a)
 			writeFile(t, filepath.Join(rootB, tc.path), tc.b)
-			keysA := itemKeys(t, discover(t, New(Options{}), rootA).Items)
-			keysB := itemKeys(t, discover(t, New(Options{}), rootB).Items)
+			keysA := itemKeys(t, discover(t, New(Options{FingerprintKey: kittest.FingerprintKey()}), rootA).Items)
+			keysB := itemKeys(t, discover(t, New(Options{FingerprintKey: kittest.FingerprintKey()}), rootB).Items)
 			if len(keysA) == 0 || strings.Join(keysA, "\n") == strings.Join(keysB, "\n") {
 				t.Fatalf("entries differing only by a secret collide: %v", keysA)
 			}

@@ -25,6 +25,7 @@ import (
 	"github.com/vgmartinez/tripcord/internal/adapters/kit/kittest"
 	"github.com/vgmartinez/tripcord/internal/adapters/opencode"
 	"github.com/vgmartinez/tripcord/internal/adapters/windsurf"
+	"github.com/vgmartinez/tripcord/internal/fpkey"
 	"github.com/vgmartinez/tripcord/internal/model"
 	"github.com/vgmartinez/tripcord/internal/output"
 	"github.com/vgmartinez/tripcord/internal/rules"
@@ -105,16 +106,21 @@ func userConfig(t *testing.T, home string) {
 }
 
 func allAdapters(home string, user bool) []adapters.Adapter {
+	return keyedAdapters(home, user, nil)
+}
+
+// keyedAdapters is allAdapters with fingerprint key k (nil selects s1).
+func keyedAdapters(home string, user bool, k *fpkey.Key) []adapters.Adapter {
 	return []adapters.Adapter{
-		claude.New(claude.Options{IncludeUser: user, HomeDir: home, Getenv: kittest.Env()}),
-		codex.New(codex.Options{IncludeUser: user, HomeDir: home, Getenv: kittest.Env()}),
-		cursor.New(cursor.Options{IncludeUser: user, HomeDir: home}),
-		copilot.New(copilot.Options{IncludeUser: user, HomeDir: home, Getenv: kittest.Env()}),
-		generic.New(generic.Options{IncludeUser: user, HomeDir: home}),
-		gemini.New(gemini.Options{IncludeUser: user, HomeDir: home, Getenv: kittest.Env()}),
-		opencode.New(opencode.Options{IncludeUser: user, HomeDir: home, Getenv: kittest.Env()}),
-		windsurf.New(windsurf.Options{IncludeUser: user, HomeDir: home, Getenv: kittest.Env()}),
-		devcontainer.New(devcontainer.Options{}),
+		claude.New(claude.Options{IncludeUser: user, HomeDir: home, Getenv: kittest.Env(), FingerprintKey: k}),
+		codex.New(codex.Options{IncludeUser: user, HomeDir: home, Getenv: kittest.Env(), FingerprintKey: k}),
+		cursor.New(cursor.Options{IncludeUser: user, HomeDir: home, FingerprintKey: k}),
+		copilot.New(copilot.Options{IncludeUser: user, HomeDir: home, Getenv: kittest.Env(), FingerprintKey: k}),
+		generic.New(generic.Options{IncludeUser: user, HomeDir: home, FingerprintKey: k}),
+		gemini.New(gemini.Options{IncludeUser: user, HomeDir: home, Getenv: kittest.Env(), FingerprintKey: k}),
+		opencode.New(opencode.Options{IncludeUser: user, HomeDir: home, Getenv: kittest.Env(), FingerprintKey: k}),
+		windsurf.New(windsurf.Options{IncludeUser: user, HomeDir: home, Getenv: kittest.Env(), FingerprintKey: k}),
+		devcontainer.New(devcontainer.Options{FingerprintKey: k}),
 	}
 }
 

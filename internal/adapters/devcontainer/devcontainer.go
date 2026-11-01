@@ -13,6 +13,7 @@ import (
 
 	"github.com/vgmartinez/tripcord/internal/adapters"
 	"github.com/vgmartinez/tripcord/internal/adapters/kit"
+	"github.com/vgmartinez/tripcord/internal/fpkey"
 	"github.com/vgmartinez/tripcord/internal/model"
 )
 
@@ -23,6 +24,9 @@ const product = "Dev Containers"
 type Options struct {
 	SkipRepo bool
 	Limits   *kit.Limits
+	// FingerprintKey selects the keyed k1 "sig:" discriminator for
+	// entries that lost a secret to redaction; nil selects s1.
+	FingerprintKey *fpkey.Key
 }
 
 // Adapter discovers Dev Container config.
@@ -66,6 +70,7 @@ func (a *Adapter) Discover(ctx context.Context, repoRoot string) ([]model.Config
 		return nil, err
 	}
 	c := kit.NewCollector(model.SurfaceDevcontainer, product)
+	c.SetFingerprintKey(a.options.FingerprintKey)
 	if a.options.SkipRepo {
 		return c.Result()
 	}

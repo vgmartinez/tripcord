@@ -24,6 +24,7 @@ import (
 
 	"github.com/vgmartinez/tripcord/internal/adapters"
 	"github.com/vgmartinez/tripcord/internal/adapters/kit"
+	"github.com/vgmartinez/tripcord/internal/fpkey"
 	"github.com/vgmartinez/tripcord/internal/model"
 )
 
@@ -49,6 +50,9 @@ type Options struct {
 	// Linux, and %ProgramData%\opencode on Windows.
 	ManagedDir string
 	Limits     *kit.Limits
+	// FingerprintKey selects the keyed k1 "sig:" discriminator for
+	// entries that lost a secret to redaction; nil selects s1.
+	FingerprintKey *fpkey.Key
 }
 
 // Adapter discovers OpenCode config.
@@ -102,6 +106,7 @@ func (a *Adapter) Discover(ctx context.Context, repoRoot string) ([]model.Config
 		return nil, err
 	}
 	c := kit.NewCollector(model.HarnessOpenCode, product)
+	c.SetFingerprintKey(a.options.FingerprintKey)
 	if !a.options.SkipRepo {
 		if err := a.discoverRepo(ctx, repoRoot, c); err != nil {
 			return nil, err

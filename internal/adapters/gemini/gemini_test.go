@@ -216,7 +216,7 @@ func TestOpaqueHooksSeparateSecrets(t *testing.T) {
 	key := func(token string) string {
 		root := t.TempDir()
 		kittest.WriteFile(t, filepath.Join(root, ".gemini", "settings.json"), `{"hooks":{"BeforeTool":[{"type":"command","command":"run --token `+token+`"}]}}`)
-		got := kittest.Discover(t, New(Options{}), root)
+		got := kittest.Discover(t, New(Options{FingerprintKey: kittest.FingerprintKey()}), root)
 		if len(got.Items) != 1 || strings.Contains(string(got.Items[0].Payload), token) {
 			t.Fatalf("items = %+v", got.Items)
 		}

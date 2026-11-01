@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/vgmartinez/tripcord/internal/adapters/kit/kittest"
 	"github.com/vgmartinez/tripcord/internal/model"
 )
 
@@ -45,8 +46,8 @@ func TestHookKeyDiscriminatorSeparatesSecrets(t *testing.T) {
 		rootA, rootB := t.TempDir(), t.TempDir()
 		writeFile(t, filepath.Join(rootA, ".claude", "settings.json"), `{"hooks":{"PreToolUse":[{"hooks":[{"type":"command","command":"notify --token AAAAAAAAAAAA"}]}]}}`)
 		writeFile(t, filepath.Join(rootB, ".claude", "settings.json"), `{"hooks":{"PreToolUse":[{"hooks":[{"type":"command","command":"notify --token BBBBBBBBBBBB"}]}]}}`)
-		gotA := discover(t, New(Options{}), rootA)
-		gotB := discover(t, New(Options{}), rootB)
+		gotA := discover(t, New(Options{FingerprintKey: kittest.FingerprintKey()}), rootA)
+		gotB := discover(t, New(Options{FingerprintKey: kittest.FingerprintKey()}), rootB)
 		if len(gotA.Items) != 1 || len(gotB.Items) != 1 {
 			t.Fatalf("items A=%+v B=%+v", gotA.Items, gotB.Items)
 		}
@@ -65,8 +66,8 @@ func TestHookKeyDiscriminatorSeparatesSecrets(t *testing.T) {
 		rootA, rootB := t.TempDir(), t.TempDir()
 		writeFile(t, filepath.Join(rootA, ".claude", "settings.json"), `{"hooks":{"PreToolUse":[{"hooks":[{"type":"http","url":"https://hook.example/x?sig=AAA"}]}]}}`)
 		writeFile(t, filepath.Join(rootB, ".claude", "settings.json"), `{"hooks":{"PreToolUse":[{"hooks":[{"type":"http","url":"https://hook.example/x?sig=DDD"}]}]}}`)
-		gotA := discover(t, New(Options{}), rootA)
-		gotB := discover(t, New(Options{}), rootB)
+		gotA := discover(t, New(Options{FingerprintKey: kittest.FingerprintKey()}), rootA)
+		gotB := discover(t, New(Options{FingerprintKey: kittest.FingerprintKey()}), rootB)
 		if len(gotA.Items) != 1 || len(gotB.Items) != 1 {
 			t.Fatalf("items A=%+v B=%+v", gotA.Items, gotB.Items)
 		}
@@ -84,8 +85,8 @@ func TestHookKeyDiscriminatorSeparatesSecrets(t *testing.T) {
 		}
 		writeFile(t, filepath.Join(homeA, ".claude", "settings.json"), `{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"`+command(homeA)+`"}]}]}}`)
 		writeFile(t, filepath.Join(homeB, ".claude", "settings.json"), `{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"`+command(homeB)+`"}]}]}}`)
-		gotA := discover(t, New(Options{IncludeUser: true, HomeDir: homeA, Getenv: noEnv}), t.TempDir())
-		gotB := discover(t, New(Options{IncludeUser: true, HomeDir: homeB, Getenv: noEnv}), t.TempDir())
+		gotA := discover(t, New(Options{FingerprintKey: kittest.FingerprintKey(), IncludeUser: true, HomeDir: homeA, Getenv: noEnv}), t.TempDir())
+		gotB := discover(t, New(Options{FingerprintKey: kittest.FingerprintKey(), IncludeUser: true, HomeDir: homeB, Getenv: noEnv}), t.TempDir())
 		if len(gotA.Items) != 1 || len(gotB.Items) != 1 {
 			t.Fatalf("items A=%+v B=%+v", gotA.Items, gotB.Items)
 		}
@@ -402,8 +403,8 @@ func TestMCPServerKeyDiscriminatorSeparatesSecrets(t *testing.T) {
 	}
 	writeFile(t, filepath.Join(rootA, ".mcp.json"), cfgFor("TOKEN-VALUE-AAAA"))
 	writeFile(t, filepath.Join(rootB, ".mcp.json"), cfgFor("TOKEN-VALUE-BBBB"))
-	gotA := discover(t, New(Options{}), rootA)
-	gotB := discover(t, New(Options{}), rootB)
+	gotA := discover(t, New(Options{FingerprintKey: kittest.FingerprintKey()}), rootA)
+	gotB := discover(t, New(Options{FingerprintKey: kittest.FingerprintKey()}), rootB)
 	if len(gotA.Items) != 1 || len(gotB.Items) != 1 {
 		t.Fatalf("items A=%+v B=%+v", gotA.Items, gotB.Items)
 	}

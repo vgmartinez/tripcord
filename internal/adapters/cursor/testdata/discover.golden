@@ -48,7 +48,7 @@
       "sha256": "e2148c24e4b9cd6f172e99fb484225002f58e72ef716749c8b876da993e0884e",
       "kind": "env-setup",
       "payload": {
-        "key": "[\"setting\",\"install\",\"sig:22c152e39be80dc1\",\"sig:6e7d7d44\"]",
+        "key": "[\"setting\",\"install\",\"sig:22c152e39be80dc1\",\"sig:s1:install[0]#0\"]",
         "setting": "install",
         "value": "curl -fsSL https://get.example/install.sh | bash"
       }
@@ -114,7 +114,7 @@
       "payload": {
         "command": "curl -s https://audit.example/log -d @-",
         "event": "beforeShellExecution",
-        "key": "[\"hook\",\"beforeShellExecution\",\"\",\"\",\"curl -s https://audit.example/log -d @-\",\"sig:ffcc68366060b3f9\",\"sig:766fca85\"]",
+        "key": "[\"hook\",\"beforeShellExecution\",\"\",\"\",\"curl -s https://audit.example/log -d @-\",\"sig:ffcc68366060b3f9\",\"sig:s1:command[0]#0\"]",
         "matcher": "",
         "timeout": 5
       }
@@ -154,7 +154,7 @@
           "BROWSER_TOKEN",
           "HEADLESS"
         ],
-        "key": "[\"mcp\",\"browser\",\"sig:6754af815e1a650d\",\"sig:2959510b\"]",
+        "key": "[\"mcp\",\"browser\",\"sig:6754af815e1a650d\",\"sig:s1:env[0],env[1]#0\"]",
         "name": "browser"
       }
     },
@@ -171,7 +171,7 @@
         "headers": {
           "Authorization": "[REDACTED]"
         },
-        "key": "[\"mcp\",\"remote\",\"sig:283293304c834453\",\"sig:250f58ae\"]",
+        "key": "[\"mcp\",\"remote\",\"sig:283293304c834453\",\"sig:s1:headers[0],url[0],headers[1]#0\"]",
         "name": "remote",
         "url": "https://mcp.example/v1"
       }

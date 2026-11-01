@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/vgmartinez/tripcord/internal/adapters"
+	"github.com/vgmartinez/tripcord/internal/adapters/kit"
 	"github.com/vgmartinez/tripcord/internal/model"
 )
 
@@ -478,7 +479,7 @@ func (s *src) marketplace(raw []byte, base string) []string {
 				payload["plugin_root"] = root
 			}
 		}
-		s.add(model.ConfigKindPlugin, []string{"plugin", name}, payload, removed)
+		s.add(model.ConfigKindPlugin, []string{"plugin", name}, payload, kit.Removed("value", removed...))
 		if hooks, ok := entry["hooks"].(map[string]any); ok {
 			s.hooks(hooks)
 		}
@@ -506,7 +507,7 @@ func (s *src) pluginManifest(raw []byte) []fileRef {
 	root := pluginRootOf(s.path)
 	name, _ := obj["name"].(string)
 	sanitizedObj, removed := s.safePayloadValue("plugin", obj)
-	s.add(model.ConfigKindPlugin, []string{"plugin", name}, map[string]any{"setting": "plugin", "value": sanitizedObj, "plugin_root": root}, removed)
+	s.add(model.ConfigKindPlugin, []string{"plugin", name}, map[string]any{"setting": "plugin", "value": sanitizedObj, "plugin_root": root}, kit.Removed("value", removed...))
 	var refs []fileRef
 	collect := func(value any, role fileRole, inline func(any)) {
 		switch v := value.(type) {

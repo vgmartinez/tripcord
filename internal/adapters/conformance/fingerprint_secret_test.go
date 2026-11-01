@@ -9,6 +9,7 @@ import (
 
 	"github.com/vgmartinez/tripcord/internal/adapters/kit"
 	"github.com/vgmartinez/tripcord/internal/adapters/kit/kittest"
+	"github.com/vgmartinez/tripcord/internal/fpkey"
 	"github.com/vgmartinez/tripcord/internal/model"
 	"github.com/vgmartinez/tripcord/internal/output"
 	"github.com/vgmartinez/tripcord/internal/rules"
@@ -77,13 +78,26 @@ func writeAppServer(t *testing.T, root, home string, args []any) {
 	kittest.WriteFile(t, filepath.Join(home, ".codeium", "windsurf", "mcp_config.json"), mcpServers)
 }
 
-// appServers discovers args in a fresh repository and home and returns
-// the "app" MCP item of each adapter.
-func appServers(t *testing.T, args []any) map[model.Harness]model.ConfigItem {
+// conformanceKey is the k1 fingerprint key of the secret-variant tests.
+const conformanceKey = "c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00"
+
+func testKey(t *testing.T) *fpkey.Key {
+	t.Helper()
+	k, err := fpkey.New(conformanceKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return k
+}
+
+// appServers discovers args in a fresh repository and home with
+// fingerprint key k (nil selects s1) and returns the "app" MCP item of
+// each adapter.
+func appServers(t *testing.T, args []any, k *fpkey.Key) map[model.Harness]model.ConfigItem {
 	t.Helper()
 	root, home := t.TempDir(), t.TempDir()
 	writeAppServer(t, root, home, args)
-	got := discoverAll(t, root, allAdapters(home, true))
+	got := discoverAll(t, root, keyedAdapters(home, true, k))
 	out := map[model.Harness]model.ConfigItem{}
 	for _, items := range got.byAdapter {
 		for _, item := range items {
@@ -112,9 +126,9 @@ func withoutKey(t *testing.T, item model.ConfigItem) string {
 	return string(raw)
 }
 
-// TestMCPFingerprintTracksSecretValue checks that the same MCP server
-// with a different secret value gets a different fingerprint in every
-// adapter, while the sanitized payload, the evidence key, and every
+// TestMCPFingerprintTracksSecretValue checks that, with a fingerprint
+// key (k1), the same MCP server with a different secret value gets a
+// different fingerprint in every adapter, while the sanitized payload, the evidence key, and every
 // report format carry none of the secrets. The payloads are identical
 // across variants, so only the discriminator over removed values can
 // tell them apart.
@@ -128,11 +142,12 @@ func TestMCPFingerprintTracksSecretValue(t *testing.T) {
 	for _, group := range secretVariantGroups {
 		t.Run(group.name, func(t *testing.T) {
 			t.Parallel()
+			key := testKey(t)
 			found := make([]map[model.Harness]model.ConfigItem, len(group.variants))
 			for i, v := range group.variants {
-				found[i] = appServers(t, v.args)
+				found[i] = appServers(t, v.args, key)
 			}
-			again := appServers(t, group.variants[0].args)
+			again := appServers(t, group.variants[0].args, key)
 			var findings []model.Finding
 			for _, harness := range harnesses {
 				fps := map[string]string{}

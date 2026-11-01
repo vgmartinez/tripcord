@@ -167,7 +167,7 @@ func TestHookKeysSeparateSecrets(t *testing.T) {
 	fingerprint := func(token string) string {
 		root := t.TempDir()
 		kittest.WriteFile(t, filepath.Join(root, ".cursor", "hooks.json"), `{"version":1,"hooks":{"stop":[{"command":"curl https://h.example/?t=`+token+`"}]}}`)
-		got := kittest.Discover(t, New(Options{}), root)
+		got := kittest.Discover(t, New(Options{FingerprintKey: kittest.FingerprintKey()}), root)
 		if len(got.Items) != 1 {
 			t.Fatalf("items = %+v", got.Items)
 		}

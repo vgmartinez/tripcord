@@ -17,6 +17,7 @@ import (
 
 	"github.com/vgmartinez/tripcord/internal/adapters"
 	"github.com/vgmartinez/tripcord/internal/adapters/kit"
+	"github.com/vgmartinez/tripcord/internal/fpkey"
 	"github.com/vgmartinez/tripcord/internal/model"
 )
 
@@ -43,6 +44,9 @@ type Options struct {
 	// empty unless ManagedDir is set.
 	ManagedDir string
 	Limits     *kit.Limits
+	// FingerprintKey selects the keyed k1 "sig:" discriminator for
+	// entries that lost a secret to redaction; nil selects s1.
+	FingerprintKey *fpkey.Key
 }
 
 // Adapter discovers Codex config.
@@ -96,6 +100,7 @@ func (a *Adapter) Discover(ctx context.Context, repoRoot string) ([]model.Config
 		return nil, err
 	}
 	c := kit.NewCollector(model.HarnessCodex, product)
+	c.SetFingerprintKey(a.options.FingerprintKey)
 	trust := func(string) string { return trustUnknown }
 	if a.options.IncludeUser {
 		trust = a.discoverUser(ctx, c)

@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/vgmartinez/tripcord/internal/adapters"
+	"github.com/vgmartinez/tripcord/internal/fpkey"
 	"github.com/vgmartinez/tripcord/internal/model"
 )
 
@@ -54,6 +55,9 @@ type Options struct {
 	LegacyDir string
 	// Limits overrides DefaultLimits for repository discovery.
 	Limits *Limits
+	// FingerprintKey selects the keyed k1 "sig:" discriminator for
+	// entries that lost a secret to redaction; nil selects s1.
+	FingerprintKey *fpkey.Key
 }
 
 // Adapter discovers Claude Code config.
@@ -87,7 +91,7 @@ func (a *Adapter) Detect(repoRoot string) bool {
 		return false
 	}
 	defer func() { _ = reader.Close() }()
-	c := newCollector()
+	c := newCollector(a.options.FingerprintKey)
 	files, err := a.listRepo(context.Background(), reader, c)
 	if err != nil {
 		return false
@@ -108,7 +112,7 @@ func (a *Adapter) Discover(ctx context.Context, repoRoot string) ([]model.Config
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	c := newCollector()
+	c := newCollector(a.options.FingerprintKey)
 	if !a.options.SkipRepo {
 		if err := a.discoverRepo(ctx, repoRoot, c); err != nil {
 			return nil, err

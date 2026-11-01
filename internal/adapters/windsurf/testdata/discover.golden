@@ -9,7 +9,7 @@
       "payload": {
         "command": "/opt/corp/block-rm.sh --secret [REDACTED]",
         "event": "pre_run_command",
-        "key": "[\"hook\",\"pre_run_command\",\"\",\"\",\"/opt/corp/block-rm.sh --secret [REDACTED]\",\"sig:0080cca0c94b5b87\",\"sig:23c71309\"]",
+        "key": "[\"hook\",\"pre_run_command\",\"\",\"\",\"/opt/corp/block-rm.sh --secret [REDACTED]\",\"sig:0080cca0c94b5b87\",\"sig:s1:command[0]#0\"]",
         "matcher": ""
       }
     },
@@ -62,7 +62,7 @@
       "payload": {
         "command": "curl -s https://hooks.example.com/log",
         "event": "post_cascade_response",
-        "key": "[\"hook\",\"post_cascade_response\",\"\",\"\",\"curl -s https://hooks.example.com/log\",\"sig:763a480d3c8ff509\",\"sig:9c04b7be\"]",
+        "key": "[\"hook\",\"post_cascade_response\",\"\",\"\",\"curl -s https://hooks.example.com/log\",\"sig:763a480d3c8ff509\",\"sig:s1:command[0]#0\"]",
         "matcher": ""
       }
     },
@@ -75,7 +75,7 @@
       "payload": {
         "command": "python3 .windsurf/guard.py --token [REDACTED]",
         "event": "pre_mcp_tool_use",
-        "key": "[\"hook\",\"pre_mcp_tool_use\",\"\",\"\",\"python3 .windsurf/guard.py --token [REDACTED]\",\"sig:e0baff4a3d89fcc5\",\"sig:f8896aec\"]",
+        "key": "[\"hook\",\"pre_mcp_tool_use\",\"\",\"\",\"python3 .windsurf/guard.py --token [REDACTED]\",\"sig:e0baff4a3d89fcc5\",\"sig:s1:command[0]#0\"]",
         "matcher": "",
         "show_output": true
       }
@@ -92,7 +92,7 @@
           "globs": "**/*.sql",
           "trigger": "glob"
         },
-        "key": "[\"rule\",\"sig:f2f482a67674101b\",\"sig:07130164\"]",
+        "key": "[\"rule\",\"sig:f2f482a67674101b\",\"sig:s1:content[0]#0\"]",
         "role": "rule"
       }
     },
@@ -132,7 +132,7 @@
       "payload": {
         "command": "npm run lint -- --api-key [REDACTED]",
         "event": "pre_write_code",
-        "key": "[\"hook\",\"pre_write_code\",\"\",\"\",\"npm run lint -- --api-key [REDACTED]\",\"sig:846c6721b8b46b78\",\"sig:79069124\"]",
+        "key": "[\"hook\",\"pre_write_code\",\"\",\"\",\"npm run lint -- --api-key [REDACTED]\",\"sig:846c6721b8b46b78\",\"sig:s1:command[0]#0\"]",
         "matcher": ""
       }
     },
@@ -180,7 +180,7 @@
         "env_keys": [
           "GITHUB_PERSONAL_ACCESS_TOKEN"
         ],
-        "key": "[\"mcp\",\"github\",\"sig:bc0fa3b1373d47ad\",\"sig:a8d36b24\"]",
+        "key": "[\"mcp\",\"github\",\"sig:bc0fa3b1373d47ad\",\"sig:s1:env[0],env[1]#0\"]",
         "name": "github"
       }
     },
@@ -197,7 +197,7 @@
         "headers": {
           "Authorization": "[REDACTED]"
         },
-        "key": "[\"mcp\",\"remote\",\"sig:071acb6095ae452e\",\"sig:b88f5038\"]",
+        "key": "[\"mcp\",\"remote\",\"sig:071acb6095ae452e\",\"sig:s1:headers[0],headers[1]#0\"]",
         "name": "remote",
         "serverUrl": "https://mcp.example.com/mcp"
       }

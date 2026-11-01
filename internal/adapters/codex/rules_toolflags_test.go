@@ -29,7 +29,7 @@ func TestRulesPatternRedactsToolSecretFlags(t *testing.T) {
 		home := t.TempDir()
 		kittest.WriteFile(t, filepath.Join(home, ".codex", "rules", "default.rules"),
 			"prefix_rule(pattern = "+strings.ReplaceAll(pattern, "%s", secret)+`, decision = "allow", match = [`+strings.ReplaceAll(pattern, "%s", "M"+secret)+"])\n")
-		got := kittest.Discover(t, New(Options{IncludeUser: true, HomeDir: home, Getenv: kittest.Env()}), t.TempDir())
+		got := kittest.Discover(t, New(Options{FingerprintKey: kittest.FingerprintKey(), IncludeUser: true, HomeDir: home, Getenv: kittest.Env()}), t.TempDir())
 		items := got.Find("~/.codex/rules/default.rules", model.ConfigKindPermissions)
 		if len(items) != 1 {
 			t.Fatalf("%s: items = %+v", pattern, got.Items)

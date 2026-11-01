@@ -99,7 +99,7 @@ func TestSecretsSeparateFingerprints(t *testing.T) {
 			key := func(secret string) string {
 				root := t.TempDir()
 				kittest.WriteFile(t, filepath.Join(root, ".devcontainer.json"), content(secret))
-				got := kittest.Discover(t, New(Options{}), root)
+				got := kittest.Discover(t, New(Options{FingerprintKey: kittest.FingerprintKey()}), root)
 				if len(got.Items) != 1 || strings.Contains(string(got.Items[0].Payload), secret) {
 					t.Fatalf("items = %+v", got.Items)
 				}

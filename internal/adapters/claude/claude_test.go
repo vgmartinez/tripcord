@@ -817,7 +817,7 @@ func FuzzParseConfig(f *testing.F) {
 	}
 	f.Add("claudejson", []byte(`{"mcpServers":{"a":{"command":"a"}},"projects":{"/p":{"mcpServers":{"b":{"url":"u"}}}}}`))
 	f.Fuzz(func(t *testing.T, kind string, data []byte) {
-		c := newCollector()
+		c := newCollector(nil)
 		s := newSrc(c, model.ScopeRepo, "plugins/p/.claude-plugin/plugin.json", data)
 		switch kind {
 		case "settings":
@@ -932,7 +932,7 @@ func TestNormalizeSkillRewritesHomeOnlyInUserScope(t *testing.T) {
 	paths := map[model.Scope]string{model.ScopeUser: "~/.agents/skills/deploy/SKILL.md", model.ScopeRepo: ".agents/skills/deploy/SKILL.md"}
 	payloadOf := func(scope model.Scope) map[string]any {
 		t.Helper()
-		items, diags := NormalizeSkill(model.SurfaceGeneric, scope, paths[scope], home, raw)
+		items, diags := NormalizeSkill(model.SurfaceGeneric, scope, paths[scope], home, nil, raw)
 		if len(diags) != 0 {
 			t.Fatalf("diagnostics = %+v", diags)
 		}

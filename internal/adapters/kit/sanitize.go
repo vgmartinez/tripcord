@@ -1,13 +1,12 @@
 package kit
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/url"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/vgmartinez/tripcord/internal/model"
@@ -36,7 +35,7 @@ var (
 
 // Sanitized is one string after sanitization: the safe text, and the raw
 // substrings removed to produce it. Removed is never stored; it only
-// feeds KeyDiscriminator.
+// feeds the k1 discriminator (see discriminated).
 type Sanitized struct {
 	Value   string
 	Removed []string
@@ -90,14 +89,82 @@ func (s *Source) SafeKey(parts []string) []string {
 	return out
 }
 
+// Removal is one raw value sanitization removed while an entry was
+// built, and the top-level payload field it came from. Value is never
+// stored: in k1 mode it only feeds the HMAC; in s1 mode it is not used.
+type Removal struct {
+	Field string
+	Value string
+}
+
+// Removed tags each value as removed from field.
+func Removed(field string, values ...string) []Removal {
+	out := make([]Removal, len(values))
+	for i, v := range values {
+		out[i] = Removal{Field: field, Value: v}
+	}
+	return out
+}
+
+const (
+	// k1Domain separates the k1 HMAC from any other use of the key.
+	k1Domain = "tripcord.sig.k1"
+	// k1HexLen is the k1 discriminator length in hex characters.
+	k1HexLen = 16
+)
+
 // discriminated returns key with a "sig:" discriminator over removed
 // appended when it is non-empty, so two entries that differ only by
-// redacted text keep distinct keys.
-func discriminated(key []string, removed []string) []string {
-	if len(removed) > 0 {
-		return append(key, "sig:"+KeyDiscriminator(removed))
+// redacted text keep distinct keys. The mode is part of the text:
+//
+//   - k1, with a fingerprint key: "sig:k1:" and 16 hex characters of
+//     HMAC-SHA256(key, removed values). The same entry with a different
+//     secret gets a different key.
+//   - s1, without one: "sig:s1:", the structure of what was removed
+//     (StructuralDiscriminator), "#", and the entry's ordinal among
+//     earlier entries of the same file whose key up to here is
+//     identical. No hash or other function of a removed value is used,
+//     so a rotated secret keeps its key, and identical duplicates are
+//     told apart only by ordinal, in the order the file lists them.
+func (s *Source) discriminated(kind model.ConfigKind, key []string, removed []Removal) []string {
+	if len(removed) == 0 {
+		return key
 	}
-	return key
+	if s.c.key.Present() {
+		values := make([]string, len(removed))
+		for i, r := range removed {
+			values[i] = r.Value
+		}
+		return append(key, "sig:k1:"+s.c.key.Sum(k1Domain, values, k1HexLen))
+	}
+	part := "sig:s1:" + StructuralDiscriminator(removed)
+	ordinal := s.c.ordinal(s.harness, s.scope, s.path, kind, EvidenceKey(append(slices.Clone(key), part)))
+	return append(key, part+"#"+strconv.Itoa(ordinal))
+}
+
+// StructuralDiscriminator describes removed without its values: each
+// removal as field[n], where n counts earlier removals from the same
+// field, comma-joined in removal order. Field names are passed through
+// output.DefaultRedactor.
+func StructuralDiscriminator(removed []Removal) string {
+	seen := map[string]int{}
+	parts := make([]string, len(removed))
+	for i, r := range removed {
+		field := output.DefaultRedactor(r.Field)
+		parts[i] = field + "[" + strconv.Itoa(seen[field]) + "]"
+		seen[field]++
+	}
+	return strings.Join(parts, ",")
+}
+
+// enterField makes name the field later removals are attributed to when
+// no outer field is set, and returns the function that restores it.
+func (s *Source) enterField(name string) func() {
+	if s.field != "" || name == "" {
+		return func() {}
+	}
+	s.field = name
+	return func() { s.field = "" }
 }
 
 // tildeHome rewrites the home directory as "~" in user scope only.
@@ -111,15 +178,6 @@ func (s *Source) tildeHome(value string) string {
 	return pathx.TildeHome(s.c.home, value)
 }
 
-// KeyDiscriminator is the first 8 hex characters of SHA-256 over removed,
-// NUL-joined. It is computed from the removed text, never the sanitized
-// text, so it is stable across machines but differs whenever the secret
-// differs.
-func KeyDiscriminator(removed []string) string {
-	sum := sha256.Sum256([]byte(strings.Join(removed, "\x00")))
-	return hex.EncodeToString(sum[:])[:8]
-}
-
 // SafeValue sanitizes a decoded value recursively. Strings are sanitized;
 // in an array, the element after a bare secret flag ("--token", "X") or
 // a bare "Bearer" scheme word (an MCP server's args split across two
@@ -130,6 +188,7 @@ func KeyDiscriminator(removed []string) string {
 // (output.LooksLikeUserPass), so ["-u", "root"] ("sudo -u root") is left
 // alone; a string or number under a secret-looking key name is redacted.
 func (s *Source) SafeValue(key string, value any) any {
+	defer s.enterField(key)()
 	if key != "" && SecretKey(key) && !namesEnvVar(key) {
 		switch value.(type) {
 		case string, json.Number, int64, float64:
@@ -233,6 +292,7 @@ func (s *Source) RedactValues(m map[string]any) map[string]any {
 }
 
 func (s *Source) redactValue(key string, value any) any {
+	defer s.enterField(key)()
 	if key != "" && SecretKey(key) {
 		s.recordRemovedValue(value)
 		return Redacted
@@ -454,7 +514,8 @@ func splitSecret(secret string) []string {
 
 // StripURLSecrets reports whether raw parses as an absolute URL with a
 // host and, if so, returns it without userinfo, query, or fragment.
-// removedRaw is the removed text, NUL-joined, for KeyDiscriminator only.
+// removedRaw is the removed text, NUL-joined, for the k1 discriminator
+// only.
 func StripURLSecrets(raw string) (stripped, removedRaw string, ok bool) {
 	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" {
