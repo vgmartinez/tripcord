@@ -1,9 +1,7 @@
 package shellcmd
 
 import (
-	"path"
 	"regexp"
-	"slices"
 	"strings"
 )
 
@@ -16,14 +14,11 @@ import (
 //  2. sha256sum -c <file>, or shasum -a 256 -c <file>;
 //  3. echo or printf '<64 hex>  <file>' piped into sha256sum -c [-]
 //     (or shasum -a 256 -c [-]), with exactly one entry naming a file
-//     that is not - or /dev/*;
+//     that is a plain filename;
 //  4. sh or bash <file>, where the script fetched <file>;
 //  5. set -e, -eu, -euo pipefail, -eo pipefail, or -o errexit, only
 //     before every other command and as statements of their own;
-//  6. cd (only before the first fetch, check, or run), mkdir, chmod,
-//     or rm;
-//  7. export NAME=literal or NAME=literal, except names that change
-//     how a command is found or run (PATH, BASH_ENV, LD_*, ...).
+//  6. mkdir, chmod, or rm with plain filename arguments.
 //
 // Statements are joined by ;, a newline, or &&, and the only pipe is
 // the one of form 3. Anything else on the line (another command, a
@@ -64,7 +59,6 @@ const (
 	kindFetch
 	kindCheck
 	kindRun
-	kindCd
 	kindOther
 )
 
@@ -79,7 +73,7 @@ type element struct {
 }
 
 func checkElements(els []element, last int) bool {
-	errexit, leading, started := false, true, false
+	errexit, leading := false, true
 	fetched := map[string]bool{}
 	for _, e := range els {
 		if e.kind != kindSet {
@@ -91,27 +85,16 @@ func checkElements(els []element, last int) bool {
 				return false
 			}
 			errexit = true
-		case kindCd:
-			if started {
-				return false
-			}
 		case kindFetch:
 			fetched[e.file] = true
-			started = true
-		case kindCheck, kindRun:
-			started = true
-		case kindOther:
-		}
-	}
-	for _, e := range els {
-		if e.kind == kindCheck && e.sums != "" && fetched[e.sums] {
-			return false
+		case kindCheck, kindRun, kindOther:
 		}
 	}
 	covers := func(c element, file string) bool {
 		return c.kind == kindCheck && (c.file == "" || c.file == file)
 	}
 	anyFetch := false
+	used := map[string]bool{}
 	for i, e := range els {
 		switch e.kind {
 		case kindFetch:
@@ -130,9 +113,10 @@ func checkElements(els []element, last int) bool {
 				return false
 			}
 		case kindRun:
-			if !slices.ContainsFunc(els[:i], func(f element) bool { return f.kind == kindFetch && f.file == e.file }) {
+			if !fetched[e.file] {
 				return false
 			}
+			used[e.file] = true
 			guarded := false
 			for j := i - 1; j >= 0 && els[j].kind != kindFetch; j-- {
 				if c := els[j]; covers(c, e.file) && (c.list == e.list || errexit && c.standalone) {
@@ -143,7 +127,19 @@ func checkElements(els []element, last int) bool {
 			if !guarded {
 				return false
 			}
-		case kindSet, kindCheck, kindCd, kindOther:
+		case kindCheck:
+			if e.file != "" {
+				used[e.file] = true
+			}
+			if e.sums != "" {
+				used[e.sums] = true
+			}
+		case kindSet, kindOther:
+		}
+	}
+	for file := range fetched {
+		if !used[file] {
+			return false
 		}
 	}
 	return anyFetch
@@ -165,14 +161,6 @@ func classifyPipeline(p gpipe) (element, bool) {
 }
 
 func classifyCommand(c gcmd) (element, bool) {
-	if assignment(c[0]) {
-		for _, w := range c {
-			if !assignment(w) {
-				return element{}, false
-			}
-		}
-		return element{kind: kindOther}, true
-	}
 	if c[0].quote >= 0 {
 		return element{}, false
 	}
@@ -185,26 +173,16 @@ func classifyCommand(c gcmd) (element, bool) {
 		sums, ok := checksumFile(c)
 		return element{kind: kindCheck, sums: sums}, ok
 	case "sh", "bash":
-		if len(args) == 0 || strings.HasPrefix(args[0].text, "-") || !literalFile(args[0].text) {
+		if len(args) == 0 || strings.HasPrefix(args[0].text, "-") || !plainFile(args[0].text) {
 			return element{}, false
 		}
-		return element{kind: kindRun, file: path.Clean(args[0].text)}, true
+		return element{kind: kindRun, file: args[0].text}, true
 	case "set":
 		return element{kind: kindSet}, errexitOptions[joinWords(args)] && unquoted(args)
-	case "export":
-		if len(args) == 0 {
-			return element{}, false
-		}
-		for _, w := range args {
-			if !assignment(w) && !exportName(w) {
-				return element{}, false
-			}
-		}
-		return element{kind: kindOther}, true
-	case "cd":
-		return element{kind: kindCd}, len(args) <= 1
-	case "mkdir", "chmod", "rm":
-		return element{kind: kindOther}, true
+	case "mkdir", "rm":
+		return element{kind: kindOther}, plainFiles(args)
+	case "chmod":
+		return element{kind: kindOther}, chmodArgs(args)
 	default:
 		return element{}, false
 	}
@@ -220,17 +198,22 @@ var errexitOptions = map[string]bool{
 var grammarCommands = map[string]bool{
 	"curl": true, "wget": true, "sha256sum": true, "shasum": true,
 	"echo": true, "printf": true, "sh": true, "bash": true, "set": true,
-	"export": true, "cd": true, "mkdir": true, "chmod": true, "rm": true,
+	"mkdir": true, "chmod": true, "rm": true,
 }
 
-var targetName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+-]*$`)
+var plainFilename = regexp.MustCompile(`^[A-Za-z0-9_-][A-Za-z0-9._-]*$`)
+
+var unsafeFilename = map[string]bool{
+	"curlrc": true, "_curlrc": true, "wgetrc": true, ".wgetrc": true,
+	"netrc": true, "_netrc": true,
+}
 
 // fetchTarget returns the literal output file of a curl or wget of one
 // http(s) URL. Only the listed options are accepted: anything that
 // reads a config file (curl -K), names the file remotely (curl -O),
 // writes elsewhere, or starts another transfer gives no credit. The
-// target's base name may not start with a dot (.curlrc, .wgetrc) or be
-// a command the grammar runs.
+// target must be a plain filename, never a path or a curl, wget, or
+// netrc configuration name.
 func fetchTarget(name string, args []gword) (string, bool) {
 	var target string
 	targets, urls := 0, 0
@@ -302,12 +285,10 @@ func fetchTarget(name string, args []gword) (string, bool) {
 			urls++
 		}
 	}
-	if targets != 1 || urls != 1 || !literalFile(target) {
+	if targets != 1 || urls != 1 || !plainFile(target) {
 		return "", false
 	}
-	target = path.Clean(target)
-	base := path.Base(target)
-	if !targetName.MatchString(base) || grammarCommands[base] {
+	if grammarCommands[target] || unsafeFilename[target] {
 		return "", false
 	}
 	return target, true
@@ -339,10 +320,10 @@ var wgetLong = map[string]int{
 // -a 256 -c <file>.
 func checksumFile(c gcmd) (string, bool) {
 	rest, ok := checksumPrefix(c)
-	if !ok || len(rest) != 1 || !literalFile(rest[0].text) {
+	if !ok || len(rest) != 1 || rest[0].text == "-" || !plainFile(rest[0].text) {
 		return "", false
 	}
-	return path.Clean(rest[0].text), true
+	return rest[0].text, true
 }
 
 // checksumStdin reports sha256sum -c or shasum -a 256 -c reading the
@@ -410,55 +391,35 @@ func checksumEntry(c gcmd) (string, bool) {
 		return "", false
 	}
 	m := checksumLine.FindStringSubmatch(text)
-	if m == nil || !literalFile(m[1]) {
+	if m == nil || !plainFile(m[1]) {
 		return "", false
 	}
-	return path.Clean(m[1]), true
+	return m[1], true
 }
 
-// literalFile reports a file name that is not empty, an option, stdin,
-// or a device.
-func literalFile(f string) bool {
-	return f != "" && f != "-" && !strings.HasPrefix(f, "-") && !strings.HasPrefix(path.Clean(f), "/dev/")
+// plainFile reports a filename in the current directory. In particular
+// paths cannot plant curlrc, ld.so.preload, or another loader config.
+func plainFile(f string) bool {
+	return plainFilename.MatchString(f) && !unsafeFilename[f]
 }
 
-func assignment(w gword) bool {
-	name, _, ok := strings.Cut(w.text, "=")
-	return ok && (w.quote < 0 || w.quote > len(name)) && isIdent(name) && safeEnvName(name)
-}
-
-func exportName(w gword) bool {
-	return w.quote < 0 && isIdent(w.text) && safeEnvName(w.text)
-}
-
-func isIdent(s string) bool {
-	if s == "" || isDigit(s[0]) {
+func plainFiles(args []gword) bool {
+	if len(args) == 0 {
 		return false
 	}
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if c != '_' && !isDigit(c) && (c|0x20 < 'a' || c|0x20 > 'z') {
+	for _, arg := range args {
+		if !plainFile(arg.text) {
 			return false
 		}
 	}
 	return true
 }
 
-// safeEnvName rejects variables that change which program runs, what a
-// shell or interpreter loads first, or which config curl and wget read.
-func safeEnvName(name string) bool {
-	u := strings.ToUpper(name)
-	switch u {
-	case "PATH", "ENV", "IFS", "HOME", "CDPATH", "SHELLOPTS", "PS4",
-		"CURL_HOME", "WGETRC", "SYSTEM_WGETRC", "XDG_CONFIG_HOME", "GLIBC_TUNABLES":
+func chmodArgs(args []gword) bool {
+	if len(args) < 2 || (args[0].text != "+x" && args[0].text != "0755" && args[0].text != "u+x") {
 		return false
 	}
-	for _, p := range []string{"BASH", "LD_", "DYLD_", "PERL", "PYTHON", "NODE_", "RUBY", "GCONV"} {
-		if strings.HasPrefix(u, p) {
-			return false
-		}
-	}
-	return true
+	return plainFiles(args[1:])
 }
 
 func unquoted(ws []gword) bool {
