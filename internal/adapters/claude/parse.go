@@ -186,7 +186,7 @@ var (
 	// at whitespace, quotes, a backtick, and ")" so the match does not
 	// swallow a trailing shell quote, the end of a command substitution,
 	// or the rest of a pipeline.
-	embeddedURL = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://[^\s'"<>`+"`"+`)]+`)
+	embeddedURL = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://[^\s'"<>` + "`" + `)]+`)
 )
 
 // redactCommandSecrets redacts "Bearer <token>" and then everything

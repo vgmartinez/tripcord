@@ -30,7 +30,7 @@ var (
 	// curl command. It stops at whitespace, quotes, a backtick, and ")" so
 	// a trailing shell quote, the end of a command substitution, or the
 	// rest of a pipeline is not swallowed.
-	embeddedURL = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://[^\s'"<>`+"`"+`)]+`)
+	embeddedURL = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://[^\s'"<>` + "`" + `)]+`)
 )
 
 // Sanitized is one string after sanitization: the safe text, and the raw
