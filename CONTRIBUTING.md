@@ -75,6 +75,15 @@ result.
 - `event`: a `tripcord.event/v1` event, for event rules. Every
   non-list event field is present; omitted strings are `""`.
 
+Besides the standard CEL and string extension functions, `when` can
+call `shell.risks(command)`, which reads a command line (a string, or
+an argv list of strings) as a POSIX, PowerShell, or cmd shell would and
+returns the risks it found: `"fetch"` (a downloader in command position
+with a non-loopback target), `"pipe"` (output piped into a shell), and
+`"encoded"` (`powershell -EncodedCommand`). It follows `-c`, `-Command`,
+and `/c` payloads, `$( )` and `eval`, and costs one unit per 10 bytes,
+so prefer it to long regexes over hook commands.
+
 Reading a field that is missing makes the whole expression false, not
 an error. That fails open for negations and deny rules:
 `!(payload.tools.size() > 0)` would be false for a server with no
@@ -95,7 +104,10 @@ has a cost limit and a timeout (10 ms in scans, 5 ms on the hook path),
 and a hook event's rules share a 15 ms budget with a 64 KiB input cap.
 The timeouts are cooperative: CEL checks them between steps, so one
 `matches()` over a large string finishes before it notices. The input
-caps bound that case.
+caps bound that case. A rule that fails to evaluate on a file, for
+example over the cost limit, does not stop the scan: the other rules and
+files are reported, with a diagnostic naming the rule and file, and the
+scan exits 3 as incomplete.
 
 ### Rule ids
 
