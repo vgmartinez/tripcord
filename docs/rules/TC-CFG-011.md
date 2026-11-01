@@ -4,7 +4,7 @@
 | --- | --- |
 | Severity | high |
 | Harnesses | generic (`AGENTS.md`), Claude Code, Gemini CLI, Windsurf, GitHub Copilot, Cursor |
-| Files | `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` (any depth), `.windsurfrules`, `.github/copilot-instructions.md`, `.github/instructions/**/*.instructions.md`, `.cursor/rules/**/*.mdc` (repository scope) |
+| Files | `AGENTS.md`, `CLAUDE.md`, `CLAUDE.local.md`, `GEMINI.md` (any depth), `.claude/rules/**/*.md`, `.windsurfrules`, `.cursorrules`, `.github/copilot-instructions.md`, `.github/instructions/**/*.md`, `.github/agents/**/*.agent.md`, `.cursor/rules/**/*.md(c)` (repository scope) |
 | Rule | [`rules/TC-CFG-011.yaml`](../../rules/TC-CFG-011.yaml) |
 
 ## What it detects
@@ -28,12 +28,14 @@ The whole file is read as bytes, frontmatter included. A U+FEFF that
 starts the file is a byte order mark and is not counted; one anywhere
 else is.
 
+A U+200D zero-width joiner between two emoji code points is a normal
+emoji ZWJ sequence and is not reported. A U+200D beside ASCII, or at
+the start or end of a file, is reported.
+
 Not reported:
 
 - U+200E and U+200F (left-to-right and right-to-left marks), which
   change no order on their own and are common in right-to-left text.
-- Other instruction files, such as `CLAUDE.local.md`, `.claude/rules/`,
-  `.cursorrules`, `.cursor/rules/*.md`, and Copilot agent files.
 - User-scope files.
 
 ## Evidence
@@ -57,11 +59,13 @@ reorders, and not what a tag run spells. A tag run is named by its
 block, not by its code points, because each tag code point maps to one
 ASCII character and listing them would spell the hidden text.
 
-The excerpt is part of the fingerprint, so moving a hidden run to
-another line or column gives a new finding.
+The fingerprint is the file, hidden code-point sequence, and its
+ordinal within the file. Line and column are evidence only, so moving
+the same hidden sequence does not create a new finding.
 
 A file that is not valid UTF-8 is still checked in its valid parts, and
-the scan reports a diagnostic and exits 3 (incomplete).
+the scan reports a diagnostic and exits 3 (incomplete), but only for a
+file this rule reads.
 
 ## Examples
 

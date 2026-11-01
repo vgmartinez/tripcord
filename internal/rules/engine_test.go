@@ -182,6 +182,7 @@ func TestHiddenCharsEvidence(t *testing.T) {
 	}
 
 	withEvidence := base
+	withEvidence.ID = "TC-CFG-011"
 	withEvidence.Evidence = EvidenceHiddenChars
 	f, err := Match{Rule: withEvidence, Item: it}.Finding(model.SeverityHigh, model.DecisionDeny)
 	if err != nil {
@@ -195,6 +196,12 @@ func TestHiddenCharsEvidence(t *testing.T) {
 	}
 	if f.Fingerprint == plain.Fingerprint {
 		t.Fatal("excerpt is not part of the fingerprint")
+	}
+	moved := it
+	moved.Hidden, _ = hiddenchar.Scan([]byte("\n\nok\nsee \u202ehidden\u202c\n"))
+	m, err := Match{Rule: withEvidence, Item: moved}.Finding(model.SeverityHigh, model.DecisionDeny)
+	if err != nil || m.Fingerprint != f.Fingerprint {
+		t.Fatalf("moving hidden text changed fingerprint: %s vs %s (%v)", m.Fingerprint, f.Fingerprint, err)
 	}
 
 	clean := it

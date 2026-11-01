@@ -9,8 +9,12 @@ package hiddenchar
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"path"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/vgmartinez/tripcord/internal/model"
@@ -58,6 +62,7 @@ func Scan(b []byte) (model.HiddenChars, bool) {
 	b, _ = bytes.CutPrefix(b, bom)
 	line, col := 1, 1
 	inRun, stored := false, false
+	prev := rune(-1)
 	for len(b) > 0 {
 		r, size := utf8.DecodeRune(b)
 		b = b[size:]
@@ -68,9 +73,11 @@ func Scan(b []byte) (model.HiddenChars, bool) {
 		case r == '\n':
 			line, col = line+1, 1
 			inRun = false
+			prev = r
 			continue
-		case Class(r) != "":
+		case isCounted(r, prev, nextRune(b)):
 			out.Total++
+			out.Sequence = append(out.Sequence, r)
 			switch {
 			case inRun && stored:
 				out.Runs[len(out.Runs)-1].Length++
@@ -86,8 +93,56 @@ func Scan(b []byte) (model.HiddenChars, bool) {
 			inRun = false
 		}
 		col++
+		prev = r
 	}
 	return out, valid
+}
+
+// isCounted excludes the joiner in an emoji ZWJ sequence. In every other
+// context U+200D can hide or split an instruction and remains reportable.
+func isCounted(r, prev, next rune) bool {
+	if Class(r) == "" {
+		return false
+	}
+	return r != 0x200D || !isEmoji(prev) || !isEmoji(next)
+}
+
+func nextRune(b []byte) rune {
+	r, _ := utf8.DecodeRune(b)
+	return r
+}
+
+func isEmoji(r rune) bool {
+	return r >= 0x1F000 && r <= 0x1FAFF || (r >= 0x2600 && r <= 0x27BF && unicode.Is(unicode.So, r))
+}
+
+// FingerprintKey is a safe representation of a hidden-code-point sequence
+// and its ordinal within the file. It never includes the hidden text or
+// presentation coordinates.
+func FingerprintKey(h model.HiddenChars, ordinal int) string {
+	var b strings.Builder
+	for _, r := range h.Sequence {
+		fmt.Fprintf(&b, "%X,", r)
+	}
+	sum := sha256.Sum256([]byte(b.String()))
+	return fmt.Sprintf("hidden_chars/%d/%s", ordinal, hex.EncodeToString(sum[:8]))
+}
+
+// InstructionPath reports whether rel is one of TC-CFG-011's instruction
+// files. Adapters use it to avoid an invalid-UTF-8 diagnostic on unrelated
+// Markdown instructions.
+func InstructionPath(rel string) bool {
+	p := strings.ToLower(strings.TrimPrefix(rel, "./"))
+	base := path.Base(p)
+	switch base {
+	case "agents.md", "claude.md", "claude.local.md", "gemini.md", ".windsurfrules", ".cursorrules":
+		return true
+	}
+	return strings.HasPrefix(p, ".claude/rules/") && strings.HasSuffix(p, ".md") ||
+		strings.HasPrefix(p, ".cursor/rules/") && (strings.HasSuffix(p, ".md") || strings.HasSuffix(p, ".mdc")) ||
+		p == ".github/copilot-instructions.md" ||
+		strings.HasPrefix(p, ".github/instructions/") && strings.HasSuffix(p, ".md") ||
+		strings.HasPrefix(p, ".github/agents/") && strings.HasSuffix(p, ".agent.md")
 }
 
 // Excerpt describes h for a finding: the number of hidden code points,

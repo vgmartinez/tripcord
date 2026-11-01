@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 )
@@ -19,6 +20,8 @@ const (
 	// is exactly this many characters, and it matches fingerprintPattern.
 	fingerprintHexLen = 16
 )
+
+var hiddenCharPosition = regexp.MustCompile(` at line [0-9]+, column [0-9]+`)
 
 var (
 	errEmptyRule      = errors.New("fingerprint: empty rule")
@@ -180,6 +183,11 @@ func fingerprintPreimage(rule string, loc Location, evidence []Evidence) ([]byte
 	items := make([]fingerprintEvidence, 0, len(evidence))
 	for _, ev := range evidence {
 		excerpt := strings.Join(strings.Fields(ev.Excerpt), " ")
+		if rule == "TC-CFG-011" {
+			// Its evidence's code point sequence identifies the hidden
+			// content; line and column are presentation only.
+			excerpt = hiddenCharPosition.ReplaceAllString(excerpt, "")
+		}
 		config := fingerprintConfigOf(ev.Config)
 		if excerpt == "" && config == nil {
 			continue

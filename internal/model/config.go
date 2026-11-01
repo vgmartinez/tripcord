@@ -89,6 +89,7 @@ type ConfigItem struct {
 // and Total every hidden code point in the file.
 type HiddenChars struct {
 	Runs     []HiddenRun
+	Sequence []rune
 	RunCount int
 	Total    int
 }

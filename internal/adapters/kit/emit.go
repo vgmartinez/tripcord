@@ -258,7 +258,7 @@ func (s *Source) Markdown(kind model.ConfigKind, role string, raw []byte, mode F
 		payload["frontmatter"] = front
 	}
 	hidden, valid := hiddenchar.Scan(raw)
-	if !valid && kind == model.ConfigKindInstructions {
+	if !valid && kind == model.ConfigKindInstructions && hiddenchar.InstructionPath(s.path) {
 		s.Warn("%s", InvalidUTF8)
 	}
 	before := len(s.c.items)

@@ -62,8 +62,8 @@ const ConfigConfidence = 1.0
 // The evidence carries no file content. A rule with evidence
 // hidden_chars adds an excerpt of the item's hidden code points by code
 // point, line, and column (hiddenchar.Excerpt), and the first one's line
-// to the location; the excerpt is part of the fingerprint, the line is
-// not.
+// to the location. For TC-CFG-011, the fingerprint uses the hidden-code
+// point sequence and file identity, not those presentation coordinates.
 func (m Match) Finding(severity model.Severity, decision model.Decision) (model.Finding, error) {
 	id, err := m.Item.ID()
 	if err != nil {
@@ -73,6 +73,7 @@ func (m Match) Finding(severity model.Severity, decision model.Decision) (model.
 	evidence := []model.Evidence{{Config: &model.ConfigRef{ID: id, Key: ConfigEvidenceKey(m.Item)}}}
 	if hidden := m.Item.Hidden; m.Rule.Evidence == EvidenceHiddenChars && hidden.Total > 0 {
 		evidence[0].Excerpt = hiddenchar.Excerpt(hidden)
+		evidence[0].Config.Key = hiddenchar.FingerprintKey(hidden, 1)
 		if len(hidden.Runs) > 0 {
 			line := hidden.Runs[0].Line
 			loc.Line = &line
