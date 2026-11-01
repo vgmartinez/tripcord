@@ -35,7 +35,7 @@ when: |
     has(payload.command) && (
       [
         type(payload.command) == string ?
-          payload.command + (has(payload.args) && type(payload.args) == list && payload.args.all(a, type(a) == string) ? " " + payload.args.join(" ") : "") :
+          ([payload.command] + hook.args(payload)).join(" ") :
         type(payload.command) == list && payload.command.all(a, type(a) == string) ? payload.command.join(" ") : ""
       ].exists(h, h.matches(r'''(?i)^\s*(?:[^\s]*[/\\])?(?:(?:(?:ba|z|da|k|a|c|tc|fi)?sh|cmd|powershell|pwsh)(?:\.exe)?(?:\s|$)|python(?:3(?:\.[0-9]+)?)?(?:\.exe)?(?:\s+-[^\sm]\S*)*?\s+-c(?:\s|$)|node(?:\.exe)?(?:\s+-[^\se]\S*)*?\s+(?:-e|--eval)(?:\s|$)|(?:perl|ruby)(?:\.exe)?(?:\s+-[^\se]\S*)*?\s+-e(?:\s|$)|deno(?:\.exe)?\s+eval(?:\s|$))''')) ||
       (type(payload.command) == string && "pipe" in shell.risks(payload.command))

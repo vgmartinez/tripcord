@@ -146,6 +146,7 @@ func NewEnv(limits Limits) (*Env, error) {
 		shellRisks,
 		shellLocations,
 		hookCommands,
+		hookArgs,
 		hookArgv,
 		cel.ParserExpressionSizeLimit(limits.MaxExpressionBytes),
 		cel.ParserRecursionLimit(limits.MaxNesting),
@@ -206,11 +207,11 @@ var shellLocations = cel.Function(shellLocationsName,
 
 // hook.commands(payload) returns the string values of a hook payload's
 // command fields (model.HookCommandFields); a missing or non-string field is
-// skipped. hook.argv(payload) returns [exec or command] + args, with
-// number and bool args as their text, and [] when there are no args; it
-// is an evaluation error when args is not a list or holds an object,
-// list, or null (see argvList). They let a rule read
-// every command field without restating the list in each clause.
+// skipped. hook.args(payload) returns args, and hook.argv(payload) returns
+// [exec or command] + args. Number and bool args become their text; either is
+// an evaluation error when args is not a list or holds an object, list, or
+// null (see argvList). They let a rule read every command field without
+// restating the list in each clause.
 var hookCommands = cel.Function(hookCommandsName,
 	cel.Overload(overloadHookCommands, []*cel.Type{cel.DynType}, cel.ListType(cel.StringType),
 		cel.UnaryBinding(func(v ref.Val) ref.Val {
@@ -249,6 +250,26 @@ var hookArgv = cel.Function(hookArgvName,
 				program, _ = mapString(m, "command")
 			}
 			return types.NewStringList(types.DefaultTypeAdapter, append([]string{program}, list...))
+		})),
+)
+
+var hookArgs = cel.Function(hookArgsName,
+	cel.Overload(overloadHookArgs, []*cel.Type{cel.DynType}, cel.ListType(cel.StringType),
+		cel.UnaryBinding(func(v ref.Val) ref.Val {
+			empty := types.NewStringList(types.DefaultTypeAdapter, nil)
+			m, ok := v.(traits.Mapper)
+			if !ok {
+				return empty
+			}
+			args, found := m.Find(types.String("args"))
+			if !found {
+				return empty
+			}
+			list, err := argvList(args)
+			if err != nil {
+				return types.WrapErr(err)
+			}
+			return types.NewStringList(types.DefaultTypeAdapter, list)
 		})),
 )
 
@@ -294,6 +315,8 @@ func mapString(m traits.Mapper, key string) (string, bool) {
 const (
 	hookCommandsName             = "hook.commands"
 	overloadHookCommands         = "hook_commands_dyn"
+	hookArgsName                 = "hook.args"
+	overloadHookArgs             = "hook_args_dyn"
 	hookArgvName                 = "hook.argv"
 	overloadHookArgv             = "hook_argv_dyn"
 	shellRisksName               = "shell.risks"

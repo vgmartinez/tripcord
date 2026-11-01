@@ -72,11 +72,7 @@ when: |
       has(payload.linux) && type(payload.linux) == string ? payload.linux : "",
       has(payload.osx) && type(payload.osx) == string ? payload.osx : ""
     ].exists(c, shell.risks(c).size() > 0) ||
-    (has(payload.args) && type(payload.args) == list && payload.args.all(a, type(a) == string) &&
-      shell.risks([
-        has(payload.exec) && type(payload.exec) == string ? payload.exec :
-          has(payload.command) && type(payload.command) == string ? payload.command : ""
-      ] + payload.args).size() > 0))
+    (has(payload.args) && shell.risks(hook.argv(payload)).size() > 0))
 fix: "Do not fetch code in a SessionStart or Setup hook. Commit the script to the repository, pin what it installs by version and hash, and run it explicitly."
 refs:
   - https://workos.com/blog/npm-worm-coding-agent-config-credentials

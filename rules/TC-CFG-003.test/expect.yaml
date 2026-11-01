@@ -1,0 +1,5 @@
+# Invalid server arguments must make the scan incomplete rather than let an
+# inline MCP server escape detection.
+negativos:
+  claude-node-object-arg: error
+  malformed-fields.json: error

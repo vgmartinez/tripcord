@@ -386,6 +386,7 @@ func TestHookCommands(t *testing.T) {
 	for payload, want := range map[string]map[string]bool{
 		`{"command":"a.sh","bash":"b.sh","powershell":1,"osx":"c.sh","args":["x"]}`: {
 			`hook.commands(payload) == ["a.sh", "b.sh", "c.sh"]`: true,
+			`hook.args(payload) == ["x"]`:                        true,
 			`hook.argv(payload) == ["a.sh", "x"]`:                true,
 		},
 		`{"exec":"node","command":"ignored","args":["/tmp/x.js"]}`: {
@@ -397,6 +398,7 @@ func TestHookCommands(t *testing.T) {
 			`hook.argv(payload) == ["", "x.sh", "1", "2.5", "true"]`: true,
 		},
 		`{"exec":"bash","args":["/tmp/x.sh",1]}`: {
+			`hook.args(payload) == ["/tmp/x.sh", "1"]`:         true,
 			`hook.argv(payload) == ["bash", "/tmp/x.sh", "1"]`: true,
 			`shell.locations(hook.argv(payload)) == ["temp"]`:  true,
 		},
@@ -417,7 +419,7 @@ func TestHookCommands(t *testing.T) {
 // TestHookArgvUnreadable checks that hook.argv is an evaluation error,
 // not an empty argv, when args is not a list or holds an object, list,
 // or null, and that the error does not quote the args.
-func TestHookArgvUnreadable(t *testing.T) {
+func TestHookArgsUnreadable(t *testing.T) {
 	env := testEnv(t)
 	for _, payload := range []string{
 		`{"exec":"bash","args":"argvsecret.sh"}`,
@@ -426,7 +428,7 @@ func TestHookArgvUnreadable(t *testing.T) {
 		`{"exec":"bash","args":["argvsecret.sh",["b"]]}`,
 		`{"exec":"bash","args":["argvsecret.sh",null]}`,
 	} {
-		_, err := compileT(t, env, `hook.argv(payload).size() == 0`).Eval(context.Background(), taskInput(t, env.Limits(), payload))
+		_, err := compileT(t, env, `hook.args(payload).size() == 0`).Eval(context.Background(), taskInput(t, env.Limits(), payload))
 		if !errors.Is(err, ErrHookArgs) || !strings.Contains(err.Error(), "hook.argv: args") || strings.Contains(err.Error(), "argvsecret") {
 			t.Errorf("%s: err = %v", payload, err)
 		}
