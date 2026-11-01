@@ -1,0 +1,10 @@
+{
+  "extraKnownMarketplaces": {
+    "acme-tools": {
+      "source": {
+        "source": "github",
+        "repo": "acme/claude-plugins"
+      }
+    }
+  }
+}

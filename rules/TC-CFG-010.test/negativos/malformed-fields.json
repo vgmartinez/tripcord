@@ -1,0 +1,55 @@
+[
+ {
+  "harness": "claude",
+  "scope": "user",
+  "path": "~/.claude/settings.json",
+  "sha256": "",
+  "kind": "plugin",
+  "payload": {
+   "setting": "enabledPlugins",
+   "value": {
+    "x@y": true
+   },
+   "enabled_plugins": [
+    "x@y"
+   ]
+  }
+ },
+ {
+  "harness": "claude",
+  "scope": "repo",
+  "path": ".claude/settings.json",
+  "sha256": "",
+  "kind": "plugin",
+  "payload": {
+   "setting": "enabledPlugins",
+   "value": {
+    "x@y": true
+   }
+  }
+ },
+ {
+  "harness": "claude",
+  "scope": "repo",
+  "path": ".claude/settings.json",
+  "sha256": "",
+  "kind": "plugin",
+  "payload": {
+   "setting": "extraKnownMarketplaces",
+   "value": [
+    "acme"
+   ]
+  }
+ },
+ {
+  "harness": "opencode",
+  "scope": "repo",
+  "path": "opencode.json",
+  "sha256": "",
+  "kind": "instructions",
+  "payload": {
+   "setting": "plugin",
+   "plugin": "x"
+  }
+ }
+]

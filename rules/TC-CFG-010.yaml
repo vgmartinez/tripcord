@@ -1,0 +1,46 @@
+# A plugin is code the agent loads and runs with the user's privileges:
+# an OpenCode plugin is a JS/TS module imported at startup, and a Claude
+# Code plugin can bring hooks, MCP servers, agents, and commands. A
+# repository that adds one asks every contributor's agent to run it.
+#
+# Read, in repository scope:
+#   - OpenCode: each entry of plugin in opencode.json(c) (an npm package
+#     OpenCode installs and loads), and each JS/TS file directly inside
+#     .opencode/plugin/ or .opencode/plugins/. Custom tools
+#     (.opencode/tool/) are not read.
+#   - Claude Code: a .claude-plugin/plugin.json manifest, each plugin of
+#     a .claude-plugin/marketplace.json, and in shared
+#     .claude/settings.json an enabledPlugins entry set to true or a
+#     non-empty extraKnownMarketplaces. settings.local.json is personal
+#     and is not read.
+#
+# Medium: scan mode sees that the repository has a plugin, not that a
+# change added it or what it does, and shipping a reviewed plugin with
+# a project is a legitimate use. It is reported for review without
+# failing a scan at the default fail-on (high). Telling an addition in
+# a pull request apart (pr-context) is not implemented.
+id: TC-CFG-010
+pack: tripcord/core
+title: "Repository ships an agent plugin, which runs arbitrary code"
+severity: medium
+harness: [claude, opencode]
+files: ["**"]
+when: |
+  config.kind == "plugin" && config.scope == "repo" && (
+    (config.harness == "opencode" && (
+      (has(payload.setting) && payload.setting == "plugin") ||
+      (has(payload.role) && payload.role == "plugin"))) ||
+    (config.harness == "claude" && has(payload.setting) &&
+      !config.path.matches(r'''(?i)(^|/)settings\.local\.json$''') && (
+        payload.setting in ["plugin", "marketplace"] ||
+        (payload.setting == "enabledPlugins" && has(payload.enabled_plugins) &&
+          type(payload.enabled_plugins) == list && payload.enabled_plugins.size() > 0) ||
+        (payload.setting == "extraKnownMarketplaces" && has(payload.value) &&
+          type(payload.value) == map && payload.value.size() > 0))))
+fix: "Review the plugin's code and what it registers (hooks, MCP servers, commands) before you keep it. Prefer a plugin pinned to a reviewed version or commit, and remove plugins the project does not need."
+refs:
+  - https://opencode.ai/docs/plugins/
+  - https://opencode.ai/docs/config/
+  - https://code.claude.com/docs/en/plugins
+  - https://code.claude.com/docs/en/plugin-marketplaces
+  - https://code.claude.com/docs/en/settings

@@ -1,0 +1,12 @@
+{
+  "name": "acme",
+  "owner": {
+    "name": "Acme"
+  },
+  "plugins": [
+    {
+      "name": "fmt",
+      "source": "https://github.com/acme/fmt-plugin.git"
+    }
+  ]
+}

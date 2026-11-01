@@ -1,0 +1,6 @@
+{
+  "enabledPlugins": {
+    "formatter@acme-tools": true,
+    "linter@acme-tools": false
+  }
+}
