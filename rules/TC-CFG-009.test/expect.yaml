@@ -7,9 +7,11 @@ positivos:
   checksum-run-sums-file: high
   checksum-self-sums-and: high
   checksum-self-sums-semicolon: high
+  checksum-sums-job-working-directory: high
   checksum-sums-lists-other-file: high
   checksum-sums-malformed: high
   checksum-sums-not-committed: high
+  checksum-sums-step-working-directory: high
   checksum-target-curlrc-upper: high
   checksum-target-dash-q: high
   checksum-target-double-dash: high

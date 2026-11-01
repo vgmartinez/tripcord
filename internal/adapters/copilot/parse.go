@@ -220,7 +220,30 @@ func (f *file) step(step, job, workflow map[string]any) {
 		// again when the command is read.
 		rawRun = "set -e; " + run
 	}
-	f.AddDetect(model.ConfigKindEnvSetup, key, payload, map[string]any{"run": rawRun})
+	detect := map[string]any{"run": rawRun}
+	if dir, ok := workingDirectory(step, job, workflow); ok {
+		// A relative path in the script, such as a sha256sum -c sums
+		// file, is then not read from the repository root.
+		detect["working-directory"] = dir
+	}
+	f.AddDetect(model.ConfigKindEnvSetup, key, payload, detect)
+}
+
+// workingDirectory is the step's working-directory, then the job's
+// defaults.run.working-directory, then the workflow's, as GitHub picks
+// it. ok is false when none sets one.
+func workingDirectory(step, job, workflow map[string]any) (any, bool) {
+	if dir, ok := step["working-directory"]; ok {
+		return dir, true
+	}
+	for _, scope := range []map[string]any{job, workflow} {
+		defaults, _ := scope["defaults"].(map[string]any)
+		run, _ := defaults["run"].(map[string]any)
+		if dir, ok := run["working-directory"]; ok {
+			return dir, true
+		}
+	}
+	return nil, false
 }
 
 // effectiveShell is the shell GitHub uses: the step's shell, then the
