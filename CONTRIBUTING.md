@@ -79,10 +79,12 @@ Besides the standard CEL and string extension functions, `when` can
 call `shell.risks(command)`, which reads a command line (a string, or
 an argv list of strings) as a POSIX, PowerShell, or cmd shell would and
 returns the risks it found: `"fetch"` (a downloader in command position
-with a non-loopback target), `"pipe"` (output piped into a shell), and
-`"encoded"` (`powershell -EncodedCommand`). It follows `-c`, `-Command`,
-and `/c` payloads, `$( )` and `eval`, and costs one unit per 10 bytes,
-so prefer it to long regexes over hook commands.
+with a non-loopback target), `"pipe"` (output piped into a shell, or a
+fetch piped into Invoke-Expression), `"encoded"` (`powershell
+-EncodedCommand`), and `"nested"` (payloads nested deeper than it
+follows). It follows `-c`, `-Command`, and `/c` payloads, `$( )`,
+backticks, and `eval`, and costs one unit per byte it reads at each
+nesting level, so prefer it to long regexes over hook commands.
 
 Reading a field that is missing makes the whole expression false, not
 an error. That fails open for negations and deny rules:
@@ -100,11 +102,14 @@ entry name, that name is the evidence key: `label` for a task, `name`
 for an MCP server, and `matcher|command` for a hook. Two entries in
 one file then get different fingerprints. Other kinds have no key.
 `matches()` uses RE2: no backreferences or lookaround. Each evaluation
-has a cost limit and a timeout (10 ms in scans, 5 ms on the hook path),
-and a hook event's rules share a 15 ms budget with a 64 KiB input cap.
-The timeouts are cooperative: CEL checks them between steps, so one
-`matches()` over a large string finishes before it notices. The input
-caps bound that case. A rule that fails to evaluate on a file, for
+has a cost limit (20M units in scans, 2M on the hook path, where the
+input is capped at 64 KiB). Cost is counted, not timed, so a rule gives
+the same result on a loaded machine. Every core rule on a 1 MiB config
+file stays under 10M. The timeouts (10 s in scans, 1 s on the hook
+path, and a 5 s budget for one hook event's rules) are only a safety
+net for a cost model that underestimates a rule. They are cooperative:
+CEL checks them between steps, so one `matches()` over a large string
+finishes before it notices. The input caps bound that case. A rule that fails to evaluate on a file, for
 example over the cost limit, does not stop the scan: the other rules and
 files are reported, with a diagnostic naming the rule and file, and the
 scan exits 3 as incomplete.
