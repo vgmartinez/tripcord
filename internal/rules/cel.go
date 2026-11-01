@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"cel.dev/cel-go/cel"
-	"cel.dev/cel-go/common/cost"
 	"cel.dev/cel-go/common/types"
 	"cel.dev/cel-go/common/types/ref"
 	"cel.dev/cel-go/common/types/traits"
@@ -29,7 +28,12 @@ const (
 )
 
 // Limits bound compilation and evaluation. Rules and policy expressions
-// are untrusted data; these limits keep a hook inside its time budget.
+// are untrusted data.
+//
+// CostLimit is what decides that an evaluation is too expensive: cost
+// is counted, not timed, so the same input gives the same result on a
+// loaded machine. The timeouts are a safety net far above what the
+// cost limit allows, for a rule whose cost model underestimates it.
 //
 // The timeouts are cooperative. cel-go checks for cancellation between
 // steps (every InterruptCheckFrequency comprehension iterations), not
@@ -53,13 +57,15 @@ type Limits struct {
 }
 
 // Hook path limits. The spec's hook latency target is p95 under 25 ms
-// for the whole hook. HookBudget is the share for rule evaluation; the
-// rest is process start, parsing, and output. HookMaxInputBytes keeps
-// the longest uninterruptible builtin call, a regular expression over
-// the whole input, to a few milliseconds.
+// for the whole hook. The input cap and the cost limit are what keep a
+// hook inside it: HookMaxInputBytes keeps the longest uninterruptible
+// builtin call, a regular expression over the whole input, to a few
+// milliseconds, and HookCostLimit bounds the steps. The timeout and the
+// budget are only safety nets, so CPU load cannot change a decision.
 const (
-	HookBudget        = 15 * time.Millisecond
-	HookEvalTimeout   = 5 * time.Millisecond
+	HookCostLimit     = 2_000_000
+	HookBudget        = 5 * time.Second
+	HookEvalTimeout   = time.Second
 	HookMaxInputBytes = 64 << 10
 )
 
@@ -69,16 +75,20 @@ func DefaultLimits() Limits {
 	return Limits{
 		MaxExpressionBytes: 4 << 10,
 		MaxNesting:         64,
-		CostLimit:          100_000,
-		EvalTimeout:        10 * time.Millisecond,
-		MaxInputBytes:      1 << 20,
+		// Every core rule on a config file at the adapters' 1 MiB cap
+		// costs under 10M (a 36,000-entry allow list about 3.4M), and
+		// CEL runs at 2 to 20 ns a unit, so 20M is well under a second.
+		CostLimit:     20_000_000,
+		EvalTimeout:   5 * time.Second,
+		MaxInputBytes: 1 << 20,
 	}
 }
 
-// HookLimits returns DefaultLimits with the hook path's per-evaluation
-// timeout, total budget, and input cap.
+// HookLimits returns DefaultLimits with the hook path's cost limit,
+// per-evaluation timeout, total budget, and input cap.
 func HookLimits() Limits {
 	l := DefaultLimits()
+	l.CostLimit = HookCostLimit
 	l.EvalTimeout = HookEvalTimeout
 	l.Budget = HookBudget
 	l.MaxInputBytes = HookMaxInputBytes
@@ -136,16 +146,16 @@ func NewEnv(limits Limits) (*Env, error) {
 
 // shell.risks(command) and shell.risks([program, arg, ...]) return what a
 // hook command does that runs code from the network: "fetch", "pipe",
-// and "encoded" (see shellcmd). The list form is an argument vector no
-// shell splits, such as exec and args.
-var shellRisks = cel.Function("shell.risks",
+// "encoded", and "nested" (see shellcmd). The list form is an argument
+// vector no shell splits, such as exec and args.
+var shellRisks = cel.Function(shellRisksName,
 	cel.Overload(overloadShellRisksString, []*cel.Type{cel.StringType}, cel.ListType(cel.StringType),
 		cel.UnaryBinding(func(v ref.Val) ref.Val {
 			s, ok := v.(types.String)
 			if !ok {
 				return types.MaybeNoSuchOverloadErr(v)
 			}
-			return types.NewStringList(types.DefaultTypeAdapter, shellcmd.Risks(string(s)))
+			return newRisksList(shellcmd.Analyze(string(s)))
 		})),
 	cel.Overload(overloadShellRisksList, []*cel.Type{cel.ListType(cel.DynType)}, cel.ListType(cel.StringType),
 		cel.UnaryBinding(func(v ref.Val) ref.Val {
@@ -153,32 +163,51 @@ var shellRisks = cel.Function("shell.risks",
 			if err != nil {
 				return types.WrapErr(err)
 			}
-			return types.NewStringList(types.DefaultTypeAdapter, shellcmd.RisksArgv(argv))
+			return newRisksList(shellcmd.AnalyzeArgv(argv))
 		})),
 )
 
 const (
+	shellRisksName           = "shell.risks"
 	overloadShellRisksString = "shell_risks_string"
 	overloadShellRisksList   = "shell_risks_list"
 )
 
-// shellRisksCost charges shell.risks like one traversal of its input,
-// the same rate matches() charges per byte of the string it reads.
-func shellRisksCost(args []ref.Val, _ ref.Val) *uint64 {
-	var n uint64 = 1
-	for _, arg := range args {
-		switch v := arg.(type) {
-		case types.String:
-			n += uint64(len(v)) / 10
-		case traits.Lister:
-			for it := v.Iterator(); it.HasNext() == types.True; {
-				if s, ok := it.Next().(types.String); ok {
-					n += 1 + uint64(len(s))/10
-				}
-			}
-		}
+// risksList is the list shell.risks returns, carrying the work the
+// reader did so shellRisksCost can charge it.
+type risksList struct {
+	traits.Lister
+	work uint64
+}
+
+func newRisksList(r shellcmd.Result) risksList {
+	return risksList{Lister: types.NewStringList(types.DefaultTypeAdapter, r.Risks), work: uint64(r.Work)}
+}
+
+// shellRisksCost charges shell.risks one unit per byte the reader read,
+// at every nesting level it read it: about len × (depth + 1). The
+// reader takes a few nanoseconds a byte, so this is the same rate or
+// slower than the rest of CEL, and the cost limit, not the clock,
+// decides when a long command is too much.
+func shellRisksCost(result ref.Val) *uint64 {
+	n := uint64(1)
+	if r, ok := result.(risksList); ok {
+		n += r.work
 	}
 	return &n
+}
+
+// costEstimator charges shell.risks by function name: with a dyn
+// argument the checker cannot pick one overload, so the call has no
+// overload id an overload tracker could match. Other functions keep
+// the standard costs.
+type costEstimator struct{}
+
+func (costEstimator) CallCost(function, _ string, _ []ref.Val, result ref.Val) *uint64 {
+	if function != shellRisksName {
+		return nil
+	}
+	return shellRisksCost(result)
 }
 
 func stringList(v ref.Val) ([]string, error) {
@@ -248,10 +277,7 @@ func (e *Env) compile(src string, guarded bool) (*Expr, error) {
 	prg, err := e.env.Program(ast,
 		cel.EvalOptions(cel.OptOptimize),
 		cel.CostLimit(e.limits.CostLimit),
-		cel.CostTrackerOptions(
-			cost.OverloadTracker(overloadShellRisksString, shellRisksCost),
-			cost.OverloadTracker(overloadShellRisksList, shellRisksCost),
-		),
+		cel.CostTracking(costEstimator{}),
 		cel.InterruptCheckFrequency(100),
 	)
 	if err != nil {
