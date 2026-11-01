@@ -65,6 +65,40 @@ func ChecksumFilesArgv(argv []string) []string {
 	return ChecksumFiles(argv[2])
 }
 
+// ChecksumTargets returns the files a checksum-grammar script fetches
+// or runs, or nil when line is not one the grammar parses. The caller
+// uses this to reject a committed symlink at either final path: curl
+// would otherwise follow it while writing and sha256sum or sh would
+// follow it while reading.
+func ChecksumTargets(line string) []string {
+	lists, ok := parseScript(line)
+	if !ok {
+		return nil
+	}
+	var out []string
+	for _, l := range lists {
+		for _, p := range l {
+			e, ok := classifyPipeline(p)
+			if !ok {
+				return nil
+			}
+			if (e.kind == kindFetch || e.kind == kindRun) && !slices.Contains(out, e.file) {
+				out = append(out, e.file)
+			}
+		}
+	}
+	return out
+}
+
+// ChecksumTargetsArgv is ChecksumTargets for an argument vector: only
+// sh or bash, -c, and a script have any.
+func ChecksumTargetsArgv(argv []string) []string {
+	if !shellScriptArgv(argv) {
+		return nil
+	}
+	return ChecksumTargets(argv[2])
+}
+
 func shellScriptArgv(argv []string) bool {
 	return len(argv) == 3 && (argv[0] == "sh" || argv[0] == "bash") && argv[1] == "-c"
 }

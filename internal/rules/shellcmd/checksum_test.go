@@ -68,6 +68,21 @@ func TestChecksumFiles(t *testing.T) {
 	}
 }
 
+func TestChecksumTargets(t *testing.T) {
+	script := "curl -fsSLo i.sh https://get.example.invalid/i.sh && " +
+		"echo '" + sum + "  i.sh' | sha256sum -c && sh i.sh && " +
+		"wget -qO j.sh https://get.example.invalid/j.sh && bash j.sh"
+	if got, want := ChecksumTargets(script), []string{"i.sh", "j.sh"}; !slices.Equal(got, want) {
+		t.Fatalf("ChecksumTargets = %q, want %q", got, want)
+	}
+	if got := ChecksumTargets("curl -o i.sh https://x.invalid && eval x"); got != nil {
+		t.Fatalf("ChecksumTargets of an unparsed script = %q", got)
+	}
+	if got, want := ChecksumTargetsArgv([]string{"bash", "-c", script}), []string{"i.sh", "j.sh"}; !slices.Equal(got, want) {
+		t.Fatalf("ChecksumTargetsArgv = %q, want %q", got, want)
+	}
+}
+
 func TestChecksumScript(t *testing.T) {
 	const (
 		u     = "https://get.example.invalid/i.sh"

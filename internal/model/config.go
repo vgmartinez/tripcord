@@ -82,6 +82,10 @@ type ConfigItem struct {
 	// a sums file that is missing, outside the repository, or malformed
 	// has no entry.
 	ChecksumFiles map[string][]string `json:"-"`
+	// ChecksumSymlinks is the set of fetch and run file names in a
+	// repository env-setup checksum script that exist as symlinks in the
+	// repository. It is set after discovery, for rule evaluation only.
+	ChecksumSymlinks []string `json:"-"`
 	// Hidden is the invisible and direction-changing code points of an
 	// instruction or skill file (see internal/hiddenchar): where each run
 	// of them starts and its first code point, never the text around

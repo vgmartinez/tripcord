@@ -104,6 +104,7 @@ func emptyConfig() map[string]any {
 	m["missing_scripts"] = 0
 	m["script_locations"] = []string{}
 	m["checksum_files"] = map[string][]string{}
+	m["checksum_symlinks"] = []string{}
 	m["hidden_chars"] = 0
 	return m
 }
@@ -117,17 +118,22 @@ func configVars(id string, item model.ConfigItem) map[string]any {
 	if sums == nil {
 		sums = map[string][]string{}
 	}
+	symlinks := item.ChecksumSymlinks
+	if symlinks == nil {
+		symlinks = []string{}
+	}
 	return map[string]any{
-		"id":               id,
-		"harness":          item.Harness.String(),
-		"scope":            item.Scope.String(),
-		"path":             item.Path,
-		"sha256":           item.SHA256,
-		"kind":             item.Kind.String(),
-		"missing_scripts":  int(item.MissingScripts),
-		"script_locations": locations,
-		"checksum_files":   sums,
-		"hidden_chars":     item.Hidden.Total,
+		"id":                id,
+		"harness":           item.Harness.String(),
+		"scope":             item.Scope.String(),
+		"path":              item.Path,
+		"sha256":            item.SHA256,
+		"kind":              item.Kind.String(),
+		"missing_scripts":   int(item.MissingScripts),
+		"script_locations":  locations,
+		"checksum_files":    sums,
+		"checksum_symlinks": symlinks,
+		"hidden_chars":      item.Hidden.Total,
 	}
 }
 

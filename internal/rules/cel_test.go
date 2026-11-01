@@ -376,6 +376,8 @@ func TestShellUnpinned(t *testing.T) {
 		`has(payload.sums) && shell.unpinned(payload.sums) == ["fetch"]`:                                              true,
 		`has(payload.sumsArgv) && shell.unpinned(payload.sumsArgv, {"s": ["i.sh"]}).size() == 0`:                      true,
 		`has(payload.sumsArgv) && shell.unpinned(payload.sumsArgv, {}) == ["fetch"]`:                                  true,
+		`has(payload.sums) && shell.unpinned(payload.sums, {"s": ["i.sh"]}, ["i.sh"]) == ["fetch"]`:                   true,
+		`has(payload.sumsArgv) && shell.unpinned(payload.sumsArgv, {"s": ["i.sh"]}, ["i.sh"]) == ["fetch"]`:           true,
 	} {
 		got, err := compileT(t, env, src).Eval(context.Background(), in)
 		if err != nil || got != want {

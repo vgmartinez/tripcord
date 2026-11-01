@@ -165,6 +165,16 @@ func TestUnpinnedArgv(t *testing.T) {
 	}
 }
 
+func TestUnpinnedSumsTargets(t *testing.T) {
+	const line = "curl -fsSLo i.sh https://raw.githubusercontent.com/acme/tools/main/install.sh && sha256sum -c s && sh i.sh"
+	if got := UnpinnedSumsTargets(line, Sums{"s": {"i.sh"}}, map[string]bool{"i.sh": true}).Risks; !slices.Equal(got, []string{Fetch}) {
+		t.Fatalf("UnpinnedSumsTargets with a symlink = %q, want fetch", got)
+	}
+	if got := UnpinnedSumsTargets(line, Sums{"s": {"i.sh"}}, map[string]bool{"s": true}).Risks; len(got) != 0 {
+		t.Fatalf("UnpinnedSumsTargets with an unrelated symlink = %q, want no risks", got)
+	}
+}
+
 func TestImmutableURL(t *testing.T) {
 	for url, want := range map[string]bool{
 		commitURL: true,

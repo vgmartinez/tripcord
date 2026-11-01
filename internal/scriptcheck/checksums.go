@@ -1,6 +1,11 @@
 package scriptcheck
 
 import (
+	"errors"
+	"os"
+	"path/filepath"
+	"slices"
+
 	"github.com/vgmartinez/tripcord/internal/adapters"
 	"github.com/vgmartinez/tripcord/internal/model"
 	"github.com/vgmartinez/tripcord/internal/rules/shellcmd"
@@ -36,6 +41,7 @@ func annotateChecksums(root string, items []model.ConfigItem) error {
 			continue
 		}
 		item.ChecksumFiles = nil
+		item.ChecksumSymlinks = nil
 		payload := decode(*item)
 		if payload == nil || elsewhere[item.Path] {
 			continue
@@ -43,6 +49,7 @@ func annotateChecksums(root string, items []model.ConfigItem) error {
 		if _, ok := payload["working-directory"]; ok {
 			continue
 		}
+		item.ChecksumSymlinks = symlinkTargets(root, payload)
 		for _, name := range checksumNames(payload) {
 			if _, done := item.ChecksumFiles[name]; done {
 				continue
@@ -56,6 +63,22 @@ func annotateChecksums(root string, items []model.ConfigItem) error {
 		}
 	}
 	return nil
+}
+
+func symlinkTargets(root string, payload map[string]any) []string {
+	var out []string
+	for _, name := range checksumTargets(payload) {
+		info, err := os.Lstat(filepath.Join(root, name))
+		switch {
+		case err == nil && info.Mode()&os.ModeSymlink != 0:
+			out = append(out, name)
+		case err != nil && !errors.Is(err, os.ErrNotExist):
+			// A target that cannot be inspected must not get checksum
+			// credit, including a path raced into an unreadable state.
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
 func checksumNames(payload map[string]any) []string {
@@ -80,14 +103,45 @@ func checksumNames(payload map[string]any) []string {
 	return out
 }
 
+func checksumTargets(payload map[string]any) []string {
+	var out []string
+	for _, field := range commandFields {
+		switch v := payload[field].(type) {
+		case string:
+			out = append(out, shellcmd.ChecksumTargets(v)...)
+		case []any:
+			argv := stringsOnly(v)
+			out = append(out, shellcmd.ChecksumTargetsArgv(argv)...)
+		}
+	}
+	return slices.Compact(out)
+}
+
+func stringsOnly(v []any) []string {
+	argv := make([]string, 0, len(v))
+	for _, a := range v {
+		s, ok := a.(string)
+		if !ok {
+			return nil
+		}
+		argv = append(argv, s)
+	}
+	return argv
+}
+
 // readSums returns the names the sums file name lists, with the symlink
-// rules of lookupScript: it must exist, resolve inside root, be a regular
-// file, and parse (see shellcmd.ParseSums).
+// rules of lookupScript: its final component must itself be a regular
+// file (not a symlink), its parent path must resolve inside root, and it
+// must parse (see shellcmd.ParseSums).
 func readSums(root string, reader *adapters.SafeReader, name string) ([]string, bool) {
+	info, err := os.Lstat(filepath.Join(root, name))
+	if err != nil || !info.Mode().IsRegular() {
+		return nil, false
+	}
 	if class, missing := lookupScript(root, name); missing || class != "" {
 		return nil, false
 	}
-	info, err := reader.Stat(name)
+	info, err = reader.Stat(name)
 	if err != nil || !info.Mode().IsRegular() {
 		return nil, false
 	}

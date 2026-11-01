@@ -32,12 +32,20 @@ func Unpinned(line string) Result { return UnpinnedSums(line, nil) }
 // UnpinnedSums is Unpinned where a sha256sum -c <file> check covers the
 // files sums lists for <file>.
 func UnpinnedSums(line string, sums Sums) Result {
+	return UnpinnedSumsTargets(line, sums, nil)
+}
+
+// UnpinnedSumsTargets is UnpinnedSums where targets is the committed
+// symlink names among the grammar script's fetch and run files. A
+// downloader follows such a symlink while writing, and a checker or
+// shell follows one while reading, so either gets no checksum credit.
+func UnpinnedSumsTargets(line string, sums Sums, targets map[string]bool) Result {
 	var s scanner
 	s.line(line, 0, false)
 	if strings.Contains(line, "`") {
 		s.line(line, 0, true)
 	}
-	return s.unpinnedResult(checksumScript(line, sums))
+	return s.unpinnedResult(checksumScript(line, sums) && safeChecksumTargets(line, targets))
 }
 
 // UnpinnedArgv is Unpinned for an argument vector (see RisksArgv). A
@@ -48,13 +56,28 @@ func UnpinnedArgv(argv []string) Result { return UnpinnedArgvSums(argv, nil) }
 
 // UnpinnedArgvSums is UnpinnedArgv with sums (see UnpinnedSums).
 func UnpinnedArgvSums(argv []string, sums Sums) Result {
+	return UnpinnedArgvSumsTargets(argv, sums, nil)
+}
+
+// UnpinnedArgvSumsTargets is UnpinnedArgvSums with targets (see
+// UnpinnedSumsTargets).
+func UnpinnedArgvSumsTargets(argv []string, sums Sums, targets map[string]bool) Result {
 	var s scanner
 	for _, a := range argv {
 		s.work += len(a) + 1
 	}
 	s.command(argv, 0, false)
-	verified := shellScriptArgv(argv) && checksumScript(argv[2], sums)
+	verified := shellScriptArgv(argv) && checksumScript(argv[2], sums) && safeChecksumTargets(argv[2], targets)
 	return s.unpinnedResult(verified)
+}
+
+func safeChecksumTargets(line string, targets map[string]bool) bool {
+	for _, name := range ChecksumTargets(line) {
+		if targets[name] {
+			return false
+		}
+	}
+	return true
 }
 
 // unpinnedResult is the scan's result, with no risks when every fetch is
