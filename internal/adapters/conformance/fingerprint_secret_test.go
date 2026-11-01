@@ -207,3 +207,75 @@ func TestMCPFingerprintTracksSecretValue(t *testing.T) {
 		})
 	}
 }
+
+// TestMCPFingerprintS1KeepsShape is TestMCPFingerprintTracksSecretValue
+// with no fingerprint key (s1): the variants of a group remove secrets of
+// the same shape at the same positions, so every adapter gives them one
+// fingerprint, and nothing in the payload, the evidence key, or any
+// report format carries a secret.
+func TestMCPFingerprintS1KeepsShape(t *testing.T) {
+	t.Parallel()
+	harnesses := []model.Harness{
+		model.HarnessClaude, model.HarnessCodex, model.HarnessCursor, model.HarnessCopilot,
+		model.HarnessGemini, model.HarnessOpenCode, model.HarnessWindsurf, model.SurfaceVSCode,
+	}
+	rule := &rules.Rule{ID: "TC-TEST-005", Title: "secret variants", Fix: "none", Severity: model.SeverityHigh}
+	for _, group := range secretVariantGroups {
+		t.Run(group.name, func(t *testing.T) {
+			t.Parallel()
+			var findings []model.Finding
+			found := make([]map[model.Harness]model.ConfigItem, len(group.variants))
+			for i, v := range group.variants {
+				found[i] = appServers(t, v.args, nil)
+			}
+			for _, harness := range harnesses {
+				var want string
+				for i, v := range group.variants {
+					item, ok := found[i][harness]
+					if !ok {
+						t.Fatalf("%s %s: no MCP item", harness, v.name)
+					}
+					key := rules.ConfigEvidenceKey(item)
+					for _, secret := range group.secrets {
+						if strings.Contains(string(item.Payload), secret) || strings.Contains(key, secret) {
+							t.Fatalf("%s %s: payload or key leaks %q: %s", harness, v.name, secret, item.Payload)
+						}
+					}
+					finding, err := rules.Match{Rule: rule, Item: item}.Finding(model.SeverityHigh, model.DecisionWarn)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if mode := model.FingerprintMode(finding.Evidence); mode != "s1" {
+						t.Fatalf("%s %s: fingerprint mode %q, want s1: %s", harness, v.name, mode, key)
+					}
+					if i == 0 {
+						want = finding.Fingerprint
+					} else if finding.Fingerprint != want {
+						t.Fatalf("%s: %s fingerprint %s, base %s: same shape and position must match in s1", harness, v.name, finding.Fingerprint, want)
+					}
+					findings = append(findings, finding)
+				}
+			}
+			for _, format := range []string{"json", "md", "sarif", "text", "gha"} {
+				var buf bytes.Buffer
+				handle, err := output.SelectSink(format, "", &buf, output.Options{Redactor: output.DefaultRedactor, RepoRoot: t.TempDir(), ToolVersion: "test"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, f := range findings {
+					if err := handle.Write(f); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if err := handle.Flush(); err != nil {
+					t.Fatal(err)
+				}
+				for _, secret := range group.secrets {
+					if strings.Contains(buf.String(), secret) {
+						t.Fatalf("%s output leaks %q:\n%s", format, secret, buf.String())
+					}
+				}
+			}
+		})
+	}
+}
