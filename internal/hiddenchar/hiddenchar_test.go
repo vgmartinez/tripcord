@@ -1,0 +1,143 @@
+package hiddenchar
+
+import (
+	"bytes"
+	"slices"
+	"strings"
+	"testing"
+	"unicode/utf8"
+
+	"github.com/vgmartinez/tripcord/internal/model"
+)
+
+func run(r rune, line, col, n int) model.HiddenRun {
+	return model.HiddenRun{CodePoint: r, Line: line, Column: col, Length: n}
+}
+
+func TestScan(t *testing.T) {
+	cases := []struct {
+		name  string
+		in    string
+		runs  []model.HiddenRun
+		count int
+		total int
+		valid bool
+	}{
+		{"plain", "# Rules\n\nBe nice.\n", nil, 0, 0, true},
+		{"leading BOM", "\uFEFF# Rules\n", nil, 0, 0, true},
+		{"BOM column", "\uFEFFa\u202Eb", []model.HiddenRun{run(0x202E, 1, 2, 1)}, 1, 1, true},
+		{"BOM later", "a\uFEFF", []model.HiddenRun{run(0xFEFF, 1, 2, 1)}, 1, 1, true},
+		{"second BOM", "\uFEFF\uFEFF", []model.HiddenRun{run(0xFEFF, 1, 1, 1)}, 1, 1, true},
+		{"bidi", "x\n  if a \u202E b\n", []model.HiddenRun{run(0x202E, 2, 8, 1)}, 1, 1, true},
+		{"isolates", "\u2066\u2067\u2068\u2069", []model.HiddenRun{run(0x2066, 1, 1, 4)}, 1, 4, true},
+		{"zero-width run", "a\u200B\u200C\u200D\u2060b", []model.HiddenRun{run(0x200B, 1, 2, 4)}, 1, 4, true},
+		{"tags", "ok\U000E0069\U000E0067\U000E006E\n", []model.HiddenRun{run(0xE0069, 1, 3, 3)}, 1, 3, true},
+		{"crlf", "a\r\n\u202Ab", []model.HiddenRun{run(0x202A, 2, 1, 1)}, 1, 1, true},
+		{"newline ends run", "\u200B\n\u200B", []model.HiddenRun{run(0x200B, 1, 1, 1), run(0x200B, 2, 1, 1)}, 2, 2, true},
+		{"multibyte columns", "é漢\u202B", []model.HiddenRun{run(0x202B, 1, 3, 1)}, 1, 1, true},
+		{"not hidden", "\u200E\u200F\u061C\u00AD", nil, 0, 0, true},
+		{"invalid", "a\xff\u202Cb", []model.HiddenRun{run(0x202C, 1, 3, 1)}, 1, 1, false},
+		{"invalid ends run", "\u200B\xff\u200B", []model.HiddenRun{run(0x200B, 1, 1, 1), run(0x200B, 1, 3, 1)}, 2, 2, false},
+		{"cap", strings.Repeat("\u200Bx", MaxRuns+2), []model.HiddenRun{
+			run(0x200B, 1, 1, 1), run(0x200B, 1, 3, 1), run(0x200B, 1, 5, 1), run(0x200B, 1, 7, 1), run(0x200B, 1, 9, 1),
+		}, MaxRuns + 2, MaxRuns + 2, true},
+	}
+	for _, tc := range cases {
+		got, valid := Scan([]byte(tc.in))
+		if !slices.Equal(got.Runs, tc.runs) || got.RunCount != tc.count || got.Total != tc.total || valid != tc.valid {
+			t.Errorf("%s: Scan = %+v, %v; want runs %+v, count %d, total %d, valid %v", tc.name, got, valid, tc.runs, tc.count, tc.total, tc.valid)
+		}
+	}
+}
+
+func TestExcerpt(t *testing.T) {
+	cases := map[string]string{
+		"a\u202Eb":                     "1 hidden code point: U+202E (bidi control) at line 1, column 2",
+		"\n\u200B\u200B\u200B":         "3 hidden code points: U+200B (zero-width) at line 2, column 1, 3 in a row",
+		"x\U000E0069\U000E0067":        "2 hidden code points: tag characters (U+E0000-U+E007F) at line 1, column 2, 2 in a row",
+		"\u202E\U000E0041":             "2 hidden code points: U+202E (bidi control) at line 1, column 1, 2 in a row",
+		strings.Repeat("\u2060 ", 7):   "7 hidden code points: U+2060 (zero-width) at line 1, column 1; U+2060 (zero-width) at line 1, column 3; U+2060 (zero-width) at line 1, column 5; U+2060 (zero-width) at line 1, column 7; U+2060 (zero-width) at line 1, column 9; 2 more run(s)",
+		"plain":                        "0 hidden code points: ",
+		"\uFEFFlead\uFEFF":             "1 hidden code point: U+FEFF (zero-width) at line 1, column 5",
+		"y\u2066\u2069":                "2 hidden code points: U+2066 (bidi control) at line 1, column 2, 2 in a row",
+		"tag\U000E0001\U000E007F\nend": "2 hidden code points: tag characters (U+E0000-U+E007F) at line 1, column 4, 2 in a row",
+	}
+	for in, want := range cases {
+		h, _ := Scan([]byte(in))
+		if got := Excerpt(h); got != want {
+			t.Errorf("Excerpt(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// reference is a second reading of b, split into lines first: every
+// hidden code point with its line and column.
+type point struct {
+	r         rune
+	line, col int
+}
+
+func reference(b []byte) (points []point, valid bool) {
+	valid = true
+	b = bytes.TrimPrefix(b, bom)
+	for i, line := range bytes.Split(b, []byte("\n")) {
+		col := 1
+		for len(line) > 0 {
+			r, size := utf8.DecodeRune(line)
+			if r == utf8.RuneError && size == 1 {
+				valid = false
+				r = -1
+			}
+			if Class(r) != "" {
+				points = append(points, point{r, i + 1, col})
+			}
+			line = line[size:]
+			col++
+		}
+	}
+	return points, valid
+}
+
+func FuzzScan(f *testing.F) {
+	for _, seed := range []string{
+		"# AGENTS\n\nRun tests.\n",
+		"\uFEFFa\u202Eb\r\n\u2066x\u2069",
+		"ignore\U000E0069\U000E0067\U000E006E\U000E006F\U000E0072\U000E0065",
+		"\u200B\u200C\u200D\u2060\uFEFF\xff\u200B",
+		"\xef\xbb",
+		strings.Repeat("\u200Bz\n", 20),
+	} {
+		f.Add([]byte(seed))
+	}
+	f.Fuzz(func(t *testing.T, b []byte) {
+		got, valid := Scan(b)
+		want, wantValid := reference(b)
+		if valid != wantValid || valid != utf8.Valid(bytes.TrimPrefix(b, bom)) {
+			t.Fatalf("valid = %v, reference %v", valid, wantValid)
+		}
+		if got.Total != len(want) || len(got.Runs) > MaxRuns || got.RunCount < len(got.Runs) || got.RunCount > got.Total {
+			t.Fatalf("Scan = %+v, reference has %d points", got, len(want))
+		}
+		// Every located run starts at a reference point, in order, and
+		// its length never runs past the points that follow it.
+		next := 0
+		for _, r := range got.Runs {
+			for next < len(want) && (want[next].line != r.Line || want[next].col != r.Column) {
+				next++
+			}
+			if next == len(want) || want[next].r != r.CodePoint || r.Length < 1 || next+r.Length > len(want) {
+				t.Fatalf("run %+v not in reference %+v", r, want)
+			}
+			next += r.Length
+		}
+		excerpt := Excerpt(got)
+		for i := 0; i < len(excerpt); i++ {
+			if excerpt[i] >= utf8.RuneSelf {
+				t.Fatalf("excerpt is not ASCII: %q", excerpt)
+			}
+		}
+		if strings.Contains(strings.ReplaceAll(excerpt, "(U+E0000-U+E007F)", ""), "U+E00") {
+			t.Fatalf("excerpt names a tag code point: %q", excerpt)
+		}
+	})
+}

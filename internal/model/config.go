@@ -76,6 +76,29 @@ type ConfigItem struct {
 	// symlink resolves outside the repository: "home", "temp", "absolute",
 	// or "network". The target path is not kept.
 	ScriptLocations []string `json:"-"`
+	// Hidden is the invisible and direction-changing code points of an
+	// instruction or skill file (see internal/hiddenchar): where each run
+	// of them starts and its first code point, never the text around
+	// or between them. It is set by the adapter, for rule evaluation and
+	// the finding's excerpt only.
+	Hidden HiddenChars `json:"-"`
+}
+
+// HiddenChars is what internal/hiddenchar found in one file. Runs holds
+// the first runs, at most hiddenchar.MaxRuns; RunCount counts every run
+// and Total every hidden code point in the file.
+type HiddenChars struct {
+	Runs     []HiddenRun
+	RunCount int
+	Total    int
+}
+
+// HiddenRun is a run of consecutive hidden code points: the first one,
+// its 1-based line and column (in code points), and the run's length.
+type HiddenRun struct {
+	CodePoint    rune
+	Line, Column int
+	Length       int
 }
 
 // ScriptCount is a number of scripts (see ConfigItem.MissingScripts).
