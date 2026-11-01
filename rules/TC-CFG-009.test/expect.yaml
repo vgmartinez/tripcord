@@ -2,8 +2,11 @@
 # internal/rules/fixtures.go, ExpectFile).
 positivos:
   copilot-branch-url-pipe: high
-  copilot-checksum-explicit-sh: high
   copilot-checksum-without-errexit: high
+  copilot-checksum-stdin-from-cat: high
+  copilot-checksum-stdin-in-and-list: high
+  copilot-checksum-stdin-longer-pipe: high
+  copilot-checksum-stdin-without-errexit: high
   copilot-curl-pipe-sh: high
   copilot-errexit-check-backgrounded: high
   copilot-errexit-check-in-and-list: high

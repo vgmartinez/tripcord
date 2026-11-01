@@ -60,8 +60,14 @@ not.
   match is case-insensitive.
 - **Checksum verified before execution.** The next statement is
   `sha256sum -c <file>` (or `sha384sum`, `sha512sum`, or
-  `shasum -a 256|384|512 -c`). The file is not `-` or under `/dev`, and
-  the check has no other flag (`--ignore-missing`, `--quiet`, and the
+  `shasum -a 256|384|512 -c`), or `echo` or `printf` piped straight
+  into that check with no file or `-`
+  (`echo "<sha256>  t.sh" | sha256sum -c -`). The pipe is a pipeline of
+  exactly those two commands: the check is its last command, so the
+  pipeline fails when the check fails, with or without `pipefail`. A
+  longer pipeline (`| tee log`), `cat` or another command feeding the
+  sums, and `-` without a pipe do not count. The file is not under
+  `/dev`, and the check has no other flag (`--ignore-missing`, `--quiet`, and the
   rest do not count). It joins the download to the command that runs it
   only with `&&`. A `set -e` or `set -euo pipefail` also covers the
   check, under three conditions. The `set` is a foreground top-level
@@ -72,7 +78,7 @@ not.
   (`sha256sum -c f && true; sh f`), backgrounded (`sha256sum -c f & sh
   f`), or used as an `if` or `while` condition does not stop the script
   when it fails. And the line has no `set +e`, `eval`, `source`, `.`,
-  `||`, `!`, or pipe anywhere, since those can turn errexit off or keep
+  `||`, `!`, or pipe other than the `echo | sha256sum -c` of a check, since those can turn errexit off or keep
   a failure from stopping the script.
 
 Never pinned: package runners (`npx -y`, `bunx`, `pnpm dlx`,
@@ -120,6 +126,13 @@ Not reported:
 
 ```json
 {"install": "curl -fsSLo t.sh https://get.tools.example.invalid/t.sh && sha256sum -c t.sh.sha256 && sh t.sh"}
+```
+
+```yaml
+      - run: |
+          curl -fsSLo t.sh https://get.tools.example.invalid/t.sh
+          echo "<sha256>  t.sh" | sha256sum -c -
+          sh t.sh
 ```
 
 ```json

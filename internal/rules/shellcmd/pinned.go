@@ -17,8 +17,9 @@ import (
 //     (see immutableURL), or a .NET Download* call whose every remote
 //     URL is. Piping that download into a shell is pinned.
 //   - Checksum. Each direct fetch is followed by sha256sum -c <file>
-//     (or sha384sum, sha512sum, or shasum -a 256|384|512). The file is
-//     not /dev/* or -, and the check has no other flag. It is joined to
+//     (or sha384sum, sha512sum, or shasum -a 256|384|512), or by echo or
+//     printf piped into sha256sum -c [-] (see checkStatement). The file
+//     is not /dev/* or -, and the check has no other flag. It is joined to
 //     the fetch and to whatever runs it only by &&, in one simple list.
 //     A set -e or set -euo pipefail also covers it (see errexitVerified)
 //     when the set is a foreground top-level command before the first
@@ -381,10 +382,11 @@ func reservedStart(words []string) bool {
 }
 
 // errexitDefeated reports what turns set -e off or keeps a failure from
-// aborting: set +e, eval, source, or . anywhere, and ||, !, or a pipe.
+// aborting: set +e, eval, source, or . anywhere, and ||, !, or a pipe
+// other than the echo | sha256sum -c of a check (see checkStatement).
 func errexitDefeated(cmds []command) bool {
-	for _, c := range cmds {
-		if c.pipeIn || c.sep == "||" || hasBang(c.words) {
+	for i, c := range cmds {
+		if c.pipeIn && !stdinCheck(cmds, i) || c.sep == "||" || hasBang(c.words) {
 			return true
 		}
 		if _, off := setErrexit(c.words); off {
@@ -409,15 +411,15 @@ func andListVerified(cmds []command, fetch int) bool {
 		return false
 	}
 	start, end, ok := nextStatement(cmds, fetch)
-	if !ok || end-start != 1 || cmds[start].pipeIn || reservedStart(cmds[start].words) || !cleanChecksum(cmds[start].words) {
+	if !ok || !checkStatement(cmds, start, end) {
 		return false
 	}
 	for j := start; j < len(cmds); j++ {
-		if cmds[j].pipeIn || cmds[j].sep == "||" || hasBang(cmds[j].words) {
+		if cmds[j].pipeIn && !stdinCheck(cmds, j) || cmds[j].sep == "||" || hasBang(cmds[j].words) {
 			return false
 		}
 	}
-	return cmds[start].sep == "&&" || cmds[start].sep == ""
+	return cmds[end-1].sep == "&&" || cmds[end-1].sep == ""
 }
 
 // checksumFollows reports a fetch that is a simple statement followed
@@ -427,13 +429,54 @@ func checksumFollows(cmds []command, top []bool, fetch int) bool {
 		return false
 	}
 	start, end, ok := nextStatement(cmds, fetch)
-	if !ok || end-start != 1 || !top[start] || cmds[start].pipeIn || reservedStart(cmds[start].words) {
+	if !ok || !top[start] || !checkStatement(cmds, start, end) {
 		return false
 	}
-	if sep := cmds[start].sep; sep != opSep && sep != "" {
+	sep := cmds[end-1].sep
+	return sep == opSep || sep == ""
+}
+
+// checkStatement reports a statement that is a clean checksum: either
+// sha256sum -c <file> on its own, or echo or printf piped into
+// sha256sum -c with no file or -. In the pipe the check is the last
+// command, so its status is the statement's with or without pipefail.
+// A longer pipeline does not count.
+func checkStatement(cmds []command, start, end int) bool {
+	if reservedStart(cmds[start].words) {
 		return false
 	}
-	return cleanChecksum(cmds[start].words)
+	switch end - start {
+	case 1:
+		return cleanChecksum(cmds[start].words, false)
+	case 2:
+		return stdinCheck(cmds, start+1)
+	default:
+		return false
+	}
+}
+
+// stdinCheck reports a sha256sum -c that reads the sums from an echo or
+// printf piped into it, and ends its statement.
+func stdinCheck(cmds []command, i int) bool {
+	if i == 0 || !cmds[i].pipeIn || cmds[i-1].pipeIn || cmds[i-1].stmt != cmds[i].stmt {
+		return false
+	}
+	if i+1 < len(cmds) && cmds[i+1].stmt == cmds[i].stmt {
+		return false
+	}
+	if reservedStart(cmds[i-1].words) || hasBang(cmds[i-1].words) {
+		return false
+	}
+	w := unwrap(cmds[i-1].words)
+	if len(w) == 0 {
+		return false
+	}
+	switch progName(w[0]) {
+	case "echo", "printf":
+	default:
+		return false
+	}
+	return cleanChecksum(cmds[i].words, true)
 }
 
 func statementLen(cmds []command, i int) int {
@@ -539,8 +582,9 @@ func setErrexit(words []string) (on, off bool) {
 
 // cleanChecksum reports sha256sum, sha384sum, or sha512sum -c <file>,
 // or shasum -a 256|384|512 -c <file>. --check is the long form of -c.
-// Any other flag, a missing file, -, and /dev/* do not count.
-func cleanChecksum(words []string) bool {
+// Any other flag and /dev/* do not count. A missing file or - counts
+// only when stdin is the sums piped in by echo or printf.
+func cleanChecksum(words []string, stdin bool) bool {
 	if hasBang(words) {
 		return false
 	}
@@ -583,7 +627,13 @@ func cleanChecksum(words []string) bool {
 			files = append(files, a)
 		}
 	}
-	if !check || !strong || len(files) == 0 {
+	if !check || !strong {
+		return false
+	}
+	if stdin {
+		return len(files) == 0 || len(files) == 1 && files[0] == "-"
+	}
+	if len(files) == 0 {
 		return false
 	}
 	for _, file := range files {

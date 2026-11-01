@@ -11,6 +11,7 @@ const (
 	commitPrefix = "https://raw.githubusercontent.com/acme/tools/" + sha40
 	commitURL    = commitPrefix + "/install.sh"
 	branchURL    = "https://raw.githubusercontent.com/acme/tools/main/install.sh"
+	sum          = "abababababababababababababababababababababababababababababababab"
 )
 
 func TestUnpinned(t *testing.T) {
@@ -54,7 +55,26 @@ func TestUnpinned(t *testing.T) {
 		{"powershell -EncodedCommand ZQBjAGgAbwA=", []string{Encoded}},
 
 		// Checksum verified before running.
-		{"curl -fsSLo i.sh " + branchURL + " && echo \"" + strings.Repeat("ab", 32) + "  i.sh\" | sha256sum -c - && sh i.sh", []string{Fetch}},
+		{"curl -fsSLo i.sh " + branchURL + " && echo \"" + sum + "  i.sh\" | sha256sum -c - && sh i.sh", nil},
+		{"curl -fsSLo i.sh " + branchURL + " && echo \"" + sum + "  i.sh\" | sha256sum -c && sh i.sh", nil},
+		{"curl -fsSLo i.sh " + branchURL + " && printf '%s  i.sh\\n' " + sum + " | sha256sum --check - && sh i.sh", nil},
+		{"curl -fsSLo i.sh " + branchURL + " && echo \"" + sum + "  i.sh\" | shasum -a 256 -c && sh i.sh", nil},
+		{"set -e; curl -fsSLo i.sh " + branchURL + "; echo \"" + sum + "  i.sh\" | sha256sum -c -; sh i.sh", nil},
+		{"set -e\ncurl -fsSLo i.sh " + branchURL + "\necho \"" + sum + "  i.sh\" | sha256sum -c\nsh i.sh", nil},
+		{"curl -fsSLo i.sh " + branchURL + "; echo \"" + sum + "  i.sh\" | sha256sum -c -; sh i.sh", []string{Fetch}},
+		{"set -e; curl -fsSLo i.sh " + branchURL + "; echo \"" + sum + "  i.sh\" | sha256sum -c - && true; sh i.sh", []string{Fetch}},
+		{"set -e; curl -fsSLo i.sh " + branchURL + "; echo \"" + sum + "  i.sh\" | sha256sum -c - & sh i.sh", []string{Fetch}},
+		{"set -e; curl -fsSLo i.sh " + branchURL + "; echo \"" + sum + "  i.sh\" | sha256sum -c - | cat; sh i.sh", []string{Fetch}},
+		{"curl -fsSLo i.sh " + branchURL + " && echo \"" + sum + "  i.sh\" | sha256sum -c - | cat && sh i.sh", []string{Fetch}},
+		{"curl -fsSLo i.sh " + branchURL + " && echo \"" + sum + "  i.sh\" | sha256sum -c - || true; sh i.sh", []string{Fetch}},
+		{"curl -fsSLo i.sh " + branchURL + " && echo \"" + sum + "  i.sh\" | sha256sum -c --ignore-missing && sh i.sh", []string{Fetch}},
+		{"curl -fsSLo i.sh " + branchURL + " && echo \"" + sum + "  i.sh\" | sha256sum -c /dev/stdin && sh i.sh", []string{Fetch}},
+		{"curl -fsSLo i.sh " + branchURL + " && echo \"" + sum + "  i.sh\" | sha1sum -c - && sh i.sh", []string{Fetch}},
+		{"curl -fsSLo i.sh " + branchURL + " && cat sums | sha256sum -c - && sh i.sh", []string{Fetch}},
+		{"curl -fsSLo i.sh " + branchURL + " && ! echo \"" + sum + "  i.sh\" | sha256sum -c - && sh i.sh", []string{Fetch}},
+		{"curl -fsSLo i.sh " + branchURL + " && sha256sum -c - && sh i.sh", []string{Fetch}},
+		{"curl -fsSLo i.sh " + branchURL + " && sha256sum -c && sh i.sh", []string{Fetch}},
+		{"curl -fsSLo i.sh " + branchURL + " && echo \"" + sum + "  i.sh\" | sha256sum -c - && echo ok | sh", []string{Fetch, Pipe}},
 		{"curl -fsSLo i.sh " + branchURL + " && sha512sum --check i.sh.sha512 && bash i.sh", nil},
 		{"curl -fsSLo i.sh " + branchURL + " && shasum -a 256 -c sums.txt && sh i.sh", nil},
 		{"set -euo pipefail\ncurl -fsSLo i.sh " + branchURL + "\nsha256sum -c sums.txt\nsh i.sh", nil},
