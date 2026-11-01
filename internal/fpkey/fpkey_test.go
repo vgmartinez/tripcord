@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -291,6 +293,47 @@ func TestLoadFailsClosedOnBrokenExistingMaterial(t *testing.T) {
 				t.Fatalf("error names the home directory: %v", err)
 			}
 		})
+	}
+}
+
+// TestLoadNamesSudoRootOwnershipFix is the researcher review's fix 4: a
+// one-off `sudo tripcord scan` with HOME preserved (macOS's default,
+// and some Linux configurations) leaves ~/.tripcord owned by root, so
+// every later unprivileged run fails closed. The message must name the
+// cause and the fix, not just "not owned by the current user".
+func TestLoadNamesSudoRootOwnershipFix(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("ownership is not checked on Windows; see fpkey_windows.go")
+	}
+	if os.Getuid() == 0 {
+		t.Skip("already root; cannot exercise a uid mismatch")
+	}
+	sudo, err := exec.LookPath("sudo")
+	if err != nil {
+		t.Skip("sudo not available")
+	}
+	if exec.Command(sudo, "-n", "true").Run() != nil {
+		t.Skip("sudo requires a password in this environment")
+	}
+	home := t.TempDir()
+	writeRaw(t, home, secret+"\n")
+	dir := filepath.Dir(Path(home))
+	if err := exec.Command(sudo, "-n", "chown", "-R", "0:0", dir).Run(); err != nil {
+		t.Fatalf("sudo chown to root: %v", err)
+	}
+	t.Cleanup(func() {
+		owner := strconv.Itoa(os.Getuid()) + ":" + strconv.Itoa(os.Getgid())
+		_ = exec.Command(sudo, "-n", "chown", "-R", owner, dir).Run()
+	})
+	_, src, err := Load(Options{Home: home, Getenv: env(nil)})
+	if !errors.Is(err, ErrKeyUnusable) || src != SourceNone {
+		t.Fatalf("Load = %v, %v, want ErrKeyUnusable", src, err)
+	}
+	if !strings.Contains(err.Error(), "uid 0") || !strings.Contains(err.Error(), "chown") {
+		t.Fatalf("error does not name the cause and the fix: %v", err)
+	}
+	if strings.Contains(err.Error(), home) {
+		t.Fatalf("error names the home directory: %v", err)
 	}
 }
 

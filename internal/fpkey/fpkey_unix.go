@@ -37,13 +37,29 @@ func checkFileSecurity(info fs.FileInfo, _ string) error {
 	return nil
 }
 
+// checkOwner rejects logical (LogicalDir or LogicalPath) when info's
+// owner is not the current user. uid 0 gets its own message: `sudo`
+// with HOME preserved (macOS's default, and some Linux configurations)
+// runs `tripcord scan` as root but still resolves ~/.tripcord under the
+// invoking user's home, so a one-off sudo invocation leaves the
+// directory and key file root-owned, and every later, unprivileged run
+// hits this check and exits 3 until someone notices and fixes the
+// ownership by hand.
 func checkOwner(info fs.FileInfo, logical string) error {
 	stat, ok := info.Sys().(*syscall.Stat_t)
 	if !ok {
 		return nil
 	}
-	if int(stat.Uid) != os.Getuid() {
-		return fmt.Errorf("%w: %s is not owned by the current user", ErrKeyUnusable, logical)
+	uid := int(stat.Uid)
+	if uid == os.Getuid() {
+		return nil
 	}
-	return nil
+	if uid == 0 {
+		return fmt.Errorf(
+			"%w: %s is owned by uid 0 (probably created by an earlier `sudo tripcord scan` with HOME preserved); "+
+				"run `sudo chown -R $USER %s` to fix it",
+			ErrKeyUnusable, logical, LogicalDir,
+		)
+	}
+	return fmt.Errorf("%w: %s is owned by uid %d, not the current user", ErrKeyUnusable, logical, uid)
 }
