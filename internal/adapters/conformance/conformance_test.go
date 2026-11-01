@@ -105,12 +105,13 @@ func userConfig(t *testing.T, home string) {
 	kittest.WriteFile(t, filepath.Join(home, ".codeium", "windsurf", "hooks.json"), `{"hooks":{"pre_run_command":[{"command":"`+h+`/hooks/w.sh --token HOMESECRET"}]}}`)
 }
 
+// allAdapters is every adapter with no fingerprint key (s1).
 func allAdapters(home string, user bool) []adapters.Adapter {
-	return keyedAdapters(home, user, nil)
+	return allAdaptersWithKey(home, user, nil)
 }
 
-// keyedAdapters is allAdapters with fingerprint key k (nil selects s1).
-func keyedAdapters(home string, user bool, k *fpkey.Key) []adapters.Adapter {
+// allAdaptersWithKey is every adapter with fingerprint key k; nil is s1.
+func allAdaptersWithKey(home string, user bool, k *fpkey.Key) []adapters.Adapter {
 	return []adapters.Adapter{
 		claude.New(claude.Options{IncludeUser: user, HomeDir: home, Getenv: kittest.Env(), FingerprintKey: k}),
 		codex.New(codex.Options{IncludeUser: user, HomeDir: home, Getenv: kittest.Env(), FingerprintKey: k}),

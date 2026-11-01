@@ -78,18 +78,6 @@ func writeAppServer(t *testing.T, root, home string, args []any) {
 	kittest.WriteFile(t, filepath.Join(home, ".codeium", "windsurf", "mcp_config.json"), mcpServers)
 }
 
-// conformanceKey is the k1 fingerprint key of the secret-variant tests.
-const conformanceKey = "c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00"
-
-func testKey(t *testing.T) *fpkey.Key {
-	t.Helper()
-	k, err := fpkey.New(conformanceKey)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return k
-}
-
 // appServers discovers args in a fresh repository and home with
 // fingerprint key k (nil selects s1) and returns the "app" MCP item of
 // each adapter.
@@ -97,7 +85,7 @@ func appServers(t *testing.T, args []any, k *fpkey.Key) map[model.Harness]model.
 	t.Helper()
 	root, home := t.TempDir(), t.TempDir()
 	writeAppServer(t, root, home, args)
-	got := discoverAll(t, root, keyedAdapters(home, true, k))
+	got := discoverAll(t, root, allAdaptersWithKey(home, true, k))
 	out := map[model.Harness]model.ConfigItem{}
 	for _, items := range got.byAdapter {
 		for _, item := range items {
