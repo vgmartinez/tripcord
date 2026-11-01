@@ -38,11 +38,11 @@ profile is evaluated exactly like the top level. Codex does not apply
 shared and its profiles are copied into user configs, so the rule does
 not rely on that.
 
-Gemini CLI documents that yolo can only be enabled with `--yolo` or
-`--approval-mode=yolo`, not in `settings.json`; its
-`general.defaultApprovalMode` setting excludes `yolo`. `autoAccept` in a
-settings file also does not auto-approve every action. These are medium intent
-signals rather than effective shared-file bypasses.
+Gemini CLI's configuration reference says yolo can only be enabled with
+`--yolo` or `--approval-mode=yolo`. `general.defaultApprovalMode` does not
+accept `yolo`, so that value in a settings file is medium: an intent signal,
+not an effective shared-file bypass. `autoAccept` and `tools.autoAccept` set
+to true are reported at medium as well.
 
 A Codex config with both `danger-full-access` and
 `approval_policy = "never"` is two findings, one per setting.

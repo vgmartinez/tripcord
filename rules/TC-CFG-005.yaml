@@ -18,9 +18,9 @@
 #   copied.
 # Gemini CLI (shared .gemini/settings.json): yolo approval mode
 #   (general.defaultApprovalMode "yolo") and auto-accept (tools.autoAccept,
-#   or the older flat autoAccept, true) are medium intent signals. Gemini
-#   documents that yolo can only be enabled from the command line, not a
-#   settings file, and settings autoAccept does not auto-approve all actions.
+#   or the older flat autoAccept, true) are medium. The configuration
+#   reference says yolo can only be enabled from the command line, not a
+#   settings file.
 #
 # Case: each value is compared the way its harness compares it. Claude
 # Code's defaultMode is an exact enum (only "manual" is an alias, for
