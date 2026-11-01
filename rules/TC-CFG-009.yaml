@@ -1,0 +1,70 @@
+# A cloud agent or dev container runs the repository's environment
+# setup before anyone reviews what it fetched: the Copilot coding
+# agent's copilot-setup-steps workflow, Cursor's cloud-agent
+# .cursor/environment.json, and a dev container's lifecycle commands
+# and Features. A setup command that downloads and runs code from a
+# source that can change runs whatever that source serves next.
+#
+# Rules read each command as the file wrote it, before URL secrets are
+# stripped; findings show only the sanitized form (see docs/scan.md).
+#
+# Read, with shell.unpinned (see internal/rules/shellcmd/pinned.go),
+# which reports what shell.risks reports (fetch, pipe, encoded, nested;
+# see TC-CFG-001) unless every fetch in the command is pinned:
+#   - Copilot: the run of each step of the copilot-setup-steps job in
+#     .github/workflows/copilot-setup-steps.yml. uses steps are not read.
+#   - Cursor: the install and start strings and each terminal command
+#     of .cursor/environment.json.
+#   - Dev containers: onCreateCommand, updateContentCommand,
+#     postCreateCommand, and postStartCommand, in string, array, or
+#     object form; and a Feature whose reference is an http(s) tarball
+#     URL, which the tooling downloads and runs as root, read as a curl
+#     of that URL. initializeCommand and postAttachCommand are not read.
+#
+# Pinned means one of:
+#   - Immutable URL: every downloader target is an https URL whose path
+#     names a 40- or 64-digit hex commit id (a path segment, or the part
+#     after @) or a sha256:<64 hex> digest. A tag, a branch, a release
+#     download, or a version number is not a pin.
+#   - Checksum verified before execution: nothing is piped into a
+#     shell, and each download is followed, as the next statement, by
+#     sha256sum, sha384sum, or sha512sum -c (or shasum -a 256, 384, or
+#     512 -c), joined to what follows by && or under set -e.
+# Package runners (npx -y, uvx, pnpm dlx, ...), git clone, and a
+# variable target are never pinned.
+#
+# Not read: Devin's .devin/blueprint.yaml (no adapter reads it), RUN
+# lines of a Dockerfile, OCI Feature references (ghcr.io/...:1), and
+# what a fetched script does.
+id: TC-CFG-009
+pack: tripcord/core
+title: "Environment setup runs code fetched from an unpinned source"
+severity: high
+harness: [copilot, cursor, devcontainer]
+files: ["**"]
+when: |
+  config.kind == "env-setup" && config.scope == "repo" && has(payload.setting) && (
+    (config.harness == "copilot" && payload.setting == "step" &&
+      has(payload.run) && type(payload.run) == string &&
+      shell.unpinned(payload.run).size() > 0) ||
+    (config.harness == "cursor" && payload.setting in ["install", "start"] &&
+      has(payload.value) && type(payload.value) == string &&
+      shell.unpinned(payload.value).size() > 0) ||
+    (config.harness == "cursor" && payload.setting == "terminals" &&
+      has(payload.command) && type(payload.command) == string &&
+      shell.unpinned(payload.command).size() > 0) ||
+    (config.harness == "devcontainer" &&
+      payload.setting in ["onCreateCommand", "updateContentCommand", "postCreateCommand", "postStartCommand"] &&
+      has(payload.command) && (type(payload.command) == string || type(payload.command) == list) &&
+      shell.unpinned(payload.command).size() > 0) ||
+    (config.harness == "devcontainer" && payload.setting == "features" &&
+      has(payload.feature) && type(payload.feature) == string &&
+      payload.feature.matches(r'''(?i)^https?://''') &&
+      shell.unpinned(["curl", payload.feature]).size() > 0)
+  )
+fix: "Commit the setup script to the repository and run it from there, or pin what it downloads: fetch an https URL that names a commit or digest, or download to a file and check its SHA-256 (sha256sum -c) before running it, with && so a mismatch stops setup."
+refs:
+  - https://docs.github.com/en/copilot/how-tos/use-copilot-agents/coding-agent/customize-the-agent-environment
+  - https://cursor.com/docs/cloud-agent
+  - https://containers.dev/implementors/json_reference/
+  - https://workos.com/blog/npm-worm-coding-agent-config-credentials

