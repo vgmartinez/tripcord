@@ -153,29 +153,32 @@ func (s *Source) MCPServers(value any, what string) {
 		}
 		payload := s.SafeObject(server)
 		s.redactMaps(server, payload, "env", "headers", "http_headers", "env_http_headers")
-		s.redactToolArgs(server, payload)
+		s.redactToolArgs(payload)
 		payload["name"] = name
 		s.Add(model.ConfigKindMCPServer, []string{"mcp", name}, payload)
 	}
 }
 
-// redactToolArgs applies output.RedactToolArgv to server's command and
-// args, where a tool-specific flag and its value are separate array
-// elements (["login", "-p", "X"] for command "docker") that SafeValue's
-// generic per-element scan does not redact, because a short flag like
-// -p or -t means something unrelated for most commands and is only
-// safe to redact for the specific tool that treats it as a credential
-// (see output.RedactToolArgv). It rewrites payload["args"] in place and
-// records the raw values it removed for Add's key discriminator.
-func (s *Source) redactToolArgs(server, payload map[string]any) {
-	command, ok := server["command"].(string)
+// redactToolArgs applies output.RedactToolArgv to the already-sanitized
+// command and args in payload. A tool-specific flag and its value can be
+// separate array elements (["login", "-p", "X"] for command "docker"),
+// which SafeValue's generic per-element scan does not redact because a
+// short flag like -p or -t means something unrelated for most commands.
+// Starting with the sanitized payload is critical: rewriting args from
+// the raw server value would restore a different secret SafeObject or
+// SafeValue already removed from another element.
+func (s *Source) redactToolArgs(payload map[string]any) {
+	command, ok := payload["command"].(string)
 	if !ok {
 		return
 	}
-	rawArgs, _ := server["args"].([]any)
-	argv := make([]string, 0, len(rawArgs)+1)
+	args, ok := payload["args"].([]any)
+	if !ok {
+		return
+	}
+	argv := make([]string, 0, len(args)+1)
 	argv = append(argv, command)
-	for _, arg := range rawArgs {
+	for _, arg := range args {
 		text, _ := arg.(string)
 		argv = append(argv, text)
 	}
@@ -184,13 +187,9 @@ func (s *Source) redactToolArgs(server, payload map[string]any) {
 		return
 	}
 	s.recordRemoved(removed...)
-	args, ok := payload["args"].([]any)
-	if !ok {
-		return
-	}
 	out := make([]any, len(args))
 	for i, arg := range args {
-		if _, isString := rawArgs[i].(string); isString {
+		if _, isString := arg.(string); isString {
 			out[i] = redactedArgv[i+1]
 		} else {
 			out[i] = arg
