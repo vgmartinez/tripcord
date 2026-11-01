@@ -46,24 +46,43 @@ const maxDepth = 8
 
 // Risks reports the risks in a command line, in the order Fetch, Pipe,
 // Encoded, Nested, each at most once.
-func Risks(line string) []string {
+func Risks(line string) []string { return Analyze(line).Risks }
+
+// Result is what Analyze found and how much it read.
+type Result struct {
+	Risks []string
+	// Work is the number of bytes read, counting a nested payload once
+	// for each level it is read at. The reader is linear in Work, so it
+	// is the cost to charge for a call.
+	Work int
+}
+
+// Analyze is Risks with the work it took.
+func Analyze(line string) Result {
 	var s scanner
 	s.line(line, 0)
-	return s.risks()
+	return Result{Risks: s.risks(), Work: s.work}
 }
 
 // RisksArgv reports the risks in an argument vector that no shell
 // splits, such as a hook's exec and args. A pipe character in an
 // argument is literal; a wrapper's payload is still read as a command
 // line.
-func RisksArgv(argv []string) []string {
+func RisksArgv(argv []string) []string { return AnalyzeArgv(argv).Risks }
+
+// AnalyzeArgv is RisksArgv with the work it took.
+func AnalyzeArgv(argv []string) Result {
 	var s scanner
+	for _, a := range argv {
+		s.work += len(a) + 1
+	}
 	s.command(argv, 0, false)
-	return s.risks()
+	return Result{Risks: s.risks(), Work: s.work}
 }
 
 type scanner struct {
 	fetch, pipe, encoded, nested bool
+	work                         int
 }
 
 func (s *scanner) risks() []string {
@@ -84,6 +103,7 @@ func (s *scanner) risks() []string {
 }
 
 func (s *scanner) line(src string, depth int) {
+	s.work += len(src) + 1
 	if strings.TrimSpace(src) == "" {
 		return
 	}

