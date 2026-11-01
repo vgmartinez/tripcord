@@ -212,6 +212,42 @@ func TestHiddenCharsEvidence(t *testing.T) {
 	}
 }
 
+// TestHiddenCharsEvidenceDevinKnowledgeEntries checks that three Devin
+// knowledge entries in one blueprint.yaml, each with the same single
+// hidden code point (so hiddenchar.FingerprintKey alone hashes them
+// identically) and no excerpt position (TC-CFG-011 strips line and
+// column from the hash), still get three distinct fingerprints: Config.
+// ID is the same for all three (one file), so only the entry-specific
+// key kit.Source.AddDetect already puts in payload.key tells them apart.
+func TestHiddenCharsEvidenceDevinKnowledgeEntries(t *testing.T) {
+	_, cat := fixtureEngine(t)
+	base, ok := cat.Rule("TEST-CFG-001")
+	if !ok {
+		t.Fatal("missing fixture rule")
+	}
+	withEvidence := base
+	withEvidence.ID = "TC-CFG-011"
+	withEvidence.Evidence = EvidenceHiddenChars
+	hidden, _ := hiddenchar.Scan([]byte("a\u200bb"))
+	fingerprints := map[string]bool{}
+	for i, key := range []string{"k1", "k2", "k3"} {
+		it := item(model.HarnessDevin, ".devin/blueprint.yaml", model.ConfigKindInstructions,
+			fmt.Sprintf(`{"role":"knowledge","content":"c%d","key":%q}`, i, key))
+		it.Hidden = hidden
+		f, err := Match{Rule: withEvidence, Item: it}.Finding(model.SeverityHigh, model.DecisionDeny)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if fingerprints[f.Fingerprint] {
+			t.Fatalf("entry %d (key %q) reused a fingerprint: %s", i, key, f.Fingerprint)
+		}
+		fingerprints[f.Fingerprint] = true
+	}
+	if len(fingerprints) != 3 {
+		t.Fatalf("fingerprints = %v, want 3 distinct", fingerprints)
+	}
+}
+
 func TestConfigIDVariable(t *testing.T) {
 	env := testEnv(t)
 	it := item(model.HarnessClaude, "~/.claude/settings.json", model.ConfigKindHook, `{}`)

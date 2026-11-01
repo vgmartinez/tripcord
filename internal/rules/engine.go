@@ -70,10 +70,23 @@ func (m Match) Finding(severity model.Severity, decision model.Decision) (model.
 		return model.Finding{}, err
 	}
 	loc := model.Location{Harness: m.Item.Harness, Scope: m.Item.Scope, Path: m.Item.Path}
-	evidence := []model.Evidence{{Config: &model.ConfigRef{ID: id, Key: ConfigEvidenceKey(m.Item)}}}
+	entryKey := ConfigEvidenceKey(m.Item)
+	evidence := []model.Evidence{{Config: &model.ConfigRef{ID: id, Key: entryKey}}}
 	if hidden := m.Item.Hidden; m.Rule.Evidence == EvidenceHiddenChars && hidden.Total > 0 {
 		evidence[0].Excerpt = hiddenchar.Excerpt(hidden)
-		evidence[0].Config.Key = hiddenchar.FingerprintKey(hidden, 1)
+		key := hiddenchar.FingerprintKey(hidden, 1)
+		if m.Item.Harness == model.HarnessDevin && entryKey != "" {
+			// Several Devin knowledge entries in one blueprint.yaml
+			// share ID (one file) and, when their hidden runs are the
+			// same code point, Sequence; overwriting entryKey below
+			// would then collapse them onto one fingerprint. Devin's
+			// entries already carry a content-derived key (see
+			// kit.Source.AddDetect), so keep it instead of discarding
+			// it. Every other harness keeps the plain
+			// hiddenchar.FingerprintKey below, unchanged.
+			key = entryKey + "/" + key
+		}
+		evidence[0].Config.Key = key
 		if len(hidden.Runs) > 0 {
 			line := hidden.Runs[0].Line
 			loc.Line = &line
