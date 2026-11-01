@@ -8,9 +8,14 @@ import (
 	"time"
 
 	"cel.dev/cel-go/cel"
+	"cel.dev/cel-go/common/cost"
 	"cel.dev/cel-go/common/types"
+	"cel.dev/cel-go/common/types/ref"
+	"cel.dev/cel-go/common/types/traits"
 	"cel.dev/cel-go/ext"
 	"cel.dev/cel-go/interpreter"
+
+	"github.com/vgmartinez/tripcord/internal/rules/shellcmd"
 )
 
 // CEL variables. Every variable is bound on every evaluation. On a
@@ -102,9 +107,10 @@ var (
 )
 
 // Env compiles expressions against the Tripcord variables. It has the
-// CEL standard library and the cel-go strings extension only. Neither
-// can read files, the network, the clock, or the environment, and
-// matches() uses Go's RE2 engine, which runs in linear time.
+// CEL standard library, the cel-go strings extension, and shell.risks.
+// None can read files, the network, the clock, or the environment.
+// matches() uses Go's RE2 engine and shell.risks a single pass of the
+// shellcmd reader; both run in linear time.
 type Env struct {
 	env    *cel.Env
 	limits Limits
@@ -118,6 +124,7 @@ func NewEnv(limits Limits) (*Env, error) {
 		cel.Variable(VarTask, cel.DynType),
 		cel.Variable(VarEvent, cel.MapType(cel.StringType, cel.DynType)),
 		ext.Strings(),
+		shellRisks,
 		cel.ParserExpressionSizeLimit(limits.MaxExpressionBytes),
 		cel.ParserRecursionLimit(limits.MaxNesting),
 	)
@@ -125,6 +132,69 @@ func NewEnv(limits Limits) (*Env, error) {
 		return nil, err
 	}
 	return &Env{env: env, limits: limits}, nil
+}
+
+// shell.risks(command) and shell.risks([program, arg, ...]) return what a
+// hook command does that runs code from the network: "fetch", "pipe",
+// and "encoded" (see shellcmd). The list form is an argument vector no
+// shell splits, such as exec and args.
+var shellRisks = cel.Function("shell.risks",
+	cel.Overload(overloadShellRisksString, []*cel.Type{cel.StringType}, cel.ListType(cel.StringType),
+		cel.UnaryBinding(func(v ref.Val) ref.Val {
+			s, ok := v.(types.String)
+			if !ok {
+				return types.MaybeNoSuchOverloadErr(v)
+			}
+			return types.NewStringList(types.DefaultTypeAdapter, shellcmd.Risks(string(s)))
+		})),
+	cel.Overload(overloadShellRisksList, []*cel.Type{cel.ListType(cel.DynType)}, cel.ListType(cel.StringType),
+		cel.UnaryBinding(func(v ref.Val) ref.Val {
+			argv, err := stringList(v)
+			if err != nil {
+				return types.WrapErr(err)
+			}
+			return types.NewStringList(types.DefaultTypeAdapter, shellcmd.RisksArgv(argv))
+		})),
+)
+
+const (
+	overloadShellRisksString = "shell_risks_string"
+	overloadShellRisksList   = "shell_risks_list"
+)
+
+// shellRisksCost charges shell.risks like one traversal of its input,
+// the same rate matches() charges per byte of the string it reads.
+func shellRisksCost(args []ref.Val, _ ref.Val) *uint64 {
+	var n uint64 = 1
+	for _, arg := range args {
+		switch v := arg.(type) {
+		case types.String:
+			n += uint64(len(v)) / 10
+		case traits.Lister:
+			for it := v.Iterator(); it.HasNext() == types.True; {
+				if s, ok := it.Next().(types.String); ok {
+					n += 1 + uint64(len(s))/10
+				}
+			}
+		}
+	}
+	return &n
+}
+
+func stringList(v ref.Val) ([]string, error) {
+	list, ok := v.(traits.Lister)
+	if !ok {
+		return nil, errors.New("shell.risks: argument is not a list")
+	}
+	var out []string
+	for it := list.Iterator(); it.HasNext() == types.True; {
+		s, ok := it.Next().(types.String)
+		if !ok {
+			return nil, errors.New("shell.risks: list element is not a string")
+		}
+		out = append(out, string(s))
+	}
+	return out, nil
 }
 
 // Limits returns the limits this environment enforces.
@@ -178,6 +248,10 @@ func (e *Env) compile(src string, guarded bool) (*Expr, error) {
 	prg, err := e.env.Program(ast,
 		cel.EvalOptions(cel.OptOptimize),
 		cel.CostLimit(e.limits.CostLimit),
+		cel.CostTrackerOptions(
+			cost.OverloadTracker(overloadShellRisksString, shellRisksCost),
+			cost.OverloadTracker(overloadShellRisksList, shellRisksCost),
+		),
 		cel.InterruptCheckFrequency(100),
 	)
 	if err != nil {

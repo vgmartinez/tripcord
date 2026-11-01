@@ -47,6 +47,7 @@ lowerAscii
 matches
 replace
 reverse
+shell.risks
 size
 split
 startsWith
