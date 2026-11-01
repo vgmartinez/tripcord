@@ -400,9 +400,13 @@ A process killed (`SIGKILL`, a hard crash) between creating its
 temporary file and removing it again leaves that file behind forever
 otherwise. Every `tripcord scan` that finds `~/.tripcord` already
 there, not only the path that goes on to create a new key, sweeps any
-`.fingerprint.key.*.tmp` file older than a few minutes: old enough that
-it cannot still be a concurrent run's in-progress write, so deleting it
-is always safe.
+`.fingerprint.key.*.tmp` file older than a few minutes, or with a
+modification time in the future: neither can be a concurrent run's
+in-progress write, so deleting it is always safe. The sweep reads the
+directory and matches that pattern against each name. It does not glob
+the path, so a home directory whose own name contains `*`, `?`, or `[`
+cannot make the sweep touch a sibling directory or silently match
+nothing. Only a regular file is removed.
 
 ## Canonical JSON
 

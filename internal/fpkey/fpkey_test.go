@@ -208,23 +208,98 @@ func TestLoadRemovesStaleTempFiles(t *testing.T) {
 	dir := filepath.Dir(Path(home))
 	stale := filepath.Join(dir, ".fingerprint.key.stale0123.tmp")
 	fresh := filepath.Join(dir, ".fingerprint.key.fresh4567.tmp")
-	for _, path := range []string{stale, fresh} {
+	future := filepath.Join(dir, ".fingerprint.key.future89.tmp")
+	// A directory whose name matches the temp pattern must be left
+	// alone, even when it is old enough to look stale: only a regular
+	// file is a leftover from createKeyFile.
+	asDir := filepath.Join(dir, ".fingerprint.key.notfile.tmp")
+	for _, path := range []string{stale, fresh, future} {
 		if err := os.WriteFile(path, []byte("leftover"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
+	if err := os.Mkdir(asDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
 	old := time.Now().Add(-staleTempFileAge - time.Minute)
-	if err := os.Chtimes(stale, old, old); err != nil {
+	ahead := time.Now().Add(time.Hour)
+	for _, path := range []string{stale, asDir} {
+		if err := os.Chtimes(path, old, old); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Chtimes(future, ahead, ahead); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := Load(Options{Home: home, Getenv: env(nil)}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(stale); !errors.Is(err, fs.ErrNotExist) {
-		t.Fatalf("stale temp file was not removed: %v", err)
+	for _, path := range []string{stale, future} {
+		if _, err := os.Stat(path); !errors.Is(err, fs.ErrNotExist) {
+			t.Fatalf("stale temp file %s was not removed: %v", filepath.Base(path), err)
+		}
 	}
-	if _, err := os.Stat(fresh); err != nil {
-		t.Fatalf("fresh temp file was removed: %v", err)
+	for _, path := range []string{fresh, asDir} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("%s was removed: %v", filepath.Base(path), err)
+		}
+	}
+}
+
+// TestLoadStaleSweepStaysInsideHome is the researcher review's bug: the
+// sweep used filepath.Glob on the whole path, so a home directory whose
+// name contained a glob metacharacter deleted a sibling home's stale
+// temp file ("h*" matched "hvictim") or, with an unmatched "[", matched
+// nothing and left the sweep off.
+func TestLoadStaleSweepStaysInsideHome(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, homeName, siblingName string
+	}{
+		{"star", "h*", "hvictim"},
+		{"question", "h?", "hx"},
+		{"bracket", "h[", "ha"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			parent := t.TempDir()
+			home := filepath.Join(parent, tc.homeName)
+			sibling := filepath.Join(parent, tc.siblingName)
+			if err := os.Mkdir(home, 0o700); err != nil {
+				if runtime.GOOS == "windows" {
+					t.Skipf("directory name %q: %v", tc.homeName, err)
+				}
+				t.Fatal(err)
+			}
+			writeKey(t, home, secret)
+			siblingTmp := filepath.Join(sibling, ".tripcord", ".fingerprint.key.stale0123.tmp")
+			if err := os.MkdirAll(filepath.Dir(siblingTmp), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(siblingTmp, []byte("sibling"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			ownTmp := filepath.Join(filepath.Dir(Path(home)), ".fingerprint.key.stale0123.tmp")
+			if err := os.WriteFile(ownTmp, []byte("own"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			old := time.Now().Add(-staleTempFileAge - time.Minute)
+			for _, path := range []string{siblingTmp, ownTmp} {
+				if err := os.Chtimes(path, old, old); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if _, _, err := Load(Options{Home: home, Getenv: env(nil)}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := os.Stat(ownTmp); !errors.Is(err, fs.ErrNotExist) {
+				t.Fatalf("own stale temp file was not removed: %v", err)
+			}
+			got, err := os.ReadFile(siblingTmp)
+			if err != nil || string(got) != "sibling" {
+				t.Fatalf("sibling temp file = %q, %v; a home named %q must not reach it", got, err, tc.homeName)
+			}
+		})
 	}
 }
 

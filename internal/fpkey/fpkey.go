@@ -301,23 +301,39 @@ func IsCI(getenv func(string) string) bool {
 	return false
 }
 
-// cleanStaleTempFiles best-effort removes any leftover temporary key
-// file (tempFilePattern) in dir older than staleTempFileAge. It never
-// reports an error: Load only ever reads or creates fingerprint.key
-// itself, so a failure to sweep these orphans is not fatal to it, and
-// leaving one behind for another pass to find is always safe.
+// cleanStaleTempFiles best-effort removes leftover temporary key files
+// (tempFilePattern) in dir. It reads dir and matches the pattern
+// against each name, never against the path: dir can contain glob
+// metacharacters (a home directory literally named "h*", "h?", or
+// "h["), and filepath.Glob would otherwise interpret those and delete
+// a sibling directory's files, or, on an unmatched "[", match nothing
+// and leave the sweep off. Only a regular file is removed. A mtime in
+// the future is treated as stale, the same as one older than
+// staleTempFileAge: it cannot be a write still in progress.
+//
+// It never reports an error. Load only ever reads or creates
+// fingerprint.key itself, so a failure to sweep these orphans is not
+// fatal, and leaving one behind for another pass is always safe.
 func cleanStaleTempFiles(dir string) {
-	matches, err := filepath.Glob(filepath.Join(dir, tempFilePattern))
+	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return
 	}
-	cutoff := time.Now().Add(-staleTempFileAge)
-	for _, path := range matches {
-		info, err := os.Lstat(path)
-		if err != nil || info.ModTime().After(cutoff) {
+	now := time.Now()
+	cutoff := now.Add(-staleTempFileAge)
+	for _, entry := range entries {
+		matched, err := filepath.Match(tempFilePattern, entry.Name())
+		if err != nil || !matched {
 			continue
 		}
-		_ = os.Remove(path)
+		info, err := entry.Info()
+		if err != nil || !info.Mode().IsRegular() {
+			continue
+		}
+		mod := info.ModTime()
+		if mod.After(now) || !mod.After(cutoff) {
+			_ = os.Remove(filepath.Join(dir, entry.Name()))
+		}
 	}
 }
 
