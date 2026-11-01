@@ -2,6 +2,7 @@
 # internal/rules/fixtures.go, ExpectFile).
 positivos:
   copilot-branch-url-pipe: high
+  copilot-checksum-extra-fetch: high
   copilot-checksum-function-override: high
   copilot-checksum-stdin-from-cat: high
   copilot-checksum-stdin-in-and-list: high
@@ -25,6 +26,12 @@ positivos:
   copilot-errexit-true-set-e: high
   copilot-errexit-variable-set-plus-e: high
   copilot-evil-host-sha: high
+  copilot-export-openssl-conf: high
+  copilot-fetch-curlrc-absolute: high
+  copilot-fetch-curlrc-dotdot: high
+  copilot-fetch-curlrc-relative: high
+  copilot-fetch-curlrc-via-cd: high
+  copilot-fetch-ld-so-preload: high
   copilot-oci-digest-curl: high
   copilot-pwsh-iwr-iex: high
   copilot-release-asset-sha: high
