@@ -329,9 +329,10 @@ func IsCI(getenv func(string) string) bool {
 // metacharacters (a home directory literally named "h*", "h?", or
 // "h["), and filepath.Glob would otherwise interpret those and delete
 // a sibling directory's files, or, on an unmatched "[", match nothing
-// and leave the sweep off. Only a regular file is removed. A mtime in
-// the future is treated as stale, the same as one older than
-// staleTempFileAge: it cannot be a write still in progress.
+// and leave the sweep off. Only a regular file is removed. A mtime is
+// stale only when it is more than staleTempFileAge old or more than
+// staleTempFileAge in the future: a small future skew can come from
+// another process's live write, or a filesystem clock difference.
 //
 // It never reports an error. Load only ever reads or creates
 // fingerprint.key itself, so a failure to sweep these orphans is not
@@ -342,7 +343,8 @@ func cleanStaleTempFiles(dir string) {
 		return
 	}
 	now := time.Now()
-	cutoff := now.Add(-staleTempFileAge)
+	oldCutoff := now.Add(-staleTempFileAge)
+	futureCutoff := now.Add(staleTempFileAge)
 	for _, entry := range entries {
 		matched, err := filepath.Match(tempFilePattern, entry.Name())
 		if err != nil || !matched {
@@ -353,7 +355,7 @@ func cleanStaleTempFiles(dir string) {
 			continue
 		}
 		mod := info.ModTime()
-		if mod.After(now) || !mod.After(cutoff) {
+		if mod.Before(oldCutoff) || mod.After(futureCutoff) {
 			_ = os.Remove(filepath.Join(dir, entry.Name()))
 		}
 	}

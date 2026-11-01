@@ -250,12 +250,13 @@ func TestLoadRemovesStaleTempFiles(t *testing.T) {
 	dir := filepath.Dir(Path(home))
 	stale := filepath.Join(dir, ".fingerprint.key.stale0123.tmp")
 	fresh := filepath.Join(dir, ".fingerprint.key.fresh4567.tmp")
-	future := filepath.Join(dir, ".fingerprint.key.future89.tmp")
+	nearFuture := filepath.Join(dir, ".fingerprint.key.near-future.tmp")
+	farFuture := filepath.Join(dir, ".fingerprint.key.far-future.tmp")
 	// A directory whose name matches the temp pattern must be left
 	// alone, even when it is old enough to look stale: only a regular
 	// file is a leftover from createKeyFile.
 	asDir := filepath.Join(dir, ".fingerprint.key.notfile.tmp")
-	for _, path := range []string{stale, fresh, future} {
+	for _, path := range []string{stale, fresh, nearFuture, farFuture} {
 		if err := os.WriteFile(path, []byte("leftover"), 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -264,24 +265,31 @@ func TestLoadRemovesStaleTempFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	old := time.Now().Add(-staleTempFileAge - time.Minute)
-	ahead := time.Now().Add(time.Hour)
+	nearAhead := time.Now().Add(3 * time.Second)
+	farAhead := time.Now().Add(staleTempFileAge + time.Minute)
 	for _, path := range []string{stale, asDir} {
 		if err := os.Chtimes(path, old, old); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := os.Chtimes(future, ahead, ahead); err != nil {
-		t.Fatal(err)
+	for _, path := range []string{nearFuture, farFuture} {
+		mtime := farAhead
+		if path == nearFuture {
+			mtime = nearAhead
+		}
+		if err := os.Chtimes(path, mtime, mtime); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if _, _, err := Load(Options{Home: home, Getenv: env(nil)}); err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{stale, future} {
+	for _, path := range []string{stale, farFuture} {
 		if _, err := os.Stat(path); !errors.Is(err, fs.ErrNotExist) {
 			t.Fatalf("stale temp file %s was not removed: %v", filepath.Base(path), err)
 		}
 	}
-	for _, path := range []string{fresh, asDir} {
+	for _, path := range []string{fresh, nearFuture, asDir} {
 		if _, err := os.Stat(path); err != nil {
 			t.Fatalf("%s was removed: %v", filepath.Base(path), err)
 		}

@@ -252,7 +252,10 @@ anyone looking them up by number:
   `ab` are the same key and produce the same fingerprints. An odd
   number of hex characters cannot be decoded and the scan exits 3. A
   key file additionally has an exact-length rule a human-set env var
-  does not; see "Fingerprint key" above.
+  does not; see "Fingerprint key" above. **k1 fingerprints change once
+  in this PR** because older commits on this branch keyed the HMAC with
+  the hex text; nothing is released yet, so this is the one safe point
+  to normalize it.
 - **s1 granularity** is top-level payload field plus index
   (`field[n]`), not a deeper structural path into nested values; see
   "Secret discriminator" above.
@@ -406,13 +409,13 @@ A process killed (`SIGKILL`, a hard crash) between creating its
 temporary file and removing it again leaves that file behind forever
 otherwise. Every `tripcord scan` that finds `~/.tripcord` already
 there, not only the path that goes on to create a new key, sweeps any
-`.fingerprint.key.*.tmp` file older than a few minutes, or with a
-modification time in the future: neither can be a concurrent run's
-in-progress write, so deleting it is always safe. The sweep reads the
-directory and matches that pattern against each name. It does not glob
-the path, so a home directory whose own name contains `*`, `?`, or `[`
-cannot make the sweep touch a sibling directory or silently match
-nothing. Only a regular file is removed.
+`.fingerprint.key.*.tmp` file older than a few minutes, or more than a
+few minutes in the future. A small future skew is left alone: it can
+come from another process's live write, or an NFS/SMB clock
+difference. The sweep reads the directory and matches that pattern
+against each name. It does not glob the path, so a home directory whose
+own name contains `*`, `?`, or `[` cannot make the sweep touch a sibling
+directory or silently match nothing. Only a regular file is removed.
 
 ## Canonical JSON
 
