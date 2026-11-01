@@ -32,6 +32,17 @@ func TestStripEmbeddedURL(t *testing.T) {
 		{"https://e.com/?a|b?sig=S2", "https://e.com/|b", "a\x00sig=S2"},
 		{"https://e.com/?a|https://u:S3@h/x?s=S4", "https://e.com/|https://h/x", "a\x00s=S4\x00u:S3"},
 
+		// The opening quote is part of an embedded match. Its matching
+		// closing quote bounds the URL, so old-style query separators stay
+		// inside the stripped part. The closing quote itself is outside the
+		// match and is left in the enclosing command.
+		{`"https://e.com/x?a=1;sig=S1`, `"https://e.com/x`, "a=1;sig=S1"},
+		{`'https://e.com/x?a=1|sig=S2`, `'https://e.com/x`, "a=1|sig=S2"},
+		{`"https://e.com/x?a=1&&sig=S3`, `"https://e.com/x`, "a=1&&sig=S3"},
+		{`"https://e.com/x#a=1;sig=S4`, `"https://e.com/x`, "a=1;sig=S4"},
+		{`'https://e.com/x#a=1|sig=S5`, `'https://e.com/x`, "a=1|sig=S5"},
+		{`"https://e.com/x#a=1&&sig=S6`, `"https://e.com/x`, "a=1&&sig=S6"},
+
 		// No host: the query and fragment still go.
 		{"https://:8443/x?sig=S5", "https://:8443/x", "sig=S5"},
 		{"https:///x?sig=S6#S7", "https:///x", "sig=S6\x00S7"},
@@ -56,15 +67,20 @@ func FuzzStripEmbeddedURL(f *testing.F) {
 	for _, seed := range []string{
 		"https://e.com/x?a=)&sig=S", "https://u:p@e.com/(x)?s#f)", "https://e.com/x?a=`&s`", "http://h/#a)b",
 		"https://:8443/x?sig=S", "https:///x?s#f", `https://e.com/?x\`, "https://e.com/?a|https://u:p@h/?s",
+		`"https://e.com/x?a=1;sig=S`, `'https://e.com/x?a=1|sig=S`, `"https://e.com/x#a=1&&sig=S`,
 	} {
 		f.Add(seed)
 	}
 	f.Fuzz(func(t *testing.T, s string) {
 		for _, m := range embeddedURL.FindAllString(s, -1) {
+			quoted := len(m) > 0 && (m[0] == '\'' || m[0] == '"')
 			got, _ := StripEmbeddedURL(m)
 			rest := got[strings.Index(got, "://")+3:]
 			if strings.ContainsAny(rest, "?#") {
 				t.Fatalf("StripEmbeddedURL(%q) = %q keeps query or fragment text", m, got)
+			}
+			if quoted && strings.ContainsAny(rest, "?#") {
+				t.Fatalf("StripEmbeddedURL(%q) = %q keeps content before its closing quote", m, got)
 			}
 			for r := got; ; {
 				i := strings.Index(r, "://")

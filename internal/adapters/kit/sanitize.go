@@ -31,7 +31,7 @@ var (
 	// quote or the rest of a pipeline is not swallowed. It runs on through
 	// ")" and a backtick, so a query that contains one is still stripped
 	// whole; StripEmbeddedURL keeps the shell text that closes there.
-	embeddedURL = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://[^\s'"<>]+`)
+	embeddedURL = regexp.MustCompile(`["']?[A-Za-z][A-Za-z0-9+.-]*://[^\s'"<>]+`)
 )
 
 // Sanitized is one string after sanitization: the safe text, and the raw
@@ -327,15 +327,21 @@ func stripEmbeddedURLSecrets(value string) (string, []string) {
 // inside a longer string, as text: the URL is not parsed and rebuilt, so
 // nothing is re-encoded, and a URL without a host (https://:8443/x) is
 // stripped all the same. A query or fragment runs to the end of the
-// match or to a shell character that ends it: ;, |, \, &&, or a trailing
-// &. That character and the text after it are kept, so the evidence
-// keeps the command's shape (?sig=x|sh keeps |sh), and a ? or # in that
-// text starts another removed part. ")" and a backtick do not end a
-// query, and neither does a single &, its own separator; a run of ")"
-// and backticks that ends the match is kept, since it closes a $( ) or
-// backtick substitution around the URL. removedRaw is the removed text,
-// NUL-joined, for KeyDiscriminator only.
+// match. When m starts with a quote, that quoted string bounds its query
+// or fragment, so legitimate old-style query separators (;, |, &&) do
+// not end stripping. Outside quotes, a shell character ends it: ;, |,
+// \, &&, or a trailing &. That character and the text after it are kept,
+// so the evidence keeps the command's shape (?sig=x|sh keeps |sh), and
+// a ? or # in that text starts another removed part. ")" and a backtick
+// do not end a query, and neither does a single &, its own separator; a
+// run of ")" and backticks that ends the match is kept, since it closes a
+// $( ) or backtick substitution around the URL. removedRaw is the
+// removed text, NUL-joined, for KeyDiscriminator only.
 func StripEmbeddedURL(m string) (stripped, removedRaw string) {
+	quote := byte(0)
+	if len(m) > 0 && (m[0] == '\'' || m[0] == '"') {
+		quote, m = m[0], m[1:]
+	}
 	prefix, rest := "", m
 	if sep := strings.Index(m, "://"); sep >= 0 {
 		prefix, rest = m[:sep+3], m[sep+3:]
@@ -351,6 +357,9 @@ func StripEmbeddedURL(m string) (stripped, removedRaw string) {
 		auth = auth[at+1:]
 	}
 	var b strings.Builder
+	if quote != 0 {
+		b.WriteByte(quote)
+	}
 	b.WriteString(prefix)
 	b.WriteString(auth)
 	for len(tail) > 0 {
@@ -360,7 +369,7 @@ func StripEmbeddedURL(m string) (stripped, removedRaw string) {
 			break
 		}
 		b.WriteString(tail[:q])
-		end := q + 1 + queryEnd(tail[q+1:])
+		end := q + 1 + queryEnd(tail[q+1:], quote)
 		secret := tail[q:end]
 		removed = append(removed, splitSecret(secret)...)
 		if end == len(tail) {
@@ -402,8 +411,12 @@ func stripUserinfo(text string) (string, []string) {
 }
 
 // queryEnd returns the index in s of the shell character that ends a
-// query or fragment, or len(s).
-func queryEnd(s string) int {
+// query or fragment, or len(s). Inside a quoted URL, the closing quote
+// already ended the embeddedURL match, so the query runs to len(s).
+func queryEnd(s string, quote byte) int {
+	if quote != 0 {
+		return len(s)
+	}
 	for i := 0; i < len(s); i++ {
 		switch s[i] {
 		case ';', '|', '\\':

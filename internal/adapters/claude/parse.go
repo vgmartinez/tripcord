@@ -196,7 +196,7 @@ var (
 	// shell quote or the rest of a pipeline. It runs on through ")" and
 	// a backtick, so a query that contains one is still stripped whole;
 	// kit.StripEmbeddedURL keeps the shell text that closes there.
-	embeddedURL = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://[^\s'"<>]+`)
+	embeddedURL = regexp.MustCompile(`["']?[A-Za-z][A-Za-z0-9+.-]*://[^\s'"<>]+`)
 )
 
 // redactCommandSecrets redacts "Bearer <token>" and then everything
