@@ -76,7 +76,7 @@ file and hidden-code-point sequence, not presentation coordinates.
 
 `when` sees these variables:
 
-- `config`: the config item (`id`, `harness`, `scope`, `path`, `sha256`, `kind`), `missing_scripts`: on a repository hook, how many project-relative scripts it runs are not in the scanned tree (0 otherwise; see `internal/scriptcheck`), `script_locations`: the location classes of project scripts whose symlink resolves outside the repository, and `hidden_chars`: on a markdown file, how many bidi controls, tag characters, and zero-width code points it holds (a leading BOM is not counted; 0 otherwise).
+- `config`: the config item (`id`, `harness`, `scope`, `path`, `sha256`, `kind`), `missing_scripts`: on a repository hook, how many project-relative scripts it runs are not in the scanned tree (0 otherwise; see `internal/scriptcheck`), `script_locations`: the location classes of project scripts whose symlink resolves outside the repository, `checksum_files`: on a repository env-setup entry, a map from each committed sums file its `sha256sum -c` checks name to the file names it lists (missing, out-of-tree, and malformed sums files are left out; see `internal/scriptcheck`), and `hidden_chars`: on a markdown file, how many bidi controls, tag characters, and zero-width code points it holds (a leading BOM is not counted; 0 otherwise).
 - `payload`: the item's parsed content.
 - `task`: the same as `payload` when `config.kind == "task"`, otherwise empty.
 - `event`: a `tripcord.event/v1` event, for event rules. Every
@@ -101,12 +101,15 @@ never a `sha256:` digest, which curl and wget do not verify) with no userinfo an
 or `..` path segment (decoded or not), or the whole line is a script
 the checksum grammar accepts (see `checksumScript` and
 `docs/rules/TC-CFG-009.md`): curl/wget fetches to plain
-current-directory filenames, `sha256sum -c` checks that cover them,
+current-directory filenames, checks that cover them (an `echo`/`printf`
+entry, or `sha256sum -c <sums>` where `<sums>` is never fetched or run),
 `sh`/`bash` runs of the fetched files, a leading `set -e`, and restricted
 `mkdir`/`chmod`/`rm`, with nothing else. `cd`, `export`, and assignments
 do not receive checksum credit. Package runners, git
 clone, variable targets, and version tags are never pinned. It costs
-what `shell.risks` costs.
+what `shell.risks` costs. `shell.unpinned(command, config.checksum_files)`
+also lets a `sha256sum -c <sums>` check cover the files a committed
+`<sums>` lists; with one argument such a check covers nothing.
 
 `shell.locations(command)` reads the line the same way and returns
 where the programs it runs live: the program of each simple command,

@@ -35,13 +35,17 @@
 #     nor is a path with a . or .. segment (also %2e%2e, .%2E).
 #   - Checksum verified before execution: the whole script parses under
 #     the checksum grammar (docs/rules/TC-CFG-009.md): only curl/wget to
-#     one plain current-directory filename (no / or leading .),
-#     sha256sum -c <sums> or shasum -a 256 -c <sums>,
+#     one plain current-directory filename (no /, leading ., or
+#     leading -; config and command names rejected in any case),
+#     sha256sum -c <sums> or shasum -a 256 -c <sums> where <sums> is
+#     committed (config.checksum_files, see internal/scriptcheck),
 #     echo|printf '<64 hex>  <file>' | sha256sum -c [-] naming the
 #     fetched and run file, sh/bash <fetched file>, a leading set -e,
 #     and mkdir/chmod/rm with plain filenames, joined by ;, newlines,
-#     or &&. Every fetch is the run script or a sums file used by a
-#     check. Each run follows a check that stops it on failure. Anything
+#     or &&. Every fetch is the run script or an echo/printf entry's
+#     file; a sums file is never fetched or run. A sums check covers
+#     only the names the committed file lists. Each run follows a
+#     check that stops it on failure. Anything
 #     else (cd, export, assignments, trap, eval, functions, subshells,
 #     ||, $, ...) gives no credit.
 # Package runners (npx -y, uvx, pnpm dlx, ...), git clone (including a

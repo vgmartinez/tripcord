@@ -71,8 +71,8 @@ Every command in the script is one of these forms:
 
 | Form | Accepted | Notes |
 | --- | --- | --- |
-| Fetch | `curl -o <file> <url>`, `wget -O <file> <url>` | Exactly one `http(s)` URL and one plain output filename: `^[A-Za-z0-9_-][A-Za-z0-9._-]*$`. It has no `/` or leading dot and is not `curlrc`, `_curlrc`, `wgetrc`, `.wgetrc`, `netrc`, or `_netrc`, or a command the grammar runs (`sha256sum`, `sh`, ...). This prevents a fetch from planting curl, wget, loader, or netrc configuration. curl options: `-f -s -S -L -k` (clustered, `-o` last), `--fail`, `--silent`, `--show-error`, `--location`, `--create-dirs`, `--compressed`, `--fail-with-body`, `--no-progress-meter`, `--tlsv1.2`, `--tlsv1.3`, `--http1.1`, `--retry`, `--retry-delay`, `--retry-max-time`, `--connect-timeout`, `--max-time`, `--proto`, `--proto-redir`, `--output`. wget options: `-q`, `-nv`, `--quiet`, `--no-verbose`, `--https-only`, `--tries`, `--timeout`, `--output-document`. |
-| Check | `sha256sum -c <sums>`, `shasum -a 256 -c <sums>` | `--check` is the long form of `-c`. No other option. `<sums>` is a plain filename, not `-` or a path. It can be fetched, but then it must be used by this check. |
+| Fetch | `curl -o <file> <url>`, `wget -O <file> <url>` | Exactly one `http(s)` URL and one plain output filename: `^[A-Za-z0-9_][A-Za-z0-9._-]*$`. It has no `/`, leading dot, or leading `-` (so not `-q` or `--`) and is not `curlrc`, `_curlrc`, `wgetrc`, `.wgetrc`, `netrc`, or `_netrc`, or a command the grammar runs (`sha256sum`, `sh`, ...), in any case (`CURLRC` and `SH` are rejected too, since macOS and Windows file systems ignore case). It is never a sums file. This prevents a fetch from planting curl, wget, loader, or netrc configuration. curl options: `-f -s -S -L -k` (clustered, `-o` last), `--fail`, `--silent`, `--show-error`, `--location`, `--create-dirs`, `--compressed`, `--fail-with-body`, `--no-progress-meter`, `--tlsv1.2`, `--tlsv1.3`, `--http1.1`, `--retry`, `--retry-delay`, `--retry-max-time`, `--connect-timeout`, `--max-time`, `--proto`, `--proto-redir`, `--output`. wget options: `-q`, `-nv`, `--quiet`, `--no-verbose`, `--https-only`, `--tries`, `--timeout`, `--output-document`. |
+| Check | `sha256sum -c <sums>`, `shasum -a 256 -c <sums>` | `--check` is the long form of `-c`. No other option. `<sums>` is a plain filename, not `-` or a path. It must be committed to the repository (see below), and is never fetched or run by the script. |
 | Entry check | `echo '<64 hex>  <file>' \| sha256sum -c [-]` | Or `printf '<64 hex>  <file>\n'`, or `shasum -a 256 -c [-]`. The text is parsed: exactly one entry, 64 hex digits, two spaces or ` *`, and a plain filename. No `echo` option, no `printf` conversion, and no escape except a final `\n`. It covers only the file it names. The pipe is exactly these two commands, the check last, so it fails when the check fails without `pipefail`. |
 | Run | `sh <file>`, `bash <file>` | `<file>` is a plain filename the script fetched; no shell option. Arguments after it are passed to the script. |
 | Errexit | `set -e`, `set -eu`, `set -euo pipefail`, `set -eo pipefail`, `set -o errexit` | Only before every other command, each a statement of its own. A `set` anywhere else gives no credit. |
@@ -103,11 +103,31 @@ Order:
 - Each fetch is followed by a check that covers its file before the
   file is fetched again, and that fails the script: a statement of its
   own under `set -e`, or part of the script's last statement. Every
-  fetched file must be either the script run, the sums file used by a
-  plain check, or the file named by an entry check; an unused fetch
-  gives no credit.
-- A plain check (`sha256sum -c <sums>`) covers any file, because the
-  sums file is not read. An entry check covers only the file it names.
+  fetched file must be either the script run or the file named by an
+  entry check; an unused fetch gives no credit.
+- A sums file is never a fetch target and never run, and is not the
+  run file. Names are compared case-insensitively here, so
+  `curl -o i.sh ...; sha256sum -c I.SH` gives no credit either.
+- An entry check covers only the file it names. A plain check
+  (`sha256sum -c <sums>`) covers only the files `<sums>` lists, and
+  only when `<sums>` is committed to the scanned repository:
+  - it exists at the repository root as a regular file. Like the hook
+    scripts of `internal/scriptcheck`, it is found with `Stat` and
+    `EvalSymlinks`, and a symlink must resolve inside the repository.
+    It is then read through the repository's confined reader, at most
+    64 KiB;
+  - every line is `<64 hex>  <name>` or `<64 hex> *<name>`, with an
+    optional final newline. A blank line, a comment, a carriage return,
+    or the BSD `SHA256 (name) = ...` form makes the file malformed;
+  - the run file appears in it, exactly as the script names it.
+
+  A missing, unreadable, out-of-tree, or malformed sums file, or one
+  that lists only other files, gives no credit. The file is looked up
+  in the repository root, where Copilot, Cursor, and dev containers
+  run setup. A Copilot step with a `working-directory` (its own, or the
+  job's or workflow's `defaults.run`), and a `devcontainer.json` that
+  sets `workspaceFolder`, run elsewhere, so get no credit for a plain
+  check.
 
 Copilot steps whose effective shell is fail-closed are read with a
 leading `set -e`, so a check on its own line counts there.
@@ -127,8 +147,11 @@ sh t.sh
 
 Not accepted: `trap 'sh t.sh' EXIT` anywhere, `echo set -e`, `\set +e`,
 `sha256sum() { :; }`, `echo "<sha256>  /dev/null" | sha256sum -c`,
-`echo "<sha256>  other.sh" | sha256sum -c && sh t.sh`, and
-`printf '%s  t.sh\n' <sha256> | sha256sum -c`.
+`echo "<sha256>  other.sh" | sha256sum -c && sh t.sh`,
+`printf '%s  t.sh\n' <sha256> | sha256sum -c`, a fetched sums file
+(`curl -o t.sha ...; curl -o t.sh ...; sha256sum -c t.sha; sh t.sh`),
+and the script as its own sums file
+(`curl -o t.sh ...; sha256sum -c t.sh; sh t.sh`).
 
 Never pinned: package runners (`npx -y`, `bunx`, `pnpm dlx`,
 `yarn dlx`, `uvx`, `pipx run`), tags, `git clone` (including a later
@@ -152,7 +175,8 @@ too-deeply nested payloads.
 - Variables are not expanded, and the script a setup command fetches
   is not read.
 - The checksum itself is not compared with anything: the rule checks
-  that a check runs, not that the expected hash is right.
+  that a check runs against a hash committed to the repository, not
+  that the hash is right.
 
 ## Examples
 
@@ -171,7 +195,8 @@ jobs:
 {"postCreateCommand": "npx -y @acme/bootstrap"}
 ```
 
-Not reported:
+Not reported, with `t.sh.sha256` committed at the repository root and
+holding `<sha256>  t.sh`:
 
 ```json
 {"install": "curl -fsSLo t.sh https://get.tools.example.invalid/t.sh && sha256sum -c t.sh.sha256 && sh t.sh"}
@@ -192,8 +217,11 @@ Not reported:
 
 Commit the setup script to the repository and run it from there. If it
 must be downloaded, fetch an `https` URL that names a commit,
-or download it to a file and check its SHA-256 (`sha256sum -c`) before
-running it, joined with `&&` so a mismatch stops setup. Keep that script
+or download it to a file and check its SHA-256 before running it,
+joined with `&&` so a mismatch stops setup: put the hash in the
+command (`echo '<sha256>  t.sh' | sha256sum -c`) or in a sums file
+committed to the repository (`sha256sum -c t.sh.sha256`), never in a
+file the setup downloads. Keep that script
 to the checksum grammar: move anything else to a separate step or to a
 committed script.
 
