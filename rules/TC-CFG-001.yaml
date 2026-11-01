@@ -19,20 +19,29 @@
 #   localhost@host and localhost.host are not. uvx --from and pipx run
 #   --spec of a local path run local code.
 # pipe: any unquoted pipe into a shell, loopback or not, except a
-#   relative script piped into a bare shell (./x.sh | sh); a pipe into
-#   Invoke-Expression only when a command in that pipeline fetches, so
-#   oh-my-posh init pwsh | Invoke-Expression is quiet like eval of it.
+#   relative script piped into a bare shell (./x.sh | sh); and
+#   Invoke-Expression in a statement that downloads: curl, wget, iwr,
+#   irm, their long names, or a .NET Download* call with a target that
+#   is not provably loopback. A variable or $env target is not, so
+#   iwr $u | iex fires, while oh-my-posh init pwsh | Invoke-Expression
+#   is quiet like eval of it. $x = <command> is unwrapped, and a
+#   variable assigned a download carries it to a later $x | iex or
+#   iex $x on the same line.
 # encoded: PowerShell -EncodedCommand, or decoded content feeding
 #   Invoke-Expression: base64 -d/--decode, FromBase64, or
-#   [Text.Encoding]::GetString, piped in or passed as the argument.
-#   powershell and pwsh -Command and a positional script block are read.
+#   [Text.Encoding]::GetString, piped in, passed as the argument, or
+#   assigned to a variable that is.
+#   powershell and pwsh -Command and a positional script block are read,
+#   with backtick as PowerShell's escape character (I`E`X is IEX); a
+#   hook command with a backtick is read both as POSIX and PowerShell.
 # nested: a payload nested deeper than the reader follows (eight levels
 #   of $( ), -c, or eval), reported so that nesting cannot hide a fetch.
 #
 # npx and bunx of a bare name (npx tsc) are read as a local or
 # devDependency binary: the expression cannot read package.json.
-# Not read: $VAR and $(echo cur)l, nohup, xargs, env -S, busybox, and
-# start /b wrappers, and the script a hook calls.
+# Not read: $VAR as a fetch target outside Invoke-Expression, $(echo
+# cur)l, nohup, xargs, env -S, busybox, and start /b wrappers, and the
+# script a hook calls.
 id: TC-CFG-001
 pack: tripcord/core
 title: "SessionStart or Setup hook in shared config downloads or runs code from the network"

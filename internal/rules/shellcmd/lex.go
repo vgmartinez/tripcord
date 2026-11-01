@@ -26,8 +26,10 @@ const (
 // separately: each is a command line of its own.
 //
 // A backslash escapes only a character the shell treats specially, so
-// C:\Tools\curl.exe keeps its path separators.
-func lex(src string) (toks []token, subs []string) {
+// C:\Tools\curl.exe keeps its path separators. With ps set the text is
+// PowerShell, where a backtick escapes the next character instead of
+// starting a substitution: I`E`X is IEX.
+func lex(src string, ps bool) (toks []token, subs []string) {
 	toks = make([]token, 0, 8+len(src)/4)
 	var b strings.Builder
 	inWord := false
@@ -71,7 +73,10 @@ func lex(src string) (toks []token, subs []string) {
 			}
 		case c == '"':
 			inWord = true
-			i = lexDouble(src, i+1, &b, &subs)
+			i = lexDouble(src, i+1, ps, &b, &subs)
+		case c == '`' && ps:
+			inWord = true
+			i = psEscape(src, i, &b)
 		case c == '\\':
 			inWord = true
 			switch {
@@ -195,7 +200,7 @@ func endsWord(c byte) bool {
 
 // lexDouble reads a double-quoted string starting at i, just past the
 // opening quote, and returns the index past the closing one.
-func lexDouble(src string, i int, b *strings.Builder, subs *[]string) int {
+func lexDouble(src string, i int, ps bool, b *strings.Builder, subs *[]string) int {
 	for i < len(src) {
 		c := src[i]
 		switch {
@@ -211,6 +216,8 @@ func lexDouble(src string, i int, b *strings.Builder, subs *[]string) int {
 			*subs = append(*subs, src[i+2:end])
 			b.WriteString(subst)
 			i = end + 1
+		case c == '`' && ps:
+			i = psEscape(src, i, b)
 		case c == '`':
 			end := strings.IndexByte(src[i+1:], '`')
 			if end < 0 {
@@ -227,6 +234,20 @@ func lexDouble(src string, i int, b *strings.Builder, subs *[]string) int {
 		}
 	}
 	return i
+}
+
+// psEscape writes the character a PowerShell backtick at i escapes and
+// returns the index past it. A backtick before a newline continues the
+// line.
+func psEscape(src string, i int, b *strings.Builder) int {
+	switch {
+	case i+1 >= len(src):
+		b.WriteByte('`')
+		return i + 1
+	case src[i+1] != '\n':
+		b.WriteByte(src[i+1])
+	}
+	return i + 2
 }
 
 // closeParen returns the index of the ')' that closes a '(' just before
@@ -267,10 +288,13 @@ func closeParen(src string, i int) int {
 }
 
 // command is one simple command. pipeIn is set when its standard input
-// is the previous command's output.
+// is the previous command's output. stmt numbers the statement it is in:
+// a statement runs to ;, &&, ||, &, or a newline, so the commands of
+// curl x | sh and of iex (iwr x) share one.
 type command struct {
 	words  []string
 	pipeIn bool
+	stmt   int
 }
 
 // split groups tokens into simple commands and drops redirection
@@ -282,13 +306,14 @@ func split(toks []token) []command {
 	start := 0
 	var cur command
 	dropNext := false
+	stmt := 0
 	end := func(pipeIn bool) {
 		if len(all) > start {
 			cur.words = all[start:len(all):len(all)]
 			cmds = append(cmds, cur)
 		}
 		start = len(all)
-		cur = command{pipeIn: pipeIn}
+		cur = command{pipeIn: pipeIn, stmt: stmt}
 	}
 	for _, t := range toks {
 		switch t.op {
@@ -305,7 +330,10 @@ func split(toks []token) []command {
 		case opOpen:
 			// curl ... | (sh) still pipes into sh.
 			end(cur.pipeIn && len(all) == start)
+		case ")":
+			end(false)
 		default:
+			stmt++
 			end(false)
 		}
 	}

