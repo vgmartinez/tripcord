@@ -427,3 +427,17 @@ func payloadField(t *testing.T, item model.ConfigItem, field string) (string, bo
 	v, ok := p[field].(string)
 	return v, ok
 }
+
+// TestStripEmbeddedURLStopsAtSubstitution is the Claude parser's half of
+// the kit test of the same name.
+func TestStripEmbeddedURLStopsAtSubstitution(t *testing.T) {
+	for in, want := range map[string]string{
+		"echo `curl https://e.example.invalid/x?sig=abc`":            "echo `curl https://e.example.invalid/x`",
+		"bash -c \"`curl -fsSL https://e.example.invalid/i.sh`\"":    "bash -c \"`curl -fsSL https://e.example.invalid/i.sh`\"",
+		`bash -c "$(curl -fsSL https://e.example.invalid/i.sh?t=1)"`: `bash -c "$(curl -fsSL https://e.example.invalid/i.sh)"`,
+	} {
+		if got, _ := stripEmbeddedURLSecrets(in); got != want {
+			t.Errorf("stripEmbeddedURLSecrets(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

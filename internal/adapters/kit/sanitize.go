@@ -27,9 +27,10 @@ var (
 	bearerSchemeWord = regexp.MustCompile(`(?i)(?:^|:)\s*bearer\s*$`)
 	userFlagName     = regexp.MustCompile(`(?i)^(?:` + output.UserFlagAlternation + `)$`)
 	// embeddedURL finds an absolute URL inside a larger string, such as a
-	// curl command. It stops at whitespace and quotes so a trailing shell
-	// quote or the rest of a pipeline is not swallowed.
-	embeddedURL = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://[^\s'"<>]+`)
+	// curl command. It stops at whitespace, quotes, a backtick, and ")" so
+	// a trailing shell quote, the end of a command substitution, or the
+	// rest of a pipeline is not swallowed.
+	embeddedURL = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://[^\s'"<>`+"`"+`)]+`)
 )
 
 // Sanitized is one string after sanitization: the safe text, and the raw
