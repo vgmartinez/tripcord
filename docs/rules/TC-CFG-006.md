@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Severity | high (home, temp, remote URL); medium (other absolute path, `..`) |
+| Severity | high (home, temp, remote URL); medium (other absolute path, `..`, referenced script missing from repo) |
 | Harnesses | Claude Code, Codex, Copilot, Cursor, Gemini CLI, Windsurf, shared skills (`generic`) |
 | Files | every hook any adapter normalizes, repository scope, except `settings.local.json` |
 | Rule | [`rules/TC-CFG-006.yaml`](../../rules/TC-CFG-006.yaml) |
@@ -30,31 +30,76 @@ is given: `bash x.sh`, `python x.py`, `node x.js`, `deno run x.ts`,
 | A temporary directory: `/tmp`, `/var/tmp`, `/dev/shm`, `/private/tmp`, `/var/folders`, `$TMPDIR`, `%TEMP%`, `$RUNNER_TEMP`, `C:\Windows\Temp` | high |
 | Any other absolute path, such as `/opt/acme/hooks/check.sh` or `D:\tools\x.ps1` | medium |
 | Above the project directory: `../x.sh`, `$CLAUDE_PROJECT_DIR/../x.sh` | medium |
+| A project script the hook runs that is not in the scanned tree | medium, titled "Referenced script missing from repo" |
 
-Not reported:
+When several apply, the first row in this order decides the severity and
+title.
 
-- Relative paths inside the project, and paths under
-  `$CLAUDE_PROJECT_DIR`, `$CLAUDE_PLUGIN_ROOT`, `$GEMINI_PROJECT_DIR`,
-  `$CURSOR_PROJECT_DIR`, or `$PWD`.
-- Programs found on `PATH` (`npx`, `tripcord`, `jq`), and binaries
-  without a script extension under a system directory (`/usr`, `/bin`,
-  `/opt`, `/nix`, `/Applications`, `C:\Program Files`, ...), such as
-  `/usr/local/bin/tripcord`. A script there (`/opt/x/hook.sh`) is
-  reported as medium.
-- Paths in arguments: `cp {} /tmp/backup/` and `>> ~/.claude/audit.log`
-  run `cp` and `echo`.
-- HTTP hooks to `localhost`, `127.0.0.0/8`, or `[::1]`.
-- `$VAR` paths for other variables (`$HOOKS_DIR/x.sh`) and command
-  substitutions: their value is not known statically.
-- `.claude/settings.local.json` and `.github/copilot/settings.local.json`,
-  which are personal.
+## Heuristics
+
+The rule reads text, not a machine, so it decides some cases by rule of
+thumb. These are the ones a reviewer should know.
+
+**What counts as remote.** A hook `url`, or a program or script written
+as an `http`, `https`, or `ftp` URL, whose host is not loopback
+(`localhost`, `127.0.0.0/8`, `[::1]`), and a UNC path (`\\host\share`,
+`//host/share`). A URL that is only an argument (`./notify.sh
+https://...`) is not a target. A `curl` or `wget` inside the command is
+not read by this rule: TC-CFG-001 reports it in session-start hooks and
+TC-CFG-008 in Cursor, Copilot, and Windsurf hooks.
+
+**Project variables.** `$CLAUDE_PROJECT_DIR`, `$CLAUDE_PLUGIN_ROOT`,
+`$GEMINI_PROJECT_DIR`, `$CURSOR_PROJECT_DIR`, and `$PWD`, written
+`$NAME`, `${NAME}`, `%NAME%`, or `$env:NAME`, are taken to be the
+project, so a path under them is inside the repository. `../` after one
+still climbs out and is medium. Any other variable (`$HOOKS_DIR/x.sh`)
+and any command substitution has no known value and is not reported.
+
+**System directories.** A program without a script extension under
+`/usr`, `/bin`, `/sbin`, `/lib`, `/lib64`, `/opt`, `/nix`, `/snap`,
+`/etc`, `/Applications`, `/System`, `/Library`, `C:\Windows`,
+`C:\Program Files`, `C:\Program Files (x86)`, or `C:\ProgramData` is
+taken to be an installed binary, such as `/usr/local/bin/tripcord` or
+`/opt/homebrew/bin/prettier`, and is not reported. A script there (by
+extension: `.sh`, `.py`, `.js`, `.mjs`, `.cjs`, `.ts`, `.rb`, `.pl`,
+`.php`, `.lua`, `.ps1`, `.cmd`, `.bat`, ...) is reported as medium, for
+example `/opt/acme/hooks/check.sh`.
+
+**Programs on `PATH`.** A bare name (`npx`, `jq`, `tripcord`) is a
+`PATH` lookup and has no location.
+
+**Arguments.** Only the program and an interpreter's script are read:
+`cp {} /tmp/backup/` and `>> ~/.claude/audit.log` run `cp` and `echo`.
+
+**Missing scripts.** A project script is a program written as a path
+(`./x.sh`, `scripts/x`, `"$CLAUDE_PROJECT_DIR"/.claude/hooks/x.sh`) or an
+interpreter's script (`bash x.sh`, `node .cursor/hooks/x.mjs`). It is
+looked up relative to the hook's project directory: the directory that
+holds the harness's config directory (`.claude`, `.cursor`, `.github`,
+`.windsurf`, `.devin`, `.codex`, `.gemini`, `.agents`), so a hook in
+`packages/web/.claude/settings.json` resolves `./x.sh` to
+`packages/web/x.sh`. A Copilot hook's relative `cwd` is joined to it.
+The lookup is confined to the scanned directory: a symlink out of it is
+not opened and does not count as missing. It is not checked:
+
+- when the line contains a backslash, because POSIX and PowerShell
+  split it differently (`.\scripts\x.ps1`);
+- after `cd`, `pushd`, or `Set-Location` on the same line;
+- for a bare operand without a directory or extension (`node server`),
+  which the interpreter may resolve to another file;
+- for paths with any other variable or a glob, and for
+  `$CLAUDE_PLUGIN_ROOT` paths;
+- for hooks in a file outside those config directories, such as a
+  Claude plugin's `hooks/hooks.json`.
+
+Not reported at all: `.claude/settings.local.json` and
+`.github/copilot/settings.local.json`, which are personal.
 
 ## Limits
 
-- Whether a script inside the repository is committed. The scan does
-  not run git, so a project-relative script that is untracked or
-  gitignored is not reported. See the open question in the pull
-  request.
+- Whether a script that exists is committed. The scan does not run git,
+  so an untracked or gitignored script counts as present. Reading the
+  git index is a follow-up.
 - What the target script does. Only the hook entry is read.
 
 ## Examples
@@ -76,7 +121,15 @@ Reported:
   {"type": "http", "url": "https://hooks.example.invalid/pre-tool"}]}]}}
 ```
 
-Not reported:
+Reported as "Referenced script missing from repo", when
+`.cursor/hooks/redact.mjs` is not in the tree:
+
+```json
+{"version": 1, "hooks": {"beforeShellExecution": [
+  {"command": "node .cursor/hooks/redact.mjs"}]}}
+```
+
+Not reported, when `.claude/hooks/guard.sh` is in the tree:
 
 ```json
 {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [
