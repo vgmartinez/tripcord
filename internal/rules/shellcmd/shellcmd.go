@@ -13,6 +13,9 @@
 // A payload nested deeper than maxDepth is reported as Nested. A
 // pipeline into Invoke-Expression is a Pipe only when a command in it
 // fetches: oh-my-posh init pwsh | Invoke-Expression runs local output.
+// Decoded content feeding Invoke-Expression is Encoded: base64 -d or
+// --decode, FromBase64, or [Text.Encoding]::GetString, piped in or
+// passed as the argument.
 //
 // Static limits: variables are not expanded, so $URL is not a target
 // and $(echo cur)l is not curl. nohup, xargs, env -S, busybox, and
@@ -112,6 +115,9 @@ func (s *scanner) line(src string, depth int) {
 		return
 	}
 	toks, subs := lex(src)
+	if decodedExpression(toks, subs) {
+		s.encoded = true
+	}
 	for _, sub := range subs {
 		s.line(sub, depth+1)
 	}
@@ -436,6 +442,135 @@ func localExpression(cmds []command, fetched []bool, i int) bool {
 		}
 	}
 	return true
+}
+
+// decodedExpression reports a statement that feeds decoded content to
+// Invoke-Expression. A statement runs to a separator (;, &&, ||, &);
+// quotes are already resolved, so a mention inside echo '…' does not
+// count. The decoder is base64 -d/--decode, a FromBase64 call, or
+// [Text.Encoding]::GetString, in command position or in a substitution
+// in that statement.
+func decodedExpression(toks []token, subs []string) bool {
+	subAt := 0
+	var stmt []token
+	flush := func() bool {
+		n := 0
+		for _, t := range stmt {
+			n += strings.Count(t.word, subst)
+		}
+		// A NUL byte in the command is the substitution marker, so the
+		// count can run past the real substitutions. Never slice past them.
+		if subAt > len(subs) {
+			subAt = len(subs)
+		}
+		if subAt+n > len(subs) {
+			n = len(subs) - subAt
+		}
+		ok := statementDecoded(stmt, subs[subAt:subAt+n])
+		subAt += n
+		stmt = nil
+		return ok
+	}
+	for _, t := range toks {
+		if t.op == opSep || t.op == "&&" || t.op == "||" || t.op == "&" {
+			if flush() {
+				return true
+			}
+			continue
+		}
+		stmt = append(stmt, t)
+	}
+	return flush()
+}
+
+// statementDecoded reports that this statement both decodes and runs
+// Invoke-Expression, in either order: `base64 -d | iex` and
+// `iex ([Convert]::FromBase64String(...))`.
+func statementDecoded(toks []token, subs []string) bool {
+	decodes, iex := false, false
+	for _, c := range split(toks) {
+		decodes = decodes || commandDecodes(c.words)
+		iex = iex || commandIsIEX(c.words)
+	}
+	if iex && decodes {
+		return true
+	}
+	if !iex {
+		return false
+	}
+	for _, sub := range subs {
+		if textDecodes(sub, 0) {
+			return true
+		}
+	}
+	return false
+}
+
+func commandIsIEX(words []string) bool {
+	w := unwrap(words)
+	if len(w) == 0 {
+		return false
+	}
+	name := progName(w[0])
+	return name == "iex" || name == "invoke-expression"
+}
+
+// commandDecodes reports a command that decodes a payload: base64 -d or
+// --decode, a FromBase64 call, or [Text.Encoding]::*.GetString.
+func commandDecodes(words []string) bool {
+	w := unwrap(words)
+	if len(w) == 0 {
+		return false
+	}
+	if progName(w[0]) == "base64" && base64Decodes(w[1:]) {
+		return true
+	}
+	head := strings.ToLower(w[0])
+	if strings.Contains(head, "frombase64") {
+		return true
+	}
+	return strings.Contains(head, "text.encoding]::") && strings.Contains(head, "getstring")
+}
+
+// base64Decodes reports a decode flag: -d, -D, a short cluster containing
+// one of them (-di), or --decode. -- ends the flags.
+func base64Decodes(args []string) bool {
+	for _, a := range args {
+		switch {
+		case a == "--":
+			return false
+		case a == "--decode" || strings.HasPrefix(a, "--decode="):
+			return true
+		case strings.HasPrefix(a, "--") || len(a) < 2 || a[0] != '-':
+			continue
+		}
+		for i := 1; i < len(a); i++ {
+			if a[i] == 'd' || a[i] == 'D' {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// textDecodes reports a decoder in src, including one nested in a
+// substitution, up to maxDepth.
+func textDecodes(src string, depth int) bool {
+	if depth > maxDepth || strings.TrimSpace(src) == "" {
+		return false
+	}
+	toks, subs := lex(src)
+	for _, c := range split(toks) {
+		if commandDecodes(c.words) {
+			return true
+		}
+	}
+	for _, sub := range subs {
+		if textDecodes(sub, depth+1) {
+			return true
+		}
+	}
+	return false
 }
 
 // fetches reports a downloader or remote runner with a remote target.
