@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "hooks": {
+    "afterFileEdit": [
+      {
+        "command": "pwsh -NoProfile -Command \"Get-Content ./.cursor/hooks/format.ps1 -Raw | iex\""
+      }
+    ]
+  }
+}

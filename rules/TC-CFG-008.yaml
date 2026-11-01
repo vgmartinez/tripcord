@@ -10,7 +10,12 @@
 #   remote deno module, npx -y, pnpm dlx, uvx, git clone; see
 #   TC-CFG-001), shell.locations reports a program or script at a
 #   non-loopback URL or UNC share, or the hook is an HTTP hook to a
-#   non-loopback URL.
+#   non-loopback URL. A download into Invoke-Expression whose target is
+#   a variable (iwr $u | iex, irm $env:U | iex, $x = iwr $u; iex $x,
+#   iex (New-Object Net.WebClient).DownloadString($u)) is a pipe, not a
+#   fetch, in shell.risks; it counts when the same command also names
+#   iex or Invoke-Expression and a downloader or .NET Download call, so a
+#   pipe into sh (cat x | sh) is not read as network.
 # Unconditional allow (Cursor and Copilot, whose hooks return their
 #   decision as JSON on stdout): the whole command is one echo, printf,
 #   or Write-Output of a fixed JSON text with "permission",
@@ -22,8 +27,9 @@
 #   so only the network part applies to them.
 #
 # Not read: what a hook's script prints (.cursor/hooks/allow.sh may
-# allow everything), an allow wrapped in bash -c or cat <<EOF, and a
-# fetch through iwr $u | iex, which shell.risks reports as a pipe.
+# allow everything), an allow wrapped in bash -c or cat <<EOF, a
+# POSIX download from a variable (curl $u | sh), and which hook events
+# a hook runs on. A session-start hook that fetches is also TC-CFG-001.
 id: TC-CFG-008
 pack: tripcord/core
 title: "Cursor, Copilot, or Windsurf hook reaches the network or always allows"
@@ -38,10 +44,16 @@ when: |
       hook.commands(payload).exists(c,
         "fetch" in shell.risks(c) ||
         "network" in shell.locations(c) ||
+        ("pipe" in shell.risks(c) &&
+          c.matches(r'''(?i)(^|[^\w$-])(iex|invoke-expression)([^\w-]|$)''') &&
+          c.matches(r'''(?i)(^|[^\w$-])(iwr|irm|curl|wget|invoke-webrequest|invoke-restmethod|start-bitstransfer)([^\w-]|$)|(?i)\.download(string|file|data)''')) ||
         (config.harness in ["copilot", "cursor"] &&
           c.matches(r'''^\s*(?i:echo|printf|write-output)(\s+-[A-Za-z]+)*\s+[^$`|&;<>()\r\n]*\\?"(permission|permissionDecision|decision)\\?"\s*:\s*\\?"(allow|approve)\\?"[^$`|&;<>()\r\n]*(;\s*exit(\s+0)?)?\s*;?\s*$'''))) ||
       "fetch" in shell.risks(hook.argv(payload)) ||
       "network" in shell.locations(hook.argv(payload)) ||
+      ("pipe" in shell.risks(hook.argv(payload)) &&
+        hook.argv(payload).exists(a, a.matches(r'''(?i)(^|[^\w$-])(iex|invoke-expression)([^\w-]|$)''')) &&
+        hook.argv(payload).exists(a, a.matches(r'''(?i)(^|[^\w$-])(iwr|irm|curl|wget|invoke-webrequest|invoke-restmethod|start-bitstransfer)([^\w-]|$)|(?i)\.download(string|file|data)'''))) ||
       (config.harness in ["copilot", "cursor"] &&
         has(payload.exec) && type(payload.exec) == string &&
         payload.exec.matches(r'''^((/usr)?/bin/)?(echo|printf)$''') &&

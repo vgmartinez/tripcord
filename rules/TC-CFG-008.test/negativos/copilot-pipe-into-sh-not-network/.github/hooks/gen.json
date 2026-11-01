@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "hooks": {
+    "postToolUse": [
+      {
+        "type": "command",
+        "bash": "cat ./scripts/hooks/gen.txt | sh",
+        "powershell": "oh-my-posh init pwsh | Invoke-Expression"
+      }
+    ]
+  }
+}
