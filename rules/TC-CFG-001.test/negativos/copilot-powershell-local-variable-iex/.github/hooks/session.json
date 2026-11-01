@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "type": "command",
+        "powershell": "$c = Get-Content ./profile.ps1 -Raw; iex $c"
+      },
+      {
+        "type": "command",
+        "powershell": "oh-my-posh init pwsh | Invoke-Expression"
+      },
+      {
+        "type": "command",
+        "powershell": "(& uv generate-shell-completion powershell) | Out-String | Invoke-Expression"
+      },
+      {
+        "type": "command",
+        "powershell": "iwr http://localhost:8080/profile.ps1 | iex"
+      },
+      {
+        "type": "command",
+        "powershell": "$u = 'https://docs.example.invalid'; Write-Host \"see $u\""
+      },
+      {
+        "type": "command",
+        "powershell": "Write-Host \"ready`tok\""
+      }
+    ]
+  }
+}
