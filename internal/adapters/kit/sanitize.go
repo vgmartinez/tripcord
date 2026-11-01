@@ -183,12 +183,26 @@ func StructuralDiscriminator(view map[string]any) string {
 
 // redactedFieldNames memoizes output.DefaultRedactor on a field name: a
 // scan's payload field names (command, headers, env, url, args, and so
-// on) come from a small, fixed set defined by the adapters themselves,
-// repeated across every entry and every scan, so caching avoids running
-// DefaultRedactor's whole regex pipeline again on a name it has already
-// classified. It is shared across all adapters and sources: a field
-// name is redacted the same way regardless of which one produced it,
-// and the cache never holds a secret value, only field names.
+// on) usually come from a small, fixed set defined by the adapters
+// themselves, repeated across every entry and every scan, so caching
+// avoids running DefaultRedactor's whole regex pipeline again on a name
+// it has already classified. It is shared across all adapters and
+// sources: a field name is redacted the same way regardless of which
+// one produced it.
+//
+// That "small, fixed set" assumption is usually true but not
+// guaranteed: SafeObject keeps every key of a hook's or an MCP server's
+// raw JSON object, sanitizing only its value, so a config author (or an
+// attacker who can edit one) can add a field whose name the adapter
+// never expected. Such a name is passed through DefaultRedactor here
+// like any other string before it can reach a discriminator or other
+// output, the same guarantee every other secret-shaped value in this
+// package relies on. But unlike a Removal, whose Value is never
+// retained once used, this cache's key is always the original,
+// unredacted field name, kept for the life of the process: a field name
+// that happens to be credential-shaped is, by definition, a secret
+// value, so this cache is only free of secret values when every field
+// name actually is one of the small fixed set adapters normally use.
 var redactedFieldNames sync.Map
 
 func redactedFieldName(field string) string {
