@@ -3,17 +3,18 @@
 # repository. Novee showed allow overriding ask in claude-code-action.
 #
 # Paths follow Claude's permission syntax: //path is absolute from the
-# filesystem root, /path is relative to the project root, ~/path is the
-# home directory.
+# filesystem root (///path reads the same), /path is relative to the
+# project root, ~/path is the home directory.
 #
 # High: exec tools with a broad wildcard (bare Bash, Bash(*), Bash(:*),
 # Bash(**), *, mcp__*, and the same shapes for PowerShell, Shell, Cmd,
-# Terminal, and run_shell_command), and Read(//**) or Edit(//**), which
-# cover the whole filesystem.
-# Medium: bare Read, Edit, Write, and WebFetch; Read(*), Read(/**),
-# Read(~/**), the same for Edit and Write, Write(//**), WebFetch(*), and
-# WebFetch(domain:*). Write takes no path pattern of its own (Edit rules
-# govern file writes), so Write(...) stays medium.
+# Terminal, and run_shell_command), and Edit(//**), which can write the
+# whole filesystem.
+# Medium: broad reads and writes: bare Read, Edit, Write, and WebFetch;
+# Read(*), Read(/**), Read(//**), Read(~/**), the same for Write,
+# Edit(*), Edit(/**), Edit(~/**), WebFetch(*), and WebFetch(domain:*).
+# Write takes no path pattern of its own (Edit rules govern file
+# writes), so Write(...) stays medium.
 # One permissions object is one finding, at the first matching
 # severity, so high wins when both are present. settings.local.json is
 # personal and is not part of this rule's files.
@@ -26,12 +27,12 @@ severity_when:
     when: |
       has(payload.value) && type(payload.value) == map &&
         has(payload.value.allow) && type(payload.value.allow) == list &&
-        payload.value.allow.exists(e, type(e) == string && e.matches(r'''(?i)^\s*(\*+|mcp__\*+|(bash|powershell|pwsh|shell|cmd|terminal|run_shell_command)(\(\s*:?\s*\*+\s*\))?|(read|edit)\(\s*//\*+\s*\))\s*$'''))
+        payload.value.allow.exists(e, type(e) == string && e.matches(r'''(?i)^\s*(\*+|mcp__\*+|(bash|powershell|pwsh|shell|cmd|terminal|run_shell_command)(\(\s*:?\s*\*+\s*\))?|edit\(\s*//+\*+\s*\))\s*$'''))
   - severity: medium
     when: |
       has(payload.value) && type(payload.value) == map &&
         has(payload.value.allow) && type(payload.value.allow) == list &&
-        payload.value.allow.exists(e, type(e) == string && e.matches(r'''(?i)^\s*(read|edit|write|webfetch)(\(\s*(/{0,2}\*+|~/\*+|domain:\*)\s*\))?\s*$'''))
+        payload.value.allow.exists(e, type(e) == string && e.matches(r'''(?i)^\s*(read|edit|write|webfetch)(\(\s*(/*\*+|~/\*+|domain:\*)\s*\))?\s*$'''))
 harness: [claude]
 files: ["**/.claude/settings.json"]
 when: |
