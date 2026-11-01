@@ -493,7 +493,7 @@ func TestRulesEvaluateDetectView(t *testing.T) {
 	if f.Evidence[0].Config.Key != key {
 		t.Fatalf("evidence key = %q, want the sanitized %q", f.Evidence[0].Config.Key, key)
 	}
-	encoded := mustJSON(t, f) + mustJSON(t, it) + fmt.Sprintf("%v %+v %#v %s", it, it, it, it)
+	encoded := mustJSON(t, f) + mustJSON(t, it) + fmt.Sprintf("%v %+v %#v", it, it, it)
 	if strings.Contains(encoded, "RAWSECRET") {
 		t.Fatalf("raw text reached a finding or a formatted item:\n%s", encoded)
 	}

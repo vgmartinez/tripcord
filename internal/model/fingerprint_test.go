@@ -457,9 +457,9 @@ func TestFingerprintRejectsBadInput(t *testing.T) {
 	if !errors.Is(err, errEmptyHarness) {
 		t.Fatalf("empty harness: %v", err)
 	}
-	_, err = Fingerprint("TC-SEC-018", Location{Harness: "devin"}, nil)
+	_, err = Fingerprint("TC-SEC-018", Location{Harness: "not-a-harness"}, nil)
 	if !errors.Is(err, errUnknownHarness) {
-		t.Fatalf("devin: %v", err)
+		t.Fatalf("unknown harness: %v", err)
 	}
 	_, err = Fingerprint("TC-SEC-018", Location{Harness: HarnessClaude, Scope: "global"}, nil)
 	if !errors.Is(err, errUnknownScope) {
