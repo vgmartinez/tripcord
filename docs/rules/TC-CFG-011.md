@@ -49,7 +49,8 @@ Lines are counted from 1 and split on `\n`. Columns count code points
 from 1, so a CJK character or an emoji before the run is one column. An
 invalid UTF-8 byte counts as one column. The first five runs are listed,
 then how many more there are. The finding's location line is the first
-run's line.
+run's line. SARIF and GitHub annotation output carry that line but no
+evidence excerpt, as for every rule.
 
 The evidence never includes the text: not the characters a bidi run
 reorders, and not what a tag run spells. A tag run is named by its
