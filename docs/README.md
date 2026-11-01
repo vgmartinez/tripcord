@@ -32,7 +32,14 @@ adapter (`generic`) and which adapter owns a file several harnesses read.
 ## Finding fingerprints
 
 [fingerprint.md](fingerprint.md) defines the canonical finding fingerprint.
-The digest is stable across versions. Golden tests lock it.
+The digest is stable across versions. Golden tests lock it. Its "Secret
+discriminator" section covers the keyed (`k1`) and structural (`s1`)
+modes and where the fingerprint key lives.
+
+## Release notes
+
+[release-notes.md](release-notes.md) lists changes that affect
+fingerprints, baselines, or other stored results.
 
 ## Output
 

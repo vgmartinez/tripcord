@@ -77,34 +77,82 @@ Two things that do look like metadata, but **are** hashed:
   The digest is over the sanitized payload, so two entries that differ
   only in a value redaction replaced with `[REDACTED]` (a `--token` in a
   hook's `powershell` field, an `API_TOKEN` env value, ...) would share
-  it. Every sanitizer in `kit` therefore records the raw text it removes
-  while an entry is built, walking maps in sorted key order, and
-  `kit.Source.Add` appends `sig:` plus `kit.KeyDiscriminator` of that
-  whole sequence (8 hex characters of SHA-256). The Claude adapter,
-  which keeps some values raw in its payloads, uses
-  `kit.Source.EntrySignature`: the digest of its payload as kit
-  sanitizes it, and the same discriminator over its own removals and
-  kit's. The discriminator is a truncated hash of removed text, never
-  the text itself; it is home-normalized in user scope, so it does not
-  depend on the scanning machine.
-
-  The discriminator is the first 32 bits of an unsalted SHA-256. It is
-  not a secret-safe commitment: anyone holding a candidate secret can
-  hash it and compare, and a short or guessable secret (a PIN, a
-  dictionary password) can be confirmed by brute force from a report.
-  32 bits is enough to keep entries apart within one repository, which
-  is all it is for; the chance of two different removals sharing it is
-  about one in four billion per pair. There is deliberately no
-  per-install salt: the same configuration must produce the same
-  fingerprint on every machine and in CI, so a baseline or an
-  acceptance recorded on one machine matches the finding on another. A
-  salt would make every fingerprint machine-specific. Treat a report
-  that carries `sig:` keys as you would the configuration it came from.
+  it. Every sanitizer in `kit` therefore records each raw value it
+  removes while an entry is built, with the top-level payload field it
+  came from, walking maps in sorted key order, and `kit.Source.Add`
+  appends a `sig:` discriminator over that sequence; see "Secret
+  discriminator" below. The Claude adapter, which keeps some values raw
+  in its payloads, uses `kit.Source.EntryKey`: the digest of its payload
+  as kit sanitizes it, and the same discriminator over its own removals
+  (tagged with their field) and kit's.
 
 Credential values, secret values, and network URLs are never inputs,
-other than through the truncated-hash discriminator described above.
-Evidence excerpts must already be redacted; this package does not search
-them for secrets.
+other than through the keyed k1 discriminator described below. Evidence
+excerpts must already be redacted; this package does not search them for
+secrets.
+
+## Secret discriminator
+
+An entry that lost nothing to redaction has no secret discriminator,
+and its key and fingerprint are the same in both modes. An entry that
+lost one or more values gets one last key part. Its text names the mode,
+so a k1 key and an s1 key for the same entry never collide, and a
+baseline recorded in one mode never matches a secret-bearing finding
+from the other. The public fingerprint format stays `tcf_` plus 16 hex
+characters. The mode is visible in the evidence key, not in the
+fingerprint.
+
+| Mode | When | Key part | Different secret | Rotated secret | Identical duplicates |
+| --- | --- | --- | --- | --- | --- |
+| `k1` | A fingerprint key is set | `sig:k1:` + the first 16 hex characters of HMAC-SHA256(key, `tripcord.sig.k1` NUL JSON(removed values)) | Different fingerprint | Different fingerprint | Same fingerprint when the secrets are equal too |
+| `s1` | No key (the default in CI) | `sig:s1:` + `field[n],...` + `#` + ordinal | Same fingerprint | Same fingerprint | Told apart only by the ordinal |
+
+In s1, `field[n]` is the top-level payload field each removed value came
+from (`args`, `env`, `command`, `headers`, `content`, ...; passed through
+the output redactor) and `n` counts earlier removals from that field, in
+removal order. The ordinal counts earlier entries of the same file
+(harness, scope, path, and kind) whose key up to and including the
+`sig:s1:` part was identical, in the order the file lists them. No hash
+or other function of a removed value is used. s1 therefore keeps a
+baseline stable when a secret is rotated, which is what a baseline
+wants. Two entries that are identical after sanitizing get `#0`, `#1`,
+... in file order, so reordering such duplicates swaps their
+fingerprints.
+
+In k1 the HMAC is over the removed values only, in removal order, so the
+same server with a different secret gets a different fingerprint, and
+the key never has to leave the machine or CI secret store for that to
+hold. The same key text gives the same fingerprints everywhere, so a
+team that shares one key (for example as a CI secret and in each
+developer's key file) gets matching fingerprints locally and in CI.
+Without a shared key, local scans (k1 with a per-machine key) and CI
+scans (s1) do not match on secret-bearing entries, by design.
+
+Neither mode depends on the home directory: removed values are
+home-normalized in user scope before they are recorded, and the key file
+location only decides which key is used.
+
+### Fingerprint key
+
+`tripcord scan` resolves the key once, in this order:
+
+1. `TRIPCORD_FINGERPRINT_KEY`, when set and non-empty. In CI, set it
+   from a secret. Surrounding white space is trimmed. It must be at
+   least 16 bytes, or the scan exits 3. Example: `openssl rand -hex 32`.
+2. `~/.tripcord/fingerprint.key`, when it exists. It holds the key text
+   with the same trimming and minimum length.
+3. Otherwise, outside CI, a new key file: 32 random bytes, hex-encoded,
+   created with `O_EXCL` and mode `0600` in a `0700` `~/.tripcord`
+   directory. In CI (`CI` or `GITHUB_ACTIONS` set to anything other than
+   empty, `0`, or `false`) the file is never created and the scan runs
+   in s1.
+
+If the key file cannot be read or created (no home directory, a
+read-only home, ...), the scan continues in s1 and says so on stderr.
+The key is never printed: no output format, diagnostic, error message,
+or log carries it, and Go's formatting of the key type prints a fixed
+placeholder. In v0 the key is a file or an environment variable. The OS
+keychain arrives with the v1 store.
 
 ## Canonical JSON
 

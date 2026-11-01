@@ -28,13 +28,24 @@ Policy defaults are `enforce` and `high` for scan. Policy files control mode
 and the normal threshold. `--fail-on` then applies, subject to a locked
 ceiling. See [policy.md](policy.md).
 
+## Fingerprint key
+
+Findings on an entry that lost a secret to redaction are fingerprinted
+with a keyed HMAC (`k1`) when a fingerprint key is available, and with a
+structural discriminator that never hashes the secret (`s1`) when it is
+not. The key comes from `TRIPCORD_FINGERPRINT_KEY` (set it from a secret
+in CI) or `~/.tripcord/fingerprint.key`. A local scan creates that file
+with mode `0600` on first use; a scan in CI (`CI` or `GITHUB_ACTIONS`
+set) never does, so CI defaults to `s1`. The key is never printed. See
+[fingerprint.md](fingerprint.md#secret-discriminator).
+
 ## Exit codes
 
 | Code | Meaning |
 | --- | --- |
 | 0 | No finding meets the effective threshold. |
 | 1 | At least one finding meets the effective threshold. |
-| 3 | Invalid flags or format, configuration/policy error, a Git ref `--since` cannot use, an invalid `--output` or `--policy` path, unavailable v0 secret scan, unknown command, or an incomplete scan (below). `--help` exits 0. |
+| 3 | Invalid flags or format, configuration/policy error, a Git ref `--since` cannot use, an invalid `--output` or `--policy` path, an invalid fingerprint key (`TRIPCORD_FINGERPRINT_KEY` or `~/.tripcord/fingerprint.key` shorter than 16 bytes), unavailable v0 secret scan, unknown command, or an incomplete scan (below). `--help` exits 0. |
 | 4 | Internal error, or a failure to start Git or finish writing the output file. |
 
 When an adapter cannot fully read the configuration (malformed, oversized,

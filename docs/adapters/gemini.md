@@ -66,9 +66,10 @@ sanitized entry, so two entries that match on the fields listed here but
 differ elsewhere still get distinct keys and fingerprints; see
 [fingerprint.md](../fingerprint.md#input). When sanitizing removed
 anything from the entry (a `--api-key` value in `args`, a redacted `env`
-value, a URL query), the key also ends with a discriminator over all of
-the removed text, so entries that differ only in what redaction replaced
-with `[REDACTED]` stay distinct too.
+value, a URL query), the key also ends with a [secret discriminator](../fingerprint.md#secret-discriminator)
+(`sig:k1:` with a fingerprint key, `sig:s1:` without one), so entries
+that differ only in what redaction replaced with `[REDACTED]` stay
+distinct too.
 
 - MCP servers (`mcpServers`): one item per server with every field
   (`command`, `args`, `cwd`, `url`, `httpUrl`, `trust`, `includeTools`,

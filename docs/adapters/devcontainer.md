@@ -30,8 +30,10 @@ than one level, is not read. Path matching is case-insensitive.
 ## Normalized payloads
 
 Every key below also carries a trailing content digest of the full
-sanitized entry, and, when sanitizing removed anything, a discriminator
-over the removed text; see [fingerprint.md](../fingerprint.md#input).
+sanitized entry, and, when sanitizing removed anything, a
+[secret discriminator](../fingerprint.md#secret-discriminator) (`sig:k1:` with a
+fingerprint key, `sig:s1:` without one); see
+[fingerprint.md](../fingerprint.md#input).
 
 - Lifecycle commands. **`initializeCommand` runs on the host**, before
   the container exists, so it executes with the developer's privileges

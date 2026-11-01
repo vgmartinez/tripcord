@@ -75,8 +75,10 @@ note that does not by itself make the scan exit non-zero.
 ## Normalized payloads
 
 Every key below also carries a trailing content digest of the full
-sanitized entry, and, when sanitizing removed anything, a discriminator
-over the removed text; see [fingerprint.md](../fingerprint.md#input).
+sanitized entry, and, when sanitizing removed anything, a
+[secret discriminator](../fingerprint.md#secret-discriminator) (`sig:k1:` with a
+fingerprint key, `sig:s1:` without one); see
+[fingerprint.md](../fingerprint.md#input).
 
 - MCP servers (`mcp`): one item per server with every field (`type`,
   `command`, `url`, `enabled`, `timeout`, `oauth`, ...), sanitized.
