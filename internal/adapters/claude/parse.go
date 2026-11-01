@@ -15,6 +15,7 @@ import (
 	"github.com/vgmartinez/tripcord/internal/adapters"
 	"github.com/vgmartinez/tripcord/internal/adapters/kit"
 	"github.com/vgmartinez/tripcord/internal/fpkey"
+	"github.com/vgmartinez/tripcord/internal/hiddenchar"
 	"github.com/vgmartinez/tripcord/internal/model"
 	"github.com/vgmartinez/tripcord/internal/output"
 	"github.com/vgmartinez/tripcord/internal/pathx"
@@ -694,7 +695,8 @@ func redactToolArgs(payload map[string]any) []string {
 }
 
 // markdown normalizes an instruction, rule, agent, command, or skill file.
-// The raw content is kept for Unicode checks; frontmatter hooks and
+// The raw content is kept for Unicode checks, and its hidden code points
+// are located as kit.Source.Markdown does; frontmatter hooks and
 // mcpServers become their own items.
 func (s *src) markdown(kind model.ConfigKind, role string, raw []byte) {
 	payload := map[string]any{"role": role, "content": s.tildeHome(string(raw))}
@@ -726,7 +728,15 @@ func (s *src) markdown(kind model.ConfigKind, role string, raw []byte) {
 		}
 		payload["frontmatter"] = frontmatter
 	}
+	hidden, valid := hiddenchar.Scan(raw)
+	if !valid && kind == model.ConfigKindInstructions {
+		s.warn("%s", kit.InvalidUTF8)
+	}
+	before := len(s.c.items)
 	s.add(kind, []string{role}, payload, nil)
+	if len(s.c.items) > before {
+		s.c.items[len(s.c.items)-1].Hidden = hidden
+	}
 	if meta == nil {
 		return
 	}

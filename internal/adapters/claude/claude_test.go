@@ -1119,3 +1119,19 @@ func TestEnabledPluginsDetectView(t *testing.T) {
 		})
 	}
 }
+
+// TestMarkdownHiddenChars checks that a CLAUDE.md item carries the
+// hidden code points of the raw file, and that invalid UTF-8 in an
+// instruction file is a diagnostic.
+func TestMarkdownHiddenChars(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "CLAUDE.md"), "# Notes\nrun \u202etests\xff\n")
+	got := discover(t, New(Options{}), root)
+	if len(got.Items) != 1 || got.Items[0].Hidden.Total != 1 || got.Items[0].Hidden.Runs[0] != (model.HiddenRun{CodePoint: 0x202E, Line: 2, Column: 5, Length: 1}) {
+		t.Fatalf("items = %+v", got.Items)
+	}
+	if len(got.Diagnostics) != 1 || !strings.Contains(got.Diagnostics[0], "not valid UTF-8") {
+		t.Fatalf("diagnostics = %v", got.Diagnostics)
+	}
+}

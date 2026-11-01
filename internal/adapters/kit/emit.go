@@ -3,6 +3,7 @@ package kit
 import (
 	"encoding/json"
 
+	"github.com/vgmartinez/tripcord/internal/hiddenchar"
 	"github.com/vgmartinez/tripcord/internal/model"
 	"github.com/vgmartinez/tripcord/internal/output"
 )
@@ -223,8 +224,11 @@ const (
 	LooseFrontmatter
 )
 
-// Markdown emits an instruction, rule, or agent file. The content is kept
-// for Unicode and instruction checks, with URL secrets stripped (and the
+// Markdown emits an instruction, rule, or agent file. Its hidden code
+// points (see internal/hiddenchar) are located in the whole raw file,
+// frontmatter included, and an instruction file that is not valid UTF-8
+// is a diagnostic. The content is kept for Unicode and instruction
+// checks, with URL secrets stripped (and the
 // home directory rewritten in user scope). When the file has a closed
 // frontmatter block, content is the body only: the frontmatter is emitted
 // sanitized as its own field, and its raw text can hold MCP server env
@@ -253,9 +257,21 @@ func (s *Source) Markdown(kind model.ConfigKind, role string, raw []byte, mode F
 		}
 		payload["frontmatter"] = front
 	}
+	hidden, valid := hiddenchar.Scan(raw)
+	if !valid && kind == model.ConfigKindInstructions {
+		s.Warn("%s", InvalidUTF8)
+	}
+	before := len(s.c.items)
 	s.Add(kind, []string{role}, payload)
+	if len(s.c.items) > before {
+		s.c.items[len(s.c.items)-1].Hidden = hidden
+	}
 	return meta
 }
+
+// InvalidUTF8 is the diagnostic for an instruction file that is not
+// valid UTF-8: hidden code points are found in its valid parts only.
+const InvalidUTF8 = "not valid UTF-8; hidden Unicode is checked in the valid parts only"
 
 func (s *Source) frontmatter(raw []byte, mode Frontmatter, folded []string) map[string]any {
 	front, found, err := SplitFrontmatter(raw)

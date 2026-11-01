@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -604,6 +605,34 @@ func TestMarkdownLooseFrontmatter(t *testing.T) {
 	payload := string(c.Items()[0].Payload)
 	if strings.Contains(payload, "secret") || !strings.Contains(payload, `"globs":"*.ts"`) {
 		t.Fatalf("payload = %s", payload)
+	}
+}
+
+// TestMarkdownHiddenChars checks that hidden code points are located in
+// the whole raw file, frontmatter included, and that an instruction file
+// that is not valid UTF-8 is a diagnostic while a skill is not.
+func TestMarkdownHiddenChars(t *testing.T) {
+	t.Parallel()
+	c := NewCollector(model.HarnessCursor, "Cursor")
+	c.Source(model.ScopeRepo, ".cursor/rules/a.mdc", nil).Markdown(model.ConfigKindInstructions, "rule", []byte("---\nglobs: \u202e*.ts\n---\nok\u200b\n"), LooseFrontmatter)
+	items := c.Items()
+	want := []model.HiddenRun{{CodePoint: 0x202E, Line: 2, Column: 8, Length: 1}, {CodePoint: 0x200B, Line: 4, Column: 3, Length: 1}}
+	if len(items) != 1 || !slices.Equal(items[0].Hidden.Runs, want) || items[0].Hidden.Total != 2 || len(c.Diagnostics()) != 0 {
+		t.Fatalf("items %+v diags %v", items, c.Diagnostics())
+	}
+	if strings.Contains(string(items[0].Payload), "Hidden") {
+		t.Fatalf("payload carries the annotation: %s", items[0].Payload)
+	}
+
+	c = NewCollector(model.HarnessCursor, "Cursor")
+	c.Source(model.ScopeRepo, "AGENTS.md", nil).Markdown(model.ConfigKindInstructions, "agents", []byte("a\xff\u2066b"), LooseFrontmatter)
+	c.Source(model.ScopeRepo, "skills/x/SKILL.md", nil).Markdown(model.ConfigKindSkill, "skill", []byte("a\xffb"), LooseFrontmatter)
+	diags := c.Diagnostics()
+	if len(diags) != 1 || diags[0].Path != "AGENTS.md" || !strings.Contains(diags[0].Message, InvalidUTF8) {
+		t.Fatalf("diags = %v", diags)
+	}
+	if got := c.Items()[0].Hidden.Total; got != 1 {
+		t.Fatalf("hidden total = %d, want 1", got)
 	}
 }
 
