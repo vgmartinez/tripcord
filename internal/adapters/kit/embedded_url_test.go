@@ -38,3 +38,26 @@ func TestStripEmbeddedURL(t *testing.T) {
 		}
 	}
 }
+
+// FuzzStripEmbeddedURL checks that what StripEmbeddedURL keeps of a
+// match has no query, fragment, or userinfo left in it.
+func FuzzStripEmbeddedURL(f *testing.F) {
+	for _, seed := range []string{
+		"https://e.com/x?a=)&sig=S", "https://u:p@e.com/(x)?s#f)", "https://e.com/x?a=`&s`", "http://h/#a)b",
+	} {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, s string) {
+		for _, m := range embeddedURL.FindAllString(s, -1) {
+			got, _, ok := StripEmbeddedURL(m)
+			if !ok {
+				continue
+			}
+			rest := got[strings.Index(got, "://")+3:]
+			auth, _, _ := strings.Cut(rest, "/")
+			if strings.ContainsAny(rest, "?#") || strings.Contains(auth, "@") {
+				t.Fatalf("StripEmbeddedURL(%q) = %q", m, got)
+			}
+		}
+	})
+}
