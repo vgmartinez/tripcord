@@ -32,11 +32,12 @@ const MaxRuleBytes = 64 << 10
 //	  - https://example.com/incident
 //
 // Every key except severity_when is required, and unknown keys are
-// rejected. severity is the fallback. severity_when, when present, is
-// tried in order and the first true clause replaces the fallback for
-// that match, so one rule can report high for one config item and
-// medium for another. A policy severity override still replaces the
-// result.
+// rejected. severity_when, when present, is tried in order after when
+// is true: the first true clause is the severity of that match, and an
+// item no clause accepts is not a match. when then holds only what the
+// clauses share, so a pattern is written once. severity is the rule's
+// catalog severity and the floor a policy lock refuses to lower. A
+// policy severity override still replaces the per-match result.
 type Spec struct {
 	ID           string         `yaml:"id"`
 	Pack         string         `yaml:"pack"`
@@ -222,21 +223,25 @@ func Compile(spec *Spec, manifest PackRef, env *Env) (*Rule, error) {
 	}, nil
 }
 
-// SeverityFor reports the severity of one match. Clauses are tried in
-// the order they are written; the first true one wins. The rule severity
-// is the fallback when none match. A clause that fails to evaluate is an
-// error, the same as the rule's when expression.
-func (r *Rule) SeverityFor(ctx context.Context, in *Input) (model.Severity, error) {
+// SeverityFor reports the severity of an item whose when is true.
+// Clauses are tried in the order they are written; the first true one
+// wins. A rule without clauses matches at its own severity. A rule with
+// clauses matches only when one is true: ok is false otherwise. A clause
+// that fails to evaluate is an error, the same as the when expression.
+func (r *Rule) SeverityFor(ctx context.Context, in *Input) (sev model.Severity, ok bool, err error) {
+	if len(r.SeverityWhen) == 0 {
+		return r.Severity, true, nil
+	}
 	for _, clause := range r.SeverityWhen {
-		ok, err := clause.When.Eval(ctx, in)
+		matched, err := clause.When.Eval(ctx, in)
 		if err != nil {
-			return "", err
+			return "", false, err
 		}
-		if ok {
-			return clause.Severity, nil
+		if matched {
+			return clause.Severity, true, nil
 		}
 	}
-	return r.Severity, nil
+	return "", false, nil
 }
 
 // Applies reports whether item is in scope for r: its harness is listed

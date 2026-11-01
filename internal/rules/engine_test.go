@@ -279,3 +279,35 @@ func TestScanConfigBudget(t *testing.T) {
 		t.Fatalf("matches %v errors %v", res.Matches, res.Errors)
 	}
 }
+
+func TestSeverityWhenDecidesTheMatch(t *testing.T) {
+	spec, err := ParseSpec([]byte(strings.Replace(validRule, validWhen, `when: has(task.label)
+severity_when:
+  - severity: high
+    when: has(task.label) && task.label == "a"
+  - severity: medium
+    when: has(task.label) && task.label == "b"`, 1)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := Compile(spec, coreManifest, testEnv(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine := NewEngine(testEnv(t), []*Rule{r})
+	for label, want := range map[string]model.Severity{"a": model.SeverityHigh, "b": model.SeverityMedium, "c": ""} {
+		res := engine.ScanConfig(context.Background(), []model.ConfigItem{
+			item(model.SurfaceVSCode, ".vscode/tasks.json", model.ConfigKindTask, `{"label":"`+label+`"}`),
+		})
+		if len(res.Errors) > 0 {
+			t.Fatal(res.Errors[0])
+		}
+		got := model.Severity("")
+		if len(res.Matches) == 1 {
+			got = res.Matches[0].Severity
+		}
+		if len(res.Matches) > 1 || got != want {
+			t.Errorf("label %s: %d matches at %q, want %q", label, len(res.Matches), got, want)
+		}
+	}
+}

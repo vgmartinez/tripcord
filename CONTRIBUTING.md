@@ -58,11 +58,14 @@ The version lives only in `rules/pack.yaml` (for example
 `tripcord/core@2026.11`); a rule inherits it. `rules/REGISTRY` is what
 stops a rule id from being reused.
 
-`severity` is the fallback, and the floor a policy lock refuses to
-lower. `severity_when` is an optional list of `{severity, when}`
-clauses tried in order. The first true clause is that match's
-severity, so one permissions object can be high and another medium.
-A policy severity override replaces the per-match result.
+`severity` is the rule's catalog severity and the floor a policy lock
+refuses to lower. `severity_when` is an optional list of
+`{severity, when}` clauses tried in order once `when` is true. The
+first true clause is that match's severity, so one permissions object
+can be high and another medium. An item no clause accepts is not a
+match, so `when` holds only what the clauses share and each pattern is
+written once. A policy severity override replaces the per-match
+result.
 
 `when` sees these variables:
 

@@ -143,9 +143,12 @@ func (e *Engine) ScanConfig(ctx context.Context, items []model.ConfigItem) Resul
 			if !ok {
 				continue
 			}
-			sev, err := r.SeverityFor(ctx, in)
+			sev, matched, err := r.SeverityFor(ctx, in)
 			if err != nil {
 				res.Errors = append(res.Errors, EvalError{Rule: r.ID, Path: item.Path, Err: err})
+				continue
+			}
+			if !matched {
 				continue
 			}
 			res.Matches = append(res.Matches, Match{Rule: r, Item: item, Severity: sev})
