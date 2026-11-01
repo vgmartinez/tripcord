@@ -3,9 +3,11 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -117,10 +119,35 @@ func scanCorpusFixture(t *testing.T, id, kind, src string) {
 	t.Run(id+"/"+kind+"/"+filepath.Base(src), func(t *testing.T) {
 		t.Parallel()
 		root := t.TempDir()
+		if runtime.GOOS == "windows" {
+			var linked bool
+			_ = filepath.WalkDir(src, func(_ string, d os.DirEntry, err error) error {
+				if err == nil && d.Type()&fs.ModeSymlink != 0 {
+					linked = true
+					return fs.SkipAll
+				}
+				return nil
+			})
+			if linked {
+				t.Skip("symlink fixture")
+			}
+		}
 		var secrets []string
 		err := filepath.WalkDir(src, func(path string, d os.DirEntry, err error) error {
 			if err != nil || d.IsDir() {
 				return err
+			}
+			rel, _ := filepath.Rel(src, path)
+			dst := filepath.Join(root, rel)
+			if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
+				return err
+			}
+			if d.Type()&fs.ModeSymlink != 0 {
+				target, err := os.Readlink(path)
+				if err != nil {
+					return err
+				}
+				return os.Symlink(target, dst)
 			}
 			data, err := os.ReadFile(path)
 			if err != nil {
@@ -129,11 +156,6 @@ func scanCorpusFixture(t *testing.T, id, kind, src string) {
 			secrets = append(secrets, leakMarker.FindAllString(string(data), -1)...)
 			for _, m := range urlSecret.FindAllStringSubmatch(string(data), -1) {
 				secrets = append(secrets, m[1])
-			}
-			rel, _ := filepath.Rel(src, path)
-			dst := filepath.Join(root, rel)
-			if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
-				return err
 			}
 			return os.WriteFile(dst, data, 0o600)
 		})

@@ -72,6 +72,10 @@ type ConfigItem struct {
 	// set after discovery, for rule evaluation only, and is a count so
 	// that no path from the raw command is kept.
 	MissingScripts ScriptCount `json:"-"`
+	// ScriptLocations are the location classes of project scripts whose
+	// symlink resolves outside the repository: "home", "temp", "absolute",
+	// or "network". The target path is not kept.
+	ScriptLocations []string `json:"-"`
 }
 
 // ScriptCount is a number of scripts (see ConfigItem.MissingScripts).

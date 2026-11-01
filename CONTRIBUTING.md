@@ -70,7 +70,7 @@ its findings when the rule title does not say why that match fired.
 
 `when` sees these variables:
 
-- `config`: the config item (`id`, `harness`, `scope`, `path`, `sha256`, `kind`), and `missing_scripts`: on a repository hook, how many project-relative scripts it runs are not in the scanned tree (0 otherwise; see `internal/scriptcheck`).
+- `config`: the config item (`id`, `harness`, `scope`, `path`, `sha256`, `kind`), `missing_scripts`: on a repository hook, how many project-relative scripts it runs are not in the scanned tree (0 otherwise; see `internal/scriptcheck`), and `script_locations`: the location classes of project scripts whose symlink resolves outside the repository.
 - `payload`: the item's parsed content.
 - `task`: the same as `payload` when `config.kind == "task"`, otherwise empty.
 - `event`: a `tripcord.event/v1` event, for event rules. Every

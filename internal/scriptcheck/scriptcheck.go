@@ -7,7 +7,10 @@
 // counts as present. A script is resolved against the hook's project
 // directory, the directory that holds the harness's config directory
 // (.claude, .cursor, .github, .windsurf, .devin, .codex, .gemini, or
-// .agents), and a Copilot hook's relative cwd. A hook in a file with no
+// .agents), and a Copilot hook's relative cwd. A symlink is resolved
+// with filepath.EvalSymlinks: a target outside the repository is reported
+// by that target's location class, and a link that does not resolve counts
+// as missing, as does any other lookup error. A hook in a file with no
 // such directory, such as a Claude plugin's hooks/hooks.json, is not
 // checked, nor is a script ProjectScripts leaves out (see shellcmd).
 package scriptcheck
@@ -15,13 +18,12 @@ package scriptcheck
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
-	"io/fs"
+	"os"
 	"path"
+	"path/filepath"
 	"slices"
 	"strings"
 
-	"github.com/vgmartinez/tripcord/internal/adapters"
 	"github.com/vgmartinez/tripcord/internal/model"
 	"github.com/vgmartinez/tripcord/internal/rules/shellcmd"
 )
@@ -30,29 +32,84 @@ import (
 // in a hook's path.
 var configDirs = []string{".claude", ".cursor", ".github", ".windsurf", ".devin", ".codex", ".gemini", ".agents"}
 
-// Annotate sets MissingScripts on every repository hook in items. root
-// is the scanned repository; scripts are looked up through a
-// adapters.SafeReader, so a path that leaves root is never opened and
-// is not counted as missing.
+// Annotate sets MissingScripts and ScriptLocations on every repository
+// hook in items. root is the scanned repository. A lookup error, including
+// a broken symlink, counts as missing. A symlink whose target resolves
+// outside root is recorded by the target's location class, not by its path.
 func Annotate(root string, items []model.ConfigItem) error {
-	reader, err := adapters.NewSafeReader(root)
+	resolvedRoot, err := filepath.EvalSymlinks(root)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = reader.Close() }()
 	for i := range items {
 		item := &items[i]
 		if item.Kind != model.ConfigKindHook || item.Scope != model.ScopeRepo {
 			continue
 		}
 		item.MissingScripts = 0
+		item.ScriptLocations = nil
 		for _, rel := range Scripts(*item) {
-			if _, err := reader.Stat(rel); errors.Is(err, fs.ErrNotExist) {
+			switch class, missing := lookupScript(resolvedRoot, rel); {
+			case missing:
 				item.MissingScripts++
+			case class != "":
+				if !slices.Contains(item.ScriptLocations, class) {
+					item.ScriptLocations = append(item.ScriptLocations, class)
+				}
 			}
 		}
 	}
 	return nil
+}
+
+// lookupScript reports whether rel is missing or resolves outside root.
+// Any error counts as missing, so an unreadable or broken path cannot pass
+// as present. The returned class is empty when the script stays inside root.
+func lookupScript(root, rel string) (class string, missing bool) {
+	cleaned := filepath.Clean(filepath.FromSlash(rel))
+	if cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) || filepath.IsAbs(cleaned) {
+		return "", true
+	}
+	abs := filepath.Join(root, cleaned)
+	info, err := os.Lstat(abs)
+	if err != nil {
+		return "", true
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		if _, err := os.Stat(abs); err != nil {
+			return "", true
+		}
+		return "", false
+	}
+	resolved, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		return "", true
+	}
+	if insideRoot(root, resolved) {
+		return "", false
+	}
+	return outsideClass(resolved), false
+}
+
+func insideRoot(root, target string) bool {
+	rel, err := filepath.Rel(root, target)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		return false
+	}
+	return true
+}
+
+// outsideClass is the severity class of a resolved path. Home and temp stay
+// distinct; a system path such as /etc/passwd is absolute, so it is medium
+// rather than ignored the way a direct system-binary command is.
+func outsideClass(resolved string) string {
+	for _, class := range shellcmd.Locate(resolved).Locations {
+		switch class {
+		case shellcmd.Home, shellcmd.Temp, shellcmd.Absolute, shellcmd.Network:
+			return class
+		}
+	}
+	return shellcmd.Absolute
 }
 
 // Scripts returns the repository-relative paths of the project scripts

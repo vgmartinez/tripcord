@@ -30,9 +30,13 @@
 #   script the hook runs is not in the scanned tree (config.missing_scripts,
 #   see internal/scriptcheck). It is resolved against the directory that
 #   holds the harness's config directory and a Copilot hook's relative
-#   cwd. A line with a backslash, anything after cd, a bare operand
-#   without a directory or extension (node server), and
-#   $CLAUDE_PLUGIN_ROOT paths are not checked.
+#   cwd. Any error looking the script up, including a broken symlink,
+#   counts as missing. A symlink that resolves outside the repository is
+#   config.script_locations, at the target's class: home or temp is high,
+#   and any other absolute path, including a system path, is medium. A
+#   line with a backslash, anything after cd, a bare operand without a
+#   directory or extension (node server), and $CLAUDE_PLUGIN_ROOT paths
+#   are not checked.
 #
 # Not read: whether a script that exists is committed (the scan does
 # not run git, so an untracked script counts as present), $VAR paths
@@ -46,11 +50,13 @@ severity_when:
     when: |
       (has(payload.url) && type(payload.url) == string && "network" in shell.locations(payload.url)) ||
         hook.commands(payload).exists(c, shell.locations(c).exists(l, l in ["network", "home", "temp"])) ||
-        shell.locations(hook.argv(payload)).exists(l, l in ["network", "home", "temp"])
+        shell.locations(hook.argv(payload)).exists(l, l in ["network", "home", "temp"]) ||
+        config.script_locations.exists(l, l in ["network", "home", "temp"])
   - severity: medium
     when: |
       hook.commands(payload).exists(c, shell.locations(c).size() > 0) ||
-        shell.locations(hook.argv(payload)).size() > 0
+        shell.locations(hook.argv(payload)).size() > 0 ||
+        config.script_locations.size() > 0
   - severity: medium
     title: "Referenced script missing from repo"
     when: config.missing_scripts > 0

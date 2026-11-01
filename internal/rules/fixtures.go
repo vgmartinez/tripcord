@@ -12,6 +12,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 
@@ -154,6 +155,11 @@ func CheckRuleFixtures(ctx context.Context, env *Env, packDir string, rule *Rule
 			}
 		}
 		for _, f := range fixtures {
+			// Windows CI may materialize a committed symlink as a regular
+			// file. Skip those fixtures there; Linux and macOS run them.
+			if f.raw && runtime.GOOS == "windows" && treeHasSymlink(f.path) {
+				continue
+			}
 			expected, listed := want[filepath.Base(f.path)]
 			if kind == PositiveDir && !listed {
 				if len(rule.SeverityWhen) > 0 {
@@ -185,6 +191,21 @@ func CheckRuleFixtures(ctx context.Context, env *Env, packDir string, rule *Rule
 type fixtureEntry struct {
 	path string
 	raw  bool
+}
+
+func treeHasSymlink(dir string) bool {
+	found := false
+	_ = filepath.WalkDir(dir, func(_ string, d fs.DirEntry, err error) error {
+		if err != nil || found {
+			return err
+		}
+		if d.Type()&fs.ModeSymlink != 0 {
+			found = true
+			return fs.SkipAll
+		}
+		return nil
+	})
+	return found
 }
 
 func fixtureEntries(dir string, rawAllowed bool) ([]fixtureEntry, error) {
