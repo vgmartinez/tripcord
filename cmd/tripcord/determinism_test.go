@@ -11,6 +11,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+
+	"github.com/vgmartinez/tripcord/internal/rules"
 )
 
 // TestScanDeterministicUnderLoad scans every rule fixture tree, and the
@@ -63,11 +65,27 @@ func TestScanDeterministicUnderLoad(t *testing.T) {
 
 func TestDeterministicFixtureTreesCoverEveryRule(t *testing.T) {
 	covered := deterministicFixtureCoverage(t)
-	for n := 1; n <= 8; n++ {
-		id := fmt.Sprintf("TC-CFG-%03d.test", n)
+	raw, err := os.ReadFile(filepath.Join("../../rules", rules.RegistryFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg, err := rules.ParseRegistry(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	active := 0
+	for _, e := range reg.Entries() {
+		if e.Status != rules.StatusActive {
+			continue
+		}
+		active++
+		id := e.ID + rules.TestDirSuffix
 		if !covered[id]["positivos"] || !covered[id]["negativos"] {
 			t.Fatalf("deterministic fixture subset has no positive or negative for %s", id)
 		}
+	}
+	if active == 0 {
+		t.Fatal("no active rules in REGISTRY")
 	}
 }
 
@@ -93,6 +111,12 @@ var deterministicFixtureTrees = []string{
 	"TC-CFG-007.test/negativos/skill-without-hooks",
 	"TC-CFG-008.test/positivos/copilot-exec-curl",
 	"TC-CFG-008.test/negativos/copilot-echo-message",
+	"TC-CFG-009.test/positivos/copilot-curl-pipe-sh",
+	"TC-CFG-009.test/negativos/copilot-checksum-verified",
+	"TC-CFG-010.test/positivos/claude-enabled-plugins",
+	"TC-CFG-010.test/negativos/claude-plugins-disabled",
+	"TC-CFG-011.test/positivos/agents-nested-tags",
+	"TC-CFG-011.test/negativos/agents-leading-bom",
 }
 
 // deterministicFixtureRoots copies the fixed raw fixture subset into
