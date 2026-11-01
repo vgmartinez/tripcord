@@ -27,6 +27,7 @@ positivos:
   missing-cursor-node-script: medium
   missing-gemini-project-dir: medium
   missing-nested-package: medium
+  missing-pwd-script: medium
   missing-skill-script: medium
   missing-windsurf-python: medium
   shared-skill-tmp: high
