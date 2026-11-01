@@ -112,15 +112,7 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return scanConfigError(stderr, err)
 	}
-	env, err := rules.NewEnv(scanLimits())
-	if err != nil {
-		return scanInternalError(stderr, err)
-	}
-	pack, err := rules.LoadCore(env)
-	if err != nil {
-		return scanInternalError(stderr, err)
-	}
-	catalog, err := rules.NewCatalog(pack)
+	env, catalog, err := loadRules(scanLimits())
 	if err != nil {
 		return scanInternalError(stderr, err)
 	}
@@ -687,6 +679,25 @@ func now() time.Time { return time.Now() }
 // scanLimits returns the CEL limits for a scan. A test that lowers them
 // must not run in parallel.
 var scanLimits = rules.DefaultLimits
+
+// loadRules compiles the core pack under limits. The CLI scans once per
+// process; tests replace it with a cache keyed by limits, since the
+// compiled pack is read-only and compiling it dominates a small scan.
+var loadRules = func(limits rules.Limits) (*rules.Env, *rules.Catalog, error) {
+	env, err := rules.NewEnv(limits)
+	if err != nil {
+		return nil, nil, err
+	}
+	pack, err := rules.LoadCore(env)
+	if err != nil {
+		return nil, nil, err
+	}
+	catalog, err := rules.NewCatalog(pack)
+	if err != nil {
+		return nil, nil, err
+	}
+	return env, catalog, nil
+}
 
 func scanConfigError(stderr io.Writer, err error) int {
 	writeString(stderr, "tripcord scan: "+redactHomeFromError(err)+"\n")
