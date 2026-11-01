@@ -108,14 +108,17 @@ func (f *file) command(setting, runsOn, parent, name string, value any) {
 		payload["name"] = name
 	}
 	form := parent
+	var raw map[string]any
 	switch v := value.(type) {
 	case string:
 		payload["command"] = f.SafeString(v)
+		raw = map[string]any{"command": v}
 		if form == "" {
 			form = "string"
 		}
 	case []any:
 		payload["command"] = f.SafeValue("", f.SafeToolArgv(v))
+		raw = map[string]any{"command": v}
 		if form == "" {
 			form = "array"
 		}
@@ -129,7 +132,11 @@ func (f *file) command(setting, runsOn, parent, name string, value any) {
 		form = "other"
 	}
 	payload["form"] = form
-	f.Add(model.ConfigKindEnvSetup, []string{"lifecycle", setting, name}, payload)
+	if raw == nil {
+		f.Add(model.ConfigKindEnvSetup, []string{"lifecycle", setting, name}, payload)
+		return
+	}
+	f.AddDetect(model.ConfigKindEnvSetup, []string{"lifecycle", setting, name}, payload, raw)
 }
 
 // features emits one item per Feature. A Feature is an install script
@@ -144,11 +151,11 @@ func (f *file) features(value any) {
 	}
 	for _, id := range kit.SortedKeys(table) {
 		safe := f.SafeString(id)
-		f.Add(model.ConfigKindEnvSetup, []string{"feature", safe}, map[string]any{
+		f.AddDetect(model.ConfigKindEnvSetup, []string{"feature", safe}, map[string]any{
 			"setting": "features",
 			"feature": safe,
 			"options": f.SafeValue("", table[id]),
-		})
+		}, map[string]any{"feature": id})
 	}
 }
 

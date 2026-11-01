@@ -200,12 +200,16 @@ func (f *file) step(step map[string]any) {
 			break
 		}
 	}
-	run, _ := step["run"].(string)
+	run, isString := step["run"].(string)
 	key := []string{"step", setupJob, label}
 	if run != "" && run != label {
 		key = append(key, run)
 	}
-	f.Add(model.ConfigKindEnvSetup, key, payload)
+	if !isString {
+		f.Add(model.ConfigKindEnvSetup, key, payload)
+		return
+	}
+	f.AddDetect(model.ConfigKindEnvSetup, key, payload, map[string]any{"run": run})
 }
 
 func (f *file) safeWithEnv(name string, value any) any {

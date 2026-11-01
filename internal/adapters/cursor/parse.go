@@ -90,7 +90,12 @@ func (f *file) environment(raw []byte) {
 		} else {
 			safe = f.SafeValue(name, value)
 		}
-		f.Add(model.ConfigKindEnvSetup, []string{"setting", name}, map[string]any{"setting": name, "value": safe})
+		payload := map[string]any{"setting": name, "value": safe}
+		if command, ok := value.(string); ok {
+			f.AddDetect(model.ConfigKindEnvSetup, []string{"setting", name}, payload, map[string]any{"value": command})
+			continue
+		}
+		f.Add(model.ConfigKindEnvSetup, []string{"setting", name}, payload)
 	}
 }
 
@@ -107,9 +112,13 @@ func (f *file) terminals(value any) {
 			continue
 		}
 		name, _ := terminal["name"].(string)
-		command, _ := terminal["command"].(string)
+		command, isString := terminal["command"].(string)
 		payload := f.SafeObject(terminal)
 		payload["setting"] = "terminals"
-		f.Add(model.ConfigKindEnvSetup, []string{"terminal", name, command}, payload)
+		if !isString {
+			f.Add(model.ConfigKindEnvSetup, []string{"terminal", name, command}, payload)
+			continue
+		}
+		f.AddDetect(model.ConfigKindEnvSetup, []string{"terminal", name, command}, payload, map[string]any{"command": command})
 	}
 }

