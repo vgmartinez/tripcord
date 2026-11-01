@@ -39,6 +39,11 @@ type Options struct {
 	// HomeDir overrides os.UserHomeDir.
 	HomeDir string
 	Limits  *Limits
+	// TasksOnly reads .vscode/tasks.json and nothing else. The editor
+	// opens that file whichever agent runs in it, so a scan limited to
+	// one harness still reads it, without the skills and AGENTS.md the
+	// harness may not load. IncludeUser is ignored.
+	TasksOnly bool
 }
 
 // Adapter discovers shared files.
@@ -64,7 +69,7 @@ func (*Adapter) Harness() model.Harness { return model.SurfaceGeneric }
 func (a *Adapter) Detect(repoRoot string) bool {
 	// User scope is outside the repository, so a repo with no shared
 	// files still has configuration to read when that scope is on.
-	if a.options.IncludeUser {
+	if a.options.IncludeUser && !a.options.TasksOnly {
 		return true
 	}
 	if a.options.SkipRepo {
@@ -76,7 +81,7 @@ func (a *Adapter) Detect(repoRoot string) bool {
 	}
 	defer func() { _ = reader.Close() }()
 	c := kit.NewCollector(model.SurfaceGeneric, product)
-	files, err := kit.Walk(context.Background(), reader, a.limits, c, matcher)
+	files, err := kit.Walk(context.Background(), reader, a.limits, c, a.matcher())
 	return err == nil && (len(files) > 0 || len(c.Diagnostics()) > 0)
 }
 
@@ -87,7 +92,7 @@ func (a *Adapter) Discover(ctx context.Context, repoRoot string) ([]model.Config
 		return nil, err
 	}
 	c := kit.NewCollector(model.SurfaceGeneric, product)
-	if a.options.IncludeUser {
+	if a.options.IncludeUser && !a.options.TasksOnly {
 		if err := a.discoverUser(ctx, c); err != nil {
 			return nil, err
 		}
@@ -107,7 +112,7 @@ func (a *Adapter) discoverRepo(ctx context.Context, repoRoot string, c *kit.Coll
 		return nil
 	}
 	defer func() { _ = reader.Close() }()
-	files, err := kit.Walk(ctx, reader, a.limits, c, matcher)
+	files, err := kit.Walk(ctx, reader, a.limits, c, a.matcher())
 	if err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -211,6 +216,21 @@ func isSkillDir(segments []string) bool {
 		}
 	}
 	return false
+}
+
+func (a *Adapter) matcher() kit.Matcher {
+	if a.options.TasksOnly {
+		return tasksMatcher
+	}
+	return matcher
+}
+
+var tasksMatcher = kit.Matcher{
+	Candidate: func(rel string) bool { return classify(rel) == roleTasks },
+	Relevant: func(rel string) bool {
+		segments := strings.Split(rel, "/")
+		return segments[0] == ".vscode"
+	},
 }
 
 var matcher = kit.Matcher{

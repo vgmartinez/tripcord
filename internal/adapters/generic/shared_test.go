@@ -49,6 +49,26 @@ func TestSharedFileHarnesses(t *testing.T) {
 	}
 }
 
+func TestTasksOnly(t *testing.T) {
+	t.Parallel()
+	root := kittest.CopyTree(t, filepath.Join("testdata", "repo"))
+	home := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(home, ".agents", "skills", "a", "SKILL.md"), "---\nname: a\n---\nx\n")
+	a := New(Options{TasksOnly: true, IncludeUser: true, HomeDir: home})
+	if !a.Detect(root) || a.Detect(t.TempDir()) {
+		t.Fatal("Detect should follow .vscode/tasks.json only")
+	}
+	got := kittest.Discover(t, a, root)
+	if len(got.Items) == 0 {
+		t.Fatal("no items")
+	}
+	for _, item := range got.Items {
+		if item.Path != ".vscode/tasks.json" || item.Harness != model.SurfaceVSCode {
+			t.Fatalf("TasksOnly read %s (%s)", item.Path, item.Harness)
+		}
+	}
+}
+
 func TestFolderOpenTask(t *testing.T) {
 	t.Parallel()
 	root := kittest.CopyTree(t, filepath.Join("testdata", "repo"))

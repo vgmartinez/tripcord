@@ -165,6 +165,12 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return scanConfigError(stderr, err)
 	}
+	// The editor opens .vscode/tasks.json whichever agent is in use, so
+	// a scan limited by --harness still reads it once. Only that file:
+	// the harness may not load the shared skills and AGENTS.md.
+	if len(requested) > 0 && repoScope && !slices.ContainsFunc(selected, func(a adapters.Adapter) bool { return a.Harness() == model.SurfaceGeneric }) {
+		selected = append(selected, generic.New(generic.Options{TasksOnly: true}))
+	}
 	var items []model.ConfigItem
 	var diagnostics []adapters.Diagnostic
 	for _, owner := range registry.ImpliedOwners(requested) {

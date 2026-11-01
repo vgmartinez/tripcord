@@ -79,8 +79,10 @@ func TestScanConfigRulesEveryFormat(t *testing.T) {
 }
 
 // TestScanFolderOpenReportedOnce is the TC-CFG-002 contract: one
-// folderOpen task is one finding, on a full scan and on --harness claude,
+// folderOpen task is one finding, on a full scan and under --harness,
 // because the editor opens .vscode/tasks.json whichever agent is in use.
+// --harness claude reads that file and not the shared AGENTS.md and
+// skills, which Claude Code does not load.
 func TestScanFolderOpenReportedOnce(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -102,12 +104,10 @@ func TestScanFolderOpenReportedOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var fullFP string
-	for _, args := range [][]string{
-		{"scan", "--format", "json", root},
-		{"scan", "--format", "json", "--harness", "claude", root},
-	} {
+	scan := func(args ...string) (model.Finding, string) {
+		t.Helper()
 		var stdout, stderr bytes.Buffer
+		args = append(append([]string{"scan", "--format", "json"}, args...), root)
 		if code := run(args, &stdout, &stderr); code != int(exitcode.Findings) {
 			t.Fatalf("%v exit %d stderr %q", args, code, stderr.String())
 		}
@@ -137,18 +137,43 @@ func TestScanFolderOpenReportedOnce(t *testing.T) {
 		if !slices.Contains(f.Refs, "https://cursor.com/docs") || !slices.Contains(f.Refs, "https://docs.windsurf.com/windsurf/getting-started") {
 			t.Fatalf("refs = %v", f.Refs)
 		}
-		if slices.Contains(args, "claude") {
-			if !strings.Contains(stderr.String(), "generic: also scanned") {
-				t.Fatalf("stderr = %q", stderr.String())
-			}
-			if f.Fingerprint != fullFP {
-				t.Fatalf("fingerprint %s, full scan %s", f.Fingerprint, fullFP)
-			}
-		} else {
-			if strings.Contains(stderr.String(), "also scanned") {
-				t.Fatalf("autodetect stderr = %q", stderr.String())
-			}
-			fullFP = f.Fingerprint
+		return f, stderr.String()
+	}
+
+	full, stderr := scan()
+	if strings.Contains(stderr, "also scanned") {
+		t.Fatalf("autodetect stderr = %q", stderr)
+	}
+	for _, harness := range []string{"claude", "codex", "cursor"} {
+		f, _ := scan("--harness", harness)
+		if f.Fingerprint != full.Fingerprint {
+			t.Fatalf("--harness %s fingerprint %s, full scan %s", harness, f.Fingerprint, full.Fingerprint)
+		}
+	}
+
+	// Shared files the generic adapter would report: an AGENTS.md and a
+	// skill directory that escape the repository. A full scan sees them
+	// and is incomplete; --harness claude must not open them at all.
+	outside := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".agents", "skills"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, link := range []string{"AGENTS.md", filepath.Join(".agents", "skills", "setup")} {
+		if err := os.Symlink(outside, filepath.Join(root, link)); err != nil {
+			t.Skipf("symlinks unavailable: %v", err)
+		}
+	}
+	var stdout, fullErr bytes.Buffer
+	if code := run([]string{"scan", root}, &stdout, &fullErr); code != int(exitcode.Config) || !strings.Contains(fullErr.String(), "AGENTS.md") || !strings.Contains(fullErr.String(), ".agents/skills/setup") {
+		t.Fatalf("full scan exit %d stderr %q", code, fullErr.String())
+	}
+	f, stderr := scan("--harness", "claude")
+	if f.Fingerprint != full.Fingerprint {
+		t.Fatalf("fingerprint %s, full scan %s", f.Fingerprint, full.Fingerprint)
+	}
+	for _, unwanted := range []string{"also scanned", "AGENTS.md", "skills", "generic"} {
+		if strings.Contains(stderr, unwanted) {
+			t.Fatalf("--harness claude stderr = %q, mentions %q", stderr, unwanted)
 		}
 	}
 }
