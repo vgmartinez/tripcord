@@ -1,0 +1,14 @@
+# The severity each positive fixture must produce (see
+# internal/rules/fixtures.go, ExpectFile).
+positivos:
+  agents-bidi-override: high
+  agents-bom-then-hidden: high
+  agents-nested-tags: high
+  claude-dotclaude-word-joiner: high
+  claude-zero-width-space: high
+  copilot-instructions-inner-bom: high
+  copilot-path-instructions: high
+  cursor-nested-rule: high
+  cursor-rule-frontmatter-isolate: high
+  gemini-embedding: high
+  windsurfrules-tags: high

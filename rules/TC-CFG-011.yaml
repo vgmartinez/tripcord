@@ -1,0 +1,34 @@
+# A bidi control, a Unicode tag character, or a zero-width code point
+# in an agent instructions file is invisible in an editor and in a
+# pull-request diff, but the model reads it: bidi controls reorder what
+# a reviewer sees, tag characters (U+E0000-U+E007F) spell ASCII text no
+# one sees, and zero-width code points hide or split words.
+#
+# Read, in repository scope, as raw bytes including frontmatter:
+# AGENTS.md, CLAUDE.md, and GEMINI.md at any depth, .windsurfrules,
+# .github/copilot-instructions.md, .github/instructions/**/*.md (Copilot
+# reads *.instructions.md there), and .cursor/rules/**/*.mdc.
+#
+# Code points: U+202A-U+202E and U+2066-U+2069 (bidi), U+E0000-U+E007F
+# (tags), U+200B-U+200D, U+2060, and U+FEFF (zero-width), except a BOM
+# that starts the file. U+200E/U+200F marks are not counted.
+#
+# The excerpt names each run's code point, line, and column (code
+# points from 1), never the text the run hides or spells: a tag run is
+# named by its block. See internal/hiddenchar.
+id: TC-CFG-011
+pack: tripcord/core
+title: "Hidden Unicode in an agent instructions file"
+severity: high
+evidence: hidden_chars
+harness: [claude, copilot, cursor, gemini, windsurf, generic]
+files: ["**"]
+when: |
+  config.kind == "instructions" && config.scope == "repo" && config.hidden_chars > 0 &&
+    config.path.matches(r'''(?i)((^|/)(AGENTS|CLAUDE|GEMINI)\.md|^\.windsurfrules|^\.github/copilot-instructions\.md|^\.github/instructions/.+\.md|(^|/)\.cursor/rules/.+\.mdc)$''')
+fix: "Remove the hidden code points (the finding names each one's line and column), then review the instructions as they read without them. If a non-Latin script needs a direction mark, use U+200E or U+200F."
+refs:
+  - https://trojansource.codes/
+  - https://www.unicode.org/reports/tr9/
+  - https://www.unicode.org/charts/PDF/UE0000.pdf
+  - https://embracethered.com/blog/posts/2024/hiding-and-finding-text-with-unicode-tags/
