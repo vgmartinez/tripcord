@@ -71,13 +71,12 @@ Every command in the script is one of these forms:
 
 | Form | Accepted | Notes |
 | --- | --- | --- |
-| Fetch | `curl -o <file> <url>`, `wget -O <file> <url>` | Exactly one `http(s)` URL and one literal output file. curl options: `-f -s -S -L -k` (clustered, `-o` last), `--fail`, `--silent`, `--show-error`, `--location`, `--create-dirs`, `--compressed`, `--fail-with-body`, `--no-progress-meter`, `--tlsv1.2`, `--tlsv1.3`, `--http1.1`, `--retry`, `--retry-delay`, `--retry-max-time`, `--connect-timeout`, `--max-time`, `--proto`, `--proto-redir`, `--output`. wget options: `-q`, `-nv`, `--quiet`, `--no-verbose`, `--https-only`, `--tries`, `--timeout`, `--output-document`. The file's base name does not start with a dot (`.curlrc`, `.wgetrc`) and is not a command the grammar runs (`sha256sum`, `sh`, ...). |
-| Check | `sha256sum -c <sums>`, `shasum -a 256 -c <sums>` | `--check` is the long form of `-c`. No other option. `<sums>` is literal, not `-` or `/dev/*`, and not a file the script fetches. |
-| Entry check | `echo '<64 hex>  <file>' \| sha256sum -c [-]` | Or `printf '<64 hex>  <file>\n'`, or `shasum -a 256 -c [-]`. The text is parsed: exactly one entry, 64 hex digits, two spaces or ` *`, and a file that is not `-` or `/dev/*`. No `echo` option, no `printf` conversion, and no escape except a final `\n`. It covers only the file it names. The pipe is exactly these two commands, the check last, so it fails when the check fails without `pipefail`. |
-| Run | `sh <file>`, `bash <file>` | `<file>` is a file the script fetched; no shell option. Arguments after it are passed to the script. |
+| Fetch | `curl -o <file> <url>`, `wget -O <file> <url>` | Exactly one `http(s)` URL and one plain output filename: `^[A-Za-z0-9_-][A-Za-z0-9._-]*$`. It has no `/` or leading dot and is not `curlrc`, `_curlrc`, `wgetrc`, `.wgetrc`, `netrc`, or `_netrc`, or a command the grammar runs (`sha256sum`, `sh`, ...). This prevents a fetch from planting curl, wget, loader, or netrc configuration. curl options: `-f -s -S -L -k` (clustered, `-o` last), `--fail`, `--silent`, `--show-error`, `--location`, `--create-dirs`, `--compressed`, `--fail-with-body`, `--no-progress-meter`, `--tlsv1.2`, `--tlsv1.3`, `--http1.1`, `--retry`, `--retry-delay`, `--retry-max-time`, `--connect-timeout`, `--max-time`, `--proto`, `--proto-redir`, `--output`. wget options: `-q`, `-nv`, `--quiet`, `--no-verbose`, `--https-only`, `--tries`, `--timeout`, `--output-document`. |
+| Check | `sha256sum -c <sums>`, `shasum -a 256 -c <sums>` | `--check` is the long form of `-c`. No other option. `<sums>` is a plain filename, not `-` or a path. It can be fetched, but then it must be used by this check. |
+| Entry check | `echo '<64 hex>  <file>' \| sha256sum -c [-]` | Or `printf '<64 hex>  <file>\n'`, or `shasum -a 256 -c [-]`. The text is parsed: exactly one entry, 64 hex digits, two spaces or ` *`, and a plain filename. No `echo` option, no `printf` conversion, and no escape except a final `\n`. It covers only the file it names. The pipe is exactly these two commands, the check last, so it fails when the check fails without `pipefail`. |
+| Run | `sh <file>`, `bash <file>` | `<file>` is a plain filename the script fetched; no shell option. Arguments after it are passed to the script. |
 | Errexit | `set -e`, `set -eu`, `set -euo pipefail`, `set -eo pipefail`, `set -o errexit` | Only before every other command, each a statement of its own. A `set` anywhere else gives no credit. |
-| Files | `cd`, `mkdir`, `chmod`, `rm` | Literal arguments. `cd` only before the first fetch, check, or run. |
-| Variables | `export NAME=literal`, `export NAME`, `NAME=literal` | Not a prefix of another command (`FOO=1 curl ...`). Names that change what runs or what it loads are refused: `PATH`, `ENV`, `IFS`, `HOME`, `CDPATH`, `SHELLOPTS`, `PS4`, `CURL_HOME`, `WGETRC`, `SYSTEM_WGETRC`, `XDG_CONFIG_HOME`, `GLIBC_TUNABLES`, and names starting with `BASH`, `LD_`, `DYLD_`, `PERL`, `PYTHON`, `NODE_`, `RUBY`, or `GCONV`. |
+| Files | `mkdir <file>`, `rm <file>`, `chmod <mode> <file>` | Every file is a plain filename. `chmod` mode is exactly `+x`, `0755`, or `u+x`. `cd` is not accepted. |
 
 Syntax:
 
@@ -93,7 +92,7 @@ Syntax:
   `source`, `.`, `alias`, `shopt`, `exec`, `true`, `:`, `npm`, ...), a
   function, a subshell, `{ }`, `if`/`while`/`for`/`case`, `||`, `&`, a
   redirection, `$`, a backquote, a backslash outside single quotes, a
-  glob, `~`, or a carriage return.
+  glob, `~`, a carriage return, `cd`, `export`, or an assignment.
 
 Order:
 
@@ -103,7 +102,10 @@ Order:
   `set -e` and the check is a statement of its own.
 - Each fetch is followed by a check that covers its file before the
   file is fetched again, and that fails the script: a statement of its
-  own under `set -e`, or part of the script's last statement.
+  own under `set -e`, or part of the script's last statement. Every
+  fetched file must be either the script run, the sums file used by a
+  plain check, or the file named by an entry check; an unused fetch
+  gives no credit.
 - A plain check (`sha256sum -c <sums>`) covers any file, because the
   sums file is not read. An entry check covers only the file it names.
 

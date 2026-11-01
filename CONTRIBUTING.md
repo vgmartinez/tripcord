@@ -100,9 +100,11 @@ codeload, or gist; jsDelivr `gh@<sha>`; or GitLab `/-/raw/<sha>`;
 never a `sha256:` digest, which curl and wget do not verify) with no userinfo and no `.`
 or `..` path segment (decoded or not), or the whole line is a script
 the checksum grammar accepts (see `checksumScript` and
-`docs/rules/TC-CFG-009.md`): literal curl/wget fetches, `sha256sum -c`
-checks that cover them, `sh`/`bash` runs of the fetched files, a leading
-`set -e`, and a few file and variable commands, with nothing else. Package runners, git
+`docs/rules/TC-CFG-009.md`): curl/wget fetches to plain
+current-directory filenames, `sha256sum -c` checks that cover them,
+`sh`/`bash` runs of the fetched files, a leading `set -e`, and restricted
+`mkdir`/`chmod`/`rm`, with nothing else. `cd`, `export`, and assignments
+do not receive checksum credit. Package runners, git
 clone, variable targets, and version tags are never pinned. It costs
 what `shell.risks` costs.
 
