@@ -110,11 +110,16 @@ func TestScanRejectsShortEnvKey(t *testing.T) {
 	}
 }
 
-func TestScanFallsBackToS1WhenKeyFileUnavailable(t *testing.T) {
+func TestScanFallsBackToS1WhenNoKeySourceExists(t *testing.T) {
+	// A fresh home has no env var and no key file at all; a read-only
+	// home means a new key file cannot be created either. Neither
+	// touches existing key material, so the scan still succeeds in s1
+	// mode.
 	home := t.TempDir()
-	if err := os.WriteFile(filepath.Join(home, ".tripcord"), nil, 0o600); err != nil {
+	if err := os.Chmod(home, 0o500); err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = os.Chmod(home, 0o700) })
 	setKeyEnv(t, home, nil)
 	var stdout, stderr bytes.Buffer
 	if code := run([]string{"scan", keyTestRepo(t)}, &stdout, &stderr); code != int(exitcode.OK) {
@@ -122,5 +127,81 @@ func TestScanFallsBackToS1WhenKeyFileUnavailable(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "s1") || strings.Contains(stderr.String(), home) {
 		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
+// TestScanFailsClosedOnBrokenKeyMaterial covers the researcher's
+// requirement that broken EXISTING key material fails the scan closed
+// (exit 3) instead of silently falling back to s1 the way a genuinely
+// missing key source does.
+func TestScanFailsClosedOnBrokenKeyMaterial(t *testing.T) {
+	for name, setup := range map[string]func(t *testing.T, home string){
+		"home dir is a regular file": func(t *testing.T, home string) {
+			t.Helper()
+			if err := os.WriteFile(filepath.Join(home, ".tripcord"), nil, 0o600); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"key path is a directory": func(t *testing.T, home string) {
+			t.Helper()
+			if err := os.MkdirAll(fpkey.Path(home), 0o700); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"key file is a broken symlink": func(t *testing.T, home string) {
+			t.Helper()
+			if err := os.MkdirAll(filepath.Dir(fpkey.Path(home)), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(filepath.Join(home, "missing"), fpkey.Path(home)); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"key file content is too short": func(t *testing.T, home string) {
+			t.Helper()
+			if err := os.MkdirAll(filepath.Dir(fpkey.Path(home)), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(fpkey.Path(home), []byte("short\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			home := t.TempDir()
+			setup(t, home)
+			setKeyEnv(t, home, nil)
+			var stdout, stderr bytes.Buffer
+			if code := run([]string{"scan", keyTestRepo(t)}, &stdout, &stderr); code != int(exitcode.Config) {
+				t.Fatalf("exit %d, want %d; stderr: %s", code, exitcode.Config, stderr.String())
+			}
+			if strings.Contains(stderr.String(), "s1") {
+				t.Fatalf("broken key material silently fell back to s1: %q", stderr.String())
+			}
+			if strings.Contains(stderr.String(), home) {
+				t.Fatalf("stderr names the home directory: %q", stderr.String())
+			}
+		})
+	}
+}
+
+func TestScanFailsClosedOnLoosePermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("permission bits are not meaningful on Windows; see fpkey_windows.go")
+	}
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Dir(fpkey.Path(home)), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(fpkey.Path(home), []byte("zsK01q-loose-perm-key-0123456789\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	setKeyEnv(t, home, nil)
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"scan", keyTestRepo(t)}, &stdout, &stderr); code != int(exitcode.Config) {
+		t.Fatalf("exit %d, want %d; stderr: %s", code, exitcode.Config, stderr.String())
+	}
+	if strings.Contains(stderr.String(), "s1") {
+		t.Fatalf("overly permissive key file silently fell back to s1: %q", stderr.String())
 	}
 }

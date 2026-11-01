@@ -4,10 +4,16 @@
 //
 // The key comes from TRIPCORD_FINGERPRINT_KEY (CI sets it from a
 // secret) or from ~/.tripcord/fingerprint.key. Outside CI the file is
-// created on first use with mode 0600; in CI it is never created. With
-// no key the adapters fall back to the structural s1 discriminator,
-// which is never a hash of a secret. The OS keychain replaces the file
-// with the v1 store.
+// created on first use with mode 0600, written atomically so a
+// concurrent run never observes a partial file. In CI it is never
+// created. With no key source at all the adapters fall back to the
+// structural s1 discriminator, which is never a hash of a secret.
+//
+// Key material that exists but is broken — unreadable, corrupt, too
+// short, a symlink, owned by someone else, or wider than its expected
+// permissions — fails the scan closed instead of silently falling back
+// to s1: a fingerprint mode must never change without the caller
+// noticing. The OS keychain replaces the file with the v1 store.
 //
 // A Key never prints its bytes: every fmt verb, String, GoString, and
 // MarshalJSON render a fixed placeholder, and no error names its value.
@@ -31,25 +37,41 @@ import (
 const (
 	// EnvVar names the environment variable that holds the key.
 	EnvVar = "TRIPCORD_FINGERPRINT_KEY"
+	// LogicalDir is the key file's home-relative directory, used in
+	// messages so no absolute home path is printed.
+	LogicalDir = "~/.tripcord"
 	// LogicalPath is the key file's home-relative name, used in
 	// messages so no absolute home path is printed.
-	LogicalPath = "~/.tripcord/fingerprint.key"
+	LogicalPath = LogicalDir + "/fingerprint.key"
 	// MinKeyBytes is the shortest accepted key after trimming space.
 	MinKeyBytes = 16
 	// maxKeyFileBytes caps the key file read.
 	maxKeyFileBytes = 4096
 	// generatedKeyBytes is the random key length a new file gets; it is
 	// stored hex-encoded, so the file holds twice as many characters.
+	// 32 bytes is also what the docs recommend for a hand-written key.
 	generatedKeyBytes = 32
 	placeholder       = "fpkey.Key([redacted])"
+	tempFilePattern   = ".fingerprint.key.*.tmp"
 )
 
 var (
-	// ErrInvalid reports a key that is set but unusable (too short).
+	// ErrInvalid reports a key that is set but unusable (too short, or
+	// a key file larger than the size cap).
 	ErrInvalid = errors.New("fingerprint key is invalid")
-	// ErrUnavailable reports a key file that could not be read or
-	// created. Callers may continue without a key (s1 mode).
+	// ErrUnavailable reports that no key source exists at all: the
+	// home directory could not be determined, or a new key file could
+	// not be generated or created for an environmental reason (a
+	// read-only home, for example). Neither case touches existing key
+	// material, so callers may continue without a key (s1 mode).
 	ErrUnavailable = errors.New("fingerprint key file is unavailable")
+	// ErrKeyUnusable reports that key material already EXISTS but is
+	// broken: unreadable, not a regular file, a symlink, owned by
+	// someone else, wider than its expected permissions, or
+	// ~/.tripcord exists but is not a directory. Callers must fail
+	// closed (never fall back to s1) so a fingerprint mode never
+	// changes silently.
+	ErrKeyUnusable = errors.New("fingerprint key material is unusable")
 )
 
 // Key is a loaded HMAC key. The zero value and a nil *Key are "no key".
@@ -126,10 +148,19 @@ type Options struct {
 
 // Load resolves the key: TRIPCORD_FINGERPRINT_KEY when set, else an
 // existing ~/.tripcord/fingerprint.key, else, outside CI, a new key file
-// created with mode 0600 in a 0700 directory. In CI (CI or
-// GITHUB_ACTIONS set) the file is never created and Load returns no key.
-// A failure to determine home, read, or create the file wraps
-// ErrUnavailable; a key that is set but too short wraps ErrInvalid.
+// created with mode 0600 in a 0700 directory. In CI (CI, GITHUB_ACTIONS,
+// or another recognized CI environment variable set) the file is never
+// created and Load returns no key.
+//
+// A key that is set but too short, or a key file larger than the size
+// cap, wraps ErrInvalid. A failure to determine the home directory, or
+// to generate or create a brand-new key file, wraps ErrUnavailable and
+// is safe to treat as s1 mode. Anything wrong with key material that
+// already exists on disk — unreadable, corrupt, a symlink, the wrong
+// owner, too-wide permissions, or ~/.tripcord existing as a
+// non-directory — wraps ErrKeyUnusable and must fail the caller closed:
+// it is never safe to silently fall back to s1 once a key was supposed
+// to be in play.
 func Load(opts Options) (*Key, Source, error) {
 	getenv := opts.Getenv
 	if getenv == nil {
@@ -150,13 +181,27 @@ func Load(opts Options) (*Key, Source, error) {
 		}
 	}
 	path := Path(home)
-	k, err := readKeyFile(path)
+	dir := filepath.Dir(path)
+	dirErr := checkKeyDir(dir)
 	switch {
-	case err == nil:
-		return k, SourceFile, nil
-	case !errors.Is(err, fs.ErrNotExist):
-		return nil, SourceNone, err
-	case IsCI(getenv):
+	case dirErr == nil:
+		k, err := readKeyFile(path)
+		switch {
+		case err == nil:
+			return k, SourceFile, nil
+		case !errors.Is(err, fs.ErrNotExist):
+			return nil, SourceNone, err
+		}
+		// The directory exists but the key file does not: fall
+		// through to maybe create one below.
+	case !errors.Is(dirErr, fs.ErrNotExist):
+		// The directory exists but is unsafe (not a directory, a
+		// symlink, the wrong owner, or too permissive). That is
+		// broken existing material, not a missing key source: fail
+		// closed rather than silently using s1.
+		return nil, SourceNone, dirErr
+	}
+	if IsCI(getenv) {
 		return nil, SourceNone, nil
 	}
 	random := opts.Rand
@@ -178,10 +223,18 @@ func Path(home string) string {
 	return filepath.Join(home, ".tripcord", "fingerprint.key")
 }
 
-// IsCI reports whether CI or GITHUB_ACTIONS is set to anything other
-// than empty, "0", or "false".
+// IsCI reports whether a recognized CI environment variable is set to
+// anything other than empty, "0", or "false". Beyond the generic CI and
+// GITHUB_ACTIONS, this recognizes the indicators several other CI
+// systems set unconditionally: Jenkins (JENKINS_URL), Azure Pipelines
+// (TF_BUILD), AWS CodeBuild (CODEBUILD_BUILD_ID), TeamCity
+// (TEAMCITY_VERSION), Buildkite (BUILDKITE), GitLab CI (GITLAB_CI), and
+// CircleCI (CIRCLECI).
 func IsCI(getenv func(string) string) bool {
-	for _, name := range []string{"CI", "GITHUB_ACTIONS"} {
+	for _, name := range []string{
+		"CI", "GITHUB_ACTIONS", "JENKINS_URL", "TF_BUILD", "CODEBUILD_BUILD_ID",
+		"TEAMCITY_VERSION", "BUILDKITE", "GITLAB_CI", "CIRCLECI",
+	} {
 		switch strings.ToLower(strings.TrimSpace(getenv(name))) {
 		case "", "0", "false":
 		default:
@@ -191,22 +244,62 @@ func IsCI(getenv func(string) string) bool {
 	return false
 }
 
+// checkKeyDir reports whether dir is safe to hold the key file: it must
+// not exist as anything but a real directory, must not be a symlink,
+// and (where the platform supports the check) must be owned by the
+// current user and not group- or world-writable. A dir that does not
+// exist at all is reported as fs.ErrNotExist, which Load treats as "no
+// key source yet" rather than broken material.
+func checkKeyDir(dir string) error {
+	info, err := os.Lstat(dir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	if err != nil {
+		return fmt.Errorf("%w: cannot stat the directory of %s", ErrKeyUnusable, LogicalPath)
+	}
+	if info.Mode()&fs.ModeSymlink != 0 {
+		return fmt.Errorf("%w: %s must not be a symlink", ErrKeyUnusable, LogicalDir)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("%w: %s exists but is not a directory", ErrKeyUnusable, LogicalDir)
+	}
+	return checkDirSecurity(info, dir)
+}
+
+// readKeyFile reads and validates an existing key file. It never follows
+// a symlink at path: a key file must be a plain regular file that the
+// current user owns and that nobody else can read, so Load can trust
+// that only this process's earlier run, not an attacker, placed it
+// there.
 func readKeyFile(path string) (*Key, error) {
-	f, err := os.Open(path)
+	info, err := os.Lstat(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, err
 	}
 	if err != nil {
-		return nil, fmt.Errorf("%w: cannot open %s", ErrUnavailable, LogicalPath)
+		return nil, fmt.Errorf("%w: cannot stat %s", ErrKeyUnusable, LogicalPath)
+	}
+	if info.Mode()&fs.ModeSymlink != 0 {
+		if _, targetErr := os.Stat(path); errors.Is(targetErr, fs.ErrNotExist) {
+			return nil, fmt.Errorf("%w: %s is a broken symlink", ErrKeyUnusable, LogicalPath)
+		}
+		return nil, fmt.Errorf("%w: %s must not be a symlink", ErrKeyUnusable, LogicalPath)
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("%w: %s is not a regular file", ErrKeyUnusable, LogicalPath)
+	}
+	if err := checkFileSecurity(info, path); err != nil {
+		return nil, err
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("%w: cannot open %s", ErrKeyUnusable, LogicalPath)
 	}
 	defer func() { _ = f.Close() }()
-	info, err := f.Stat()
-	if err != nil || !info.Mode().IsRegular() {
-		return nil, fmt.Errorf("%w: %s is not a regular file", ErrUnavailable, LogicalPath)
-	}
 	raw, err := io.ReadAll(io.LimitReader(f, maxKeyFileBytes+1))
 	if err != nil {
-		return nil, fmt.Errorf("%w: cannot read %s", ErrUnavailable, LogicalPath)
+		return nil, fmt.Errorf("%w: cannot read %s", ErrKeyUnusable, LogicalPath)
 	}
 	if len(raw) > maxKeyFileBytes {
 		return nil, fmt.Errorf("%w: %s is larger than %d bytes", ErrInvalid, LogicalPath, maxKeyFileBytes)
@@ -218,40 +311,48 @@ func readKeyFile(path string) (*Key, error) {
 	return k, nil
 }
 
-// createKeyFile writes a new random key with O_EXCL. When another
-// process won the race, it reads that file instead and reports
-// created=false.
+// createKeyFile writes a new random key. The content is written to a
+// temporary file in the same directory, flushed, and then published
+// with os.Link, which atomically fails with fs.ErrExist if the final
+// path already exists rather than truncating or racing a concurrent
+// writer. A process that loses the race reads the file the winner just
+// finished instead, so every concurrent Load agrees on one key and none
+// ever observes a partially written file.
 func createKeyFile(path string, random io.Reader) (*Key, bool, error) {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return nil, false, fmt.Errorf("%w: cannot create the directory of %s", ErrUnavailable, LogicalPath)
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, false, fmt.Errorf("%w: cannot create the directory of %s", ErrUnavailable, LogicalDir)
 	}
 	buf := make([]byte, generatedKeyBytes)
 	if _, err := io.ReadFull(random, buf); err != nil {
 		return nil, false, fmt.Errorf("%w: cannot generate a key", ErrUnavailable)
 	}
 	text := hex.EncodeToString(buf)
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-	if errors.Is(err, fs.ErrExist) {
-		k, err := readKeyFile(path)
-		return k, false, err
-	}
+	tmp, err := os.CreateTemp(dir, tempFilePattern)
 	if err != nil {
-		return nil, false, fmt.Errorf("%w: cannot create %s", ErrUnavailable, LogicalPath)
+		return nil, false, fmt.Errorf("%w: cannot create a temporary file for %s", ErrUnavailable, LogicalPath)
 	}
-	// The umask can only narrow 0600; Chmod makes the mode exact.
-	werr := f.Chmod(0o600)
+	tmpPath := tmp.Name()
+	defer func() { _ = os.Remove(tmpPath) }()
+	werr := tmp.Chmod(0o600)
 	if werr == nil {
-		_, werr = io.WriteString(f, text+"\n")
+		_, werr = io.WriteString(tmp, text+"\n")
 	}
 	if werr == nil {
-		werr = f.Sync()
+		werr = tmp.Sync()
 	}
-	if cerr := f.Close(); werr == nil {
+	if cerr := tmp.Close(); werr == nil {
 		werr = cerr
 	}
 	if werr != nil {
-		_ = os.Remove(path)
 		return nil, false, fmt.Errorf("%w: cannot write %s", ErrUnavailable, LogicalPath)
+	}
+	if err := os.Link(tmpPath, path); err != nil {
+		if errors.Is(err, fs.ErrExist) {
+			k, err := readKeyFile(path)
+			return k, false, err
+		}
+		return nil, false, fmt.Errorf("%w: cannot create %s", ErrUnavailable, LogicalPath)
 	}
 	k, err := New(text)
 	return k, true, err

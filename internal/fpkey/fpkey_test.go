@@ -202,24 +202,112 @@ func TestLoadConcurrentCreateAgrees(t *testing.T) {
 
 func TestLoadUnavailable(t *testing.T) {
 	t.Parallel()
-	home := t.TempDir()
-	// A regular file where ~/.tripcord should be makes creation fail
-	// for every user, root included.
-	if err := os.WriteFile(filepath.Join(home, ".tripcord"), nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	_, src, err := Load(Options{Home: home, Getenv: env(nil)})
+	// A failing random source with no key file anywhere is a genuinely
+	// missing key source, not broken existing material: s1 fallback is
+	// still safe (ErrUnavailable), not a hard failure.
+	_, src, err := Load(Options{Home: t.TempDir(), Getenv: env(nil), Rand: failingReader{}})
 	if !errors.Is(err, ErrUnavailable) || src != SourceNone {
-		t.Fatalf("Load = %v, %v", src, err)
+		t.Fatalf("Load with a failing random source = %v, %v", src, err)
 	}
-	if strings.Contains(err.Error(), home) {
-		t.Fatalf("error names the home directory: %v", err)
+	if errors.Is(err, ErrKeyUnusable) {
+		t.Fatalf("a missing key source must not be reported as broken material: %v", err)
 	}
+}
 
-	_, _, err = Load(Options{Home: t.TempDir(), Getenv: env(nil), Rand: failingReader{}})
-	if !errors.Is(err, ErrUnavailable) {
-		t.Fatalf("Load with a failing random source = %v", err)
+// TestLoadFailsClosedOnBrokenExistingMaterial covers every "key material
+// exists but is broken" case from the researcher's review: each must
+// wrap ErrKeyUnusable (never the soft ErrUnavailable) and must never
+// name the home directory, so the scan can fail closed with an
+// actionable, non-leaking message.
+func TestLoadFailsClosedOnBrokenExistingMaterial(t *testing.T) {
+	t.Parallel()
+	for name, setup := range map[string]func(t *testing.T, home string){
+		"home dir is a regular file": func(t *testing.T, home string) {
+			t.Helper()
+			if err := os.WriteFile(filepath.Join(home, ".tripcord"), nil, 0o600); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"key path is a directory": func(t *testing.T, home string) {
+			t.Helper()
+			if err := os.MkdirAll(Path(home), 0o700); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"key file is a symlink": func(t *testing.T, home string) {
+			t.Helper()
+			target := writeOutsideKey(t, "elsewhere-key-0123456789abcdef")
+			if err := os.MkdirAll(filepath.Dir(Path(home)), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(target, Path(home)); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"key file is a broken symlink": func(t *testing.T, home string) {
+			t.Helper()
+			if err := os.MkdirAll(filepath.Dir(Path(home)), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(filepath.Join(home, "does-not-exist"), Path(home)); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"key dir is a symlink": func(t *testing.T, home string) {
+			t.Helper()
+			target := t.TempDir()
+			if err := os.Symlink(target, filepath.Dir(Path(home))); err != nil {
+				t.Fatal(err)
+			}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			home := t.TempDir()
+			setup(t, home)
+			_, src, err := Load(Options{Home: home, Getenv: env(nil)})
+			if !errors.Is(err, ErrKeyUnusable) || src != SourceNone {
+				t.Fatalf("Load = %v, %v, want ErrKeyUnusable", src, err)
+			}
+			if errors.Is(err, ErrUnavailable) {
+				t.Fatalf("broken material must not report the soft ErrUnavailable: %v", err)
+			}
+			if strings.Contains(err.Error(), home) {
+				t.Fatalf("error names the home directory: %v", err)
+			}
+		})
 	}
+}
+
+func TestLoadFailsClosedOnLoosePermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("permission bits are not meaningful on Windows; see fpkey_windows.go")
+	}
+	t.Parallel()
+	t.Run("key file readable by group", func(t *testing.T) {
+		t.Parallel()
+		home := t.TempDir()
+		writeRaw(t, home, secret+"\n")
+		if err := os.Chmod(Path(home), 0o640); err != nil {
+			t.Fatal(err)
+		}
+		_, src, err := Load(Options{Home: home, Getenv: env(nil)})
+		if !errors.Is(err, ErrKeyUnusable) || src != SourceNone {
+			t.Fatalf("Load = %v, %v, want ErrKeyUnusable", src, err)
+		}
+	})
+	t.Run("key dir writable by others", func(t *testing.T) {
+		t.Parallel()
+		home := t.TempDir()
+		writeRaw(t, home, secret+"\n")
+		if err := os.Chmod(filepath.Dir(Path(home)), 0o707); err != nil {
+			t.Fatal(err)
+		}
+		_, src, err := Load(Options{Home: home, Getenv: env(nil)})
+		if !errors.Is(err, ErrKeyUnusable) || src != SourceNone {
+			t.Fatalf("Load = %v, %v, want ErrKeyUnusable", src, err)
+		}
+	})
 }
 
 func TestLoadRejectsBadKeyFile(t *testing.T) {
@@ -229,13 +317,6 @@ func TestLoadRejectsBadKeyFile(t *testing.T) {
 	_, _, err := Load(Options{Home: home, Getenv: env(nil)})
 	if !errors.Is(err, ErrInvalid) || strings.Contains(err.Error(), "short\n") {
 		t.Fatalf("err = %v", err)
-	}
-	home = t.TempDir()
-	if err := os.MkdirAll(Path(home), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := Load(Options{Home: home, Getenv: env(nil)}); !errors.Is(err, ErrUnavailable) {
-		t.Fatalf("directory at the key path: %v", err)
 	}
 }
 
@@ -251,6 +332,20 @@ func writeRaw(t *testing.T, home, text string) {
 	if err := os.WriteFile(Path(home), []byte(text), 0o600); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// writeOutsideKey writes a key file in its own directory, outside any
+// home used by the test, and returns its path. It is used as a symlink
+// target so the symlink itself, not the target's permissions, is what a
+// test is checking.
+func writeOutsideKey(t *testing.T, text string) string {
+	t.Helper()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "fingerprint.key")
+	if err := os.WriteFile(path, []byte(text+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
 }
 
 func writeKey(t *testing.T, home, text string) *Key {
