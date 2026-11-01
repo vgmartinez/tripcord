@@ -106,6 +106,7 @@ func TestAnnotateChecksumsCaseFoldedAliases(t *testing.T) {
 	)
 	for _, tc := range []struct {
 		name  string
+		run   string
 		setup func(t *testing.T, root string)
 		sums  map[string][]string
 		links []string
@@ -143,11 +144,42 @@ func TestAnnotateChecksumsCaseFoldedAliases(t *testing.T) {
 			},
 			sums: nil,
 		},
+		{
+			name: "regular sums spelling sorts before symlink",
+			run:  `{"setting":"step","run":"curl -fsSLo t.sh https://x.invalid/t.sh && sha256sum -c T.SH.SHA256 && sh t.sh"}`,
+			setup: func(t *testing.T, root string) {
+				// ReadDir returns uppercase first, so the regular file is
+				// seen before the symlink that a case-insensitive checkout
+				// can open for the same name.
+				writeChecksumFile(t, root, "T.SH.SHA256", sum+"  t.sh\n")
+				if err := os.Symlink("T.SH", filepath.Join(root, "t.sh.sha256")); err != nil {
+					t.Fatal(err)
+				}
+			},
+			sums: nil,
+		},
+		{
+			name: "regular target spelling sorts before symlink",
+			run:  `{"setting":"step","run":"curl -fsSLo T.SH https://x.invalid/t.sh && sha256sum -c t.sh.sha256 && sh T.SH"}`,
+			setup: func(t *testing.T, root string) {
+				writeChecksumFile(t, root, "t.sh.sha256", sum+"  T.SH\n")
+				writeChecksumFile(t, root, "T.SH", "regular\n")
+				if err := os.Symlink("/tmp/tripcord-outside.sh", filepath.Join(root, "t.sh")); err != nil {
+					t.Fatal(err)
+				}
+			},
+			sums:  map[string][]string{"t.sh.sha256": {"T.SH"}},
+			links: []string{"T.SH"},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root := t.TempDir()
 			tc.setup(t, root)
-			items := []model.ConfigItem{envSetup(model.HarnessCopilot, path, run)}
+			script := run
+			if tc.run != "" {
+				script = tc.run
+			}
+			items := []model.ConfigItem{envSetup(model.HarnessCopilot, path, script)}
 			if err := Annotate(root, items); err != nil {
 				t.Fatal(err)
 			}

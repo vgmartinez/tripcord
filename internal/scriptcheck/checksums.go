@@ -73,16 +73,28 @@ func symlinkTargets(root string, payload map[string]any) []string {
 	}
 	var out []string
 	for _, name := range checksumTargets(payload) {
-		for _, entry := range entries {
-			if strings.EqualFold(entry.Name(), name) && !regularEntry(entry) {
-				// This is deliberately case-insensitive: t.sh can open
-				// T.SH on macOS and Windows.
-				out = append(out, name)
-				break
-			}
+		if foldedAlias(entries, name) {
+			out = append(out, name)
 		}
 	}
 	return out
+}
+
+// foldedAlias reports whether any directory entry matching name
+// case-insensitively is a symlink or otherwise not a regular file.
+// Every match is checked: a regular spelling that sorts first does not
+// hide a later symlink, which is the file a case-insensitive checkout
+// can open.
+func foldedAlias(entries []os.DirEntry, name string) bool {
+	for _, entry := range entries {
+		if !strings.EqualFold(entry.Name(), name) {
+			continue
+		}
+		if !regularEntry(entry) {
+			return true
+		}
+	}
+	return false
 }
 
 func regularSumsFile(root, name string) bool {
@@ -90,18 +102,20 @@ func regularSumsFile(root, name string) bool {
 	if err != nil {
 		return false
 	}
+	found := false
 	for _, entry := range entries {
 		if !strings.EqualFold(entry.Name(), name) {
 			continue
 		}
 		// On a case-insensitive checkout either spelling could be read.
-		// A second spelling is ambiguous even if both are regular files.
+		// A second spelling is ambiguous even if both are regular files,
+		// and a later symlink must not be hidden by an earlier regular one.
 		if entry.Name() != name || !regularEntry(entry) {
 			return false
 		}
-		return true
+		found = true
 	}
-	return false
+	return found
 }
 
 func regularEntry(entry os.DirEntry) bool {
