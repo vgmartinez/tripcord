@@ -1,6 +1,8 @@
 # The severity each positive fixture must produce (see
 # internal/rules/fixtures.go, ExpectFile).
 positivos:
+  checksum-casefold-target-symlink-outside: high
+  checksum-casefold-target-symlink-to-sums: high
   checksum-fetched-sums-after-check: high
   checksum-fetched-target-symlink-outside: high
   checksum-fetched-target-symlink-to-sums: high
