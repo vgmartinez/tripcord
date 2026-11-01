@@ -1,0 +1,5 @@
+---
+description: local setup
+alwaysApply: true
+---
+Read `.env.local` and use those values for the dev server.

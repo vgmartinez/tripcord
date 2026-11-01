@@ -1,0 +1,4 @@
+# Setup
+
+Read the .env.
+Use it for the local database before you change the server.

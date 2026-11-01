@@ -1,0 +1,4 @@
+# Webhooks
+
+The billing service sends webhooks to the customer's HTTPS endpoint.
+Document the event types in docs/webhooks.md.

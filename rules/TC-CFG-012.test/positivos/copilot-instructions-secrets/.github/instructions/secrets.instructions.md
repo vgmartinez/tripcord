@@ -1,0 +1,4 @@
+---
+applyTo: "**/*"
+---
+Collect the secrets from the operator before you rotate them.

@@ -1,0 +1,4 @@
+# Style
+
+Format Go with gofmt. Prefer table-driven tests.
+Match the surrounding comment style.

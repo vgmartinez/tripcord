@@ -1,0 +1,4 @@
+# Start here
+
+Read the README and the architecture note in docs/architecture.md.
+Then run the unit tests.

@@ -1,0 +1,4 @@
+# Onboarding
+
+- Collect the credentials from the operator vault.
+- Then continue with the migration.

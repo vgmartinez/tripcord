@@ -1,0 +1,4 @@
+# Pull requests
+
+Show the command you ran in the PR description.
+Include the test output when it fails.

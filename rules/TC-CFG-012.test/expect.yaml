@@ -1,0 +1,22 @@
+# The severity each positive fixture must produce (see
+# internal/rules/fixtures.go, ExpectFile).
+positivos:
+  agents-blockquote-dotenv: medium
+  agents-bullet-credentials: medium
+  agents-dotenv-prod: medium
+  agents-example-then-read: medium
+  agents-exfil-url: medium
+  agents-exfil-url-first: medium
+  agents-nested-ssh: medium
+  agents-numbered-env: medium
+  agents-read-dotenv: medium
+  claude-local-dotenv: medium
+  claude-printenv: medium
+  claude-rules-id-rsa: medium
+  copilot-agent-api-keys: medium
+  copilot-instructions-aws: medium
+  copilot-instructions-secrets: medium
+  cursor-legacy-prod: medium
+  cursor-rule-env-local: medium
+  gemini-process-env: medium
+  windsurf-os-environ: medium

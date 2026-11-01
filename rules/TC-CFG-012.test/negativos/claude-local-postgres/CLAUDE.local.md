@@ -1,0 +1,4 @@
+# Database
+
+This checkout uses the local Postgres on port 5432.
+Do not point tests at the shared staging database.

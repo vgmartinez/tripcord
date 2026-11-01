@@ -1,0 +1,4 @@
+# Environments
+
+This service has three environments: dev, staging, and prod.
+Config for each lives in `deploy/env/<name>.yaml`, not in dotenv files.
