@@ -13,6 +13,14 @@ positivos:
   copilot-pwsh-iwr-iex: high
   copilot-set-plus-e: high
   copilot-step-shell-overrides-job: high
+  copilot-traversal-dot-dotdot: high
+  copilot-traversal-encoded: high
+  copilot-traversal-encoded-mixed: high
+  copilot-traversal-encoded-upper: high
+  copilot-traversal-github-raw: high
+  copilot-traversal-other-repo: high
+  copilot-traversal-to-branch: high
+  cursor-traversal-wget: high
   cursor-install-curl-pipe: high
   cursor-start-encoded: high
   cursor-terminal-wget-pipe: high

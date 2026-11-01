@@ -53,7 +53,10 @@ not.
   after an OCI `blobs` or `manifests` segment. Any other host, a
   release asset, a tag, a branch, userinfo
   (`raw.githubusercontent.com@evil.example`), or a trailing-dot host
-  is not a pin. The host match is case-insensitive.
+  is not a pin. Nor is a path with a `.` or `..` segment, as written or
+  percent-encoded in any case (`%2e%2e`, `.%2E`): curl and wget resolve
+  it before the request, so `<sha>/../main/` fetches `main`. The host
+  match is case-insensitive.
 - **Checksum verified before execution.** The next statement is
   `sha256sum -c <file>` (or `sha384sum`, `sha512sum`, or
   `shasum -a 256|384|512 -c`). The file is not `-` or under `/dev`, and

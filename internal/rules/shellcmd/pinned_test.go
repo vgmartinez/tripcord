@@ -7,8 +7,10 @@ import (
 )
 
 const (
-	commitURL = "https://raw.githubusercontent.com/acme/tools/0123456789abcdef0123456789abcdef01234567/install.sh"
-	branchURL = "https://raw.githubusercontent.com/acme/tools/main/install.sh"
+	sha40        = "0123456789abcdef0123456789abcdef01234567"
+	commitPrefix = "https://raw.githubusercontent.com/acme/tools/" + sha40
+	commitURL    = commitPrefix + "/install.sh"
+	branchURL    = "https://raw.githubusercontent.com/acme/tools/main/install.sh"
 )
 
 func TestUnpinned(t *testing.T) {
@@ -26,6 +28,15 @@ func TestUnpinned(t *testing.T) {
 		{"curl -fsSL https://github.com/acme/tools/releases/download/" + strings.Repeat("ab", 20) + "/i.sh | sh", []string{Fetch, Pipe}},
 		{"curl -fsSL https://RAW.GITHUBUSERCONTENT.COM/acme/tools/" + strings.Repeat("ab", 20) + "/i.sh | sh", nil},
 		{"curl -fsSL https://raw.githubusercontent.com./acme/tools/" + strings.Repeat("ab", 20) + "/i.sh | sh", []string{Fetch, Pipe}},
+		{"curl -fsSL " + commitPrefix + "/../main/i.sh | sh", []string{Fetch, Pipe}},
+		{"curl -fsSL " + commitPrefix + "/../../../evil/repo/main/i.sh | sh", []string{Fetch, Pipe}},
+		{"curl -fsSL https://github.com/acme/tools/raw/" + sha40 + "/../../../../x/y/raw/main/i.sh | sh", []string{Fetch, Pipe}},
+		{"curl -fsSL " + commitPrefix + "/./../main/i.sh | sh", []string{Fetch, Pipe}},
+		{"curl -fsSL " + commitPrefix + "/%2e%2e/main/i.sh | sh", []string{Fetch, Pipe}},
+		{"curl -fsSL " + commitPrefix + "/%2E%2e/main/i.sh | sh", []string{Fetch, Pipe}},
+		{"curl -fsSL " + commitPrefix + "/.%2E/main/i.sh | sh", []string{Fetch, Pipe}},
+		{"wget -qO- " + commitPrefix + "/../main/i.sh | sh", []string{Fetch, Pipe}},
+		{"wget -qO- " + commitPrefix + "/%2e%2e/main/i.sh | sh", []string{Fetch, Pipe}},
 		{"iwr " + commitURL + " | iex", nil},
 		{"deno run -A " + strings.Replace(commitURL, "install.sh", "mod.ts", 1), nil},
 		{"iex (New-Object Net.WebClient).DownloadString('" + commitURL + "')", nil},
@@ -120,12 +131,21 @@ func TestImmutableURL(t *testing.T) {
 		"https://github.com/acme/tools/releases/download/" + strings.Repeat("ab", 20) + "/i.sh":           false,
 		"https://evil.example/sha256:" + strings.Repeat("0", 64) + "/i.sh":                                false,
 		"http://raw.githubusercontent.com/acme/tools/" + strings.Repeat("ab", 20) + "/i.sh":               false,
-		branchURL: false,
-		"https://example.invalid/i.sh?ref=0123456789abcdef0123456789abcdef01234567": false,
-		"https://example.invalid/0123456789abcdef0123456789abcdef0123456/i.sh":      false,
-		"https://example.invalid/sha256:" + strings.Repeat("0", 63):                 false,
-		"ftp://example.invalid/0123456789abcdef0123456789abcdef01234567/i.sh":       false,
-		"https:///0123456789abcdef0123456789abcdef01234567":                         false,
+		commitPrefix + "/../main/i.sh":                                                  false,
+		commitPrefix + "/../../../evil/repo/main/i.sh":                                  false,
+		"https://github.com/acme/tools/raw/" + sha40 + "/../../../../x/y/raw/main/i.sh": false,
+		commitPrefix + "/./../main/i.sh":                                                false,
+		commitPrefix + "/%2e%2e/main/i.sh":                                              false,
+		commitPrefix + "/%2E%2E/main/i.sh":                                              false,
+		commitPrefix + "/.%2E/main/i.sh":                                                false,
+		commitPrefix + "/%2e/i.sh":                                                      false,
+		commitPrefix + "/%zz/i.sh":                                                      false,
+		branchURL:                                                                       false,
+		"https://example.invalid/i.sh?ref=0123456789abcdef0123456789abcdef01234567":     false,
+		"https://example.invalid/0123456789abcdef0123456789abcdef0123456/i.sh":          false,
+		"https://example.invalid/sha256:" + strings.Repeat("0", 63):                     false,
+		"ftp://example.invalid/0123456789abcdef0123456789abcdef01234567/i.sh":           false,
+		"https:///0123456789abcdef0123456789abcdef01234567":                             false,
 		"%zz": false,
 	} {
 		if got := immutableURL(url); got != want {

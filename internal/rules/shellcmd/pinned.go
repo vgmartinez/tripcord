@@ -137,9 +137,10 @@ func urlsImmutable(text string) bool {
 }
 
 // immutableURL reports an https URL whose host and path place a commit
-// or an OCI digest where that service treats it as immutable. Any other
-// host, a userinfo, a trailing-dot host, and a non-https URL are
-// rejected: a hex string in the path is not itself a pin.
+// where that service treats it as immutable. Any other host, a
+// userinfo, a trailing-dot host, a non-https URL, and a path with a .
+// or .. segment (decoded or not) are rejected: a hex string in the path
+// is not itself a pin.
 //
 //	raw.githubusercontent.com/<owner>/<repo>/<sha>/...
 //	github.com/<owner>/<repo>/raw/<sha>/...
@@ -165,6 +166,9 @@ func immutableURL(w string) bool {
 		return false
 	}
 	segs := pathSegments(u.EscapedPath())
+	if dotSegment(segs) {
+		return false
+	}
 	switch strings.ToLower(host) {
 	case "raw.githubusercontent.com":
 		return len(segs) >= 4 && isCommit(segs[2])
@@ -191,6 +195,22 @@ func pathSegments(path string) []string {
 		}
 	}
 	return segs
+}
+
+// dotSegment reports a . or .. path segment, as written or after
+// percent-decoding in any case (%2e, .%2E). curl and wget resolve them
+// before the request, so <sha>/../main fetches main.
+func dotSegment(segs []string) bool {
+	for _, seg := range segs {
+		decoded, err := url.PathUnescape(seg)
+		if err != nil {
+			return true
+		}
+		if seg == "." || seg == ".." || decoded == "." || decoded == ".." {
+			return true
+		}
+	}
+	return false
 }
 
 func githubImmutable(segs []string) bool {
