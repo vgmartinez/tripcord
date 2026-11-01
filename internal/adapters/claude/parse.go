@@ -183,10 +183,11 @@ var (
 	bearerWord = regexp.MustCompile(`(?i)(?:^|:)\s*bearer\s*$`)
 	// embeddedURL finds an absolute URL anywhere inside a larger string,
 	// such as the command of "curl 'https://host/x?sig=y' | sh". It stops
-	// at whitespace, quotes, a backtick, and ")" so the match does not
-	// swallow a trailing shell quote, the end of a command substitution,
-	// or the rest of a pipeline.
-	embeddedURL = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://[^\s'"<>` + "`" + `)]+`)
+	// at whitespace and quotes so the match does not swallow a trailing
+	// shell quote or the rest of a pipeline. It runs on through ")" and
+	// a backtick, so a query that contains one is still stripped whole;
+	// kit.StripEmbeddedURL keeps the shell text that closes there.
+	embeddedURL = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://[^\s'"<>]+`)
 )
 
 // redactCommandSecrets redacts "Bearer <token>" and then everything
@@ -214,7 +215,7 @@ func redactCommandSecrets(value string) (string, []string) {
 func stripEmbeddedURLSecrets(value string) (string, []string) {
 	var removed []string
 	value = embeddedURL.ReplaceAllStringFunc(value, func(m string) string {
-		stripped, raw, ok := stripURLSecrets(m)
+		stripped, raw, ok := kit.StripEmbeddedURL(m)
 		if !ok {
 			return m
 		}

@@ -27,10 +27,11 @@ var (
 	bearerSchemeWord = regexp.MustCompile(`(?i)(?:^|:)\s*bearer\s*$`)
 	userFlagName     = regexp.MustCompile(`(?i)^(?:` + output.UserFlagAlternation + `)$`)
 	// embeddedURL finds an absolute URL inside a larger string, such as a
-	// curl command. It stops at whitespace, quotes, a backtick, and ")" so
-	// a trailing shell quote, the end of a command substitution, or the
-	// rest of a pipeline is not swallowed.
-	embeddedURL = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://[^\s'"<>` + "`" + `)]+`)
+	// curl command. It stops at whitespace and quotes so a trailing shell
+	// quote or the rest of a pipeline is not swallowed. It runs on through
+	// ")" and a backtick, so a query that contains one is still stripped
+	// whole; StripEmbeddedURL keeps the shell text that closes there.
+	embeddedURL = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://[^\s'"<>]+`)
 )
 
 // Sanitized is one string after sanitization: the safe text, and the raw
@@ -313,7 +314,7 @@ func redactCommandSecrets(value string) (string, []string) {
 func stripEmbeddedURLSecrets(value string) (string, []string) {
 	var removed []string
 	value = embeddedURL.ReplaceAllStringFunc(value, func(m string) string {
-		stripped, raw, ok := StripURLSecrets(m)
+		stripped, raw, ok := StripEmbeddedURL(m)
 		if !ok {
 			return m
 		}
@@ -323,6 +324,56 @@ func stripEmbeddedURLSecrets(value string) (string, []string) {
 		return stripped
 	})
 	return value, removed
+}
+
+// StripEmbeddedURL strips userinfo, query, and fragment from a URL found
+// inside a longer string, as text: the URL is not parsed and rebuilt, so
+// nothing is re-encoded, and a query is removed to the end of the match
+// even when it contains ")" or a backtick. Those two characters, when
+// they end the match, are kept: they close a $( ) or backtick
+// substitution around the URL, and carry no secret. ok is false when
+// there is no host. removedRaw is the removed text, NUL-joined, for
+// KeyDiscriminator only.
+func StripEmbeddedURL(m string) (stripped, removedRaw string, ok bool) {
+	sep := strings.Index(m, "://")
+	if sep < 0 {
+		return "", "", false
+	}
+	prefix, rest := m[:sep+3], m[sep+3:]
+	authEnd := strings.IndexAny(rest, "/?#")
+	if authEnd < 0 {
+		authEnd = len(rest)
+	}
+	auth, tail := rest[:authEnd], rest[authEnd:]
+	var removed []string
+	if at := strings.LastIndexByte(auth, '@'); at >= 0 {
+		removed = append(removed, auth[:at])
+		auth = auth[at+1:]
+	}
+	if auth == "" || auth[0] == ':' {
+		return "", "", false
+	}
+	path, secret := tail, ""
+	if q := strings.IndexAny(tail, "?#"); q >= 0 {
+		path, secret = tail[:q], tail[q:]
+	}
+	if query, ok := strings.CutPrefix(secret, "?"); ok {
+		frag := ""
+		if h := strings.IndexByte(query, '#'); h >= 0 {
+			query, frag = query[:h], query[h+1:]
+		}
+		removed = append(removed, query)
+		if frag != "" {
+			removed = append(removed, frag)
+		}
+	} else if frag, ok := strings.CutPrefix(secret, "#"); ok && frag != "" {
+		removed = append(removed, frag)
+	}
+	closing := len(secret)
+	for closing > 0 && (secret[closing-1] == ')' || secret[closing-1] == '`') {
+		closing--
+	}
+	return prefix + auth + path + secret[closing:], strings.Join(removed, "\x00"), true
 }
 
 // StripURLSecrets reports whether raw parses as an absolute URL with a
