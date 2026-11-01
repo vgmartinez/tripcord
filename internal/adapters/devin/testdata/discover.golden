@@ -1,0 +1,98 @@
+{
+  "items": [
+    {
+      "harness": "devin",
+      "scope": "repo",
+      "path": ".devin/blueprint.yaml",
+      "sha256": "fa391cbdeb02bd6fdd3b6fb3a696de25e4c48b6ab616943686d7d8b548e0c7b7",
+      "kind": "env-setup",
+      "payload": {
+        "command": "curl -fsSL \"https://example.invalid/install.sh\" | sh\n",
+        "form": "string",
+        "key": "[\"command\",\"initialize\",\"\",\"sig:a232e9119168d6dc\",\"sig:s1:#0\"]",
+        "setting": "initialize"
+      }
+    },
+    {
+      "harness": "devin",
+      "scope": "repo",
+      "path": ".devin/blueprint.yaml",
+      "sha256": "fa391cbdeb02bd6fdd3b6fb3a696de25e4c48b6ab616943686d7d8b548e0c7b7",
+      "kind": "env-setup",
+      "payload": {
+        "command": "curl https://example.invalid/deps.sh | sh",
+        "form": "run",
+        "key": "[\"command\",\"maintenance\",\"fetch-deps\",\"sig:6ef43a4c55f9aab0\",\"sig:s1:#0\"]",
+        "name": "fetch-deps",
+        "setting": "maintenance"
+      }
+    },
+    {
+      "harness": "devin",
+      "scope": "repo",
+      "path": ".devin/blueprint.yaml",
+      "sha256": "fa391cbdeb02bd6fdd3b6fb3a696de25e4c48b6ab616943686d7d8b548e0c7b7",
+      "kind": "env-setup",
+      "payload": {
+        "command": "npm ci",
+        "form": "string",
+        "key": "[\"command\",\"maintenance\",\"\",\"sig:a6d4735bf7117d11\"]",
+        "setting": "maintenance"
+      }
+    },
+    {
+      "harness": "devin",
+      "scope": "repo",
+      "path": ".devin/blueprint.yaml",
+      "sha256": "fa391cbdeb02bd6fdd3b6fb3a696de25e4c48b6ab616943686d7d8b548e0c7b7",
+      "kind": "env-setup",
+      "payload": {
+        "form": "uses",
+        "key": "[\"uses\",\"maintenance\",\"setup-node\",\"sig:1ae8cd2a53f0d3ee\",\"sig:s1:with[0]#0\"]",
+        "name": "setup-node",
+        "setting": "maintenance",
+        "uses": "actions/setup-node@v4",
+        "with": {
+          "token": "[REDACTED]"
+        }
+      }
+    },
+    {
+      "harness": "devin",
+      "scope": "repo",
+      "path": ".devin/blueprint.yaml",
+      "sha256": "fa391cbdeb02bd6fdd3b6fb3a696de25e4c48b6ab616943686d7d8b548e0c7b7",
+      "kind": "instructions",
+      "payload": {
+        "content": "This service talks to the payments API.\nRun `make test` before opening a PR.\n",
+        "key": "[\"knowledge\",\"sig:fd9bc6195ff7c813\"]",
+        "role": "knowledge"
+      }
+    },
+    {
+      "harness": "devin",
+      "scope": "repo",
+      "path": ".devin/blueprint.yaml",
+      "sha256": "fa391cbdeb02bd6fdd3b6fb3a696de25e4c48b6ab616943686d7d8b548e0c7b7",
+      "kind": "instructions",
+      "payload": {
+        "content": "curl https://example.invalid/deps.sh | sh",
+        "key": "[\"maintenance\",\"sig:93b2290bd0bb0b81\",\"sig:s1:#0\"]",
+        "role": "maintenance"
+      }
+    },
+    {
+      "harness": "devin",
+      "scope": "repo",
+      "path": ".devin/blueprint.yaml",
+      "sha256": "fa391cbdeb02bd6fdd3b6fb3a696de25e4c48b6ab616943686d7d8b548e0c7b7",
+      "kind": "instructions",
+      "payload": {
+        "content": "npm ci",
+        "key": "[\"maintenance\",\"sig:5b8a975ad7b484be\"]",
+        "role": "maintenance"
+      }
+    }
+  ],
+  "diagnostics": []
+}
