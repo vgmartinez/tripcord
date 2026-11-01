@@ -86,6 +86,21 @@ fetch piped into Invoke-Expression), `"encoded"` (`powershell
 backticks, and `eval`, and costs one unit per byte it reads at each
 nesting level, so prefer it to long regexes over hook commands.
 
+`shell.locations(command)` reads the line the same way and returns
+where the programs it runs live: the program of each simple command,
+and the script an interpreter is given (`bash x.sh`, `python x.py`,
+`node x.js`, `pwsh -File x.ps1`, `source x`). The classes are
+`"network"` (a non-loopback URL or a UNC share), `"home"` (`~`,
+`$HOME`, `%USERPROFILE%`, `/home/<user>`, ...), `"temp"` (`/tmp`,
+`$TMPDIR`, `%TEMP%`, ...), `"absolute"` (any other absolute path,
+except a binary without a script extension under a system directory
+such as `/usr/local/bin`), and `"parent"` (`../x.sh`). Relative paths,
+`$CLAUDE_PROJECT_DIR`, `$CLAUDE_PLUGIN_ROOT`, `$GEMINI_PROJECT_DIR`,
+`$CURSOR_PROJECT_DIR`, and `$PWD` are the project directory; other
+variables, substitutions, and programs on `PATH` have no location.
+Arguments are not read, so `cat ~/.ssh/config` is not a home program.
+It costs what `shell.risks` costs.
+
 Reading a field that is missing makes the whole expression false, not
 an error. That fails open for negations and deny rules:
 `!(payload.tools.size() > 0)` would be false for a server with no

@@ -362,6 +362,45 @@ func TestShellRisks(t *testing.T) {
 	}
 }
 
+func TestShellLocations(t *testing.T) {
+	env := testEnv(t)
+	in := taskInput(t, env.Limits(), `{"command":"bash -c '~/.x/run.sh && /tmp/y.sh'","exec":"/srv/hooks/check","args":["../x.sh"],"mixed":["sh",1],"safe":"\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/x.sh"}`)
+	for src, want := range map[string]bool{
+		`has(payload.command) && shell.locations(payload.command) == ["home", "temp"]`: true,
+		`has(payload.safe) && shell.locations(payload.safe).size() == 0`:               true,
+		`has(payload.exec) && "absolute" in shell.locations(payload.exec)`:             true,
+		`has(payload.args) && shell.locations(["bash"] + payload.args) == ["parent"]`:  true,
+	} {
+		got, err := compileT(t, env, src).Eval(context.Background(), in)
+		if err != nil || got != want {
+			t.Errorf("%s = %v, %v; want %v", src, got, err, want)
+		}
+	}
+	if _, err := compileT(t, env, `has(payload.mixed) && shell.locations(payload.mixed).size() > 0`).Eval(context.Background(), in); err == nil {
+		t.Error("non-string list element was not reported")
+	}
+}
+
+// TestShellLocationsCost checks that shell.locations is charged like
+// shell.risks: by the bytes read at every level.
+func TestShellLocationsCost(t *testing.T) {
+	setup := strings.Repeat("mkdir -p build && cp -r src build/ && ", 64*1024/38)
+	payload := `{"command":"bash -c '` + setup + `~/.x/run.sh'"}`
+	src := `has(payload.command) && shell.locations(payload.command).size() > 0`
+	for limit, want := range map[uint64]error{uint64(2 * len(setup)): ErrCostLimit, DefaultLimits().CostLimit: nil} {
+		limits := DefaultLimits()
+		limits.CostLimit = limit
+		env, err := NewEnv(limits)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = compileT(t, env, src).Eval(context.Background(), taskInput(t, limits, payload))
+		if !errors.Is(err, want) && err != want {
+			t.Errorf("cost limit %d: err = %v, want %v", limit, err, want)
+		}
+	}
+}
+
 // TestShellRisksCost checks that shell.risks is charged the bytes the
 // reader reads, at every level it reads them, on a dyn argument (a
 // payload field) as well as a string: a 64 KB bash -c payload is read

@@ -121,10 +121,10 @@ var (
 )
 
 // Env compiles expressions against the Tripcord variables. It has the
-// CEL standard library, the cel-go strings extension, and shell.risks.
-// None can read files, the network, the clock, or the environment.
-// matches() uses Go's RE2 engine and shell.risks a single pass of the
-// shellcmd reader; both run in linear time.
+// CEL standard library, the cel-go strings extension, shell.risks, and
+// shell.locations. None can read files, the network, the clock, or the
+// environment. matches() uses Go's RE2 engine and the shell functions a
+// single pass of the shellcmd reader; all run in linear time.
 type Env struct {
 	env    *cel.Env
 	limits Limits
@@ -139,6 +139,7 @@ func NewEnv(limits Limits) (*Env, error) {
 		cel.Variable(VarEvent, cel.MapType(cel.StringType, cel.DynType)),
 		ext.Strings(),
 		shellRisks,
+		shellLocations,
 		cel.ParserExpressionSizeLimit(limits.MaxExpressionBytes),
 		cel.ParserRecursionLimit(limits.MaxNesting),
 	)
@@ -163,7 +164,7 @@ var shellRisks = cel.Function(shellRisksName,
 		})),
 	cel.Overload(overloadShellRisksList, []*cel.Type{cel.ListType(cel.DynType)}, cel.ListType(cel.StringType),
 		cel.UnaryBinding(func(v ref.Val) ref.Val {
-			argv, err := stringList(v)
+			argv, err := stringList(shellRisksName, v)
 			if err != nil {
 				return types.WrapErr(err)
 			}
@@ -171,29 +172,61 @@ var shellRisks = cel.Function(shellRisksName,
 		})),
 )
 
-const (
-	shellRisksName           = "shell.risks"
-	overloadShellRisksString = "shell_risks_string"
-	overloadShellRisksList   = "shell_risks_list"
+// shell.locations(command) and shell.locations([program, arg, ...])
+// return where the programs and scripts a hook command runs live:
+// "network", "home", "temp", "absolute", and "parent" (see
+// shellcmd.Locate). A program on PATH or inside the project has none.
+var shellLocations = cel.Function(shellLocationsName,
+	cel.Overload(overloadShellLocationsString, []*cel.Type{cel.StringType}, cel.ListType(cel.StringType),
+		cel.UnaryBinding(func(v ref.Val) ref.Val {
+			s, ok := v.(types.String)
+			if !ok {
+				return types.MaybeNoSuchOverloadErr(v)
+			}
+			r := shellcmd.Locate(string(s))
+			return newWorkList(r.Locations, r.Work)
+		})),
+	cel.Overload(overloadShellLocationsList, []*cel.Type{cel.ListType(cel.DynType)}, cel.ListType(cel.StringType),
+		cel.UnaryBinding(func(v ref.Val) ref.Val {
+			argv, err := stringList(shellLocationsName, v)
+			if err != nil {
+				return types.WrapErr(err)
+			}
+			r := shellcmd.LocateArgv(argv)
+			return newWorkList(r.Locations, r.Work)
+		})),
 )
 
-// risksList is the list shell.risks returns, carrying the work the
-// reader did so shellRisksCost can charge it.
+const (
+	shellRisksName               = "shell.risks"
+	overloadShellRisksString     = "shell_risks_string"
+	overloadShellRisksList       = "shell_risks_list"
+	shellLocationsName           = "shell.locations"
+	overloadShellLocationsString = "shell_locations_string"
+	overloadShellLocationsList   = "shell_locations_list"
+)
+
+// risksList is the list a shell function returns, carrying the work the
+// reader did so shellCost can charge it.
 type risksList struct {
 	traits.Lister
 	work uint64
 }
 
 func newRisksList(r shellcmd.Result) risksList {
-	return risksList{Lister: types.NewStringList(types.DefaultTypeAdapter, r.Risks), work: uint64(r.Work)}
+	return newWorkList(r.Risks, r.Work)
 }
 
-// shellRisksCost charges shell.risks one unit per byte the reader read,
-// at every nesting level it read it: about len × (depth + 1). The
-// reader takes a few nanoseconds a byte, so this is the same rate or
-// slower than the rest of CEL, and the cost limit, not the clock,
-// decides when a long command is too much.
-func shellRisksCost(result ref.Val) *uint64 {
+func newWorkList(items []string, work int) risksList {
+	return risksList{Lister: types.NewStringList(types.DefaultTypeAdapter, items), work: uint64(work)}
+}
+
+// shellCost charges shell.risks and shell.locations one unit per byte
+// the reader read, at every nesting level it read it: about
+// len × (depth + 1). The reader takes a few nanoseconds a byte, so this
+// is the same rate or slower than the rest of CEL, and the cost limit,
+// not the clock, decides when a long command is too much.
+func shellCost(result ref.Val) *uint64 {
 	n := uint64(1)
 	if r, ok := result.(risksList); ok {
 		n += r.work
@@ -201,29 +234,29 @@ func shellRisksCost(result ref.Val) *uint64 {
 	return &n
 }
 
-// costEstimator charges shell.risks by function name: with a dyn
+// costEstimator charges the shell functions by name: with a dyn
 // argument the checker cannot pick one overload, so the call has no
 // overload id an overload tracker could match. Other functions keep
 // the standard costs.
 type costEstimator struct{}
 
 func (costEstimator) CallCost(function, _ string, _ []ref.Val, result ref.Val) *uint64 {
-	if function != shellRisksName {
+	if function != shellRisksName && function != shellLocationsName {
 		return nil
 	}
-	return shellRisksCost(result)
+	return shellCost(result)
 }
 
-func stringList(v ref.Val) ([]string, error) {
+func stringList(function string, v ref.Val) ([]string, error) {
 	list, ok := v.(traits.Lister)
 	if !ok {
-		return nil, errors.New("shell.risks: argument is not a list")
+		return nil, errors.New(function + ": argument is not a list")
 	}
 	var out []string
 	for it := list.Iterator(); it.HasNext() == types.True; {
 		s, ok := it.Next().(types.String)
 		if !ok {
-			return nil, errors.New("shell.risks: list element is not a string")
+			return nil, errors.New(function + ": list element is not a string")
 		}
 		out = append(out, string(s))
 	}

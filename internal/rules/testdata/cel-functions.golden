@@ -47,6 +47,7 @@ lowerAscii
 matches
 replace
 reverse
+shell.locations
 shell.risks
 size
 split
