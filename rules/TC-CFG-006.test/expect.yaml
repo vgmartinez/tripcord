@@ -11,14 +11,17 @@ positivos:
   claude-parent-dir: medium
   claude-plugin-hooks-json: high
   claude-project-dir-escape: medium
+  claude-unc-command: high
   codex-config-toml-tmp: high
   codex-hooks-json-home: high
   copilot-bash-home: high
   copilot-exec-args-tmp: high
   copilot-exec-numeric-arg: high
   copilot-powershell-temp: high
+  copilot-powershell-unc: high
   cursor-absolute-users: high
   cursor-home-script: high
+  cursor-unc-quoted: high
   gemini-tmp-script: high
   missing-claude-project-dir: medium
   missing-codex-hooks-json: medium

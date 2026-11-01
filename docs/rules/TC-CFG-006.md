@@ -43,7 +43,11 @@ thumb. These are the ones a reviewer should know.
 **What counts as remote.** A hook `url`, or a program or script written
 as an `http`, `https`, or `ftp` URL, whose host is not loopback
 (`localhost`, `127.0.0.0/8`, `[::1]`), and a UNC path (`\\host\share`,
-`//host/share`). A URL that is only an argument (`./notify.sh
+`//host/share`). A UNC path is high in every command field, bare,
+quoted, or as a `-File` or interpreter script, including a Copilot
+`powershell` field: a POSIX shell would read an unquoted `\\` as one
+backslash, but cmd.exe and PowerShell run the file from the share, and
+a hook does not say which shell runs it. A URL that is only an argument (`./notify.sh
 https://...`) is not a target. A `curl` or `wget` inside the command is
 not read by this rule: TC-CFG-001 reports it in session-start hooks and
 TC-CFG-008 in Cursor, Copilot, and Windsurf hooks.
