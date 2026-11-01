@@ -191,7 +191,7 @@ func (c *Collector) SourceSHA(scope model.Scope, path, sha string) *Source {
 // TrustSanitized makes Sanitize return a string f reports as already
 // sanitized as it is, with nothing removed. It is for an adapter that
 // runs the same string sanitization itself and signs its own output
-// (see EntrySignature): re-sanitizing that text protects nothing, since
+// (see EntryKey): re-sanitizing that text protects nothing, since
 // it is already in the payload as written, while kit's key and array
 // rules still apply to the whole entry.
 func (s *Source) TrustSanitized(f func(string) bool) *Source {
