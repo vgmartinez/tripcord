@@ -4,7 +4,7 @@
 | --- | --- |
 | Severity | medium |
 | Harnesses | generic (`AGENTS.md`), Claude Code, Gemini CLI, Windsurf, GitHub Copilot, Cursor, Devin |
-| Files | TC-CFG-011's repository paths, except `AGENTS.local.md` and `GEMINI.local.md`, plus every repository `skill` item and emitted Claude `agent` / `command` item (including plugin-root paths), `.windsurf/rules/**/*.md`, and Devin maintenance commands and knowledge |
+| Files | TC-CFG-011's repository paths, except `AGENTS.local.md` and `GEMINI.local.md`, plus every repository `skill` item and emitted Claude `agent` / `command` item (including plugin-root paths), `.windsurf/rules/**/*.md`, and Devin blueprint `knowledge` contents (blueprint `initialize` / `maintenance` text is shell input for TC-CFG-009, not instructions) |
 | Rule | [`rules/TC-CFG-012.yaml`](../../rules/TC-CFG-012.yaml) |
 
 ## What it detects

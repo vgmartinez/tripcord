@@ -1,0 +1,3 @@
+maintenance:
+  - name: load-env
+    run: "cat .env"

@@ -41,7 +41,8 @@ fingerprint key, `sig:s1:` without one); see
   text). The doc surfaces maintenance commands and loads knowledge
   into the agent's context. `initialize` is documented as build-only,
   so its text is not an instruction item. Hidden code points in the
-  surfaced text are located for TC-CFG-011.
+  surfaced text are located for TC-CFG-011. Maintenance text stays
+  shell input: TC-CFG-012 reads only the `knowledge` items.
 
 A blueprint that is not one YAML mapping, or a section whose shape is
 not a string or a list, is reported and does not stop the rest of the
