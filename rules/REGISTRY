@@ -6,3 +6,4 @@
 # its file and change its status to retired. Never remove or reuse a
 # line: CI compares this file with the pull request base.
 TC-CFG-001 active tripcord/core@2026.11
+TC-CFG-002 active tripcord/core@2026.11

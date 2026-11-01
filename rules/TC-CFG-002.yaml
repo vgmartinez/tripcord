@@ -1,0 +1,19 @@
+# VS Code, and the Cursor and Windsurf forks, start a task with
+# runOptions.runOn "folderOpen" as soon as the folder is opened (once the
+# workspace is trusted). The npm worm of August 2026 planted one.
+# Only the task's own runOptions is read, compared exactly as the spec
+# writes it.
+id: TC-CFG-002
+pack: tripcord/core
+title: "VS Code task that runs when the folder opens"
+severity: high
+harness: [vscode, cursor, windsurf]
+files: [".vscode/tasks.json"]
+when: >-
+  config.kind == "task" &&
+    has(task.runOptions) && type(task.runOptions) == map &&
+    has(task.runOptions.runOn) && task.runOptions.runOn == "folderOpen"
+fix: "Remove runOn: folderOpen or move the task to an explicit script"
+refs:
+  - https://workos.com/blog/npm-worm-coding-agent-config-credentials
+  - https://code.visualstudio.com/docs/debugtest/tasks
