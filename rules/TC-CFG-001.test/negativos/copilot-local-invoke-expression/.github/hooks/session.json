@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "type": "command",
+        "powershell": "oh-my-posh init pwsh --config ./theme.omp.json | Invoke-Expression"
+      }
+    ]
+  }
+}

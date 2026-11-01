@@ -18,9 +18,13 @@
 #   another command. localhost, 127.0.0.0/8, and [::1] are loopback;
 #   localhost@host and localhost.host are not. uvx --from and pipx run
 #   --spec of a local path run local code.
-# pipe: any unquoted pipe into a shell or Invoke-Expression, loopback or
-#   not, except a relative script piped into a bare shell (./x.sh | sh).
+# pipe: any unquoted pipe into a shell, loopback or not, except a
+#   relative script piped into a bare shell (./x.sh | sh); a pipe into
+#   Invoke-Expression only when a command in that pipeline fetches, so
+#   oh-my-posh init pwsh | Invoke-Expression is quiet like eval of it.
 # encoded: PowerShell -EncodedCommand, an opaque payload.
+# nested: a payload nested deeper than the reader follows (eight levels
+#   of $( ), -c, or eval), reported so that nesting cannot hide a fetch.
 #
 # npx and bunx of a bare name (npx tsc) are read as a local or
 # devDependency binary: the expression cannot read package.json.
