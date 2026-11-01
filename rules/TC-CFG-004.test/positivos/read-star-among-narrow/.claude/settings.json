@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": ["Bash(go test ./...)", "Bash(npm run lint)", "Read(*)", "WebFetch(domain:pkg.go.dev)"],
+    "defaultMode": "acceptEdits"
+  },
+  "env": {"GITHUB_TOKEN": "cfg004-env-secret"}
+}

@@ -1,0 +1,34 @@
+[
+  {
+    "harness": "claude",
+    "scope": "repo",
+    "path": ".claude/settings.json",
+    "sha256": "",
+    "kind": "permissions",
+    "payload": {"setting": "permissions", "value": {"allow": "Bash(*)"}}
+  },
+  {
+    "harness": "claude",
+    "scope": "repo",
+    "path": ".claude/settings.json",
+    "sha256": "",
+    "kind": "permissions",
+    "payload": {"setting": "permissions", "value": {"allow": [1, null, {"tool": "Bash(*)"}]}}
+  },
+  {
+    "harness": "claude",
+    "scope": "repo",
+    "path": ".claude/settings.json",
+    "sha256": "",
+    "kind": "permissions",
+    "payload": {"setting": "permissions", "value": ["Bash(*)"]}
+  },
+  {
+    "harness": "claude",
+    "scope": "user",
+    "path": "~/.claude/settings.json",
+    "sha256": "",
+    "kind": "permissions",
+    "payload": {"setting": "permissions", "value": {"allow": ["Bash(*)"]}}
+  }
+]

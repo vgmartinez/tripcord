@@ -1,0 +1,25 @@
+# An allow rule is applied without asking. In shared settings a broad
+# wildcard such as Bash(*) or Read(*) pre-approves every command or every
+# file for everyone who opens the repo, and Novee showed allow overriding
+# ask in claude-code-action.
+#
+# Broad means the whole specifier is wildcards: Tool(*), Tool(**). Bare
+# tool names (Bash), path globs (Read(/**)), and prefix rules
+# (Bash(npm run test:*)) are not matched. settings.local.json is personal
+# and not read.
+id: TC-CFG-004
+pack: tripcord/core
+title: "permissions.allow with a broad wildcard in shared config"
+severity: high
+harness: [claude]
+files: ["**/.claude/settings.json"]
+when: >-
+  config.kind == "permissions" && config.scope == "repo" &&
+    has(payload.setting) && payload.setting == "permissions" &&
+    has(payload.value) && type(payload.value) == map &&
+    has(payload.value.allow) && type(payload.value.allow) == list &&
+    payload.value.allow.exists(e, type(e) == string && e.matches(r'''^\s*[A-Za-z_][A-Za-z0-9_-]*\(\s*\*+\s*\)\s*$'''))
+fix: "Replace the wildcard with the specific commands or paths the project needs, for example Bash(go test ./...)."
+refs:
+  - https://novee.security/blog/breaking-ai-agent-sandboxes/
+  - https://code.claude.com/docs/en/settings
