@@ -135,7 +135,12 @@ Order:
   no checksum credit. This prevents a downloaded script from being
   written through a link (including one to the sums file or outside the
   repository), and prevents a sums-file symlink from aliasing the
-  downloaded script.
+  downloaded script. The repository directory is inspected
+  case-insensitively: `T.SH` is treated as a match for `t.sh`, because
+  macOS and Windows may open it for `t.sh`. A symlink or non-regular
+  case variant therefore also gets no credit. For a sums file, any
+  alternate-cased entry (even a regular one) gets no credit, so the
+  named sums file is unambiguous.
 
 Copilot steps whose effective shell is fail-closed are read with a
 leading `set -e`, so a check on its own line counts there.
