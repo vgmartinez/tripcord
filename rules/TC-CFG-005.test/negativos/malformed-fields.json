@@ -20,7 +20,7 @@
   {"harness": "gemini", "scope": "repo", "path": ".gemini/settings.json", "sha256": "",
    "kind": "permissions", "payload": {"setting": "general", "value": "yolo"}},
   {"harness": "gemini", "scope": "repo", "path": ".gemini/settings.json", "sha256": "",
-   "kind": "permissions", "payload": {"setting": "tools", "value": {"autoAccept": "true"}}},
+   "kind": "permissions", "payload": {"setting": "tools", "value": {"autoAccept": "on"}}},
   {"harness": "gemini", "scope": "user", "path": "~/.gemini/settings.json", "sha256": "",
    "kind": "permissions", "payload": {"setting": "autoAccept", "value": true}}
 ]

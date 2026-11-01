@@ -12,6 +12,8 @@ positivos:
   codex-nested-service: high
   codex-profile-approval-never: high
   codex-profile-yolo: high
+  gemini-auto-accept-string-mixed-case: high
   gemini-default-approval-yolo: high
+  gemini-flat-auto-accept-string-upper: high
   gemini-flat-auto-accept: high
   gemini-tools-auto-accept: high

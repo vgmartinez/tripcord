@@ -41,9 +41,18 @@ not rely on that.
 In Gemini CLI, yolo approves every tool call and `autoAccept` approves
 the tool calls it considers safe without asking.
 
-Values are compared exactly, as the harnesses read them. A Codex
-config with both `danger-full-access` and `approval_policy = "never"`
-is two findings, one per setting.
+A Codex config with both `danger-full-access` and
+`approval_policy = "never"` is two findings, one per setting.
+
+**Case.** Each value is compared the way its harness reads it, and keys
+are case-sensitive in all three:
+
+| Harness | Value | Case |
+| --- | --- | --- |
+| Claude Code | `defaultMode` | exact: a zod enum after mapping the alias `manual` to `default`, so `BypassPermissions` is not the mode |
+| Codex | `sandbox_mode`, `approval_policy` | exact: serde enums with fixed names (`danger-full-access`, `never`) |
+| Gemini CLI | `defaultApprovalMode` | exact: a string switch, and `YOLO` is rejected as an invalid mode |
+| Gemini CLI | `autoAccept`, `tools.autoAccept` | `true`, or a string `"true"` in any case: the settings loader converts boolean strings case-insensitively |
 
 Not reported:
 
@@ -51,6 +60,8 @@ Not reported:
 - Other modes: `acceptEdits`, `plan`, `default`, `workspace-write`,
   `read-only`, `on-request`, `auto_edit`.
 - `skipDangerousModePermissionPrompt: false`, and `autoAccept: false`.
+- A value in another case where the harness compares exactly:
+  `BypassPermissions`, `Danger-Full-Access`, `NEVER`, `YOLO`.
 - Mentions of the mode inside other values, such as an allow rule
   `Bash(grep -rn bypassPermissions docs/)`.
 

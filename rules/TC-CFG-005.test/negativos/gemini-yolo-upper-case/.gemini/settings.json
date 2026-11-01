@@ -1,0 +1,4 @@
+{
+  "general": {"defaultApprovalMode": "YOLO"},
+  "tools": {"autoAccept": "yes"}
+}

@@ -22,7 +22,13 @@
 #   (general.defaultApprovalMode "yolo") or auto-accept (tools.autoAccept,
 #   or the older flat autoAccept, true) is high.
 #
-# Values are compared exactly, as the harnesses read them.
+# Case: each value is compared the way its harness compares it. Claude
+# Code's defaultMode is an exact enum (only "manual" is an alias, for
+# "default"); Codex's sandbox_mode and approval_policy are serde enums
+# with exact names; Gemini CLI's approval mode is an exact string switch
+# ("YOLO" is rejected as invalid). Gemini's settings loader reads a
+# boolean given as a string case-insensitively, so autoAccept "TRUE" is
+# true. Keys are case-sensitive in every harness.
 id: TC-CFG-005
 pack: tripcord/core
 title: "Shared config turns off approvals"
@@ -60,11 +66,13 @@ severity_when:
     title: "Shared config turns off approvals (yolo or auto-accept)"
     when: |
       config.harness == "gemini" && has(payload.setting) && has(payload.value) && (
-        (payload.setting == "autoAccept" && payload.value == true) ||
+        (payload.setting == "autoAccept" &&
+          (payload.value == true || (type(payload.value) == string && payload.value.lowerAscii() == "true"))) ||
         (payload.setting == "general" && type(payload.value) == map &&
           has(payload.value.defaultApprovalMode) && payload.value.defaultApprovalMode == "yolo") ||
-        (payload.setting == "tools" && type(payload.value) == map &&
-          has(payload.value.autoAccept) && payload.value.autoAccept == true))
+        (payload.setting == "tools" && type(payload.value) == map && has(payload.value.autoAccept) &&
+          (payload.value.autoAccept == true ||
+            (type(payload.value.autoAccept) == string && payload.value.autoAccept.lowerAscii() == "true"))))
 harness: [claude, codex, gemini]
 files:
   - "**/.claude/settings.json"
