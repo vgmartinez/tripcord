@@ -16,12 +16,13 @@ import (
 //     deno run whose every remote target is an allowlisted https URL
 //     (see immutableURL), or a .NET Download* call whose every remote
 //     URL is. Piping that download into a shell is pinned.
-//   - Checksum. Nothing is piped into a shell or Invoke-Expression, and
-//     each command that fetches is followed, as the next statement of
-//     the same command line, by a SHA-2 checksum check (sha256sum,
-//     sha384sum, or sha512sum with -c or --check, or shasum -a 256, 384,
-//     or 512 with -c) that stops the line when it fails: it is joined to
-//     what follows by &&, ends the line, or runs after set -e.
+//   - Checksum. Each direct fetch is followed by sha256sum -c <file>
+//     (or sha384sum, sha512sum, or shasum -a 256|384|512). The file is
+//     not /dev/* or -, and the check has no other flag. It is joined to
+//     the fetch and to whatever runs it only by &&, in one simple list.
+//     A top-level set -e or set -euo pipefail also covers a check on its
+//     own statement, unless the line has a later set +e, a ||, a !, or
+//     a pipe, or the set is inside a subshell, function, or if.
 //
 // Package runners (npx, bunx, pnpm and yarn dlx, uvx, pipx run), git
 // clone, inline python or node code, a variable target, and a .NET
@@ -266,72 +267,202 @@ func isHex(s string) bool {
 	return true
 }
 
-// verifiedFetches reports that each command marked in direct is
-// followed, as the next statement, by a checksum check that stops the
-// line when it fails (see Unpinned).
+// verifiedFetches reports that each direct fetch is covered by a clean
+// checksum (see Unpinned). Anything short of the two accepted shapes is
+// not verified.
 func verifiedFetches(cmds []command, direct []bool) bool {
-	errexit := make([]bool, len(cmds))
-	on := false
-	for i, c := range cmds {
-		errexit[i] = on
-		on = on || setsErrexit(c.words)
+	if !anyDirect(direct) {
+		return true
 	}
-	for i, d := range direct {
-		if !d {
-			continue
-		}
-		next := -1
-		for j := i + 1; j < len(cmds); j++ {
-			if cmds[j].stmt != cmds[i].stmt {
-				next = j
-				break
-			}
-		}
-		if next < 0 {
-			return false
-		}
-		checked, last := false, next
-		for j := next; j < len(cmds) && cmds[j].stmt == cmds[next].stmt; j++ {
-			checked = checked || checksumCheck(cmds[j].words)
-			last = j
-		}
-		if !checked {
-			return false
-		}
-		switch cmds[last].sep {
-		case "&&", "":
-		case opSep:
-			if !errexit[last] {
+	if topLevelErrexit(cmds) && !checksumDisqualified(cmds) {
+		for i, d := range direct {
+			if d && !checksumFollows(cmds, i) {
 				return false
 			}
-		default:
+		}
+		return true
+	}
+	for i, d := range direct {
+		if d && !andListVerified(cmds, i) {
 			return false
 		}
 	}
 	return true
 }
 
-// setsErrexit reports set -e (alone or in a cluster such as -eu) or
-// set -o errexit.
-func setsErrexit(words []string) bool {
-	w := unwrap(words)
-	if len(w) == 0 || w[0] != "set" {
-		return false
-	}
-	for i, a := range w[1:] {
-		switch {
-		case a == "-o" && i+2 < len(w) && w[i+2] == "errexit":
-			return true
-		case len(a) > 1 && a[0] == '-' && a[1] != '-' && strings.IndexByte(a[1:], 'e') >= 0:
+func anyDirect(direct []bool) bool {
+	for _, d := range direct {
+		if d {
 			return true
 		}
 	}
 	return false
 }
 
-// checksumCheck reports sha256sum, sha384sum, or sha512sum with -c or
-// --check, or shasum with -c and -a 256, 384, or 512.
-func checksumCheck(words []string) bool {
+// topLevelErrexit reports a set -e or set -euo pipefail that is not
+// inside (), {}, if/while/for/case, or a function body, and that appears
+// before a direct fetch would rely on it. set +e anywhere defeats it.
+func topLevelErrexit(cmds []command) bool {
+	compound := 0
+	enabled := false
+	for _, c := range cmds {
+		if c.depth == 0 && compound == 0 {
+			on, off := setErrexit(c.words)
+			if off {
+				return false
+			}
+			if on && c.sep != "||" {
+				enabled = true
+			}
+		}
+		compound = adjustCompound(compound, c.words)
+	}
+	return enabled
+}
+
+// checksumDisqualified reports a ||, a !, or a pipe anywhere on the
+// line. Those defeat a top-level set -e.
+func checksumDisqualified(cmds []command) bool {
+	for _, c := range cmds {
+		if c.pipeIn || c.sep == "||" || hasBang(c.words) {
+			return true
+		}
+	}
+	return false
+}
+
+func andListVerified(cmds []command, fetch int) bool {
+	if cmds[fetch].sep != "&&" || statementLen(cmds, fetch) != 1 {
+		return false
+	}
+	start, end, ok := nextStatement(cmds, fetch)
+	if !ok || end-start != 1 || cmds[start].pipeIn || hasBang(cmds[start].words) || !cleanChecksum(cmds[start].words) {
+		return false
+	}
+	for j := start; j < len(cmds); j++ {
+		if cmds[j].pipeIn || cmds[j].sep == "||" || hasBang(cmds[j].words) {
+			return false
+		}
+	}
+	return cmds[start].sep == "&&" || cmds[start].sep == ""
+}
+
+func checksumFollows(cmds []command, fetch int) bool {
+	if statementLen(cmds, fetch) != 1 {
+		return false
+	}
+	start, end, ok := nextStatement(cmds, fetch)
+	return ok && end-start == 1 && !cmds[start].pipeIn && !hasBang(cmds[start].words) && cleanChecksum(cmds[start].words)
+}
+
+func statementLen(cmds []command, i int) int {
+	n := 1
+	for j := i - 1; j >= 0 && cmds[j].stmt == cmds[i].stmt; j-- {
+		n++
+	}
+	for j := i + 1; j < len(cmds) && cmds[j].stmt == cmds[i].stmt; j++ {
+		n++
+	}
+	return n
+}
+
+func nextStatement(cmds []command, i int) (start, end int, ok bool) {
+	for j := i + 1; j < len(cmds); j++ {
+		if cmds[j].stmt == cmds[i].stmt {
+			continue
+		}
+		start = j
+		end = j + 1
+		for end < len(cmds) && cmds[end].stmt == cmds[start].stmt {
+			end++
+		}
+		return start, end, true
+	}
+	return 0, 0, false
+}
+
+func hasBang(words []string) bool {
+	for _, w := range words {
+		if w == "!" {
+			return true
+		}
+	}
+	return false
+}
+
+func adjustCompound(depth int, words []string) int {
+	for _, w := range words {
+		switch w {
+		case "{", "if", "while", "until", "for", "case", "function":
+			depth++
+		case "}", "fi", "done", "esac":
+			if depth > 0 {
+				depth--
+			}
+		}
+	}
+	return depth
+}
+
+// setErrexit reports whether these words turn errexit on or off. A short
+// cluster enables it when it contains e (set -e, set -euo pipefail) and
+// disables it when the cluster starts with + (set +e).
+func setErrexit(words []string) (on, off bool) {
+	compound := 0
+	for i := 0; i < len(words); i++ {
+		w := words[i]
+		switch w {
+		case "{", "if", "while", "until", "for", "case", "function":
+			compound++
+			continue
+		case "}", "fi", "done", "esac":
+			if compound > 0 {
+				compound--
+			}
+			continue
+		}
+		if w != "set" || compound > 0 {
+			continue
+		}
+		for _, a := range words[i+1:] {
+			switch {
+			case a == "-o" || a == "+o":
+				continue
+			case a == "errexit":
+				continue
+			case len(a) > 1 && (a[0] == '-' || a[0] == '+') && a[1] != '-' && a[1] != '+':
+				if strings.IndexByte(a, 'e') < 0 {
+					continue
+				}
+				if a[0] == '+' {
+					off = true
+				} else {
+					on = true
+				}
+			}
+		}
+		// -o errexit and +o errexit are pairs, so scan them explicitly.
+		args := words[i+1:]
+		for j := 0; j < len(args); j++ {
+			if (args[j] == "-o" || args[j] == "+o") && j+1 < len(args) && args[j+1] == "errexit" {
+				if args[j] == "+o" {
+					off = true
+				} else {
+					on = true
+				}
+			}
+		}
+	}
+	return on, off
+}
+
+// cleanChecksum reports sha256sum, sha384sum, or sha512sum -c <file>,
+// or shasum -a 256|384|512 -c <file>. --check is the long form of -c.
+// Any other flag, a missing file, -, and /dev/* do not count.
+func cleanChecksum(words []string) bool {
+	if hasBang(words) {
+		return false
+	}
 	w := unwrap(words)
 	if len(w) == 0 {
 		return false
@@ -343,26 +474,43 @@ func checksumCheck(words []string) bool {
 		return false
 	}
 	check, strong := false, name != "shasum"
+	var files []string
 	args := w[1:]
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch {
+		case a == "--":
+			files = append(files, args[i+1:]...)
+			i = len(args)
 		case a == "--check":
 			check = true
-		case a == "-a" || a == "--algorithm":
-			if i+1 < len(args) {
-				i++
-				strong = strong || sha2Bits(args[i])
-			}
-		case strings.HasPrefix(a, "--algorithm="):
-			strong = strong || sha2Bits(strings.TrimPrefix(a, "--algorithm="))
-		case strings.HasPrefix(a, "-a") && name == "shasum":
-			strong = strong || sha2Bits(a[2:])
+		case strings.HasPrefix(a, "--"):
+			return false
+		case name == "shasum" && a == "-a" && i+1 < len(args):
+			i++
+			strong = sha2Bits(args[i])
+		case name == "shasum" && strings.HasPrefix(a, "-a") && len(a) > 2:
+			strong = sha2Bits(a[2:])
 		case len(a) > 1 && a[0] == '-' && a[1] != '-':
-			check = check || strings.IndexByte(a[1:], 'c') >= 0
+			for _, c := range a[1:] {
+				if c != 'c' {
+					return false
+				}
+				check = true
+			}
+		default:
+			files = append(files, a)
 		}
 	}
-	return check && strong
+	if !check || !strong || len(files) == 0 {
+		return false
+	}
+	for _, file := range files {
+		if file == "-" || file == "" || strings.HasPrefix(file, "/dev/") {
+			return false
+		}
+	}
+	return true
 }
 
 func sha2Bits(v string) bool {

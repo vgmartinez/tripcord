@@ -317,6 +317,9 @@ type command struct {
 	pipeIn bool
 	stmt   int
 	sep    string
+	// depth is the parenthesis nesting of this command. set -e inside
+	// ( ) does not cover the rest of the line.
+	depth int
 }
 
 // split groups tokens into simple commands and drops redirection
@@ -329,13 +332,15 @@ func split(toks []token) []command {
 	var cur command
 	dropNext := false
 	stmt := 0
+	depth := 0
 	end := func(pipeIn bool) {
 		if len(all) > start {
 			cur.words = all[start:len(all):len(all)]
+			cur.depth = depth
 			cmds = append(cmds, cur)
 		}
 		start = len(all)
-		cur = command{pipeIn: pipeIn, stmt: stmt}
+		cur = command{pipeIn: pipeIn, stmt: stmt, depth: depth}
 	}
 	for _, t := range toks {
 		switch t.op {
@@ -352,8 +357,14 @@ func split(toks []token) []command {
 		case opOpen:
 			// curl ... | (sh) still pipes into sh.
 			end(cur.pipeIn && len(all) == start)
+			depth++
+			cur.depth = depth
 		case ")":
 			end(false)
+			if depth > 0 {
+				depth--
+			}
+			cur.depth = depth
 		default:
 			stmt++
 			end(false)

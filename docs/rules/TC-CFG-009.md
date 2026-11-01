@@ -54,13 +54,15 @@ not.
   release asset, a tag, a branch, userinfo
   (`raw.githubusercontent.com@evil.example`), or a trailing-dot host
   is not a pin. The host match is case-insensitive.
-- **Checksum verified before execution.** Nothing is piped into a
-  shell, and each download is followed, as the very next statement, by
-  a SHA-2 checksum check (`sha256sum`, `sha384sum`, or `sha512sum` with
-  `-c`/`--check`, or `shasum -a 256|384|512 -c`) that stops the command
-  when it fails: it is joined to what follows by `&&`, it ends the
-  command, or it runs after `set -e` (or `set -o errexit`) on the same
-  command line.
+- **Checksum verified before execution.** The next statement is
+  `sha256sum -c <file>` (or `sha384sum`, `sha512sum`, or
+  `shasum -a 256|384|512 -c`). The file is not `-` or under `/dev`, and
+  the check has no other flag (`--ignore-missing`, `--quiet`, and the
+  rest do not count). It joins the download to the command that runs it
+  only with `&&`. A top-level `set -e` or `set -euo pipefail` also
+  covers a check on the following statement, unless the line later has
+  `set +e`, or has `||`, `!`, or a pipe anywhere. `set -e` inside a
+  subshell, a function, or `if` does not count.
 
 Never pinned: package runners (`npx -y`, `bunx`, `pnpm dlx`,
 `yarn dlx`, `uvx`, `pipx run`), tags, `git clone` (including a later

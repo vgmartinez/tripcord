@@ -98,9 +98,10 @@ when every fetch in the line is pinned (see `shellcmd.Unpinned`): each
 downloader target is an allowlisted https URL (GitHub raw, archive,
 codeload, or gist; jsDelivr `gh@<sha>`; GitLab `/-/raw/<sha>`; or an
 OCI `blobs`/`manifests` `sha256:` digest) with no userinfo, or, with nothing piped into a shell,
-each download is followed by a `sha256sum`/`sha384sum`/`sha512sum -c`
-(or `shasum -a 256|384|512 -c`) check that stops the line when it
-fails (`&&`, the end of the line, or `set -e`). Package runners, git
+each download is followed by a plain `sha256sum -c <file>`
+(`sha384sum`, `sha512sum`, or `shasum -a 256|384|512`) joined only by
+`&&`, or by the same check under a top-level `set -e` with no `set +e`,
+`||`, `!`, or pipe. Package runners, git
 clone, variable targets, and version tags are never pinned. It costs
 what `shell.risks` costs.
 

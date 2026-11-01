@@ -27,10 +27,11 @@
 #     (GitHub raw/archive/codeload/gist, jsDelivr gh@<sha>, GitLab
 #     /-/raw/<sha>), or an OCI blobs/manifests sha256 digest. A hex
 #     string on any other host, including a release asset, is not a pin.
-#   - Checksum verified before execution: nothing is piped into a
-#     shell, and each download is followed, as the next statement, by
-#     sha256sum, sha384sum, or sha512sum -c (or shasum -a 256, 384, or
-#     512 -c), joined to what follows by && or under set -e.
+#   - Checksum verified before execution: the next statement is
+#     sha256sum -c <file> (sha384sum, sha512sum, or shasum -a 256|384|512),
+#     with no other flag and no /dev file, joined only by &&. A top-level
+#     set -e or set -euo pipefail counts too, unless the line has set +e,
+#     ||, !, or a pipe, or the set is inside a subshell, function, or if.
 # Package runners (npx -y, uvx, pnpm dlx, ...), git clone (including a
 # later sha checkout), tags, and a variable target are never pinned.
 #
