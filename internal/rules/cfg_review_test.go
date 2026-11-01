@@ -263,15 +263,16 @@ func TestCFG004Severity(t *testing.T) {
 		"*", "mcp__*",
 		"PowerShell", "PowerShell(*)", "pwsh(*)", "Shell", "Cmd", "Terminal",
 		"run_shell_command", "run_shell_command(*)",
+		"Read(//**)", "Edit(//**)", "Edit( //* )",
 	}
 	medium := []string{
-		"Read", "Edit", "WebFetch",
+		"Read", "Edit", "Write", "WebFetch",
 		"Read(*)", "Read(/**)", "Read(~/**)",
-		"Edit(*)", "Edit( ** )", "Write(**)", "Write(*)",
+		"Edit(*)", "Edit( ** )", "Edit(/**)", "Write(**)", "Write(*)", "Write(//**)",
 		"WebFetch(*)", "WebFetch(domain:*)",
 	}
 	none := []string{
-		"Write",
+		"Read(//etc/**)", "Edit(///**)",
 		"Bash(go test ./...)", "Bash(npm run test:*)", "Bash(git:*)",
 		"Read(./docs/**)", "Edit(./src/**)",
 		"WebFetch(domain:docs.example.invalid)", "WebFetch(domain:pkg.go.dev)",

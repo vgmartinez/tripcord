@@ -2,14 +2,21 @@
 # broad entry pre-approves that tool for everyone who opens the
 # repository. Novee showed allow overriding ask in claude-code-action.
 #
-# Exec tools with a broad wildcard are high: bare Bash, Bash(*),
-# Bash(:*), Bash(**), *, mcp__*, and the same shapes for the shell
-# tools other harnesses spell (PowerShell, Shell, Cmd, run_shell_command).
-# Broad read and write are medium: bare Read, Edit, and WebFetch;
-# Read(*), Read(/**), Read(~/**), Edit(*), Write(**), WebFetch(*),
-# and WebFetch(domain:*). One permissions object is one finding, at the
-# first matching severity, so high wins when both are present.
-# settings.local.json is personal and is not part of this rule's files.
+# Paths follow Claude's permission syntax: //path is absolute from the
+# filesystem root, /path is relative to the project root, ~/path is the
+# home directory.
+#
+# High: exec tools with a broad wildcard (bare Bash, Bash(*), Bash(:*),
+# Bash(**), *, mcp__*, and the same shapes for PowerShell, Shell, Cmd,
+# Terminal, and run_shell_command), and Read(//**) or Edit(//**), which
+# cover the whole filesystem.
+# Medium: bare Read, Edit, Write, and WebFetch; Read(*), Read(/**),
+# Read(~/**), the same for Edit and Write, Write(//**), WebFetch(*), and
+# WebFetch(domain:*). Write takes no path pattern of its own (Edit rules
+# govern file writes), so Write(...) stays medium.
+# One permissions object is one finding, at the first matching
+# severity, so high wins when both are present. settings.local.json is
+# personal and is not part of this rule's files.
 id: TC-CFG-004
 pack: tripcord/core
 title: "permissions.allow with a broad rule in shared config"
@@ -17,28 +24,19 @@ severity: high
 severity_when:
   - severity: high
     when: |
-      config.kind == "permissions" && config.scope == "repo" &&
-        has(payload.setting) && payload.setting == "permissions" &&
-        has(payload.value) && type(payload.value) == map &&
+      has(payload.value) && type(payload.value) == map &&
         has(payload.value.allow) && type(payload.value.allow) == list &&
-        payload.value.allow.exists(e, type(e) == string && e.matches(r'''(?i)^\s*(\*+|mcp__\*+|(bash|powershell|pwsh|shell|cmd|terminal|run_shell_command)(\(\s*:?\s*\*+\s*\))?)\s*$'''))
+        payload.value.allow.exists(e, type(e) == string && e.matches(r'''(?i)^\s*(\*+|mcp__\*+|(bash|powershell|pwsh|shell|cmd|terminal|run_shell_command)(\(\s*:?\s*\*+\s*\))?|(read|edit)\(\s*//\*+\s*\))\s*$'''))
   - severity: medium
     when: |
-      config.kind == "permissions" && config.scope == "repo" &&
-        has(payload.setting) && payload.setting == "permissions" &&
-        has(payload.value) && type(payload.value) == map &&
+      has(payload.value) && type(payload.value) == map &&
         has(payload.value.allow) && type(payload.value.allow) == list &&
-        payload.value.allow.exists(e, type(e) == string && e.matches(r'''(?i)^\s*((read|edit|webfetch)|(read|edit|write|webfetch)\(\s*(\*+|/\*+|~/\*+|domain:\*)\s*\))\s*$'''))
+        payload.value.allow.exists(e, type(e) == string && e.matches(r'''(?i)^\s*(read|edit|write|webfetch)(\(\s*(/{0,2}\*+|~/\*+|domain:\*)\s*\))?\s*$'''))
 harness: [claude]
 files: ["**/.claude/settings.json"]
 when: |
   config.kind == "permissions" && config.scope == "repo" &&
-    has(payload.setting) && payload.setting == "permissions" &&
-    has(payload.value) && type(payload.value) == map &&
-    has(payload.value.allow) && type(payload.value.allow) == list &&
-    payload.value.allow.exists(e, type(e) == string && (
-      e.matches(r'''(?i)^\s*(\*+|mcp__\*+|(bash|powershell|pwsh|shell|cmd|terminal|run_shell_command)(\(\s*:?\s*\*+\s*\))?)\s*$''') ||
-      e.matches(r'''(?i)^\s*((read|edit|webfetch)|(read|edit|write|webfetch)\(\s*(\*+|/\*+|~/\*+|domain:\*)\s*\))\s*$''')))
+    has(payload.setting) && payload.setting == "permissions"
 fix: "Replace the broad allow with the specific commands or paths the project needs, for example Bash(go test ./...)."
 refs:
   - https://novee.security/blog/breaking-ai-agent-sandboxes/

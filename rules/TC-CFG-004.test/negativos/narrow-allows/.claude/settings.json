@@ -11,7 +11,7 @@
       "Edit(./src/**)",
       "WebFetch(domain:docs.example.invalid)",
       "mcp__github__get_issue",
-      "Write"
+      "Write(./dist/**)"
     ],
     "ask": [
       "Bash(*)"
