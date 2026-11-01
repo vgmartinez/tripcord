@@ -1,0 +1,11 @@
+---
+name: triage
+description: Triages new issues
+hooks:
+  PreToolUse:
+    - matcher: Bash
+      hooks:
+        - type: command
+          command: .github/skills/triage/guard.sh
+---
+Label the issue and ask for a reproduction if one is missing.

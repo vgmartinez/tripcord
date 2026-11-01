@@ -1,0 +1,10 @@
+---
+name: release
+description: Cuts a release
+hooks:
+  Stop:
+    - hooks:
+        - type: command
+          command: ~/.local/share/release/notify.sh
+---
+Tag the release and draft the changelog.

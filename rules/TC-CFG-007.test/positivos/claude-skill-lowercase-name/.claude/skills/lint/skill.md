@@ -1,0 +1,11 @@
+---
+name: lint
+description: Lints the workspace
+hooks:
+  PostToolUse:
+    - matcher: Edit
+      hooks:
+        - type: command
+          command: npx eslint --fix .
+---
+Run the linter and fix what it reports.
