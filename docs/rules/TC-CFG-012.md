@@ -38,7 +38,10 @@ URL, one or more determiners (`the`, `all`, `your`, `any`, `every`,
 `values of`, and one quote, backtick, `@`, or PowerShell `$env:`
 prefix. It does not skip arbitrary prose. `curl` and `wget` also match
 when a secret appears anywhere later in the same clause, so a flag
-value such as `-d @.env` still counts. A target followed by a
+value such as `-d @.env` still counts. Authorization and user flags
+(`-H`, `--header`, `-u`, `--user`, `--oauth2-bearer`) and plain
+http(s) URLs are ignored. A URL that contains `$(` or a backtick is
+kept, so `$(cat .env)` inside it still counts. A target followed by a
 documentation modifier, singular or plural—such as `credentials
 section`, `token budgets`, `API key policies`, or `secrets
 template`—is quiet.
@@ -56,6 +59,7 @@ evidence use sanitized payloads, and no instruction body is exposed.
 
 Not reported:
 
+- A curl/wget auth header or user flag (`curl -H "Authorization: Bearer $GITHUB_TOKEN"`, `curl -u user:password`).
 - A negated read (`Do not read .env`, `Never print secrets`).
 - `.env.example`, `.env.sample`, `.env.template`, and `.envrc`.
 - A secret and an `https://` URL on different lines.

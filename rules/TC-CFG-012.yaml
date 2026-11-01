@@ -32,7 +32,10 @@
 # rest), "contents/values of", and one quote, backtick, @, or
 # PowerShell $env: prefix are allowed. curl and wget also match when a
 # secret appears anywhere later in the same clause, so a flag value
-# such as "-d @.env" still counts. Documentation modifiers after the
+# such as "-d @.env" still counts. Authorization and user flags
+# (-H/--header, -u/--user, --oauth2-bearer) and plain http(s) URLs are
+# ignored. A URL containing $( or a backtick is kept, so $(cat .env)
+# inside it still counts. Documentation modifiers after the
 # target, singular or plural (for example "token budgets", "API key
 # policies", or "credentials section"), do not count.
 #

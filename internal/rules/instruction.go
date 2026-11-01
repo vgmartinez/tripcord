@@ -18,6 +18,10 @@ var (
 	instructionObject    = regexp.MustCompile(`(?i)^[ \t]*(?:(?:--?[a-z][a-z0-9-]*(?:[= ][^ \t]*)?[ \t]+))*?(?:https?://[^ \t]+[ \t]+)?(?:(?:the|all|your|my|our|this|these|any|every|each|its|their|those)[ \t]+)*(?:(?:contents?|values?)[ \t]+of[ \t]+)?(?:\$env:)?(?:[` + "`" + `'"@][ \t]*)?`)
 	instructionModifier  = regexp.MustCompile(`(?i)^[ \t]*(?:-[a-z]|(?:sections?|polic(?:y|ies)|flows?|counts?|usage|budgets?|docs?|documentation|readme|tables?|runbooks?|design|handling|management|templates?|reset|fields?|requirements?|pages?|code|rotation|formats?|limits?|rules?|guides?|examples?|scopes?|refresh|expiry|expiration|validation|forms?)\b)`)
 	instructionClauseEnd = regexp.MustCompile(`[;]|(?:\.(?:[ \t]|$))`)
+	// Header and user-flag values are ordinary auth, not a secret read.
+	// Plain http(s) URLs are ignored too, except a URL that embeds $( or
+	// a backtick: stripping that URL would hide $(cat .env) inside it.
+	instructionCurlNoise = regexp.MustCompile(`(?i)(?:(?:^|[ \t])(?:-H|--header|-u|--user|--oauth2-bearer)(?:=|[ \t]+)(?:"[^"]*"|'[^']*'|[^ \t]+))|\bhttps?://(?:(?:[^ \t$` + "`" + `]|\$[^(\t ])*\$?)(?:[ \t]|$)`)
 	instructionURL       = regexp.MustCompile(`(?i)\bhttps?://`)
 	instructionNamedSink = regexp.MustCompile(`(?i)\b(?:webhooks?|gist|pastebin|slack|discord)\b`)
 	instructionDataSink  = regexp.MustCompile(`(?i)\b(?:curl|wget)\b[^\r\n]*(?:\B-(?:d|F)\b|--data(?:-[a-z]+)?(?:=|[ \t])|--form(?:=|[ \t])|(?:-X|--request)[ \t=]*POST\b)`)
@@ -40,7 +44,7 @@ func instructionMatchLine(content string) int {
 					continue
 				}
 				verb := strings.ToLower(rest[read[0]:read[1]])
-				if (verb == "curl" || verb == "wget") && instructionSecret.MatchString(instructionClause(rest[read[1]:])) {
+				if (verb == "curl" || verb == "wget") && instructionSecret.MatchString(instructionCurlNoise.ReplaceAllString(instructionClause(rest[read[1]:]), " ")) {
 					return line + 1
 				}
 				if instructionDirectSecret(rest[read[1]:]) {
