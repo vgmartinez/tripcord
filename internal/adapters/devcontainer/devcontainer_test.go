@@ -115,13 +115,13 @@ func TestSecretsSeparateFingerprints(t *testing.T) {
 func TestRunArgsKeepsNonSecretAssignments(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	kittest.WriteFile(t, filepath.Join(root, ".devcontainer.json"), `{"runArgs":["-e","MODE=dev","--env","API_KEY=k-1","-eX_TOKEN=t-1","--name","SECRET_KEY=not-an-env","-ePRIVATE_KEY=pk-1","-eHOME=/home/dev"]}`)
+	kittest.WriteFile(t, filepath.Join(root, ".devcontainer.json"), `{"runArgs":["-e","MODE=dev","--env","API_KEY=k-1","-eX_TOKEN=t-1","--name","SECRET_KEY=not-an-env","-ePRIVATE_KEY=pk-1","-eHOME=/home/dev","-eLANG=C","-ePATH=/usr/bin"]}`)
 	got := kittest.Discover(t, New(Options{}), root)
 	if len(got.Items) != 1 {
 		t.Fatalf("items = %+v", got.Items)
 	}
 	value, _ := kittest.Payload(t, got.Items[0])["value"].([]any)
-	want := []any{"-e", "MODE=dev", "--env", "API_KEY=" + kit.Redacted, "-eX_TOKEN=" + kit.Redacted, "--name", "SECRET_KEY=" + kit.Redacted, "-ePRIVATE_KEY=" + kit.Redacted, "-eHOME=/home/dev"}
+	want := []any{"-e", "MODE=dev", "--env", "API_KEY=" + kit.Redacted, "-eX_TOKEN=" + kit.Redacted, "--name", "SECRET_KEY=" + kit.Redacted, "-ePRIVATE_KEY=" + kit.Redacted, "-eHOME=/home/dev", "-eLANG=C", "-ePATH=/usr/bin"}
 	if len(value) != len(want) {
 		t.Fatalf("value = %v", value)
 	}
@@ -179,6 +179,79 @@ func TestRunArgsPasswordFlagKeepsNextElementRedacted(t *testing.T) {
 		if strings.Contains(report, leaked) {
 			t.Fatalf("%s output contains %q:\n%s", format, leaked, report)
 		}
+	}
+}
+
+func TestRunArgsGluedPartialRedaction(t *testing.T) {
+	t.Parallel()
+	token := "ghp_" + strings.Repeat("a", 36)
+	cases := []struct {
+		name   string
+		arg    string
+		secret []string
+	}{
+		{"bearer tail", "-eAPI_KEY=zsW06q Bearer zsW07q", []string{"zsW06q", "zsW07q"}},
+		{"comma assignment", "-ePRIVATE_KEY=zsV13q,token=" + token, []string{"zsV13q", token}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			kittest.WriteFile(t, filepath.Join(root, ".devcontainer.json"), `{"runArgs":["`+tc.arg+`"]}`)
+			got := kittest.Discover(t, New(Options{}), root)
+			if len(got.Items) != 1 {
+				t.Fatalf("items = %+v", got.Items)
+			}
+			item := got.Items[0]
+			payload := kittest.Payload(t, item)
+			raw := string(item.Payload)
+			for _, secret := range tc.secret {
+				if strings.Contains(raw, secret) {
+					t.Fatalf("payload contains %q: %s", secret, raw)
+				}
+			}
+			value, _ := payload["value"].([]any)
+			if len(value) != 1 {
+				t.Fatalf("value = %v", value)
+			}
+			text, _ := value[0].(string)
+			if !strings.HasPrefix(text, "-e") || !strings.Contains(text, kit.Redacted) {
+				t.Fatalf("value = %q", text)
+			}
+			key, _ := payload["key"].(string)
+			evidence := rules.ConfigEvidenceKey(item)
+			for _, secret := range tc.secret {
+				if key == "" || strings.Contains(key, secret) || strings.Contains(evidence, secret) {
+					t.Fatalf("key leaks %q: item %q evidence %q", secret, key, evidence)
+				}
+			}
+			finding, err := rules.Match{Rule: &rules.Rule{ID: "TC-TEST-004", Title: "runArgs", Fix: "none", Severity: model.SeverityHigh}, Item: item}.Finding(model.SeverityHigh, model.DecisionWarn)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, format := range []string{"json", "md", "sarif", "text", "gha"} {
+				var buf bytes.Buffer
+				handle, err := output.SelectSink(format, "", &buf, output.Options{Redactor: output.DefaultRedactor, RepoRoot: root, ToolVersion: "test"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := handle.Write(finding); err != nil {
+					t.Fatal(err)
+				}
+				if err := handle.Flush(); err != nil {
+					t.Fatal(err)
+				}
+				report := buf.String()
+				if !strings.Contains(report, "TC-TEST-004") {
+					t.Fatalf("%s report has no finding:\n%s", format, report)
+				}
+				for _, secret := range tc.secret {
+					if strings.Contains(report, secret) {
+						t.Fatalf("%s output contains %q:\n%s", format, secret, report)
+					}
+				}
+			}
+		})
 	}
 }
 

@@ -157,21 +157,21 @@ func (f *file) features(value any) {
 // runArgs sanitizes the docker run arguments as an argv. The shared
 // rules redact a credential-named NAME=VALUE element wherever it
 // appears, which covers -e NAME=VALUE and --env=NAME=VALUE. docker also
-// accepts the short flag glued to its value, -eNAME=VALUE, where the
-// shared rules would read "eNAME" as the name, so that assignment is
-// sanitized without its flag.
+// accepts the short flag glued to its value, -eNAME=VALUE, where those
+// rules read the name as "eNAME". After the shared pass, an element
+// that still starts with -e and contains = is sanitized again without
+// that flag, so a value the first pass only partly redacted is finished.
+// An element replaced entirely, such as the argument after --password,
+// is [REDACTED] and no longer starts with -e, so it is left as it is.
 func (f *file) runArgs(value any) any {
 	args, ok := value.([]any)
 	if !ok {
 		return f.SafeValue("runArgs", value)
 	}
 	out, _ := f.SafeValue("", f.SafeToolArgv(args)).([]any)
-	for i, arg := range args {
-		text, isString := arg.(string)
-		// Skip an element the shared rules already changed. "--password"
-		// redacts the next argv element, and rewriting it from the raw
-		// text would put that secret back.
-		if !isString || out[i] != arg {
+	for i, item := range out {
+		text, isString := item.(string)
+		if !isString {
 			continue
 		}
 		assignment, glued := strings.CutPrefix(text, "-e")
