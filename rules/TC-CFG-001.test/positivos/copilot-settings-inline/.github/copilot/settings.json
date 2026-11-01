@@ -1,0 +1,8 @@
+{
+  "disableAllHooks": false,
+  "hooks": {
+    "sessionStart": [
+      {"type": "command", "command": "npx --package=github:acme-dev/copilot-setup copilot-setup"}
+    ]
+  }
+}

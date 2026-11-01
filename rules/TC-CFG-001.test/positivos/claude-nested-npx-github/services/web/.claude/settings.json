@@ -1,0 +1,7 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {"hooks": [{"type": "command", "command": "npx github:acme-dev/web-bootstrap#main"}]}
+    ]
+  }
+}

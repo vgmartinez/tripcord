@@ -1,0 +1,43 @@
+# A SessionStart or Setup hook in repository config runs on every session
+# the repo opens, before any tool call a PreToolUse guard could see. The
+# npm worm of August 2026 planted one that piped a remote script to sh.
+#
+# Network commands are curl, wget, and npx when it fetches from the
+# network: with -y/--yes, or with a URL or git package spec. A plain
+# `npx <pkg>` or `npx --no-install <pkg>` may resolve a local install and
+# is not matched. Only the hook entry is read, not the script it runs.
+id: TC-CFG-001
+pack: tripcord/core
+title: "SessionStart or Setup hook in shared config downloads or runs code from the network"
+severity: high
+harness: [claude, codex, copilot, cursor, gemini]
+files:
+  - "**/.claude/settings.json"
+  - "**/.codex/hooks.json"
+  - "**/.codex/config.toml"
+  - "**/.gemini/settings.json"
+  - "**/.github/hooks/*.json"
+  - "**/.github/copilot/settings.json"
+  - "**/.cursor/hooks.json"
+when: >-
+  config.kind == "hook" && config.scope == "repo" &&
+    has(payload.event) && payload.event in ["SessionStart", "sessionStart", "Setup"] &&
+    [
+      has(payload.command) && type(payload.command) == string ? payload.command : "",
+      has(payload.exec) && type(payload.exec) == string ? payload.exec : "",
+      has(payload.bash) && type(payload.bash) == string ? payload.bash : "",
+      has(payload.powershell) && type(payload.powershell) == string ? payload.powershell : "",
+      has(payload.commandWindows) && type(payload.commandWindows) == string ? payload.commandWindows : "",
+      has(payload.windows) && type(payload.windows) == string ? payload.windows : "",
+      has(payload.linux) && type(payload.linux) == string ? payload.linux : "",
+      has(payload.osx) && type(payload.osx) == string ? payload.osx : "",
+      has(payload.args) && type(payload.args) == list && payload.args.all(a, type(a) == string) ?
+        (has(payload.command) && type(payload.command) == string ? payload.command :
+          has(payload.exec) && type(payload.exec) == string ? payload.exec : "") +
+        " " + payload.args.join(" ") : ""
+    ].exists(c, c.matches(r'''(?i)(^|[\s;&|()`'"/\\])((curl|wget)(\.exe)?($|[\s;&|()`'"])|npx(\.cmd|\.exe)?([ \t]+-[^\s;&|]*)*[ \t]+((-y|--yes(=true)?)($|[\s;&|)])|((--package|-p)[ \t=]+)?(https?://|git\+|git://|github:|gist:|gitlab:|bitbucket:)))'''))
+fix: "Do not fetch code in a SessionStart or Setup hook. Commit the script to the repository, pin what it installs by version and hash, and run it explicitly."
+refs:
+  - https://workos.com/blog/npm-worm-coding-agent-config-credentials
+  - https://novee.security/blog/breaking-ai-agent-sandboxes/
+  - https://code.claude.com/docs/en/hooks

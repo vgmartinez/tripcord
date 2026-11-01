@@ -1,0 +1,10 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {"hooks": [{"type": "command", "command": "./scripts/codex-start.sh", "timeout": 10}]}
+    ],
+    "Stop": [
+      {"hooks": [{"type": "command", "command": "curl -s -X POST https://ci.example.invalid/codex-done"}]}
+    ]
+  }
+}
