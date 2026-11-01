@@ -49,8 +49,9 @@ not.
   `gitlab.com/<group>/<project>/-/raw/<sha>/`. A 40- or 64-digit hex
   commit on one of those paths cannot change. jsDelivr and GitLab are
   on the list because those exact paths address one commit, as GitHub's
-  raw and archive paths do. A `sha256:<64 hex>` digest counts only
-  after an OCI `blobs` or `manifests` segment. Any other host, a
+  raw and archive paths do. A `sha256:<64 hex>` digest in the URL,
+  even after an OCI `blobs` or `manifests` segment, is not a pin:
+  curl and wget do not verify it. Any other host, a
   release asset, a tag, a branch, userinfo
   (`raw.githubusercontent.com@evil.example`), or a trailing-dot host
   is not a pin. Nor is a path with a `.` or `..` segment, as written or
@@ -121,7 +122,7 @@ Not reported:
 ## How to fix
 
 Commit the setup script to the repository and run it from there. If it
-must be downloaded, fetch an `https` URL that names a commit or digest,
+must be downloaded, fetch an `https` URL that names a commit,
 or download it to a file and check its SHA-256 (`sha256sum -c`) before
 running it, joined with `&&` so a mismatch stops setup.
 

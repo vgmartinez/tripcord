@@ -29,8 +29,9 @@
 #   - Immutable URL: every downloader target is https, without userinfo
 #     or a trailing-dot host, on an allowlisted host and path position
 #     (GitHub raw/archive/codeload/gist, jsDelivr gh@<sha>, GitLab
-#     /-/raw/<sha>), or an OCI blobs/manifests sha256 digest. A hex
-#     string on any other host, including a release asset, is not a pin,
+#     /-/raw/<sha>). A sha256: digest is not a pin (curl and wget do
+#     not verify it), and a hex string on any other host, including a
+#     release asset, is not a pin,
 #     nor is a path with a . or .. segment (also %2e%2e, .%2E).
 #   - Checksum verified before execution: the next statement is
 #     sha256sum -c <file> (sha384sum, sha512sum, or shasum -a 256|384|512),
@@ -69,7 +70,7 @@ when: |
       payload.feature.matches(r'''(?i)^https?://''') &&
       shell.unpinned(["curl", payload.feature]).size() > 0)
   )
-fix: "Commit the setup script to the repository and run it from there, or pin what it downloads: fetch an https URL that names a commit or digest, or download to a file and check its SHA-256 (sha256sum -c) before running it, with && so a mismatch stops setup."
+fix: "Commit the setup script to the repository and run it from there, or pin what it downloads: fetch an https URL that names a commit, or download to a file and check its SHA-256 (sha256sum -c) before running it, with && so a mismatch stops setup."
 refs:
   - https://docs.github.com/en/copilot/how-tos/use-copilot-agents/coding-agent/customize-the-agent-environment
   - https://cursor.com/docs/cloud-agent

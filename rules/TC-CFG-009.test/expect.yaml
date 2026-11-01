@@ -10,6 +10,7 @@ positivos:
   copilot-trailing-dot-host: high
   copilot-userinfo-host: high
   copilot-download-then-run: high
+  copilot-oci-digest-curl: high
   copilot-pwsh-iwr-iex: high
   copilot-set-plus-e: high
   copilot-step-shell-overrides-job: high
@@ -22,6 +23,7 @@ positivos:
   copilot-traversal-to-branch: high
   cursor-traversal-wget: high
   cursor-install-curl-pipe: high
+  cursor-oci-digest-wget: high
   cursor-start-encoded: high
   cursor-terminal-wget-pipe: high
   devcontainer-feature-tarball: high

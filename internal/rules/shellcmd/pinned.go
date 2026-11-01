@@ -153,9 +153,8 @@ func urlsImmutable(text string) bool {
 //
 // jsDelivr and GitLab are included because a full commit SHA on those
 // exact paths addresses one stored tree, the same way GitHub's raw and
-// archive paths do. A sha256: digest counts only as an OCI registry
-// blob or manifest (a blobs or manifests segment followed by
-// sha256:<64 hex>), not as a path segment on an arbitrary host.
+// archive paths do. A sha256: digest is never a pin: curl and wget do
+// not verify it, so the server can return anything under that name.
 func immutableURL(w string) bool {
 	u, err := url.Parse(w)
 	if err != nil || u.User != nil || !strings.EqualFold(u.Scheme, "https") {
@@ -183,7 +182,7 @@ func immutableURL(w string) bool {
 	case "gitlab.com":
 		return gitlabImmutable(segs)
 	default:
-		return ociDigest(segs)
+		return false
 	}
 }
 
@@ -243,21 +242,6 @@ func jsDelivrImmutable(segs []string) bool {
 func gitlabImmutable(segs []string) bool {
 	for i := 0; i+2 < len(segs); i++ {
 		if segs[i] == "-" && segs[i+1] == "raw" && isCommit(segs[i+2]) {
-			return true
-		}
-	}
-	return false
-}
-
-func ociDigest(segs []string) bool {
-	registry := false
-	for _, seg := range segs {
-		if seg == "blobs" || seg == "manifests" {
-			registry = true
-			continue
-		}
-		digest, ok := strings.CutPrefix(seg, "sha256:")
-		if registry && ok && len(digest) == 64 && isHex(digest) {
 			return true
 		}
 	}
