@@ -132,7 +132,7 @@ func TestScanConfigCorporaNeverLeak(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, entry := range registry.Entries() {
-		if entry.Status != rules.StatusActive || entry.ID < "TC-CFG-009" || entry.ID > "TC-CFG-011" {
+		if entry.Status != rules.StatusActive || entry.ID < "TC-CFG-009" || entry.ID > "TC-CFG-012" {
 			continue
 		}
 		if !covered[entry.ID] {
@@ -142,12 +142,14 @@ func TestScanConfigCorporaNeverLeak(t *testing.T) {
 }
 
 // configLeakFixtureTrees is deliberately fixed to bound the five-format
-// corpus scan. The selection has one positive per new rule and retains the
-// raw-view canaries: a URL secret (009) and hidden bidi text (011).
+// corpus scan. The selection has one positive per rule from TC-CFG-009
+// on and retains the raw-view canaries: a URL secret (009), hidden bidi
+// text (011), and an https query secret in an instructions file (012).
 var configLeakFixtureTrees = []string{
 	"TC-CFG-009.test/positivos/cursor-install-curl-pipe",
 	"TC-CFG-010.test/positivos/claude-enabled-plugins",
 	"TC-CFG-011.test/positivos/agents-bidi-override",
+	"TC-CFG-012.test/positivos/agents-exfil-url",
 }
 
 func scanCorpusFixture(t *testing.T, id, kind, src string) {
