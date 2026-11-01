@@ -542,3 +542,13 @@ jobs:
 		t.Fatalf("steps = %d, items = %+v", steps, got.Items)
 	}
 }
+
+func TestSetupStepRunType(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(root, ".github", "workflows", "copilot-setup-steps.yml"), "on: workflow_dispatch\njobs:\n  copilot-setup-steps:\n    steps:\n      - run: [curl]\n")
+	got := kittest.Discover(t, New(Options{}), root)
+	if !got.HasDiag("copilot-setup-steps step run must be a string") {
+		t.Fatalf("diagnostics = %v", got.Diagnostics)
+	}
+}

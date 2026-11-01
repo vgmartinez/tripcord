@@ -206,6 +206,9 @@ func (f *file) step(step map[string]any) {
 		key = append(key, run)
 	}
 	if !isString {
+		if _, present := step["run"]; present {
+			f.Warn("%s step run must be a string; it is reported as written", setupJob)
+		}
 		f.Add(model.ConfigKindEnvSetup, key, payload)
 		return
 	}

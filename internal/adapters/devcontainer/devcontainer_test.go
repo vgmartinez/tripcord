@@ -394,3 +394,20 @@ func TestDetectViewKeepsRawCommands(t *testing.T) {
 		}
 	}
 }
+
+// TestArrayCommandWithNonString checks that an array command holding a
+// non-string is a diagnostic and is not emitted as a command.
+func TestArrayCommandWithNonString(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(root, ".devcontainer", "devcontainer.json"), `{"postCreateCommand": ["curl", 1, "https://e.example.invalid/i.sh"]}`)
+	got := kittest.Discover(t, New(Options{}), root)
+	items := got.Find(".devcontainer/devcontainer.json", model.ConfigKindEnvSetup)
+	if len(items) != 1 || !got.HasDiag("postCreateCommand must be a string or an array of strings") {
+		t.Fatalf("items = %+v, diagnostics = %v", items, got.Diagnostics)
+	}
+	p := kittest.Payload(t, items[0])
+	if _, ok := p["command"]; ok || p["form"] != "other" || items[0].Detect != nil {
+		t.Fatalf("payload = %v, detect = %s", p, items[0].Detect)
+	}
+}

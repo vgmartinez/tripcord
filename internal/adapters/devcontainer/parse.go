@@ -117,18 +117,18 @@ func (f *file) command(setting, runsOn, parent, name string, value any) {
 			form = "string"
 		}
 	case []any:
+		if !allStrings(v) {
+			f.invalidCommand(payload, setting, name, value)
+			form = "other"
+			break
+		}
 		payload["command"] = f.SafeValue("", f.SafeToolArgv(v))
 		raw = map[string]any{"command": v}
 		if form == "" {
 			form = "array"
 		}
 	default:
-		where := setting
-		if name != "" {
-			where += "." + name
-		}
-		f.Warn("%s must be a string or an array of strings; it is reported as written", where)
-		payload["value"] = f.SafeValue("", value)
+		f.invalidCommand(payload, setting, name, value)
 		form = "other"
 	}
 	payload["form"] = form
@@ -137,6 +137,26 @@ func (f *file) command(setting, runsOn, parent, name string, value any) {
 		return
 	}
 	f.AddDetect(model.ConfigKindEnvSetup, []string{"lifecycle", setting, name}, payload, raw)
+}
+
+// invalidCommand warns about a command that is neither a string nor an
+// array of strings and keeps it, sanitized, as value.
+func (f *file) invalidCommand(payload map[string]any, setting, name string, value any) {
+	where := setting
+	if name != "" {
+		where += "." + name
+	}
+	f.Warn("%s must be a string or an array of strings; it is reported as written", where)
+	payload["value"] = f.SafeValue("", value)
+}
+
+func allStrings(list []any) bool {
+	for _, e := range list {
+		if _, ok := e.(string); !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // features emits one item per Feature. A Feature is an install script

@@ -285,3 +285,13 @@ func TestEnvironmentDetectView(t *testing.T) {
 		}
 	}
 }
+
+func TestEnvironmentCommandTypes(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(root, ".cursor", "environment.json"), `{"install": ["npm", "ci"], "terminals": [{"name": "dev", "command": 1}]}`)
+	got := kittest.Discover(t, New(Options{}), root)
+	if !got.HasDiag("install must be a string") || !got.HasDiag("terminals command must be a string") {
+		t.Fatalf("diagnostics = %v", got.Diagnostics)
+	}
+}

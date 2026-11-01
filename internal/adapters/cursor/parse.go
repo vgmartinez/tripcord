@@ -91,7 +91,11 @@ func (f *file) environment(raw []byte) {
 			safe = f.SafeValue(name, value)
 		}
 		payload := map[string]any{"setting": name, "value": safe}
-		if command, ok := value.(string); ok {
+		command, ok := value.(string)
+		if !ok && (name == "install" || name == "start") {
+			f.Warn("%s must be a string; it is reported as written", name)
+		}
+		if ok {
 			f.AddDetect(model.ConfigKindEnvSetup, []string{"setting", name}, payload, map[string]any{"value": command})
 			continue
 		}
@@ -116,6 +120,9 @@ func (f *file) terminals(value any) {
 		payload := f.SafeObject(terminal)
 		payload["setting"] = "terminals"
 		if !isString {
+			if _, present := terminal["command"]; present {
+				f.Warn("terminals command must be a string; it is reported as written")
+			}
 			f.Add(model.ConfigKindEnvSetup, []string{"terminal", name, command}, payload)
 			continue
 		}
