@@ -30,6 +30,7 @@ import (
 	"github.com/vgmartinez/tripcord/internal/adapters/opencode"
 	"github.com/vgmartinez/tripcord/internal/adapters/windsurf"
 	"github.com/vgmartinez/tripcord/internal/exitcode"
+	"github.com/vgmartinez/tripcord/internal/fpkey"
 	"github.com/vgmartinez/tripcord/internal/model"
 	"github.com/vgmartinez/tripcord/internal/output"
 	"github.com/vgmartinez/tripcord/internal/pathx"
@@ -147,16 +148,20 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return scanConfigError(stderr, err)
 	}
+	key, keyNote, err := loadFingerprintKey()
+	if err != nil {
+		return scanConfigError(stderr, err)
+	}
 	registry, err := adapters.NewRegistry(
-		claude.New(claude.Options{SkipRepo: !repoScope, IncludeUser: userScope, IncludeManaged: managedScope}),
-		codex.New(codex.Options{SkipRepo: !repoScope, IncludeUser: userScope, IncludeManaged: managedScope}),
-		copilot.New(copilot.Options{SkipRepo: !repoScope, IncludeUser: userScope, IncludeManaged: managedScope}),
-		cursor.New(cursor.Options{SkipRepo: !repoScope, IncludeUser: userScope, IncludeManaged: managedScope}),
-		gemini.New(gemini.Options{SkipRepo: !repoScope, IncludeUser: userScope, IncludeManaged: managedScope}),
-		opencode.New(opencode.Options{SkipRepo: !repoScope, IncludeUser: userScope, IncludeManaged: managedScope}),
-		windsurf.New(windsurf.Options{SkipRepo: !repoScope, IncludeUser: userScope, IncludeManaged: managedScope}),
-		devcontainer.New(devcontainer.Options{SkipRepo: !repoScope}),
-		generic.New(generic.Options{SkipRepo: !repoScope, IncludeUser: userScope}),
+		claude.New(claude.Options{SkipRepo: !repoScope, IncludeUser: userScope, IncludeManaged: managedScope, FingerprintKey: key}),
+		codex.New(codex.Options{SkipRepo: !repoScope, IncludeUser: userScope, IncludeManaged: managedScope, FingerprintKey: key}),
+		copilot.New(copilot.Options{SkipRepo: !repoScope, IncludeUser: userScope, IncludeManaged: managedScope, FingerprintKey: key}),
+		cursor.New(cursor.Options{SkipRepo: !repoScope, IncludeUser: userScope, IncludeManaged: managedScope, FingerprintKey: key}),
+		gemini.New(gemini.Options{SkipRepo: !repoScope, IncludeUser: userScope, IncludeManaged: managedScope, FingerprintKey: key}),
+		opencode.New(opencode.Options{SkipRepo: !repoScope, IncludeUser: userScope, IncludeManaged: managedScope, FingerprintKey: key}),
+		windsurf.New(windsurf.Options{SkipRepo: !repoScope, IncludeUser: userScope, IncludeManaged: managedScope, FingerprintKey: key}),
+		devcontainer.New(devcontainer.Options{SkipRepo: !repoScope, FingerprintKey: key}),
+		generic.New(generic.Options{SkipRepo: !repoScope, IncludeUser: userScope, FingerprintKey: key}),
 	)
 	if err != nil {
 		return scanInternalError(stderr, err)
@@ -173,6 +178,9 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 	}
 	var items []model.ConfigItem
 	var diagnostics []adapters.Diagnostic
+	if keyNote != "" && writeString(stderr, "tripcord scan: "+keyNote+"\n") != int(exitcode.OK) {
+		return int(exitcode.Internal)
+	}
 	for _, owner := range registry.ImpliedOwners(requested) {
 		diagnostics = append(diagnostics, adapters.Diagnostic{
 			Harness:       owner,
@@ -575,6 +583,22 @@ func parseScope(value string) (repo, user, managed bool, err error) {
 		return true, true, true, nil
 	default:
 		return false, false, false, fmt.Errorf("--scope %q: want repo, user, managed, or all", value)
+	}
+}
+
+// loadFingerprintKey resolves the fingerprint key (see fpkey.Load). A key
+// file that cannot be read or created is not fatal: the scan continues
+// in s1 mode and note says so. A key that is set but invalid is a
+// configuration error. Neither message carries the key.
+func loadFingerprintKey() (key *fpkey.Key, note string, err error) {
+	key, _, err = fpkey.Load(fpkey.Options{})
+	switch {
+	case err == nil:
+		return key, "", nil
+	case errors.Is(err, fpkey.ErrUnavailable):
+		return nil, "fingerprints use the structural s1 discriminator: " + err.Error(), nil
+	default:
+		return nil, "", err
 	}
 }
 
