@@ -211,3 +211,57 @@ func TestScanMediumPermissionExitsZero(t *testing.T) {
 		t.Fatalf("stdout = %s", stdout.String())
 	}
 }
+
+// TestScanApprovalModeSeverities checks TC-CFG-005's severities, and
+// that bypassPermissions with skipDangerousModePermissionPrompt in one
+// file is one finding.
+func TestScanApprovalModeSeverities(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct {
+		path, body string
+		severity   model.Severity
+		title      string
+		code       exitcode.Code
+	}{
+		"claude bypass and skip prompt": {".claude/settings.json", `{"permissions":{"defaultMode":"bypassPermissions"},"skipDangerousModePermissionPrompt":true}`, model.SeverityHigh, "bypass-mode warning (bypassPermissions with", exitcode.Findings},
+		"claude bypass":                 {".claude/settings.json", `{"permissions":{"defaultMode":"bypassPermissions"}}`, model.SeverityHigh, "(bypassPermissions)", exitcode.Findings},
+		"claude skip prompt":            {".claude/settings.json", `{"permissions":{"defaultMode":"acceptEdits"},"skipDangerousModePermissionPrompt":true}`, model.SeverityMedium, "skips the bypass-mode warning", exitcode.OK},
+		"codex profile":                 {".codex/config.toml", "[profiles.ci]\napproval_policy = \"never\"\n", model.SeverityHigh, "approval_policy never", exitcode.Findings},
+		"gemini yolo":                   {".gemini/settings.json", `{"general":{"defaultApprovalMode":"yolo"}}`, model.SeverityHigh, "yolo or auto-accept", exitcode.Findings},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			if err := os.Mkdir(filepath.Join(root, ".git"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(root, filepath.FromSlash(tc.path))
+			if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, []byte(tc.body), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			var stdout, stderr bytes.Buffer
+			if code := run([]string{"scan", "--format", "json", root}, &stdout, &stderr); code != int(tc.code) {
+				t.Fatalf("exit %d, want %d; stderr %q", code, tc.code, stderr.String())
+			}
+			var found []model.Finding
+			for _, line := range strings.Split(strings.TrimSpace(stdout.String()), "\n") {
+				if !strings.HasPrefix(line, "{") {
+					continue
+				}
+				var f model.Finding
+				if err := json.Unmarshal([]byte(line), &f); err != nil {
+					t.Fatal(err)
+				}
+				if f.Rule == "TC-CFG-005" {
+					found = append(found, f)
+				}
+			}
+			if len(found) != 1 || found[0].Severity != tc.severity || !strings.Contains(found[0].Title, tc.title) {
+				t.Fatalf("findings = %+v, want one %s titled %q", found, tc.severity, tc.title)
+			}
+		})
+	}
+}
