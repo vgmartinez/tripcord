@@ -68,9 +68,15 @@ written once. A policy severity override replaces the per-match
 result. A clause may also set `title`, which replaces the rule title on
 its findings when the rule title does not say why that match fired.
 
+`evidence: hidden_chars` is the only optional evidence. It adds an
+excerpt naming the file's hidden code points by code point, line, and
+column (see `internal/hiddenchar`), never the text between them, and
+sets the location line to the first one. The excerpt is part of the
+fingerprint.
+
 `when` sees these variables:
 
-- `config`: the config item (`id`, `harness`, `scope`, `path`, `sha256`, `kind`), `missing_scripts`: on a repository hook, how many project-relative scripts it runs are not in the scanned tree (0 otherwise; see `internal/scriptcheck`), and `script_locations`: the location classes of project scripts whose symlink resolves outside the repository.
+- `config`: the config item (`id`, `harness`, `scope`, `path`, `sha256`, `kind`), `missing_scripts`: on a repository hook, how many project-relative scripts it runs are not in the scanned tree (0 otherwise; see `internal/scriptcheck`), `script_locations`: the location classes of project scripts whose symlink resolves outside the repository, and `hidden_chars`: on a markdown file, how many bidi controls, tag characters, and zero-width code points it holds (a leading BOM is not counted; 0 otherwise).
 - `payload`: the item's parsed content.
 - `task`: the same as `payload` when `config.kind == "task"`, otherwise empty.
 - `event`: a `tripcord.event/v1` event, for event rules. Every
