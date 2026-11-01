@@ -2,6 +2,7 @@
 # internal/rules/fixtures.go, ExpectFile).
 positivos:
   copilot-branch-url-pipe: high
+  copilot-checksum-explicit-sh: high
   copilot-checksum-without-errexit: high
   copilot-curl-pipe-sh: high
   copilot-download-then-run: high
@@ -10,7 +11,9 @@ positivos:
   cursor-start-encoded: high
   cursor-terminal-wget-pipe: high
   devcontainer-feature-tarball: high
+  devcontainer-initialize-host: high
   devcontainer-oncreate-array: high
   devcontainer-postcreate-curl-pipe: high
+  devcontainer-postattach: high
   devcontainer-poststart-base64: high
   devcontainer-updatecontent-object: high

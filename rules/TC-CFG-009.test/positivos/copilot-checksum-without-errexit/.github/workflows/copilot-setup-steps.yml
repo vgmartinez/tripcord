@@ -5,4 +5,5 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: step0
+        shell: sh
         run: "curl -fsSLo t.sh https://get.tools.example.invalid/t.sh; sha256sum -c t.sh.sha256; sh t.sh"

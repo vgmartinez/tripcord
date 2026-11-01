@@ -20,11 +20,12 @@ Commands read:
   `uses` steps are not read.
 - Cursor: the `install` and `start` strings and each terminal
   `command` in `.cursor/environment.json`.
-- Dev containers: `onCreateCommand`, `updateContentCommand`,
-  `postCreateCommand`, and `postStartCommand`, as a string, an array,
-  or an object of named commands; and a Feature whose reference is an
-  `http(s)` tarball URL, which the tooling downloads and runs as root,
-  read as a `curl` of that URL.
+- Dev containers: `initializeCommand`, `onCreateCommand`,
+  `updateContentCommand`, `postCreateCommand`, `postStartCommand`, and
+  `postAttachCommand`, as a string, an array, or an object of named
+  commands. `initializeCommand` runs on the host before the container
+  starts, so is the most sensitive lifecycle command. An `http(s)`
+  tarball Feature is read as a `curl` of its URL.
 
 Each command is read by `shell.unpinned`, which reports the same
 risks as `shell.risks` (see [TC-CFG-001](TC-CFG-001.md): a fetch, a
@@ -55,20 +56,21 @@ not.
   command line.
 
 Never pinned: package runners (`npx -y`, `bunx`, `pnpm dlx`,
-`yarn dlx`, `uvx`, `pipx run`), `git clone`, inline `python -c` or
-`node -e` network code, a downloader whose target is a variable, and
-encoded or too-deeply nested payloads.
+`yarn dlx`, `uvx`, `pipx run`), tags, `git clone` (including a later
+checkout of a 40-hex sha), inline `python -c` or `node -e` network
+code, a downloader whose target is a variable, and encoded or
+too-deeply nested payloads.
 
 ## Limits
 
 - Devin's `.devin/blueprint.yaml` is not read: no adapter normalizes
   it yet.
-- `RUN` lines of a Dockerfile, OCI Feature references
-  (`ghcr.io/devcontainers/features/node:1`), `initializeCommand`, and
-  `postAttachCommand` are not read.
-- A Copilot step runs under `bash -e` by default, but the rule does not
-  assume it: a checksum check on its own line needs `set -e` in the
-  step, or `&&`.
+- `RUN` lines of a Dockerfile and OCI Feature references
+  (`ghcr.io/devcontainers/features/node:1`) are not read. OCI Feature
+  tags are not flagged.
+- A Copilot step with no `shell` declaration runs under `bash -e`, so a
+  checksum check on its own line stops setup when it fails. A step that
+  explicitly declares another shell needs `set -e` or `&&`.
 - Variables are not expanded, and the script a setup command fetches
   is not read.
 - The checksum itself is not compared with anything: the rule checks

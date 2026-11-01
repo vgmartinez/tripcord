@@ -212,7 +212,13 @@ func (f *file) step(step map[string]any) {
 		f.Add(model.ConfigKindEnvSetup, key, payload)
 		return
 	}
-	f.AddDetect(model.ConfigKindEnvSetup, key, payload, map[string]any{"run": run})
+	rawRun := run
+	if _, hasShell := step["shell"]; !hasShell {
+		// Copilot runs a step without shell under bash -e. Model the
+		// fail-closed default for the Detect-only command analysis.
+		rawRun = "set -e; " + run
+	}
+	f.AddDetect(model.ConfigKindEnvSetup, key, payload, map[string]any{"run": rawRun})
 }
 
 func (f *file) safeWithEnv(name string, value any) any {

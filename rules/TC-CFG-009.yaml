@@ -16,10 +16,10 @@
 #   - Cursor: the install and start strings and each terminal command
 #     of .cursor/environment.json.
 #   - Dev containers: onCreateCommand, updateContentCommand,
-#     postCreateCommand, and postStartCommand, in string, array, or
-#     object form; and a Feature whose reference is an http(s) tarball
-#     URL, which the tooling downloads and runs as root, read as a curl
-#     of that URL. initializeCommand and postAttachCommand are not read.
+#     postCreateCommand, postStartCommand, and postAttachCommand, in
+#     string, array, or object form; and initializeCommand, which runs
+#     on the host before the container starts. A Feature whose reference
+#     is an http(s) tarball URL is read as a curl of that URL.
 #
 # Pinned means one of:
 #   - Immutable URL: every downloader target is an https URL whose path
@@ -30,12 +30,12 @@
 #     shell, and each download is followed, as the next statement, by
 #     sha256sum, sha384sum, or sha512sum -c (or shasum -a 256, 384, or
 #     512 -c), joined to what follows by && or under set -e.
-# Package runners (npx -y, uvx, pnpm dlx, ...), git clone, and a
-# variable target are never pinned.
+# Package runners (npx -y, uvx, pnpm dlx, ...), git clone (including a
+# later sha checkout), tags, and a variable target are never pinned.
 #
 # Not read: Devin's .devin/blueprint.yaml (no adapter reads it), RUN
 # lines of a Dockerfile, OCI Feature references (ghcr.io/...:1), and
-# what a fetched script does.
+# what a fetched script does. OCI Feature tags are not flagged.
 id: TC-CFG-009
 pack: tripcord/core
 title: "Environment setup runs code fetched from an unpinned source"
@@ -54,7 +54,7 @@ when: |
       has(payload.command) && type(payload.command) == string &&
       shell.unpinned(payload.command).size() > 0) ||
     (config.harness == "devcontainer" &&
-      payload.setting in ["onCreateCommand", "updateContentCommand", "postCreateCommand", "postStartCommand"] &&
+      payload.setting in ["initializeCommand", "onCreateCommand", "updateContentCommand", "postCreateCommand", "postStartCommand", "postAttachCommand"] &&
       has(payload.command) && (type(payload.command) == string || type(payload.command) == list) &&
       shell.unpinned(payload.command).size() > 0) ||
     (config.harness == "devcontainer" && payload.setting == "features" &&
