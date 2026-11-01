@@ -2,32 +2,30 @@
 # opens, before a PreToolUse guard can see it. The npm worm of August
 # 2026 planted one that piped a remote script to a shell.
 #
-# A downloader counts only in command position: at the start of a
-# segment, or after sudo, env, a shell's -c/-Command//c, a pipe, &&, ||,
-# ;, or $(. It also needs a URL or other network target (a host, an
-# address, a remote package spec, -y/--yes, or the package argument of
-# dlx, uvx, or pipx run, pinned or not). A bare curl or wget word in an
-# argument, or inside quotes, does not.
+# shell.risks reads each command field the way a shell splits it (see
+# internal/rules/shellcmd): quotes, separators, and pipes per simple
+# command, and the payload of sudo, env, sh -c, PowerShell -Command or a
+# positional command, cmd /c, eval, iex, and $( ) read as a command line
+# of its own, with the same exemptions. Shell and PowerShell flags that
+# take a value (-o pipefail, -ExecutionPolicy Bypass) and -- are skipped.
 #
-# The payload of bash -c "...", sh -c '...', powershell -Command "...",
-# and cmd /c "..." is read again without its outer quotes, so it counts
-# the same as the Copilot bash field. Quotes inside it still hide a pipe.
+# fetch: a downloader in command position (curl, wget, iwr, irm,
+#   Invoke-WebRequest, Invoke-RestMethod, Start-BitsTransfer, nc, ncat)
+#   with a target that is not loopback; python -c or node -e code that
+#   uses the network; a .NET DownloadString; pnpm or yarn dlx, uvx, or
+#   pipx run of a package, pinned or not; deno run of a remote module;
+#   npx or bunx of a remote spec or with -y; git clone followed by
+#   another command. localhost, 127.0.0.0/8, and [::1] are loopback;
+#   localhost@host and localhost.host are not. uvx --from and pipx run
+#   --spec of a local path run local code.
+# pipe: any unquoted pipe into a shell or Invoke-Expression, loopback or
+#   not, except a relative script piped into a bare shell (./x.sh | sh).
+# encoded: PowerShell -EncodedCommand, an opaque payload.
 #
-# Any unquoted pipe to a shell counts, including base64 -d | bash after
-# another pipe. Two local forms do not: ./script.sh | sh (a relative
-# script and nothing else), and a downloader whose only target is
-# loopback (localhost, 127.0.0.0/8, [::1]) with no pipe to a shell.
-# localhost@host and localhost.host are not loopback. uvx --from a
-# local path (./, ../, /, or a relative directory) runs local code.
-#
-# npx and bunx of a remote spec count without -y (evil@latest,
-# @scope/name@version, a URL, or a git spec). A bare local name
-# (npx tsc) and --no-install do not: the expression cannot read
-# package.json, so a name with no version, scope, URL, or -y is treated
-# as a local or devDependency binary.
-#
-# Not matched, and not a bypass of a literal command: $VAR, $(echo cur)l,
-# and c''url. The hook entry is read, not the script it calls.
+# npx and bunx of a bare name (npx tsc) are read as a local or
+# devDependency binary: the expression cannot read package.json.
+# Not read: $VAR and $(echo cur)l, nohup, xargs, env -S, busybox, and
+# start /b wrappers, and the script a hook calls.
 id: TC-CFG-001
 pack: tripcord/core
 title: "SessionStart or Setup hook in shared config downloads or runs code from the network"
@@ -44,7 +42,7 @@ files:
 when: |
   config.kind == "hook" && config.scope == "repo" &&
     has(payload.event) && payload.event in ["SessionStart", "sessionStart", "Setup"] &&
-    [
+    ([
       has(payload.command) && type(payload.command) == string ? payload.command : "",
       has(payload.exec) && type(payload.exec) == string ? payload.exec : "",
       has(payload.bash) && type(payload.bash) == string ? payload.bash : "",
@@ -53,18 +51,13 @@ when: |
       has(payload.command_windows) && type(payload.command_windows) == string ? payload.command_windows : "",
       has(payload.windows) && type(payload.windows) == string ? payload.windows : "",
       has(payload.linux) && type(payload.linux) == string ? payload.linux : "",
-      has(payload.osx) && type(payload.osx) == string ? payload.osx : "",
-      has(payload.args) && type(payload.args) == list && payload.args.all(a, type(a) == string) ?
-        (has(payload.command) && type(payload.command) == string ? payload.command :
-          has(payload.exec) && type(payload.exec) == string ? payload.exec : "") +
-        " " + payload.args.join(" ") : ""
-    ].exists(c0, [c0, c0.matches(r'''(?is)(?:^|[;&|(\s])(?:[^\s;&|'"()]*[/\\])?(?:(?:ba|z|da|k|a|c|tc|fi)?sh|cmd|powershell|pwsh)(?:\.exe)?(?:[ \t]+[-/][^\s;&|'"]+)*?[ \t]+(?:-[a-z]*c|-command|/c|/k)[ \t]+[']''') ? c0.replace("'", " ") :
-      c0.matches(r'''(?is)(?:^|[;&|(\s])(?:[^\s;&|'"()]*[/\\])?(?:(?:ba|z|da|k|a|c|tc|fi)?sh|cmd|powershell|pwsh)(?:\.exe)?(?:[ \t]+[-/][^\s;&|'"]+)*?[ \t]+(?:-[a-z]*c|-command|/c|/k)[ \t]+["]''') ? c0.replace("\"", " ") : ""].exists(c1,
-    [c1.contains("--no-install") ? c1.replace("npx", "_").replace("bunx", "_") : c1].exists(c2,
-    [(c2.matches(r'''(?i)uvx\b[^;&|\n]*?[ \t]--from[ \t=]+['"]?[\w.-]*[/\\]''') && c2.split("uvx").size() == 2 ? c2.replace("uvx", "_") : c2)
-      .replace("://localhost", "://~").replace("://127.", "://^").replace(" 127.", " ^")].exists(c,
-    (c.matches(r'''(?is)^(?:[^'"]|'(?:\\.|[^'])*'|"(?:\\.|[^"])*")*?(?:[^'"|]|'(?:\\.|[^'])*'|"(?:\\.|[^"])*")\|[ \t]*(?:sudo[ \t]+(?:-[A-Za-z-]+[ \t]+)*)?(?:[^\s;&|]*[/\\])?(?:invoke-expression|powershell|pwsh|iex|cmd|(?:ba|z|da|k|a|c|tc|fi)?sh)(?:\.exe)?(?:$|[\s;&|'"\x60])''') && !c.matches(r'''(?s)^\s*\.\.?/[^\s;&|'"]*(?:[ \t]+[^\s;&|'"$()\x60]+)*[ \t]*\|[ \t]*(?:sudo[ \t]+)?(?:ba|z|da|k|a)?sh\s*$''')) ||
-      c.matches(r'''(?is)^(?:(?:[^;&|('"\n]|'(?:\\.|[^'])*'|"(?:\\.|[^"])*")*(?:\|\||&&|[;&|\n(]|\$\()[ \t]*)*[ \t]*(?:(?:sudo|env)(?:[ \t]+(?:-[A-Za-z-]+|[A-Za-z_][A-Za-z0-9_]*=[^\s;&|'" ]+))*[ \t]+|(?:[^\s;&|'"()]*[/\\])?(?:(?:ba|z|da|k|a|c|tc|fi)?sh|cmd|powershell|pwsh)(?:\.exe)?(?:[ \t]+[-/][^\s;&|'"]+)*?[ \t]+(?:-[a-z]*c|-command|/c|/k)[ \t]+)*(?:[^\s;&|'"()]*[/\\])?(?:(?:curl|wget|iwr|irm|nc|ncat|iex|invoke-webrequest|invoke-restmethod|invoke-expression)(?:\.exe)?(?:[ \t]+\S+)*?[ \t]+['"]?(?:https?://(?:[^~^\[]|~(?:[\w.@-]|:[^/\s?#]*@)|\^[0-9.]*(?:[a-z_@-]|:[^/\s?#]*@)|\[(?:[^:]|:[^:]|::[^1]|::1(?:[^\]]|\][^/\s?#]*@)))|[0-9]{1,3}(?:\.[0-9]{1,3}){3}|\^[0-9.]*[a-z_-]|(?:[a-z0-9-]+\.)+[a-z]{2,})|python3?(?:\.exe)?[ \t]+-c\b[\s\S]*?(?:urllib|requests)|node(?:\.exe)?[ \t]+(?:-e|--eval)\b[\s\S]*?(?:fetch|\bhttps?\b)|(?:pnpm|yarn)(?:\.cmd|\.exe)?[ \t]+dlx(?:[ \t]+-[^\s;&|'" ]+)*[ \t]+[^\s;&|'"-]|uvx(?:\.exe)?(?:[ \t]+-[^\s;&|'" ]+)*[ \t]+[^\s;&|'"-]|pipx(?:\.exe)?[ \t]+run(?:[ \t]+-[^\s;&|'" ]+)*[ \t]+[^\s;&|'"-]|deno(?:\.exe)?[ \t]+run(?:[ \t]+-[^\s;&|'" ]+)*[ \t]+['"]?(?:https?://|npm:|jsr:)|git(?:\.exe)?[ \t]+clone(?:[ \t]+[^\s;&|'" ]+)+[ \t]*(?:&&|[;&|])[ \t]*\S|(?:npx|bunx)(?:\.cmd|\.exe)?(?:[ \t]+[^\s;&|'" ]+)*[ \t]+(?:-y\b|--yes(?:=true)?\b|\S*(?:https?://|git\+|git://|github:|gist:|gitlab:|bitbucket:|npm:|jsr:)|@[^\s;&|'" ]+|[^\s;&|'" @]+@(?:latest|next|[0-9])))''')))))
+      has(payload.osx) && type(payload.osx) == string ? payload.osx : ""
+    ].exists(c, shell.risks(c).size() > 0) ||
+    (has(payload.args) && type(payload.args) == list && payload.args.all(a, type(a) == string) &&
+      shell.risks([
+        has(payload.exec) && type(payload.exec) == string ? payload.exec :
+          has(payload.command) && type(payload.command) == string ? payload.command : ""
+      ] + payload.args).size() > 0))
 fix: "Do not fetch code in a SessionStart or Setup hook. Commit the script to the repository, pin what it installs by version and hash, and run it explicitly."
 refs:
   - https://workos.com/blog/npm-worm-coding-agent-config-credentials

