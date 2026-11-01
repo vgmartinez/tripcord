@@ -55,6 +55,27 @@ exit code or the report. See the adapter docs ([claude](adapters/claude.md),
 [devcontainer](adapters/devcontainer.md), [generic](adapters/generic.md)) and
 [output.md](output.md).
 
+## Rule evaluation
+
+Rules match the configuration as the file wrote it. Adapters also produce a
+sanitized copy of every entry, with URL queries, fragments, and userinfo
+stripped and credentials redacted. Every finding, evidence key,
+fingerprint, and diagnostic is built from that copy only. Matching the raw
+text means sanitizing cannot hide a command from a rule: in
+`echo https://e.com/?x;curl … | sh`, stripping the query must not swallow
+the `;` that starts the second command. A rule has no way to put the raw
+text in a report.
+
+Each evaluation of a rule on one entry has a deterministic CEL cost limit:
+20M units for a scan. That limit, not the clock, decides when an expensive
+evaluation is cut short, so the outcome is the same on any machine under
+any load. A unit takes 8 to 160 ns on an idle machine and about 300 ns
+under load, so 20M units take up to about 6 s. Each evaluation also has a
+15 s timeout, which is only a safety net set well past that point. An
+evaluation stopped by either is reported as a diagnostic, and the scan
+exits 3. There is no time budget for a whole scan yet; that is a planned
+follow-up.
+
 ## Examples
 
 ```sh
