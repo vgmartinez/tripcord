@@ -136,15 +136,13 @@ func BenchmarkDiscoverHookHeavySettings(b *testing.B) {
 // distinct), or on signing a long command by re-redacting it (about
 // 85x long).
 //
-// repeatedHooks dropped from 17.5x to about 11x (researcher review:
-// the s1 structural discriminator was re-running output.DefaultRedactor
-// on every entry's payload field names, which are a small, fixed set
-// repeated across every one of the many identical hooks this shape
-// writes; kit.redactedFieldName now memoizes it) and its budget
-// tightened to match, with about the same headroom the other shapes
-// already had.
+// The s1 discriminator memoizes output.DefaultRedactor on payload field
+// names (kit.redactedFieldName), or repeatedHooks would re-redact the
+// same few names for every one of its identical hooks. repeatedHooks
+// measures about 14x here and up to about 17x on a CI runner (the Detect
+// view rules evaluate added about 3x), so its budget stays at 25x.
 var hookHeavyBudget = map[hookHeavyShape]float64{
-	repeatedHooks: 15, distinctHooks: 60, oneLongHook: 80,
+	repeatedHooks: 25, distinctHooks: 60, oneLongHook: 80,
 	pathColonHook: 80, flagPathColonHook: 80,
 }
 
