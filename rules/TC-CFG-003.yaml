@@ -20,7 +20,8 @@
 #
 # A pipe counts only in the command string, or because the command is
 # itself a shell. A literal argument of a non-shell executable, such as
-# node server.js --filter 'a|sh', does not.
+# node server.js --filter 'a|sh', does not. The pipe is found by
+# shell.risks, with the exemption TC-CFG-001 uses (./x.sh | sh).
 #
 id: TC-CFG-003
 pack: tripcord/core
@@ -37,8 +38,7 @@ when: |
           payload.command + (has(payload.args) && type(payload.args) == list && payload.args.all(a, type(a) == string) ? " " + payload.args.join(" ") : "") :
         type(payload.command) == list && payload.command.all(a, type(a) == string) ? payload.command.join(" ") : ""
       ].exists(h, h.matches(r'''(?i)^\s*(?:[^\s]*[/\\])?(?:(?:(?:ba|z|da|k|a|c|tc|fi)?sh|cmd|powershell|pwsh)(?:\.exe)?(?:\s|$)|python(?:3(?:\.[0-9]+)?)?(?:\.exe)?(?:\s+-[^\sm]\S*)*?\s+-c(?:\s|$)|node(?:\.exe)?(?:\s+-[^\se]\S*)*?\s+(?:-e|--eval)(?:\s|$)|(?:perl|ruby)(?:\.exe)?(?:\s+-[^\se]\S*)*?\s+-e(?:\s|$)|deno(?:\.exe)?\s+eval(?:\s|$))''')) ||
-      (type(payload.command) == string &&
-        payload.command.matches(r'''(?is)^(?:[^|'"]|'(?:\\.|[^'])*'|"(?:\\.|[^"])*"|\|\|)*\|[ \t]*(?:sudo[ \t]+(?:-[A-Za-z-]+[ \t]+)*)?(?:[^\s;&|]*[/\\])?(?:(?:ba|z|da|k|a|c|tc|fi)?sh|powershell|pwsh)(?:\.exe)?(?:$|[\s;&|'"\x60])'''))
+      (type(payload.command) == string && "pipe" in shell.risks(payload.command))
     )
 fix: "Point command at the server binary and pass its arguments in args, without a shell, an inline interpreter, or a downloaded script."
 refs:
