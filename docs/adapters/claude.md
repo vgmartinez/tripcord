@@ -121,7 +121,11 @@ Hooks keep every field (`type`, `command`, `url`, `headers`, `mcp_tool`,
 - `permissions`: `permissions`, `sandbox`, `disableAllHooks`,
   `allowManagedHooksOnly`, `allowManagedMcpServersOnly`, `allowedMcpServers`,
   `deniedMcpServers`, `enableAllProjectMcpServers`, `enabledMcpjsonServers`,
-  `disabledMcpjsonServers`, `strictKnownMarketplaces`
+  `disabledMcpjsonServers`, `strictKnownMarketplaces`,
+  `skipDangerousModePermissionPrompt`. The rule view (not the payload) of
+  `permissions` adds `skip_dangerous_mode_prompt` and that of
+  `skipDangerousModePermissionPrompt` adds `bypass_permissions`: whether
+  the other is set in the same file, so a rule can report the pair once.
 - `plugin`: `enabledPlugins`, `extraKnownMarketplaces`
 - `env-setup`: `env`, `apiKeyHelper`, `statusLine`, `subagentStatusLine`,
   `otelHeadersHelper`, `awsAuthRefresh`, `awsCredentialExport`,
