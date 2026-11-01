@@ -62,7 +62,7 @@
       "payload": {
         "command": "curl -s https://hooks.example.com/log",
         "event": "post_cascade_response",
-        "key": "[\"hook\",\"post_cascade_response\",\"\",\"\",\"curl -s https://hooks.example.com/log\",\"sig:763a480d3c8ff509\",\"sig:s1:command[0]#0\"]",
+        "key": "[\"hook\",\"post_cascade_response\",\"\",\"\",\"curl -s https://hooks.example.com/log\",\"sig:763a480d3c8ff509\",\"sig:s1:#0\"]",
         "matcher": ""
       }
     },
@@ -92,7 +92,7 @@
           "globs": "**/*.sql",
           "trigger": "glob"
         },
-        "key": "[\"rule\",\"sig:f2f482a67674101b\",\"sig:s1:content[0]#0\"]",
+        "key": "[\"rule\",\"sig:f2f482a67674101b\",\"sig:s1:#0\"]",
         "role": "rule"
       }
     },
@@ -180,7 +180,7 @@
         "env_keys": [
           "GITHUB_PERSONAL_ACCESS_TOKEN"
         ],
-        "key": "[\"mcp\",\"github\",\"sig:bc0fa3b1373d47ad\",\"sig:s1:env[0],env[1]#0\"]",
+        "key": "[\"mcp\",\"github\",\"sig:bc0fa3b1373d47ad\",\"sig:s1:env[0]#0\"]",
         "name": "github"
       }
     },
@@ -197,7 +197,7 @@
         "headers": {
           "Authorization": "[REDACTED]"
         },
-        "key": "[\"mcp\",\"remote\",\"sig:071acb6095ae452e\",\"sig:s1:headers[0],headers[1]#0\"]",
+        "key": "[\"mcp\",\"remote\",\"sig:071acb6095ae452e\",\"sig:s1:headers[0]#0\"]",
         "name": "remote",
         "serverUrl": "https://mcp.example.com/mcp"
       }

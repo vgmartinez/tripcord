@@ -115,46 +115,97 @@ const (
 
 // discriminated returns key with a "sig:" discriminator over removed
 // appended when it is non-empty, so two entries that differ only by
-// redacted text keep distinct keys. The mode is part of the text:
+// redacted text keep distinct keys. Both modes also get "#" and the
+// entry's ordinal among earlier entries of the same file whose key up
+// to and including the mode part is identical, so identical duplicates
+// are told apart the same way in k1 and s1. The mode is part of the
+// text:
 //
 //   - k1, with a fingerprint key: "sig:k1:" and 16 hex characters of
 //     HMAC-SHA256(key, removed values). The same entry with a different
 //     secret gets a different key.
-//   - s1, without one: "sig:s1:", the structure of what was removed
-//     (StructuralDiscriminator), "#", and the entry's ordinal among
-//     earlier entries of the same file whose key up to here is
-//     identical. No hash or other function of a removed value is used,
-//     so a rotated secret keeps its key, and identical duplicates are
-//     told apart only by ordinal, in the order the file lists them.
-func (s *Source) discriminated(kind model.ConfigKind, key []string, removed []Removal) []string {
+//   - s1, without one: "sig:s1:" and StructuralDiscriminator(view),
+//     the structure of where view still shows [REDACTED]. No hash or
+//     other function of a removed value is used, and the result never
+//     depends on how many sanitization passes produced those markers,
+//     only on the final sanitized payload, so a rotated secret, or one
+//     with a different recognizable shape (a provider-prefixed token
+//     versus a generic one), keeps the same key.
+func (s *Source) discriminated(kind model.ConfigKind, key []string, removed []Removal, view map[string]any) []string {
 	if len(removed) == 0 {
 		return key
 	}
+	var part string
 	if s.c.key.Present() {
 		values := make([]string, len(removed))
 		for i, r := range removed {
 			values[i] = r.Value
 		}
-		return append(key, "sig:k1:"+s.c.key.Sum(k1Domain, values, k1HexLen))
+		part = "sig:k1:" + s.c.key.Sum(k1Domain, values, k1HexLen)
+	} else {
+		part = "sig:s1:" + StructuralDiscriminator(view)
 	}
-	part := "sig:s1:" + StructuralDiscriminator(removed)
-	ordinal := s.c.ordinal(s.harness, s.scope, s.path, kind, EvidenceKey(append(slices.Clone(key), part)))
+	ordinal := s.c.ordinal(s.harness, s.scope, s.path, kind, key, part)
 	return append(key, part+"#"+strconv.Itoa(ordinal))
 }
 
-// StructuralDiscriminator describes removed without its values: each
-// removal as field[n], where n counts earlier removals from the same
-// field, comma-joined in removal order. Field names are passed through
-// output.DefaultRedactor.
-func StructuralDiscriminator(removed []Removal) string {
-	seen := map[string]int{}
-	parts := make([]string, len(removed))
-	for i, r := range removed {
-		field := output.DefaultRedactor(r.Field)
-		parts[i] = field + "[" + strconv.Itoa(seen[field]) + "]"
-		seen[field]++
+// StructuralDiscriminator describes, without any secret value, where
+// view (the final sanitized payload, as built for the entry) still
+// shows the Redacted marker: each top-level field holding at least one
+// occurrence as field[n], where n counts earlier occurrences within
+// that field (maps walked in sorted key order, arrays by index),
+// comma-joined in field order (SortedKeys(view)). A field is skipped
+// when it holds none. Field names are passed through
+// output.DefaultRedactor once per field, not once per occurrence.
+//
+// Counting markers in the payload itself, rather than how many
+// sanitization passes fired while building it, means two payloads that
+// are byte-identical after sanitizing always get the same
+// discriminator: a provider-shaped secret (ghp_, sk-, AKIA, a JWT, ...)
+// and a generic one that redact to the same shape are indistinguishable
+// here, as they must be, since neither the shape nor the count of
+// detection passes that happened to match is safe to reveal.
+func StructuralDiscriminator(view map[string]any) string {
+	var parts []string
+	for _, field := range SortedKeys(view) {
+		count := countRedacted(view[field])
+		if count == 0 {
+			continue
+		}
+		name := output.DefaultRedactor(field)
+		for n := 0; n < count; n++ {
+			parts = append(parts, name+"["+strconv.Itoa(n)+"]")
+		}
 	}
 	return strings.Join(parts, ",")
+}
+
+// countRedacted counts occurrences of the Redacted marker in value,
+// walking a map in sorted key order and an array by index. It counts a
+// substring occurrence, not just a whole-value match, so it covers both
+// a value entirely replaced with [REDACTED] (a header or env map entry)
+// and [REDACTED] substituted inside a larger string (a secret embedded
+// in a command line); the discriminator's shape does not depend on
+// which of those two forms a given field happens to take.
+func countRedacted(value any) int {
+	switch v := value.(type) {
+	case string:
+		return strings.Count(v, Redacted)
+	case map[string]any:
+		total := 0
+		for _, key := range SortedKeys(v) {
+			total += countRedacted(v[key])
+		}
+		return total
+	case []any:
+		total := 0
+		for _, item := range v {
+			total += countRedacted(item)
+		}
+		return total
+	default:
+		return 0
+	}
 }
 
 // enterField makes name the field later removals are attributed to when

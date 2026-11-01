@@ -29,7 +29,7 @@ import (
 // any output format.
 
 var (
-	k1Discriminator = regexp.MustCompile(`^sig:k1:[0-9a-f]{16}$`)
+	k1Discriminator = regexp.MustCompile(`^sig:k1:[0-9a-f]{16}#[0-9]+$`)
 	// s1Discriminator is field[n] entries and an ordinal: nothing that
 	// could be a digest of a value.
 	s1Discriminator = regexp.MustCompile(`^sig:s1:[^\[\],#]*\[[0-9]+\](,[^\[\],#]*\[[0-9]+\])*#([0-9]+)$`)
@@ -415,6 +415,80 @@ func TestS1DuplicatesDifferOnlyByOrdinal(t *testing.T) {
 		}
 	}
 	assertFormatsClean(t, findings, secrets)
+}
+
+// secretShapes are 13 realistic credential shapes, each triggering a
+// different number of output.secretPatterns matches (zero for the
+// generic one, one or more for the provider-shaped ones) when the OLD
+// removal-log-based s1 discriminator counted every detection pass. The
+// NEW discriminator (internal/adapters/kit.StructuralDiscriminator) scans
+// only the final sanitized payload for [REDACTED] markers, so it must
+// produce the exact same structural key for every shape in the same
+// position: the shape of a secret, like its value, must never leak
+// through the s1 discriminator (researcher review, blocker 1).
+var secretShapes = []struct {
+	name  string
+	value string
+}{
+	{"generic", "zsG01q-opaque-token-value-0123456789"},
+	{"github PAT", "ghp_" + strings.Repeat("a1B2c3", 7)},
+	{"github fine-grained PAT", "github_pat_" + strings.Repeat("a1B2c3", 4)},
+	{"gitlab PAT", "glpat-" + strings.Repeat("a1B2c3", 4)},
+	{"openai-style", "sk-" + strings.Repeat("a1B2c3", 4)},
+	{"stripe-style live key", "sk_live_" + strings.Repeat("a1B2c3", 4)},
+	{"slack bot token", "xoxb-" + strings.Repeat("a1B2c3", 2)},
+	{"npm token", "npm_" + strings.Repeat("a1B2c3", 4)},
+	{"huggingface token", "hf_" + strings.Repeat("a1B2c3", 4)},
+	{"google oauth token", "ya29." + strings.Repeat("a1B2c3", 4)},
+	{"google api key", "AIza" + strings.Repeat("a1B2c3d4e", 3) + "aaaaaaaa"},
+	{"aws access key", "AKIA" + "ABCD1234EFGH5678"},
+	{"jwt", "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"},
+}
+
+// TestS1DiscriminatorShapeIndependent is the test the researcher asked
+// for: the s1 key is unchanged for 13 secret shapes x all positions x
+// all adapters. "Position" varies the shape of the surrounding redacted
+// field: a credential-named env assignment (-e PRIVATE_KEY=...) and a
+// bearer-token tail glued onto another flag's value (-eAPI_KEY=... Bearer
+// ...), the same two shapes modeGroups already covers for rotation.
+func TestS1DiscriminatorShapeIndependent(t *testing.T) {
+	t.Parallel()
+	positions := []struct {
+		name string
+		args func(secret string) []any
+	}{
+		{"env assignment", func(secret string) []any { return modeEnvFlagArgs(secret, "zsY01q") }},
+		{"bearer tail", func(secret string) []any { return modeBearerTailArgs("zsW05q", secret) }},
+	}
+	for _, position := range positions {
+		t.Run(position.name, func(t *testing.T) {
+			t.Parallel()
+			var want map[model.Harness]string
+			for _, shape := range secretShapes {
+				items := modeServers(t, position.args(shape.value), nil, "")
+				got := map[model.Harness]string{}
+				for _, h := range modeHarnesses {
+					item := items[h]
+					assertNoLeak(t, item, []string{shape.value})
+					d := discriminatorOf(t, item)
+					m := s1Discriminator.FindStringSubmatch(d)
+					if m == nil {
+						t.Fatalf("%s %s: discriminator %q is not s1", h, shape.name, d)
+					}
+					got[h] = strings.TrimSuffix(d, "#"+m[2])
+				}
+				if want == nil {
+					want = got
+					continue
+				}
+				for h, structural := range got {
+					if structural != want[h] {
+						t.Fatalf("%s: %s discriminator %q, want %q (same as %s)", h, shape.name, structural, want[h], secretShapes[0].name)
+					}
+				}
+			}
+		})
+	}
 }
 
 // TestFingerprintModesDeterministicAndHomeIndependent discovers the same

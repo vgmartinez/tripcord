@@ -3,6 +3,7 @@ package claude
 import (
 	"encoding/json"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -71,6 +72,58 @@ func TestPayloadDigestIgnoresRawSecrets(t *testing.T) {
 		}
 	}
 }
+
+// TestS1DiscriminatorIgnoresHeaderSecretShape is blocker 1 from the
+// researcher's review: hook() redacts hook["headers"] twice (once in the
+// generic sortedKeys loop via safePayloadValue, once more explicitly a
+// few lines later) and redactValues itself can add a further removal
+// when output.DefaultRedactor's secretPatterns also recognize the
+// value's shape (ghp_, sk-, xoxb, AKIA, a JWT, ...). Under the old
+// removal-log-based StructuralDiscriminator that gave a provider-shaped
+// X-Api-Key header one more "headers[n]" entry than a generic one of the
+// same length, so rotating to a different-shaped token changed the s1
+// fingerprint and the discriminator leaked which provider's token shape
+// was present. The new discriminator scans only the final sanitized
+// payload for [REDACTED] markers, so it must stay identical across every
+// shape: internal/adapters/conformance.TestS1DiscriminatorShapeIndependent
+// is the cross-adapter version of this same guarantee.
+func TestS1DiscriminatorIgnoresHeaderSecretShape(t *testing.T) {
+	t.Parallel()
+	discriminatorFor := func(secret string) string {
+		hook := `{"matcher":"Bash","hooks":[{"type":"http","url":"https://audit.example.test/hook","headers":{"X-Api-Key":"` + secret + `"}}]}`
+		root := t.TempDir()
+		writeFile(t, filepath.Join(root, ".claude", "settings.json"), `{"hooks":{"PreToolUse":[`+hook+`]}}`)
+		got := discover(t, New(Options{}), root)
+		parts := keyParts(t, got, model.ConfigKindHook)
+		return parts[len(parts)-1]
+	}
+	shapes := []string{
+		"zsG01q-opaque-token-value-0123456789",
+		"ghp_" + strings.Repeat("a1B2c3", 7),
+		"github_pat_" + strings.Repeat("a1B2c3", 4),
+		"glpat-" + strings.Repeat("a1B2c3", 4),
+		"sk-" + strings.Repeat("a1B2c3", 4),
+		"sk_live_" + strings.Repeat("a1B2c3", 4),
+		"xoxb-" + strings.Repeat("a1B2c3", 2),
+		"npm_" + strings.Repeat("a1B2c3", 4),
+		"hf_" + strings.Repeat("a1B2c3", 4),
+		"ya29." + strings.Repeat("a1B2c3", 4),
+		"AIza" + strings.Repeat("a1B2c3d4e", 3) + "aaaaaaaa",
+		"AKIA" + "ABCD1234EFGH5678",
+		"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+	}
+	want := discriminatorFor(shapes[0])
+	if m := s1Pattern.FindStringSubmatch(want); m == nil {
+		t.Fatalf("discriminator %q is not s1", want)
+	}
+	for _, shape := range shapes[1:] {
+		if got := discriminatorFor(shape); got != want {
+			t.Fatalf("discriminator %q for %q, want %q (same as the first shape)", got, shape, want)
+		}
+	}
+}
+
+var s1Pattern = regexp.MustCompile(`^sig:s1:`)
 
 // Two hooks that differ only in a redacted header value, or a redacted
 // field other than the action, must not share a key.

@@ -49,7 +49,7 @@
       "payload": {
         "command": "git config --global url.https://git.example.com/.insteadOf https://git.example.com/",
         "form": "string",
-        "key": "[\"lifecycle\",\"postStartCommand\",\"\",\"sig:aea4a4bb0559fa72\",\"sig:s1:[0]#0\"]",
+        "key": "[\"lifecycle\",\"postStartCommand\",\"\",\"sig:aea4a4bb0559fa72\",\"sig:s1:#0\"]",
         "runs_on": "container",
         "setting": "postStartCommand"
       }
@@ -116,7 +116,7 @@
           "ghcr.io"
         ],
         "form": "array",
-        "key": "[\"lifecycle\",\"onCreateCommand\",\"\",\"sig:317db716a4240095\",\"sig:s1:[0]#0\"]",
+        "key": "[\"lifecycle\",\"onCreateCommand\",\"\",\"sig:317db716a4240095\",\"sig:s1:command[0]#0\"]",
         "runs_on": "container",
         "setting": "onCreateCommand"
       }
@@ -135,7 +135,7 @@
           "[REDACTED]"
         ],
         "form": "object",
-        "key": "[\"lifecycle\",\"postCreateCommand\",\"login\",\"sig:27400eebb2d05145\",\"sig:s1:[0]#0\"]",
+        "key": "[\"lifecycle\",\"postCreateCommand\",\"login\",\"sig:27400eebb2d05145\",\"sig:s1:command[0]#0\"]",
         "name": "login",
         "runs_on": "container",
         "setting": "postCreateCommand"
@@ -152,7 +152,7 @@
           "API_TOKEN",
           "MODE"
         ],
-        "key": "[\"setting\",\"containerEnv\",\"sig:45960f8373e74a0a\",\"sig:s1:API_TOKEN[0]#0\"]",
+        "key": "[\"setting\",\"containerEnv\",\"sig:45960f8373e74a0a\",\"sig:s1:value[0]#0\"]",
         "setting": "containerEnv",
         "value": {
           "API_TOKEN": "[REDACTED]",
@@ -171,7 +171,7 @@
           "GITHUB_TOKEN",
           "PATH"
         ],
-        "key": "[\"setting\",\"remoteEnv\",\"sig:a123e828267617bf\",\"sig:s1:GITHUB_TOKEN[0]#0\"]",
+        "key": "[\"setting\",\"remoteEnv\",\"sig:a123e828267617bf\",\"sig:s1:value[0]#0\"]",
         "setting": "remoteEnv",
         "value": {
           "GITHUB_TOKEN": "[REDACTED]",
@@ -264,7 +264,7 @@
       "sha256": "7817e7cce2f12f802248d2a1f0767d649a014fdb46f0c75635d4ae6794a1ac87",
       "kind": "env-setup",
       "payload": {
-        "key": "[\"setting\",\"runArgs\",\"sig:d5d394181a7f32c0\",\"sig:s1:[0]#0\"]",
+        "key": "[\"setting\",\"runArgs\",\"sig:d5d394181a7f32c0\",\"sig:s1:value[0]#0\"]",
         "setting": "runArgs",
         "value": [
           "--cap-add=SYS_PTRACE",
@@ -294,7 +294,7 @@
       "sha256": "209b06afa20d68629902a5c9e7d6c3c588b5e0195dd7f38d485e26f6c12982e9",
       "kind": "env-setup",
       "payload": {
-        "key": "[\"setting\",\"build\",\"sig:4e31503b40a1e588\",\"sig:s1:build[0]#0\"]",
+        "key": "[\"setting\",\"build\",\"sig:4e31503b40a1e588\",\"sig:s1:value[0]#0\"]",
         "setting": "build",
         "value": {
           "args": {

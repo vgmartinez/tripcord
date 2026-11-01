@@ -57,13 +57,31 @@ func (c *Collector) SetHome(home string) { c.home = home }
 // secret. A nil key selects s1.
 func (c *Collector) SetFingerprintKey(k *fpkey.Key) { c.key = k }
 
-// ordinal returns how many earlier s1 entries of the same file had
-// prefix as their key so far, and counts this one.
-func (c *Collector) ordinal(harness model.Harness, scope model.Scope, path string, kind model.ConfigKind, prefix string) int {
+// ordinal returns how many earlier entries of the same file had key and
+// part as their key so far, and counts this one. The map key is a
+// cheap NUL-separated join, not JSON, since it is never compared across
+// processes or stored: ordinal() is called once per entry on top of the
+// JSON encoding its caller already pays for key, so a second
+// json.Marshal here would double that cost for no benefit.
+func (c *Collector) ordinal(harness model.Harness, scope model.Scope, path string, kind model.ConfigKind, key []string, part string) int {
 	if c.ordinals == nil {
 		c.ordinals = map[string]int{}
 	}
-	id := EvidenceKey([]string{string(harness), string(scope), path, string(kind), prefix})
+	var b strings.Builder
+	b.WriteString(string(harness))
+	b.WriteByte(0)
+	b.WriteString(string(scope))
+	b.WriteByte(0)
+	b.WriteString(path)
+	b.WriteByte(0)
+	b.WriteString(string(kind))
+	for _, p := range key {
+		b.WriteByte(0)
+		b.WriteString(p)
+	}
+	b.WriteByte(0)
+	b.WriteString(part)
+	id := b.String()
 	n := c.ordinals[id]
 	c.ordinals[id] = n + 1
 	return n
@@ -269,7 +287,7 @@ func (s *Source) add(kind model.ConfigKind, key []string, payload, rawFields map
 	// scopes this scan read, not on the file's own content, and must
 	// never affect the key (see WithField).
 	fullKey := append(s.SafeKey(key), "sig:"+PayloadDigest(payload))
-	fullKey = s.discriminated(kind, fullKey, removed)
+	fullKey = s.discriminated(kind, fullKey, removed, payload)
 	for name, value := range s.fields {
 		payload[name] = value
 	}
@@ -329,7 +347,7 @@ func (s *Source) EntryKey(kind model.ConfigKind, key []string, payload map[strin
 	view, _ := s.SafeValue("", payload).(map[string]any)
 	all := s.removed
 	s.removed = nil
-	return s.discriminated(kind, append(slices.Clone(key), "sig:"+PayloadDigest(view)), all)
+	return s.discriminated(kind, append(slices.Clone(key), "sig:"+PayloadDigest(view)), all, view)
 }
 
 // EvidenceKey encodes parts as a compact JSON array, so no choice of

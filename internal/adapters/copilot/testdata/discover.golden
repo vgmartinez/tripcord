@@ -59,7 +59,7 @@
         "env_keys": [
           "FMT_TOKEN"
         ],
-        "key": "[\"mcp\",\"fmt\",\"sig:b7aeb825cf7d4e42\",\"sig:s1:env[0],env[1]#0\"]",
+        "key": "[\"mcp\",\"fmt\",\"sig:b7aeb825cf7d4e42\",\"sig:s1:env[0]#0\"]",
         "name": "fmt",
         "type": "local"
       }
@@ -173,7 +173,7 @@
         "headers": {
           "Authorization": "[REDACTED]"
         },
-        "key": "[\"hook\",\"sessionStart\",\"\",\"http\",\"https://hooks.example/start\",\"sig:5d333f7b62025407\",\"sig:s1:headers[0],url[0],headers[1]#0\"]",
+        "key": "[\"hook\",\"sessionStart\",\"\",\"http\",\"https://hooks.example/start\",\"sig:5d333f7b62025407\",\"sig:s1:headers[0]#0\"]",
         "matcher": "",
         "type": "http",
         "url": "https://hooks.example/start"
@@ -206,7 +206,7 @@
           "NPM_TOKEN": "[REDACTED]"
         },
         "job": "copilot-setup-steps",
-        "key": "[\"job\",\"copilot-setup-steps\",\"sig:7e11789393bb54ea\",\"sig:s1:NPM_TOKEN[0]#0\"]",
+        "key": "[\"job\",\"copilot-setup-steps\",\"sig:7e11789393bb54ea\",\"sig:s1:env[0]#0\"]",
         "permissions": {
           "contents": "read"
         },
@@ -240,7 +240,7 @@
       "kind": "env-setup",
       "payload": {
         "job": "copilot-setup-steps",
-        "key": "[\"step\",\"copilot-setup-steps\",\"Install tools\",\"curl -fsSL https://get.example/tool.sh | sh\",\"sig:558ee56f8148e9b8\",\"sig:s1:run[0]#0\"]",
+        "key": "[\"step\",\"copilot-setup-steps\",\"Install tools\",\"curl -fsSL https://get.example/tool.sh | sh\",\"sig:558ee56f8148e9b8\",\"sig:s1:#0\"]",
         "name": "Install tools",
         "run": "curl -fsSL https://get.example/tool.sh | sh",
         "setting": "step"
@@ -305,7 +305,7 @@
         "headers": {
           "Authorization": "[REDACTED]"
         },
-        "key": "[\"mcp\",\"github\",\"sig:d61315cbe9605935\",\"sig:s1:headers[0],headers[1]#0\"]",
+        "key": "[\"mcp\",\"github\",\"sig:d61315cbe9605935\",\"sig:s1:headers[0]#0\"]",
         "name": "github",
         "type": "http",
         "url": "https://api.example/mcp/"

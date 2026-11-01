@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	k1Part = regexp.MustCompile(`^sig:k1:[0-9a-f]{16}$`)
+	k1Part = regexp.MustCompile(`^sig:k1:[0-9a-f]{16}#[0-9]+$`)
 	s1Part = regexp.MustCompile(`^sig:s1:[^#]*#[0-9]+$`)
 )
 
@@ -132,6 +132,49 @@ func TestS1OrdinalSeparatesIdenticalDuplicates(t *testing.T) {
 	}
 }
 
+// TestK1OrdinalSeparatesIdenticalDuplicates is TestS1OrdinalSeparatesIdenticalDuplicates's
+// k1 counterpart: k1 entries identical after sanitizing, including the
+// same secret, are told apart only by the ordinal appended after "#",
+// the same stable per-file, in-file-order rule s1 uses, not by the k1
+// HMAC alone (which would be identical for every one of them).
+func TestK1OrdinalSeparatesIdenticalDuplicates(t *testing.T) {
+	t.Parallel()
+	hooks := func(s *Source, tokens ...string) {
+		var list []any
+		for _, token := range tokens {
+			list = append(list, map[string]any{"command": "notify --token " + token})
+		}
+		s.Hooks(map[string]any{"stop": list}, Flat, []string{"command"})
+	}
+	s := source(model.ScopeRepo, ".cursor/hooks.json")
+	hooks(s, "zsE01q", "zsE01q", "zsE01q")
+	got := sigParts(t, s.c)
+	if len(got) != 3 {
+		t.Fatalf("items = %v", got)
+	}
+	for i, parts := range got {
+		if !k1Part.MatchString(last(parts)) {
+			t.Fatalf("entry %d discriminator = %q, not k1", i, last(parts))
+		}
+		want := "#" + string(rune('0'+i))
+		if !strings.HasSuffix(last(parts), want) {
+			t.Fatalf("entry %d discriminator = %q, want suffix %q", i, last(parts), want)
+		}
+		if EvidenceKey(parts) == EvidenceKey(got[0]) && i != 0 {
+			t.Fatalf("entries %d and 0 share a key: %v", i, parts)
+		}
+		beforeOrdinal := strings.TrimSuffix(last(parts), want)
+		if want0 := strings.TrimSuffix(last(got[0]), "#0"); beforeOrdinal != want0 {
+			t.Fatalf("duplicates differ before the ordinal: %q vs %q", beforeOrdinal, want0)
+		}
+	}
+	other := source(model.ScopeRepo, ".cursor/other.json")
+	hooks(other, "zsE01q")
+	if got := last(sigParts(t, other.c)[0]); !strings.HasSuffix(got, "#0") {
+		t.Fatalf("the ordinal is not per file: %q", got)
+	}
+}
+
 func TestNoDiscriminatorWithoutRemovals(t *testing.T) {
 	t.Parallel()
 	for _, s := range []*Source{source(model.ScopeRepo, "a"), s1Source(model.ScopeRepo, "a")} {
@@ -145,12 +188,25 @@ func TestNoDiscriminatorWithoutRemovals(t *testing.T) {
 
 func TestStructuralDiscriminatorUsesNoValue(t *testing.T) {
 	t.Parallel()
-	a := StructuralDiscriminator([]Removal{{Field: "args", Value: "one"}, {Field: "env", Value: "two"}, {Field: "args", Value: "three"}})
-	b := StructuralDiscriminator([]Removal{{Field: "args", Value: "x"}, {Field: "env", Value: "y"}, {Field: "args", Value: "z"}})
-	if a != b || a != "args[0],env[0],args[1]" {
+	a := StructuralDiscriminator(map[string]any{
+		"args": []any{Redacted, "x", Redacted},
+		"env":  map[string]any{"A": Redacted},
+	})
+	b := StructuralDiscriminator(map[string]any{
+		"args": []any{Redacted, "y", Redacted},
+		"env":  map[string]any{"A": Redacted},
+	})
+	if a != b || a != "args[0],args[1],env[0]" {
 		t.Fatalf("StructuralDiscriminator = %q and %q", a, b)
 	}
-	if got := StructuralDiscriminator([]Removal{{Field: "ghp_" + strings.Repeat("a", 36), Value: "v"}}); strings.Contains(got, "ghp_") {
+	fieldName := "ghp_" + strings.Repeat("a", 36)
+	if got := StructuralDiscriminator(map[string]any{fieldName: Redacted}); strings.Contains(got, "ghp_") {
 		t.Fatalf("field name was not redacted: %q", got)
+	}
+	if got := StructuralDiscriminator(map[string]any{"command": "echo " + Redacted}); got != "command[0]" {
+		t.Fatalf("embedded marker not counted: %q", got)
+	}
+	if got := StructuralDiscriminator(map[string]any{"clean": "nothing here"}); got != "" {
+		t.Fatalf("field with no marker produced a part: %q", got)
 	}
 }

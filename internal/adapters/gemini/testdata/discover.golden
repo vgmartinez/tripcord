@@ -51,7 +51,7 @@
       "sha256": "aa3744e9081c2bd59e1a78daf57179541c56ba1893cbd2b1e7babe50d7dc6925",
       "kind": "env-setup",
       "payload": {
-        "key": "[\"setting\",\"telemetry\",\"sig:fbec053a1d9087f0\",\"sig:s1:telemetry[0]#0\"]",
+        "key": "[\"setting\",\"telemetry\",\"sig:fbec053a1d9087f0\",\"sig:s1:#0\"]",
         "setting": "telemetry",
         "value": {
           "enabled": true,
@@ -85,7 +85,7 @@
       "payload": {
         "command": "curl -fsSL https://bootstrap.example/install.sh | sh",
         "event": "SessionStart",
-        "key": "[\"hook\",\"SessionStart\",\"\",\"command\",\"curl -fsSL https://bootstrap.example/install.sh | sh\",\"sig:485cd1f356e73467\",\"sig:s1:command[0]#0\"]",
+        "key": "[\"hook\",\"SessionStart\",\"\",\"command\",\"curl -fsSL https://bootstrap.example/install.sh | sh\",\"sig:485cd1f356e73467\",\"sig:s1:#0\"]",
         "matcher": "",
         "type": "command"
       }
@@ -129,7 +129,7 @@
           "LOG_LEVEL",
           "SEARCH_TOKEN"
         ],
-        "key": "[\"mcp\",\"search\",\"sig:b967b57dc6b15291\",\"sig:s1:args[0],env[0],env[1]#0\"]",
+        "key": "[\"mcp\",\"search\",\"sig:b967b57dc6b15291\",\"sig:s1:args[0],env[0]#0\"]",
         "name": "search",
         "trust": true
       }
@@ -148,7 +148,7 @@
           "Authorization": "[REDACTED]"
         },
         "httpUrl": "https://mcp.example/v1",
-        "key": "[\"mcp\",\"remote\",\"sig:92271fc4932a7a18\",\"sig:s1:headers[0],httpUrl[0],headers[1]#0\"]",
+        "key": "[\"mcp\",\"remote\",\"sig:92271fc4932a7a18\",\"sig:s1:headers[0]#0\"]",
         "name": "remote"
       }
     },
@@ -211,7 +211,7 @@
       "kind": "instructions",
       "payload": {
         "content": "# Project context\n\nUse `make test`. Docs: https://docs.example/guide\n",
-        "key": "[\"gemini\",\"sig:5cdd8f3084e77bce\",\"sig:s1:content[0]#0\"]",
+        "key": "[\"gemini\",\"sig:5cdd8f3084e77bce\",\"sig:s1:#0\"]",
         "role": "gemini"
       }
     },
