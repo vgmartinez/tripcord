@@ -322,10 +322,11 @@ existing `~/.tripcord/fingerprint.key`, and either CI is detected (see
 below) or a new key file could not be generated or created for an
 environmental reason (no home directory, a read-only home, a full disk,
 ...). The scan continues in s1 and says so on stderr; nothing here is
-fatal. In CI specifically, the note is always the same sentence, so a
-log can be grepped for it: `CI detected: fingerprint key not created,
-using s1`. It is printed once per scan, on the first fingerprint-key
-resolution, the same as every other reason to fall back to s1.
+fatal. In CI specifically, the note is exactly `CI detected:
+fingerprint key not created, using s1` — that sentence alone, printed
+once per scan after the `tripcord scan:` prefix, not wrapped in the
+"fingerprint key file is unavailable" wording the other s1 fallbacks
+use. A log can be grepped for it.
 
 Once key material exists, the scan never silently changes fingerprint
 mode. Any of the following make the scan **exit 3** with an actionable

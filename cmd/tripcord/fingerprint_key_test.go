@@ -96,9 +96,9 @@ func TestScanPrintsCINoteOnce(t *testing.T) {
 	if code := run([]string{"scan", "--format", "text", keyTestRepo(t)}, &stdout, &stderr); code != int(exitcode.OK) {
 		t.Fatalf("exit %d; stderr: %s", code, stderr.String())
 	}
-	note := "CI detected: fingerprint key not created, using s1"
-	if n := strings.Count(stderr.String(), note); n != 1 {
-		t.Fatalf("stderr contains the CI note %d times, want 1:\n%s", n, stderr.String())
+	const note = "CI detected: fingerprint key not created, using s1"
+	if stderr.String() != "tripcord scan: "+note+"\n" {
+		t.Fatalf("stderr = %q, want the CI note and nothing else", stderr.String())
 	}
 }
 

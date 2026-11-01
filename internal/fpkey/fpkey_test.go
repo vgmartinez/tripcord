@@ -213,8 +213,8 @@ func TestLoadNeverCreatesInCI(t *testing.T) {
 		if !errors.Is(err, ErrCIFallback) || !errors.Is(err, ErrUnavailable) || src != SourceNone || k.Present() {
 			t.Fatalf("%v: Load = %v, %v, %v, want ErrCIFallback", vars, k, src, err)
 		}
-		if !strings.Contains(err.Error(), "s1") {
-			t.Fatalf("%v: CI fallback note does not mention s1: %v", vars, err)
+		if err.Error() != ciFallbackNote {
+			t.Fatalf("%v: CI note = %q, want %q", vars, err.Error(), ciFallbackNote)
 		}
 		if _, err := os.Stat(filepath.Dir(Path(home))); !errors.Is(err, fs.ErrNotExist) {
 			t.Fatalf("%v: CI created %s: %v", vars, LogicalPath, err)

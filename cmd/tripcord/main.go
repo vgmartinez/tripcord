@@ -597,9 +597,9 @@ func loadFingerprintKey() (key *fpkey.Key, note string, err error) {
 	case err == nil:
 		return key, "", nil
 	case errors.Is(err, fpkey.ErrCIFallback):
-		// ErrCIFallback's own message already names the mode and the
-		// reason; print it as-is rather than wrapping it in the
-		// generic ErrUnavailable phrasing below.
+		// Error() is exactly "CI detected: fingerprint key not created,
+		// using s1". Print that, not the generic ErrUnavailable
+		// phrasing below.
 		return nil, err.Error(), nil
 	case errors.Is(err, fpkey.ErrUnavailable):
 		return nil, "fingerprints use the structural s1 discriminator: " + err.Error(), nil
