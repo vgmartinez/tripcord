@@ -28,6 +28,7 @@ const (
 // A backslash escapes only a character the shell treats specially, so
 // C:\Tools\curl.exe keeps its path separators.
 func lex(src string) (toks []token, subs []string) {
+	toks = make([]token, 0, 8+len(src)/4)
 	var b strings.Builder
 	inWord := false
 	flush := func() {
@@ -162,13 +163,34 @@ func lex(src string) (toks []token, subs []string) {
 			op(")")
 			i++
 		default:
-			inWord = true
-			b.WriteByte(c)
-			i++
+			j := i + 1
+			for j < len(src) && !special(src[j]) {
+				j++
+			}
+			// A word with no quoting is a slice of src, which keeps a
+			// long unquoted command from being copied byte by byte.
+			if !inWord && (j == len(src) || endsWord(src[j])) {
+				toks = append(toks, token{word: src[i:j]})
+			} else {
+				inWord = true
+				b.WriteString(src[i:j])
+			}
+			i = j
 		}
 	}
 	flush()
 	return toks, subs
+}
+
+// special reports whether lex handles c other than as a word byte.
+func special(c byte) bool {
+	return strings.IndexByte(" \t\r\n'\"\\$`<>|&;()", c) >= 0
+}
+
+// endsWord reports whether c ends a word without joining a redirect to
+// it, so an fd number such as the 2 in 2>&1 is not emitted as a word.
+func endsWord(c byte) bool {
+	return strings.IndexByte(" \t\r\n|&;()", c) >= 0
 }
 
 // lexDouble reads a double-quoted string starting at i, just past the
@@ -255,12 +277,17 @@ type command struct {
 // targets.
 func split(toks []token) []command {
 	var cmds []command
+	// Every command's words are a window of one array.
+	all := make([]string, 0, len(toks))
+	start := 0
 	var cur command
 	dropNext := false
 	end := func(pipeIn bool) {
-		if len(cur.words) > 0 {
+		if len(all) > start {
+			cur.words = all[start:len(all):len(all)]
 			cmds = append(cmds, cur)
 		}
+		start = len(all)
 		cur = command{pipeIn: pipeIn}
 	}
 	for _, t := range toks {
@@ -270,14 +297,14 @@ func split(toks []token) []command {
 				dropNext = false
 				continue
 			}
-			cur.words = append(cur.words, t.word)
+			all = append(all, t.word)
 		case opRedirect:
 			dropNext = true
 		case opPipe:
 			end(true)
 		case opOpen:
 			// curl ... | (sh) still pipes into sh.
-			end(cur.pipeIn && len(cur.words) == 0)
+			end(cur.pipeIn && len(all) == start)
 		default:
 			end(false)
 		}

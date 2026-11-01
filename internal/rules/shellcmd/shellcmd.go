@@ -712,11 +712,25 @@ func isSchemeChar(c byte) bool {
 // dotNetDownload reports a .NET download call, as in
 // IEX (New-Object Net.WebClient).DownloadString('https://...').
 func dotNetDownload(src string) bool {
-	lower := strings.ToLower(src)
-	if !strings.Contains(lower, "downloadstring") && !strings.Contains(lower, "downloadfile") && !strings.Contains(lower, "downloaddata") {
-		return false
+	return hasDownloadCall(src) && urlTargets(src) == remote
+}
+
+// hasDownloadCall reports whether src names DownloadString,
+// DownloadFile, or DownloadData in any letter case, without copying it.
+func hasDownloadCall(src string) bool {
+	const verb = "download"
+	for i := 0; i+len(verb) <= len(src); i++ {
+		if src[i]|0x20 != 'd' || !strings.EqualFold(src[i:i+len(verb)], verb) {
+			continue
+		}
+		rest := src[i+len(verb):]
+		for _, kind := range []string{"string", "file", "data"} {
+			if len(rest) >= len(kind) && strings.EqualFold(rest[:len(kind)], kind) {
+				return true
+			}
+		}
 	}
-	return urlTargets(src) == remote
+	return false
 }
 
 func hasAnyPrefix(s string, prefixes ...string) bool {
