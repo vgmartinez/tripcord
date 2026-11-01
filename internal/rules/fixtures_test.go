@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/vgmartinez/tripcord/internal/model"
 )
 
 // TestRuleFixtures runs every rule's positivos and negativos. By default
@@ -84,6 +86,14 @@ func TestCheckRuleFixturesFailures(t *testing.T) {
 		"raw negative triggers":     {map[string]string{"positivos/a.json": trigger, "negativos/repo/.mcp.json": `{"mcpServers":{"a":{"command":"sh"}}}`}, "negative fixture triggered"},
 		"raw unreadable":            {map[string]string{"positivos/a.json": trigger, "negativos/repo/.mcp.json": `{`}, "not fully read"},
 		"raw empty":                 {map[string]string{"positivos/a.json": trigger, "negativos/repo/README.md": "x"}, "no config items"},
+		"severity mismatch":         {map[string]string{"positivos/a.json": trigger, "negativos/b.json": quiet, ExpectFile: "positivos:\n  a.json: high\n"}, "severities = [critical], want [high]"},
+		"default severity":          {map[string]string{"positivos/a.json": trigger, "negativos/b.json": quiet, ExpectFile: "positivos:\n  a.json: [critical, high]\n"}, "want [critical high]"},
+		"stale expectation":         {map[string]string{"positivos/a.json": trigger, "negativos/b.json": quiet, ExpectFile: "positivos:\n  gone.json: critical\n"}, "gone.json: no such fixture"},
+		"bad severity":              {map[string]string{"positivos/a.json": trigger, "negativos/b.json": quiet, ExpectFile: "positivos:\n  a.json: severe\n"}, "severe"},
+		"negative severity":         {map[string]string{"positivos/a.json": trigger, "negativos/b.json": quiet, ExpectFile: "negativos:\n  b.json: high\n"}, "can only expect error"},
+		"positive error":            {map[string]string{"positivos/a.json": trigger, "negativos/b.json": quiet, ExpectFile: "positivos:\n  a.json: error\n"}, "error"},
+		"expected error evaluates":  {map[string]string{"positivos/a.json": trigger, "negativos/b.json": quiet, ExpectFile: "negativos:\n  b.json: error\n"}, "expected TEST-CFG-002 to fail to evaluate"},
+		"unknown key":               {map[string]string{"positivos/a.json": trigger, "negativos/b.json": quiet, ExpectFile: "positives:\n  a.json: critical\n"}, "positives"},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -114,6 +124,27 @@ func TestCheckRuleFixturesFailures(t *testing.T) {
 		writeFile(t, filepath.Join(dir, rule.ID+TestDirSuffix, "negativos/repo/.mcp.json"), `{"mcpServers":{"a":{"command":"node"}}}`)
 		if err := CheckRuleFixtures(context.Background(), env, dir, rule, adapterDiscover); err != nil {
 			t.Fatal(err)
+		}
+	})
+	t.Run("expected error and severities pass", func(t *testing.T) {
+		dir := t.TempDir()
+		writeFile(t, filepath.Join(dir, rule.ID+TestDirSuffix, "positivos/a.json"), trigger)
+		writeFile(t, filepath.Join(dir, rule.ID+TestDirSuffix, "negativos/b.json"), quiet)
+		writeFile(t, filepath.Join(dir, rule.ID+TestDirSuffix, "negativos/c.json"), `{"harness":"claude","scope":"repo","path":".mcp.json","kind":"mcp-server","payload":{"command":1}}`)
+		writeFile(t, filepath.Join(dir, rule.ID+TestDirSuffix, ExpectFile), "positivos:\n  a.json: critical\nnegativos:\n  c.json: error\n")
+		if err := CheckRuleFixtures(context.Background(), env, dir, rule, adapterDiscover); err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("severity_when needs an expectation", func(t *testing.T) {
+		dir := t.TempDir()
+		writeFile(t, filepath.Join(dir, rule.ID+TestDirSuffix, "positivos/a.json"), trigger)
+		writeFile(t, filepath.Join(dir, rule.ID+TestDirSuffix, "negativos/b.json"), quiet)
+		clauses := *rule
+		clauses.SeverityWhen = []SeverityClause{{Severity: model.SeverityHigh, When: rule.When}}
+		err := CheckRuleFixtures(context.Background(), env, dir, &clauses, adapterDiscover)
+		if err == nil || !strings.Contains(err.Error(), "no expected severity") {
+			t.Fatalf("err = %v", err)
 		}
 	})
 }

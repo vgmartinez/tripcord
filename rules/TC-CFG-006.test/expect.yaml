@@ -1,0 +1,33 @@
+# The severities each positive fixture must produce (see
+# internal/rules/fixtures.go, ExpectFile). A negative listed here must
+# fail to evaluate instead of matching.
+positivos:
+  claude-agent-frontmatter: high
+  claude-bash-tmp-payload: high
+  claude-home-script: high
+  claude-http-remote: high
+  claude-node-home-module: high
+  claude-opt-script: medium
+  claude-parent-dir: medium
+  claude-plugin-hooks-json: high
+  claude-project-dir-escape: medium
+  codex-config-toml-tmp: high
+  codex-hooks-json-home: high
+  copilot-bash-home: high
+  copilot-exec-args-tmp: high
+  copilot-powershell-temp: high
+  cursor-absolute-users: high
+  cursor-home-script: high
+  gemini-tmp-script: high
+  missing-claude-project-dir: medium
+  missing-codex-hooks-json: medium
+  missing-copilot-cwd: medium
+  missing-copilot-exec-args: medium
+  missing-cursor-node-script: medium
+  missing-gemini-project-dir: medium
+  missing-nested-package: medium
+  missing-skill-script: medium
+  missing-windsurf-python: medium
+  shared-skill-tmp: high
+  windsurf-home-script: high
+  windsurf-powershell-userprofile: high

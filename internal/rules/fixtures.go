@@ -8,12 +8,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 
+	"go.yaml.in/yaml/v3"
+
 	"github.com/vgmartinez/tripcord/internal/model"
+	"github.com/vgmartinez/tripcord/internal/strictyaml"
 )
 
 // Fixture directories inside <ID>.test/. The names follow the spec.
@@ -27,6 +32,81 @@ const (
 // payload bytes.
 const FixtureExt = ".json"
 
+// ExpectFile, in <ID>.test/, says what each fixture must produce, keyed
+// by the fixture's file or directory name:
+//
+//	positivos:
+//	  curl-pipe: high
+//	  two-hooks: [high, medium]
+//	negativos:
+//	  args-object.json: error
+//
+// A positive lists the distinct severities of its matches. Every
+// positive of a rule with severity_when needs an entry; a positive of
+// any other rule defaults to the rule's severity. A negative may only be
+// marked error: the rule must fail to evaluate it, which a scan reports
+// as an incomplete-scan diagnostic, and it must not match.
+const ExpectFile = "expect.yaml"
+
+const expectError = "error"
+
+type expectations struct {
+	Positive map[string]outcome `yaml:"positivos"`
+	Negative map[string]outcome `yaml:"negativos"`
+}
+
+// outcome is a severity, a list of severities, or error.
+type outcome []string
+
+func (o *outcome) UnmarshalYAML(n *yaml.Node) error {
+	if n.Kind == yaml.ScalarNode {
+		*o = outcome{n.Value}
+		return nil
+	}
+	var list []string
+	if err := n.Decode(&list); err != nil {
+		return err
+	}
+	*o = list
+	return nil
+}
+
+func readExpectations(base string) (expectations, error) {
+	var exp expectations
+	path := filepath.Join(base, ExpectFile)
+	raw, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return exp, nil
+	}
+	if err == nil {
+		err = strictyaml.Decode(raw, &exp)
+	}
+	if err != nil {
+		return exp, fmt.Errorf("%s: %w", path, err)
+	}
+	for name, o := range exp.Positive {
+		if len(o) == 0 {
+			return exp, fmt.Errorf("%s: positivos %s: no severity", path, name)
+		}
+		seen := map[string]bool{}
+		for _, sev := range o {
+			if _, err := model.ParseSeverity(sev); err != nil {
+				return exp, fmt.Errorf("%s: positivos %s: %w", path, name, err)
+			}
+			if seen[sev] {
+				return exp, fmt.Errorf("%s: positivos %s: %s is listed twice", path, name, sev)
+			}
+			seen[sev] = true
+		}
+	}
+	for name, o := range exp.Negative {
+		if !slices.Equal(o, outcome{expectError}) {
+			return exp, fmt.Errorf("%s: negativos %s: a negative can only expect %s", path, name, expectError)
+		}
+	}
+	return exp, nil
+}
+
 // DiscoverFunc normalizes the repository at root into config items, the
 // way `tripcord scan` does. It runs raw config fixtures: a subdirectory
 // of positivos/ or negativos/ is a repository tree of real config files.
@@ -34,8 +114,10 @@ const FixtureExt = ".json"
 type DiscoverFunc func(ctx context.Context, root string) ([]model.ConfigItem, error)
 
 // CheckRuleFixtures runs rule against packDir/<ID>.test/. Every fixture
-// in positivos/ must produce at least one match and every fixture in
-// negativos/ must produce none. Evaluation errors fail either kind.
+// in positivos/ must produce at least one match, with the severities
+// ExpectFile lists, and every fixture in negativos/ must produce none.
+// Evaluation errors fail either kind, except a negative ExpectFile marks
+// error, which must fail to evaluate.
 // Each directory needs at least one fixture, and that fixture must
 // contain an item inside the rule's harness and file globs. A negative
 // whose items are all out of scope would pass without testing when.
@@ -46,15 +128,40 @@ type DiscoverFunc func(ctx context.Context, root string) ([]model.ConfigItem, er
 func CheckRuleFixtures(ctx context.Context, env *Env, packDir string, rule *Rule, discover DiscoverFunc) error {
 	base := filepath.Join(packDir, rule.ID+TestDirSuffix)
 	engine := NewEngine(env, []*Rule{rule})
+	exp, err := readExpectations(base)
+	if err != nil {
+		return err
+	}
 	var errs []error
 	for _, kind := range []string{PositiveDir, NegativeDir} {
 		dir := filepath.Join(base, kind)
+		want := exp.Negative
+		if kind == PositiveDir {
+			want = exp.Positive
+		}
 		fixtures, err := fixtureEntries(dir, discover != nil)
 		if err != nil {
 			errs = append(errs, err)
 			continue
 		}
+		names := map[string]bool{}
 		for _, f := range fixtures {
+			names[filepath.Base(f.path)] = true
+		}
+		for _, name := range slices.Sorted(maps.Keys(want)) {
+			if !names[name] {
+				errs = append(errs, fmt.Errorf("%s: %s %s: no such fixture", filepath.Join(base, ExpectFile), kind, name))
+			}
+		}
+		for _, f := range fixtures {
+			expected, listed := want[filepath.Base(f.path)]
+			if kind == PositiveDir && !listed {
+				if len(rule.SeverityWhen) > 0 {
+					errs = append(errs, fmt.Errorf("%s: no expected severity in %s (the rule has severity_when)", f.path, ExpectFile))
+					continue
+				}
+				expected = outcome{string(rule.Severity)}
+			}
 			var items []model.ConfigItem
 			if f.raw {
 				items, err = discover(ctx, f.path)
@@ -65,7 +172,7 @@ func CheckRuleFixtures(ctx context.Context, env *Env, packDir string, rule *Rule
 				items, err = readFixture(f.path)
 			}
 			if err == nil {
-				err = checkFixture(ctx, engine, rule, f.path, items, kind == PositiveDir)
+				err = checkFixture(ctx, engine, rule, f.path, items, kind == PositiveDir, expected)
 			}
 			if err != nil {
 				errs = append(errs, err)
@@ -109,7 +216,7 @@ func fixtureEntries(dir string, rawAllowed bool) ([]fixtureEntry, error) {
 	return out, nil
 }
 
-func checkFixture(ctx context.Context, engine *Engine, rule *Rule, file string, items []model.ConfigItem, positive bool) error {
+func checkFixture(ctx context.Context, engine *Engine, rule *Rule, file string, items []model.ConfigItem, positive bool, want outcome) error {
 	if len(items) == 0 {
 		return fmt.Errorf("%s: no config items", file)
 	}
@@ -120,6 +227,15 @@ func checkFixture(ctx context.Context, engine *Engine, rule *Rule, file string, 
 		return fmt.Errorf("%s: no item matches the rule's harness and files", file)
 	}
 	res := engine.ScanConfig(ctx, items)
+	if slices.Equal(want, outcome{expectError}) {
+		switch {
+		case len(res.Errors) == 0:
+			return fmt.Errorf("%s: expected %s to fail to evaluate", file, rule.ID)
+		case len(res.Matches) > 0:
+			return fmt.Errorf("%s: fixture expected to fail triggered %s on %s", file, rule.ID, res.Matches[0].Item.Path)
+		}
+		return nil
+	}
 	if len(res.Errors) > 0 {
 		errs := make([]error, len(res.Errors))
 		for i, e := range res.Errors {
@@ -132,6 +248,17 @@ func checkFixture(ctx context.Context, engine *Engine, rule *Rule, file string, 
 		return fmt.Errorf("%s: positive fixture did not trigger %s", file, rule.ID)
 	case !positive && len(res.Matches) > 0:
 		return fmt.Errorf("%s: negative fixture triggered %s on %s", file, rule.ID, res.Matches[0].Item.Path)
+	case positive:
+		var got []string
+		for _, m := range res.Matches {
+			got = append(got, string(m.Severity))
+		}
+		slices.Sort(got)
+		got = slices.Compact(got)
+		w := slices.Sorted(slices.Values(want))
+		if !slices.Equal(got, w) {
+			return fmt.Errorf("%s: %s severities = %v, want %v", file, rule.ID, got, w)
+		}
 	}
 	return nil
 }

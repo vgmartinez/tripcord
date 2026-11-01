@@ -1,0 +1,15 @@
+# The severities each positive fixture must produce (see
+# internal/rules/fixtures.go, ExpectFile). A negative listed here must
+# fail to evaluate instead of matching.
+positivos:
+  claude-plugin-skill: medium
+  claude-skill-curl-pipe: high
+  claude-skill-encoded-powershell: high
+  claude-skill-home-script: high
+  claude-skill-http-hook: high
+  claude-skill-lowercase-name: medium
+  claude-skill-nested-package: medium
+  claude-skill-relative-script: medium
+  claude-skill-two-events: [high, medium]
+  shared-agents-skill: high
+  shared-github-skill: medium

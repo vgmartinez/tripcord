@@ -1,0 +1,24 @@
+# The severities each positive fixture must produce (see
+# internal/rules/fixtures.go, ExpectFile). A negative listed here must
+# fail to evaluate instead of matching.
+positivos:
+  bare-bash: high
+  bare-edit: medium
+  bare-read: medium
+  bare-webfetch: medium
+  bare-write: medium
+  bash-colon-star: high
+  bash-star: high
+  edit-abs-root: high
+  edit-triple-slash-root: high
+  mcp-star: high
+  nested-edit-doublestar: medium
+  powershell-star: high
+  read-abs-root-medium: medium
+  read-home: medium
+  read-root: medium
+  read-star-among-narrow: medium
+  read-triple-slash-root-medium: medium
+  star: high
+  webfetch-domain: medium
+  write-doublestar: medium

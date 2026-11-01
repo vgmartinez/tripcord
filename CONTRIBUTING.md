@@ -178,6 +178,17 @@ A positive and a negative both fail when no discovered item is inside
 the rule's harness and file globs. A negative that only holds an
 out-of-scope file would otherwise pass without testing `when`.
 
+`rules/<ID>.test/expect.yaml` says what each fixture must produce, keyed
+by its directory or file name. A positive lists the distinct severities
+of its matches (`curl-pipe: high`, `two-hooks: [high, medium]`); a rule
+with `severity_when` needs an entry for every positive, and a positive
+of any other rule must match at the rule's severity. A negative may be
+marked `error`: the rule must fail to evaluate it, as for a hook whose
+`args` hold an object. An entry for a fixture that does not exist
+fails. `TestSeverityClausesAreCovered` disables each `severity_when`
+clause in turn and fails when the fixtures still pass, so every clause
+needs a fixture whose severity it decides.
+
 Fixture configs use `.invalid` or `example` hosts and placeholder
 secrets only.
 

@@ -1,0 +1,17 @@
+# The severities each positive fixture must produce (see
+# internal/rules/fixtures.go, ExpectFile). A negative listed here must
+# fail to evaluate instead of matching.
+positivos:
+  claude-bypass-and-skip-prompt: high
+  claude-bypass-permissions: high
+  claude-bypass-with-deny: high
+  claude-nested-package: high
+  claude-skip-prompt-only: medium
+  codex-approval-never: high
+  codex-danger-full-access: high
+  codex-nested-service: high
+  codex-profile-approval-never: high
+  codex-profile-yolo: high
+  gemini-default-approval-yolo: high
+  gemini-flat-auto-accept: high
+  gemini-tools-auto-accept: high
