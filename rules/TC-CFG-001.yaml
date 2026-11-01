@@ -2,6 +2,9 @@
 # opens, before a PreToolUse guard can see it. The npm worm of August
 # 2026 planted one that piped a remote script to a shell.
 #
+# Rules read each field as the file wrote it, before URL secrets are
+# stripped; findings show only the sanitized form (see docs/scan.md).
+#
 # shell.risks reads each command field the way a shell splits it (see
 # internal/rules/shellcmd): quotes, separators, and pipes per simple
 # command, and the payload of sudo, env, sh -c, PowerShell -Command or a
