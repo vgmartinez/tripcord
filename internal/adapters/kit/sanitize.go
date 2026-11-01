@@ -481,7 +481,7 @@ func stripEmbeddedURLSecrets(value string) (string, []string) {
 // do not end a query, and neither does a single &, its own separator; a
 // run of ")" and backticks that ends the match is kept, since it closes a
 // $( ) or backtick substitution around the URL. removedRaw is the
-// removed text, NUL-joined, for KeyDiscriminator only.
+// removed text, NUL-joined, for the "sig:" discriminator only.
 func StripEmbeddedURL(m string) (stripped, removedRaw string) {
 	quote := byte(0)
 	if len(m) > 0 && (m[0] == '\'' || m[0] == '"') {
