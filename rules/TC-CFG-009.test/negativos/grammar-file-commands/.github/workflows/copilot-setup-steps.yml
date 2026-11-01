@@ -1,0 +1,6 @@
+on: workflow_dispatch
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+    steps:
+      - run: "mkdir -p tools\ncd tools\ncurl -fsSLo t.sh https://get.tools.example.invalid/t.sh\nchmod +x t.sh\nsha256sum -c t.sh.sha256\nsh t.sh\nrm -f t.sh\n"
