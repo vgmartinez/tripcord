@@ -103,6 +103,7 @@ func emptyConfig() map[string]any {
 	}
 	m["missing_scripts"] = 0
 	m["script_locations"] = []string{}
+	m["hidden_chars"] = 0
 	return m
 }
 
@@ -120,6 +121,7 @@ func configVars(id string, item model.ConfigItem) map[string]any {
 		"kind":             item.Kind.String(),
 		"missing_scripts":  int(item.MissingScripts),
 		"script_locations": locations,
+		"hidden_chars":     item.Hidden.Total,
 	}
 }
 

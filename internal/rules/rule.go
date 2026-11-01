@@ -31,13 +31,17 @@ const MaxRuleBytes = 64 << 10
 //	refs:
 //	  - https://example.com/incident
 //
-// Every key except severity_when is required, and unknown keys are
-// rejected. severity_when, when present, is tried in order after when
-// is true: the first true clause is the severity of that match, and an
-// item no clause accepts is not a match. when then holds only what the
-// clauses share, so a pattern is written once. severity is the rule's
-// catalog severity and the floor a policy lock refuses to lower. A
-// policy severity override still replaces the per-match result.
+// Every key except severity_when and evidence is required, and unknown
+// keys are rejected. evidence, when present, names what a finding's
+// excerpt describes besides the config citation: hidden_chars is the
+// item's hidden code points by code point, line, and column (see
+// internal/hiddenchar), never the text they hide. severity_when, when
+// present, is tried in order after when is true: the first true clause
+// is the severity of that match, and an item no clause accepts is not a
+// match. when then holds only what the clauses share, so a pattern is
+// written once. severity is the rule's catalog severity and the floor a
+// policy lock refuses to lower. A policy severity override still
+// replaces the per-match result.
 type Spec struct {
 	ID           string         `yaml:"id"`
 	Pack         string         `yaml:"pack"`
@@ -49,7 +53,13 @@ type Spec struct {
 	When         string         `yaml:"when"`
 	Fix          string         `yaml:"fix"`
 	Refs         []string       `yaml:"refs"`
+	Evidence     string         `yaml:"evidence"`
 }
+
+// EvidenceHiddenChars is the evidence value that puts an item's hidden
+// code points in the finding's excerpt and its first line in the
+// location.
+const EvidenceHiddenChars = "hidden_chars"
 
 // SeverityWhen is one per-match severity clause. Title, when set,
 // replaces the rule title on the findings of that clause, for a match
@@ -128,6 +138,9 @@ func (s *Spec) Validate() error {
 	if len(s.Refs) == 0 {
 		return errors.New("refs needs at least one incident or official documentation link")
 	}
+	if s.Evidence != "" && s.Evidence != EvidenceHiddenChars {
+		return fmt.Errorf("evidence %q: want %s or nothing", s.Evidence, EvidenceHiddenChars)
+	}
 	for _, ref := range s.Refs {
 		if err := validateRef(ref); err != nil {
 			return err
@@ -184,6 +197,8 @@ type Rule struct {
 	Fix          string
 	Refs         []string
 	When         *Expr
+	// Evidence is the spec's evidence: "" or EvidenceHiddenChars.
+	Evidence string
 }
 
 // Compile validates spec and compiles its when expression in env.
@@ -224,6 +239,7 @@ func Compile(spec *Spec, manifest PackRef, env *Env) (*Rule, error) {
 		Files:        append([]string(nil), spec.Files...),
 		Fix:          spec.Fix,
 		Refs:         append([]string(nil), spec.Refs...),
+		Evidence:     spec.Evidence,
 		When:         when,
 	}, nil
 }

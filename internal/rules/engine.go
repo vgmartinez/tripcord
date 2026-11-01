@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/vgmartinez/tripcord/internal/hiddenchar"
 	"github.com/vgmartinez/tripcord/internal/model"
 )
 
@@ -58,7 +59,11 @@ const ConfigConfidence = 1.0
 // decide them. The evidence cites the config item by ConfigItem.ID.
 // When the payload carries a stable entry name, that name is the
 // evidence key, so two matches in one file get distinct fingerprints.
-// The evidence carries no excerpt, so no file content reaches the finding.
+// The evidence carries no file content. A rule with evidence
+// hidden_chars adds an excerpt of the item's hidden code points by code
+// point, line, and column (hiddenchar.Excerpt), and the first one's line
+// to the location; the excerpt is part of the fingerprint, the line is
+// not.
 func (m Match) Finding(severity model.Severity, decision model.Decision) (model.Finding, error) {
 	id, err := m.Item.ID()
 	if err != nil {
@@ -66,6 +71,13 @@ func (m Match) Finding(severity model.Severity, decision model.Decision) (model.
 	}
 	loc := model.Location{Harness: m.Item.Harness, Scope: m.Item.Scope, Path: m.Item.Path}
 	evidence := []model.Evidence{{Config: &model.ConfigRef{ID: id, Key: ConfigEvidenceKey(m.Item)}}}
+	if hidden := m.Item.Hidden; m.Rule.Evidence == EvidenceHiddenChars && hidden.Total > 0 {
+		evidence[0].Excerpt = hiddenchar.Excerpt(hidden)
+		if len(hidden.Runs) > 0 {
+			line := hidden.Runs[0].Line
+			loc.Line = &line
+		}
+	}
 	fp, err := model.Fingerprint(m.Rule.ID, loc, evidence)
 	if err != nil {
 		return model.Finding{}, err

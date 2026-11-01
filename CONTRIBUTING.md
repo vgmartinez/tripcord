@@ -51,7 +51,7 @@ refs:
   - https://workos.com/blog/npm-worm-coding-agent-config-credentials
 ```
 
-Every key except `severity_when` is required. `refs` needs at least one
+Every key except `severity_when` and `evidence` is required. `refs` needs at least one
 https link to the incident or to official documentation; a rule without
 `refs` is not accepted. `pack` is the pack name, `<namespace>/<name>`.
 The version lives only in `rules/pack.yaml` (for example

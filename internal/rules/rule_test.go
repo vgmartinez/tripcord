@@ -128,6 +128,7 @@ func TestParseSpecRejects(t *testing.T) {
 		"not a mapping":   "- a\n- b\n",
 		"empty":           "",
 		"scalar document": "hello\n",
+		"bad evidence":    validRule + "evidence: excerpt\n",
 	}
 	for name, doc := range cases {
 		t.Run(name, func(t *testing.T) {
