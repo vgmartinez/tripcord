@@ -76,7 +76,7 @@ file and hidden-code-point sequence, not presentation coordinates.
 
 `when` sees these variables:
 
-- `config`: the config item (`id`, `harness`, `scope`, `path`, `sha256`, `kind`), `missing_scripts`: on a repository hook, how many project-relative scripts it runs are not in the scanned tree (0 otherwise; see `internal/scriptcheck`), `script_locations`: the location classes of project scripts whose symlink resolves outside the repository, `checksum_files`: on a repository env-setup entry, a map from each committed sums file its `sha256sum -c` checks name to the file names it lists (missing, out-of-tree, and malformed sums files are left out; see `internal/scriptcheck`), and `hidden_chars`: on a markdown file, how many bidi controls, tag characters, and zero-width code points it holds (a leading BOM is not counted; 0 otherwise).
+- `config`: the config item (`id`, `harness`, `scope`, `path`, `sha256`, `kind`), `missing_scripts`: on a repository hook, how many project-relative scripts it runs are not in the scanned tree (0 otherwise; see `internal/scriptcheck`), `script_locations`: the location classes of project scripts whose symlink resolves outside the repository, `checksum_files`: on a repository env-setup entry, a map from each committed sums file its `sha256sum -c` checks name to the file names it lists (missing, out-of-tree, symlinked, and malformed sums files are left out; see `internal/scriptcheck`), `checksum_symlinks`: the fetched or run checksum-grammar filenames that are repository symlinks, and `hidden_chars`: on a markdown file, how many bidi controls, tag characters, and zero-width code points it holds (a leading BOM is not counted; 0 otherwise).
 - `payload`: the item's parsed content.
 - `task`: the same as `payload` when `config.kind == "task"`, otherwise empty.
 - `event`: a `tripcord.event/v1` event, for event rules. Every
@@ -107,9 +107,11 @@ entry, or `sha256sum -c <sums>` where `<sums>` is never fetched or run),
 `mkdir`/`chmod`/`rm`, with nothing else. `cd`, `export`, and assignments
 do not receive checksum credit. Package runners, git
 clone, variable targets, and version tags are never pinned. It costs
-what `shell.risks` costs. `shell.unpinned(command, config.checksum_files)`
-also lets a `sha256sum -c <sums>` check cover the files a committed
-`<sums>` lists; with one argument such a check covers nothing.
+what `shell.risks` costs. `shell.unpinned(command, config.checksum_files,
+config.checksum_symlinks)` also lets a `sha256sum -c <sums>` check cover
+the files a committed final regular `<sums>` file lists, unless a fetched
+or run target is a repository symlink; with one argument such a check
+covers nothing.
 
 `shell.locations(command)` reads the line the same way and returns
 where the programs it runs live: the program of each simple command,

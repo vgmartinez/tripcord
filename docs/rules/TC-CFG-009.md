@@ -112,10 +112,12 @@ Order:
   (`sha256sum -c <sums>`) covers only the files `<sums>` lists, and
   only when `<sums>` is committed to the scanned repository:
   - it exists at the repository root as a regular file. Like the hook
-    scripts of `internal/scriptcheck`, it is found with `Stat` and
-    `EvalSymlinks`, and a symlink must resolve inside the repository.
-    It is then read through the repository's confined reader, at most
-    64 KiB;
+    scripts of `internal/scriptcheck`, its parent path is resolved with
+    `Stat` and `EvalSymlinks` and must stay inside the repository. Its
+    final component is checked with `Lstat` and must itself be a regular
+    file: a committed sums-file symlink, even one to a file inside the
+    repository, gives no credit. It is then read through the
+    repository's confined reader, at most 64 KiB;
   - every line is `<64 hex>  <name>` or `<64 hex> *<name>`, with an
     optional final newline. A blank line, a comment, a carriage return,
     or the BSD `SHA256 (name) = ...` form makes the file malformed;
@@ -128,6 +130,12 @@ Order:
   job's or workflow's `defaults.run`), and a `devcontainer.json` that
   sets `workspaceFolder`, run elsewhere, so get no credit for a plain
   check.
+- Each file the grammar fetches or runs is also checked with `Lstat`.
+  If a committed path with that filename is a symlink, the script gets
+  no checksum credit. This prevents a downloaded script from being
+  written through a link (including one to the sums file or outside the
+  repository), and prevents a sums-file symlink from aliasing the
+  downloaded script.
 
 Copilot steps whose effective shell is fail-closed are read with a
 leading `set -e`, so a check on its own line counts there.
