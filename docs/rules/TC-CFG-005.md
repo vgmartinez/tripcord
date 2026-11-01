@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Severity | high; medium for `skipDangerousModePermissionPrompt` alone |
+| Severity | high for effective bypasses; medium for settings-file intent signals |
 | Harnesses | Claude Code, Codex, Gemini CLI |
 | Files | `.claude/settings.json`, `.codex/config.toml`, `.gemini/settings.json` (any depth, repository scope) |
 | Rule | [`rules/TC-CFG-005.yaml`](../../rules/TC-CFG-005.yaml) |
@@ -15,20 +15,20 @@ contributor's agent loads.
 | Setting | Severity |
 | --- | --- |
 | Claude Code: `permissions.defaultMode` `"bypassPermissions"` | high |
-| Claude Code: `permissions.defaultMode` `"bypassPermissions"` and `skipDangerousModePermissionPrompt: true` in the same file | high, one finding |
+| Claude Code: `permissions.defaultMode` `"bypassPermissions"` and `skipDangerousModePermissionPrompt: true` in the same file | high, one bypass finding with skip in its evidence |
 | Claude Code: `skipDangerousModePermissionPrompt: true` without bypassPermissions | medium |
 | Codex: `sandbox_mode = "danger-full-access"` | high |
 | Codex: `approval_policy = "never"` | high |
 | Codex: either of the above in a `[profiles.<name>]` table | high |
-| Gemini CLI: `general.defaultApprovalMode` `"yolo"` | high |
-| Gemini CLI: `tools.autoAccept: true`, or the older flat `autoAccept: true` | high |
+| Gemini CLI: `general.defaultApprovalMode` `"yolo"` | medium |
+| Gemini CLI: `tools.autoAccept: true`, or the older flat `autoAccept: true` | medium |
 
 With bypassPermissions, Claude Code runs every tool call without a
-prompt. `skipDangerousModePermissionPrompt` removes the warning Claude
-Code shows when that mode is switched on, so on its own it is medium:
-it does not turn approvals off, but anyone who turns the mode on is no
-longer warned. When both are in one file, the finding is reported once,
-on `permissions`, with a title that names both.
+prompt. `skipDangerousModePermissionPrompt` is not read from a Claude Code
+project settings file. It is therefore medium: it signals bypass intent but
+does not turn approvals off there. When both values are in one file, the
+normal high-severity bypass finding is reported once, on `permissions`, with
+the skip setting retained in its evidence.
 
 `danger-full-access` runs Codex commands with no sandbox, so the
 approval policy no longer protects anything outside the workspace;
@@ -38,8 +38,11 @@ profile is evaluated exactly like the top level. Codex does not apply
 shared and its profiles are copied into user configs, so the rule does
 not rely on that.
 
-In Gemini CLI, yolo approves every tool call and `autoAccept` approves
-the tool calls it considers safe without asking.
+Gemini CLI documents that yolo can only be enabled with `--yolo` or
+`--approval-mode=yolo`, not in `settings.json`; its
+`general.defaultApprovalMode` setting excludes `yolo`. `autoAccept` in a
+settings file also does not auto-approve every action. These are medium intent
+signals rather than effective shared-file bypasses.
 
 A Codex config with both `danger-full-access` and
 `approval_policy = "never"` is two findings, one per setting.
@@ -89,14 +92,14 @@ sandbox_mode = "workspace-write"
 approval_policy = "never"
 ```
 
-```json
-{"general": {"defaultApprovalMode": "yolo"}}
-```
-
 Reported, medium:
 
 ```json
 {"permissions": {"defaultMode": "acceptEdits"}, "skipDangerousModePermissionPrompt": true}
+```
+
+```json
+{"general": {"defaultApprovalMode": "yolo"}}
 ```
 
 Not reported:
@@ -127,4 +130,4 @@ mode for a session can pass it on their own command line
 - [Novee: The Sandbox is a Suggestion](https://novee.security/blog/breaking-ai-agent-sandboxes/)
 - [Claude Code settings](https://code.claude.com/docs/en/settings)
 - [Codex config basics](https://learn.chatgpt.com/docs/config-file/config-basic.md)
-- [Gemini CLI configuration](https://geminicli.com/docs/get-started/configuration/)
+- [Gemini CLI configuration reference](https://github.com/google-gemini/gemini-cli/blob/main/docs/reference/configuration.md)

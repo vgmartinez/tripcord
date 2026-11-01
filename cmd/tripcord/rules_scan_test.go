@@ -223,11 +223,11 @@ func TestScanApprovalModeSeverities(t *testing.T) {
 		title      string
 		code       exitcode.Code
 	}{
-		"claude bypass and skip prompt": {".claude/settings.json", `{"permissions":{"defaultMode":"bypassPermissions"},"skipDangerousModePermissionPrompt":true}`, model.SeverityHigh, "bypass-mode warning (bypassPermissions with", exitcode.Findings},
+		"claude bypass and skip prompt": {".claude/settings.json", `{"permissions":{"defaultMode":"bypassPermissions"},"skipDangerousModePermissionPrompt":true}`, model.SeverityHigh, "(bypassPermissions)", exitcode.Findings},
 		"claude bypass":                 {".claude/settings.json", `{"permissions":{"defaultMode":"bypassPermissions"}}`, model.SeverityHigh, "(bypassPermissions)", exitcode.Findings},
 		"claude skip prompt":            {".claude/settings.json", `{"permissions":{"defaultMode":"acceptEdits"},"skipDangerousModePermissionPrompt":true}`, model.SeverityMedium, "skips the bypass-mode warning", exitcode.OK},
 		"codex profile":                 {".codex/config.toml", "[profiles.ci]\napproval_policy = \"never\"\n", model.SeverityHigh, "approval_policy never", exitcode.Findings},
-		"gemini yolo":                   {".gemini/settings.json", `{"general":{"defaultApprovalMode":"yolo"}}`, model.SeverityHigh, "yolo or auto-accept", exitcode.Findings},
+		"gemini yolo":                   {".gemini/settings.json", `{"general":{"defaultApprovalMode":"yolo"}}`, model.SeverityMedium, "yolo or auto-accept", exitcode.OK},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

@@ -5,13 +5,11 @@
 #
 # Claude Code (shared .claude/settings.json; settings.local.json is
 # personal and is not part of this rule's files):
-#   permissions.defaultMode "bypassPermissions" is high. With
-#   skipDangerousModePermissionPrompt true in the same file it is still
-#   one high finding, on permissions, titled for the pair: the adapter's
-#   rule view flags each setting with whether the other is set, and the
-#   skip setting is not reported on its own when bypass is set.
-#   skipDangerousModePermissionPrompt true without bypassPermissions is
-#   medium: it removes the warning for anyone who switches the mode on.
+#   permissions.defaultMode "bypassPermissions" is high. The adapter's
+#   rule view includes skipDangerousModePermissionPrompt as evidence on that
+#   finding when both occur; it is not reported again as a separate finding.
+#   On its own skipDangerousModePermissionPrompt is medium: Claude Code does
+#   not read it from a project setting, but it signals bypass intent.
 # Codex (project .codex/config.toml): sandbox_mode "danger-full-access"
 #   or approval_policy "never", at the top level or in a
 #   [profiles.<name>] table, is high. Profiles are evaluated like the top
@@ -19,8 +17,10 @@
 #   (ignored_in_project is not consulted): the file is still shared and
 #   copied.
 # Gemini CLI (shared .gemini/settings.json): yolo approval mode
-#   (general.defaultApprovalMode "yolo") or auto-accept (tools.autoAccept,
-#   or the older flat autoAccept, true) is high.
+#   (general.defaultApprovalMode "yolo") and auto-accept (tools.autoAccept,
+#   or the older flat autoAccept, true) are medium intent signals. Gemini
+#   documents that yolo can only be enabled from the command line, not a
+#   settings file, and settings autoAccept does not auto-approve all actions.
 #
 # Case: each value is compared the way its harness compares it. Claude
 # Code's defaultMode is an exact enum (only "manual" is an alias, for
@@ -34,13 +34,6 @@ pack: tripcord/core
 title: "Shared config turns off approvals"
 severity: high
 severity_when:
-  - severity: high
-    title: "Shared config turns off approvals and the bypass-mode warning (bypassPermissions with skipDangerousModePermissionPrompt)"
-    when: |
-      config.harness == "claude" && has(payload.setting) && payload.setting == "permissions" &&
-        has(payload.value) && type(payload.value) == map &&
-        has(payload.value.defaultMode) && payload.value.defaultMode == "bypassPermissions" &&
-        has(payload.skip_dangerous_mode_prompt) && payload.skip_dangerous_mode_prompt == true
   - severity: high
     title: "Shared config turns off approvals (bypassPermissions)"
     when: |
@@ -62,8 +55,8 @@ severity_when:
         (payload.setting == "profiles" && type(payload.value) == map && (
           (has(payload.value.sandbox_mode) && payload.value.sandbox_mode == "danger-full-access") ||
           (has(payload.value.approval_policy) && payload.value.approval_policy == "never"))))
-  - severity: high
-    title: "Shared config turns off approvals (yolo or auto-accept)"
+  - severity: medium
+    title: "Shared config signals an approval bypass (yolo or auto-accept)"
     when: |
       config.harness == "gemini" && has(payload.setting) && has(payload.value) && (
         (payload.setting == "autoAccept" &&
@@ -85,4 +78,4 @@ refs:
   - https://novee.security/blog/breaking-ai-agent-sandboxes/
   - https://code.claude.com/docs/en/settings
   - https://learn.chatgpt.com/docs/config-file/config-basic.md
-  - https://geminicli.com/docs/get-started/configuration/
+  - https://github.com/google-gemini/gemini-cli/blob/main/docs/reference/configuration.md
