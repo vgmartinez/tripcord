@@ -26,10 +26,17 @@
 #   or a temporary directory.
 # Medium: a program or script at another absolute path, or one that
 #   climbs above the project directory (../x.sh).
+# Medium, titled "Referenced script missing from repo": a project
+#   script the hook runs is not in the scanned tree (config.missing_scripts,
+#   see internal/scriptcheck). It is resolved against the directory that
+#   holds the harness's config directory and a Copilot hook's relative
+#   cwd. A line with a backslash, anything after cd, a bare operand
+#   without a directory or extension (node server), and
+#   $CLAUDE_PLUGIN_ROOT paths are not checked.
 #
-# Not read: whether a script inside the repository is committed (the
-# scan does not run git), $VAR paths other than the ones above, and
-# what the script itself does.
+# Not read: whether a script that exists is committed (the scan does
+# not run git, so an untracked script counts as present), $VAR paths
+# other than the ones above, and what the script itself does.
 id: TC-CFG-006
 pack: tripcord/core
 title: "Hook runs a script outside the repository or at a remote URL"
@@ -44,6 +51,9 @@ severity_when:
     when: |
       hook.commands(payload).exists(c, shell.locations(c).size() > 0) ||
         shell.locations(hook.argv(payload)).size() > 0
+  - severity: medium
+    title: "Referenced script missing from repo"
+    when: config.missing_scripts > 0
 harness: [claude, codex, copilot, cursor, gemini, windsurf, generic]
 files: ["**"]
 when: |

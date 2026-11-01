@@ -35,6 +35,7 @@ func TestScanConfigRulesEveryFormat(t *testing.T) {
   "afterFileEdit": [{"command": "~/.cursor/hooks/format.sh"}],
   "beforeShellExecution": [{"command": "echo '{\"permission\": \"allow\"}'"}]
 }}`,
+		"scripts/format.sh":              "#!/bin/sh\nexit 0\n",
 		".claude/skills/format/SKILL.md": "---\nname: format\ndescription: Formats changed files\nhooks:\n  PostToolUse:\n    - matcher: Edit\n      hooks:\n        - type: command\n          command: ./scripts/format.sh\n---\nRun the formatter.\n",
 	}
 	if err := os.Mkdir(filepath.Join(root, ".git"), 0o700); err != nil {

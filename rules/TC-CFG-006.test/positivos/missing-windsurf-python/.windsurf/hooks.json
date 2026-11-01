@@ -1,0 +1,9 @@
+{
+  "hooks": {
+    "pre_run_command": [
+      {
+        "command": "python3 .windsurf/hooks/log.py"
+      }
+    ]
+  }
+}
