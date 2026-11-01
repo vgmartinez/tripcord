@@ -64,10 +64,17 @@ fingerprint, and diagnostic is built from that copy only. Matching the raw
 text means sanitizing cannot hide a command from a rule: in
 `echo https://e.com/?x;curl … | sh`, stripping the query must not swallow
 the `;` that starts the second command. A rule has no way to put the raw
-text in a report. Inside a single- or double-quoted URL, that quote bounds
-the query or fragment, so old-style query separators such as `;`, `|`, and
-`&&` are stripped rather than shown. Outside quotes, those shell
-metacharacters are kept with the following command.
+text in a report. The quote-aware URL boundary applies only when a single
+or double quote appears immediately before the URL scheme. In that narrow
+case, the matching closing quote bounds the query or fragment, so old-style
+query separators such as `;`, `|`, and `&&` are stripped rather than shown.
+Outside that case, shell metacharacters are kept with the following command.
+
+The redaction PR will add real quote tracking. Known limits of the current
+boundary matcher are a quote of the other type or an escaped quote inside a
+query, a space or `<` inside a quoted URL, `"--url=https://…"`,
+`-d "x https://…"`, and a greedy closing quote that hides evidence such as
+`'a'https://…`. These predate PR #12 and affect only the JSON evidence key.
 
 Each evaluation of a rule on one entry has a deterministic CEL cost limit:
 20M units for a scan. That limit, not the clock, decides when an expensive

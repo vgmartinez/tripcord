@@ -372,7 +372,7 @@ func StripEmbeddedURL(m string) (stripped, removedRaw string) {
 		end := q + 1 + queryEnd(tail[q+1:], quote)
 		secret := tail[q:end]
 		removed = append(removed, splitSecret(secret)...)
-		if end == len(tail) {
+		if quote == 0 && end == len(tail) {
 			closing := len(secret)
 			for closing > 0 && (secret[closing-1] == ')' || secret[closing-1] == '`') {
 				closing--

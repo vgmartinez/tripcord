@@ -79,8 +79,8 @@ func FuzzStripEmbeddedURL(f *testing.F) {
 			if strings.ContainsAny(rest, "?#") {
 				t.Fatalf("StripEmbeddedURL(%q) = %q keeps query or fragment text", m, got)
 			}
-			if quoted && strings.ContainsAny(rest, "?#") {
-				t.Fatalf("StripEmbeddedURL(%q) = %q keeps content before its closing quote", m, got)
+			if end := strings.IndexAny(m, "?#"); quoted && end >= 0 && !strings.Contains(m[:end], "@") && got != m[:end] {
+				t.Fatalf("StripEmbeddedURL(%q) = %q keeps quoted query or fragment content; want %q", m, got, m[:end])
 			}
 			for r := got; ; {
 				i := strings.Index(r, "://")
