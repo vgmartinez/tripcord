@@ -182,7 +182,7 @@ func TestScanRuleErrorKeepsOtherFindings(t *testing.T) {
 		switch format {
 		case "json":
 			got, diags := jsonRecords(t, stdout.String())
-			if !slices.Equal(got, []string{"TC-CFG-001", "TC-CFG-003"}) {
+			if !slices.Equal(got, []string{"TC-CFG-001", "TC-CFG-003", "TC-CFG-008"}) {
 				t.Fatalf("rules = %v", got)
 			}
 			if len(diags) != 1 || diags[0]["incomplete"] != true || !strings.Contains(fmt.Sprint(diags[0]), message) {

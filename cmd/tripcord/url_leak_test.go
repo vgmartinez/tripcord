@@ -87,67 +87,74 @@ var (
 	urlSecret  = regexp.MustCompile(`://[^\s'"<>]*?[?#&=]([A-Za-z0-9_\-.]{8,})`)
 )
 
-// TestScanCFG001CorpusNeverLeaks scans every TC-CFG-001 fixture as its
-// own repository in every format. Detection reads the raw command, so
-// this checks that none of it reaches a report: no LEAK marker and no
-// URL query or fragment value of the fixture appears, and every positive
-// is still reported.
-func TestScanCFG001CorpusNeverLeaks(t *testing.T) {
+// TestScanConfigCorporaNeverLeak scans every fixture of the rules that
+// detect on the raw view as its own repository in every format.
+// Detection reads the raw command or setting, so this checks that none
+// of it reaches a report: no LEAK marker and no URL query or fragment
+// value of the fixture appears, and every positive is still reported.
+func TestScanConfigCorporaNeverLeak(t *testing.T) {
 	t.Parallel()
-	const corpus = "../../rules/TC-CFG-001.test"
-	for _, kind := range []string{"positivos", "negativos"} {
-		entries, err := os.ReadDir(filepath.Join(corpus, kind))
+	for _, id := range []string{"TC-CFG-001", "TC-CFG-005", "TC-CFG-006", "TC-CFG-007", "TC-CFG-008"} {
+		corpus := "../../rules/" + id + ".test"
+		for _, kind := range []string{"positivos", "negativos"} {
+			entries, err := os.ReadDir(filepath.Join(corpus, kind))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, e := range entries {
+				if !e.IsDir() {
+					continue
+				}
+				src := filepath.Join(corpus, kind, e.Name())
+				scanCorpusFixture(t, id, kind, src)
+			}
+		}
+	}
+}
+
+func scanCorpusFixture(t *testing.T, id, kind, src string) {
+	t.Helper()
+	t.Run(id+"/"+kind+"/"+filepath.Base(src), func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		var secrets []string
+		err := filepath.WalkDir(src, func(path string, d os.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return err
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			secrets = append(secrets, leakMarker.FindAllString(string(data), -1)...)
+			for _, m := range urlSecret.FindAllStringSubmatch(string(data), -1) {
+				secrets = append(secrets, m[1])
+			}
+			rel, _ := filepath.Rel(src, path)
+			dst := filepath.Join(root, rel)
+			if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
+				return err
+			}
+			return os.WriteFile(dst, data, 0o600)
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, e := range entries {
-			if !e.IsDir() {
-				continue
-			}
-			src := filepath.Join(corpus, kind, e.Name())
-			t.Run(kind+"/"+e.Name(), func(t *testing.T) {
-				t.Parallel()
-				root := t.TempDir()
-				var secrets []string
-				err := filepath.WalkDir(src, func(path string, d os.DirEntry, err error) error {
-					if err != nil || d.IsDir() {
-						return err
-					}
-					data, err := os.ReadFile(path)
-					if err != nil {
-						return err
-					}
-					secrets = append(secrets, leakMarker.FindAllString(string(data), -1)...)
-					for _, m := range urlSecret.FindAllStringSubmatch(string(data), -1) {
-						secrets = append(secrets, m[1])
-					}
-					rel, _ := filepath.Rel(src, path)
-					dst := filepath.Join(root, rel)
-					if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
-						return err
-					}
-					return os.WriteFile(dst, data, 0o600)
-				})
-				if err != nil {
-					t.Fatal(err)
-				}
-				if err := os.Mkdir(filepath.Join(root, ".git"), 0o700); err != nil {
-					t.Fatal(err)
-				}
-				for _, format := range []string{"json", "md", "sarif", "text", "gha"} {
-					var stdout, stderr bytes.Buffer
-					run([]string{"scan", "--format", format, root}, &stdout, &stderr)
-					report := stdout.String() + stderr.String()
-					for _, secret := range secrets {
-						if strings.Contains(report, secret) {
-							t.Fatalf("%s: report leaks %q:\n%s", format, secret, report)
-						}
-					}
-					if kind == "positivos" && !strings.Contains(report, "TC-CFG-001") {
-						t.Fatalf("%s: no TC-CFG-001:\n%s", format, report)
-					}
-				}
-			})
+		if err := os.Mkdir(filepath.Join(root, ".git"), 0o700); err != nil {
+			t.Fatal(err)
 		}
-	}
+		for _, format := range []string{"json", "md", "sarif", "text", "gha"} {
+			var stdout, stderr bytes.Buffer
+			run([]string{"scan", "--format", format, root}, &stdout, &stderr)
+			report := stdout.String() + stderr.String()
+			for _, secret := range secrets {
+				if strings.Contains(report, secret) {
+					t.Fatalf("%s: report leaks %q:\n%s", format, secret, report)
+				}
+			}
+			if kind == "positivos" && !strings.Contains(report, id) {
+				t.Fatalf("%s: no %s:\n%s", format, id, report)
+			}
+		}
+	})
 }
