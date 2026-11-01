@@ -7,6 +7,7 @@ import (
 
 	"github.com/vgmartinez/tripcord/internal/model"
 	"github.com/vgmartinez/tripcord/internal/output"
+	"github.com/vgmartinez/tripcord/internal/rules"
 )
 
 var allFormats = []output.Format{output.FormatJSON, output.FormatJSONL, output.FormatSARIF, output.FormatText, output.FormatGHA, output.FormatMD}
@@ -51,6 +52,52 @@ func TestHookColonCredentialNeverRendered(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// A credential glued to docker's -e flag in a hook command is redacted
+// on the shared tool-flag path. The value must not survive into the
+// payload, the item key, the evidence key, a diagnostic, or any report.
+func TestHookDockerGluedPrivateKeyNeverRendered(t *testing.T) {
+	t.Parallel()
+	const secret = "QG01X"
+	const command = "docker run -ePRIVATE_KEY=" + secret + " img"
+	got := discoverSettings(t, hookSettings(t, command))
+	if len(got.Items) != 1 {
+		t.Fatalf("items = %+v diagnostics %q", got.Items, got.Diagnostics)
+	}
+	item := got.Items[0]
+	if bytes.Contains(item.Payload, []byte(secret)) {
+		t.Fatalf("payload leaks %s: %s", secret, item.Payload)
+	}
+	for _, diagnostic := range got.Diagnostics {
+		if strings.Contains(diagnostic, secret) {
+			t.Fatalf("diagnostic leaks %s: %s", secret, diagnostic)
+		}
+	}
+	payloadCommand, _ := payloadField(t, item, "command")
+	key, _ := payloadField(t, item, "key")
+	if strings.Contains(key, secret) {
+		t.Fatalf("key leaks %s: %s", secret, key)
+	}
+	if evidence := rules.ConfigEvidenceKey(item); evidence == "" || strings.Contains(evidence, secret) {
+		t.Fatalf("evidence key = %q", evidence)
+	}
+	finding := hookFinding(t, item, key, payloadCommand)
+	formats := []output.Format{output.FormatJSON, output.FormatMD, output.FormatSARIF, output.FormatText, output.FormatGHA}
+	for _, format := range formats {
+		for name, redactor := range map[string]func(string) string{
+			"default":     output.DefaultRedactor,
+			"passthrough": func(s string) string { return s },
+		} {
+			rendered := render(t, format, finding, redactor)
+			if strings.Contains(rendered, secret) {
+				t.Errorf("%s with %s redactor leaks %s:\n%s", format, name, secret, rendered)
+			}
+			if !strings.Contains(rendered, "REDACTED") {
+				t.Errorf("%s with %s redactor dropped the command:\n%s", format, name, rendered)
+			}
+		}
 	}
 }
 

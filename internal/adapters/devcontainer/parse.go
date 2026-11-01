@@ -1,8 +1,6 @@
 package devcontainer
 
 import (
-	"strings"
-
 	"github.com/vgmartinez/tripcord/internal/adapters/kit"
 	"github.com/vgmartinez/tripcord/internal/model"
 )
@@ -154,32 +152,24 @@ func (f *file) features(value any) {
 	}
 }
 
-// runArgs sanitizes the docker run arguments as an argv. The shared
-// rules redact a credential-named NAME=VALUE element wherever it
-// appears, which covers -e NAME=VALUE and --env=NAME=VALUE. docker also
-// accepts the short flag glued to its value, -eNAME=VALUE, where those
-// rules read the name as "eNAME". After the shared pass, an element
-// that still starts with -e and contains = is sanitized again without
-// that flag, so a value the first pass only partly redacted is finished.
-// An element replaced entirely, such as the argument after --password,
-// is [REDACTED] and no longer starts with -e, so it is left as it is.
+// runArgs sanitizes the arguments of `docker run` as an argv. The array
+// does not include the tool word, which the shared tool-flag rules need
+// in order to tell docker's glued -eNAME=VALUE and --env=NAME=VALUE
+// from a bare -e, so "docker" and "run" are visible to that pass and
+// then dropped. There is no second redaction rule here.
 func (f *file) runArgs(value any) any {
 	args, ok := value.([]any)
 	if !ok {
 		return f.SafeValue("runArgs", value)
 	}
-	out, _ := f.SafeValue("", f.SafeToolArgv(args)).([]any)
-	for i, item := range out {
-		text, isString := item.(string)
-		if !isString {
-			continue
-		}
-		assignment, glued := strings.CutPrefix(text, "-e")
-		if glued && strings.Contains(assignment, "=") {
-			out[i] = "-e" + f.SafeString(assignment)
-		}
+	argv := make([]any, len(args)+2)
+	argv[0], argv[1] = "docker", "run"
+	copy(argv[2:], args)
+	out, ok := f.SafeValue("", f.SafeToolArgv(argv)).([]any)
+	if !ok || len(out) < 2 {
+		return out
 	}
-	return out
+	return out[2:]
 }
 
 // env emits a containerEnv or remoteEnv map with its values redacted and

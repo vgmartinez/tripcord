@@ -160,6 +160,83 @@ func TestRedactToolArgvIsWrapperAgnostic(t *testing.T) {
 	}
 }
 
+// Glued container env assignments (-eNAME=VALUE and --env=NAME=VALUE)
+// take the credential-name rule on NAME. The leading -e is not part of
+// the name, the tool word has to be present, and docker build is not
+// one of the subcommands this covers.
+func TestDefaultRedactorContainerGluedEnv(t *testing.T) {
+	t.Parallel()
+	const secret = "glued-env-secret"
+	for _, tool := range []string{"docker", "podman", "nerdctl"} {
+		for _, sub := range []string{"run", "create", "exec"} {
+			redacted := []struct{ in, want string }{
+				{tool + " " + sub + " -eSECRET_KEY=" + secret, tool + " " + sub + " -eSECRET_KEY=[REDACTED]"},
+				{tool + " " + sub + " -ePASS=" + secret, tool + " " + sub + " -ePASS=[REDACTED]"},
+				{tool + " " + sub + " --env=API_TOKEN=" + secret, tool + " " + sub + " --env=API_TOKEN=[REDACTED]"},
+				{tool + " " + sub + " --env API_TOKEN=" + secret, tool + " " + sub + " --env API_TOKEN=[REDACTED]"},
+			}
+			for _, tc := range redacted {
+				if got := DefaultRedactor(tc.in); got != tc.want || strings.Contains(got, secret) {
+					t.Errorf("DefaultRedactor(%q) = %q, want %q", tc.in, got, tc.want)
+				}
+			}
+		}
+	}
+	wrapped := "sudo docker run -eDB_PASS=" + secret
+	if got, want := DefaultRedactor(wrapped), "sudo docker run -eDB_PASS=[REDACTED]"; got != want {
+		t.Errorf("DefaultRedactor(%q) = %q, want %q", wrapped, got, want)
+	}
+	envWrapped := "env docker run -ePASS=" + secret
+	if got, want := DefaultRedactor(envWrapped), "env docker run -ePASS=[REDACTED]"; got != want {
+		t.Errorf("DefaultRedactor(%q) = %q, want %q", envWrapped, got, want)
+	}
+	if got, removed := RedactCommand("docker run -ePASS=" + secret); got != "docker run -ePASS=[REDACTED]" || !slices.Equal(removed, []string{secret}) {
+		t.Errorf("RedactCommand removed = %q, text %q", removed, got)
+	}
+	for _, in := range []string{
+		"docker run -eHOME=/x",
+		"docker run -eLANG=C",
+		"docker run -ePATH=/usr/bin",
+		"docker run --env HOME=/x",
+		"docker run --env=HOME=/x",
+		"docker build -eX=1",
+		"docker build -ePRIVATE_KEY=" + secret,
+		"echo -ePRIVATE_KEY=" + secret,
+		"echo -ePASS=" + secret,
+	} {
+		if got := DefaultRedactor(in); got != in {
+			t.Errorf("DefaultRedactor(%q) = %q, want unchanged", in, got)
+		}
+	}
+}
+
+func TestRedactToolArgvContainerGluedEnv(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		argv, want, removed []string
+	}{
+		{[]string{"docker", "run", "-eSECRET_KEY=x"}, []string{"docker", "run", "-eSECRET_KEY=[REDACTED]"}, []string{"x"}},
+		{[]string{"podman", "create", "-ePASS=x"}, []string{"podman", "create", "-ePASS=[REDACTED]"}, []string{"x"}},
+		{[]string{"nerdctl", "exec", "--env=API_TOKEN=x"}, []string{"nerdctl", "exec", "--env=API_TOKEN=[REDACTED]"}, []string{"x"}},
+		{[]string{"sudo", "docker", "run", "-eDB_PASS=x"}, []string{"sudo", "docker", "run", "-eDB_PASS=[REDACTED]"}, []string{"x"}},
+		{[]string{"docker", "run", "--env", "API_TOKEN=x"}, []string{"docker", "run", "--env", "API_TOKEN=[REDACTED]"}, []string{"x"}},
+		{[]string{"docker", "run", "--env", "HOME=/x"}, []string{"docker", "run", "--env", "HOME=/x"}, nil},
+		{[]string{"docker", "run", "-eHOME=/x"}, []string{"docker", "run", "-eHOME=/x"}, nil},
+		{[]string{"docker", "run", "-eLANG=C"}, []string{"docker", "run", "-eLANG=C"}, nil},
+		{[]string{"docker", "run", "-ePATH=/usr/bin"}, []string{"docker", "run", "-ePATH=/usr/bin"}, nil},
+		{[]string{"docker", "build", "-eX=1"}, []string{"docker", "build", "-eX=1"}, nil},
+		{[]string{"docker", "build", "-ePRIVATE_KEY=x"}, []string{"docker", "build", "-ePRIVATE_KEY=x"}, nil},
+		{[]string{"-ePRIVATE_KEY=x"}, []string{"-ePRIVATE_KEY=x"}, nil},
+		{[]string{"echo", "-ePASS=x"}, []string{"echo", "-ePASS=x"}, nil},
+	}
+	for _, tc := range cases {
+		got, removed := RedactToolArgv(tc.argv)
+		if !slices.Equal(got, tc.want) || !slices.Equal(removed, tc.removed) {
+			t.Errorf("RedactToolArgv(%q) = %q, %q; want %q, %q", tc.argv, got, removed, tc.want, tc.removed)
+		}
+	}
+}
+
 func TestDefaultRedactorFollowUpGaps(t *testing.T) {
 	t.Parallel()
 	leaks := map[string]string{

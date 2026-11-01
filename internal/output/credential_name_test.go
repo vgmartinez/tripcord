@@ -25,6 +25,9 @@ func TestCredentialNamedAssignmentsAreRedacted(t *testing.T) {
 		{"TOKEN_TTL=30,SECRET_KEY=LATERVAL", "TOKEN_TTL=30,SECRET_KEY=[REDACTED]", "LATERVAL"},
 		{"PRIVATE_KEY=BAREPK deploy", "PRIVATE_KEY=[REDACTED] deploy", "BAREPK"},
 		{"docker run -e DB_PASS=DBPASSVAL img", "docker run -e DB_PASS=[REDACTED] img", "DBPASSVAL"},
+		{"PASS=PASSVAL cmd", "PASS=[REDACTED] cmd", "PASSVAL"},
+		{"export PASS=PASSVAL", "export PASS=[REDACTED]", "PASSVAL"},
+		{"PASS: COLONPASS", "PASS: [REDACTED]", "COLONPASS"},
 		{"SMTP_PASS='SMTPVAL' mailer", "SMTP_PASS='[REDACTED]' mailer", "SMTPVAL"},
 		{"SECRET_KEY: YAMLVAL", "SECRET_KEY: [REDACTED]", "YAMLVAL"},
 		{"DB_PASS: YAMLPASS", "DB_PASS: [REDACTED]", "YAMLPASS"},
@@ -48,13 +51,18 @@ func TestCredentialNamedAssignmentsAreRedacted(t *testing.T) {
 //     credential (a lifetime, a reference), not its value.
 //   - PWD and OLDPWD are the shell's working directories; "pwd" counts
 //     only after another segment (DB_PWD).
-//   - TOKENIZER and SECRETARY merely start with a credential word, and
-//     BYPASS and PASS_THROUGH are not a "pass" after another segment.
+//   - TOKENIZER, SECRETARY, and COMPASS merely start with or contain a
+//     credential word. BYPASS is not the segment "pass". PASS_THROUGH
+//     starts with that segment but is not only it. PASS_FILE names a
+//     file, like SECRET_KEY_FILE.
 func TestCredentialMetadataAssignmentsAreKept(t *testing.T) {
 	t.Parallel()
 	for _, in := range []string{
 		"BYPASS=1 make",
 		"PASS_THROUGH=1 make",
+		"COMPASS=1 make",
+		"MYPASS=1 make",
+		"PASS_FILE=/run/secrets/p app",
 		"SECRET_KEY_FILE=/run/secrets/key app",
 		"docker run -e TOKEN_PATH=/var/run/token img",
 		"GITHUB_TOKEN_ENV_VAR=GH_TOKEN tool",
@@ -108,10 +116,11 @@ func TestCredentialName(t *testing.T) {
 		"SECRET_KEY": true, "AWS_SECRET_ACCESS_KEY": true, "aws_access_key_id": true,
 		"GITHUB_TOKEN": true, "_authToken": true, "PGPASSWORD": true, "DB_PWD": true,
 		"X-Api-Key": true, "PRIVATE_KEY": true, "credentials": true, "client-secrets": true,
-		"DB_PASS": true, "redis-pass": true,
+		"DB_PASS": true, "redis-pass": true, "PASS": true, "DB_PASS_V2": true,
 		"SECRET_KEY_FILE": false, "TOKEN_TTL": false, "PWD": false, "OLDPWD": false,
 		"TOKENIZER": false, "SECRETARY": false, "MONKEY": false, "KEY": false, "": false,
-		"BYPASS": false, "PASS": false, "--with-token": false,
+		"BYPASS": false, "PASS_THROUGH": false, "COMPASS": false, "MYPASS": false,
+		"PASS_FILE": false, "--with-token": false,
 	} {
 		if got := CredentialName(name); got != want {
 			t.Errorf("CredentialName(%q) = %v, want %v", name, got, want)

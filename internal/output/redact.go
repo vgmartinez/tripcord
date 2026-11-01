@@ -249,15 +249,19 @@ var metadataSuffixes = map[string]bool{
 var booleanFlags = map[string]bool{"--with-token": true}
 
 // CredentialName reports whether an assignment key such as SECRET_KEY,
-// AWS_SECRET_ACCESS_KEY, PRIVATE_KEY, GITHUB_TOKEN, DB_PASS, DB_PWD, or
-// X-Api-Key names a credential, case-insensitively. A segment matches
-// when it is or ends in one of credentialWords, optionally followed by
-// a glued "key"; a "key" segment matches after api, access, or private;
-// "pass" and "pwd" match only as a whole segment after another one, so
-// BYPASS, PASS_THROUGH, and the shell's PWD and OLDPWD do not. A name
-// whose last segment is a metadataSuffixes word (SECRET_KEY_FILE,
-// TOKEN_TTL) does not match, nor does a word that merely starts with a
-// credential word (TOKENIZER, SECRETARY), nor a booleanFlags flag.
+// AWS_SECRET_ACCESS_KEY, PRIVATE_KEY, GITHUB_TOKEN, DB_PASS, DB_PWD,
+// PASS, or X-Api-Key names a credential, case-insensitively. A segment
+// matches when it is or ends in one of credentialWords, optionally
+// followed by a glued "key"; a "key" segment matches after api, access,
+// or private. "pwd" matches only as a whole segment after another one,
+// so the shell's PWD and OLDPWD do not. "pass" matches as a whole
+// segment after another one (DB_PASS, redis-pass) or as the entire name
+// (PASS). BYPASS is not that segment, and PASS_THROUGH starts with it
+// but is not only that segment, so neither matches. A name whose last
+// segment is a metadataSuffixes word (SECRET_KEY_FILE, TOKEN_TTL,
+// PASS_FILE) does not match, nor does a word that merely starts with a
+// credential word (TOKENIZER, SECRETARY, COMPASS), nor a booleanFlags
+// flag.
 func CredentialName(name string) bool {
 	lower := strings.ToLower(name)
 	if booleanFlags[lower] {
@@ -271,12 +275,21 @@ func CredentialName(name string) bool {
 		switch {
 		case credentialSegment(segment), credentialSegment(strings.TrimSuffix(segment, "key")):
 			return true
-		case (segment == "pwd" || segment == "pass") && i > 0,
+		case segment == "pwd" && i > 0,
+			segment == "pass" && passSegment(i, len(segments)),
 			segment == "key" && i > 0 && keyQualifiers[segments[i-1]]:
 			return true
 		}
 	}
 	return false
+}
+
+// passSegment reports whether a segment that is exactly "pass" names a
+// credential: the whole name (PASS, i == 0 and no other segment) or a
+// later segment (DB_PASS, MY_PASS_V2). A leading segment with something
+// after it (PASS_THROUGH) does not.
+func passSegment(i, n int) bool {
+	return i > 0 || n == 1
 }
 
 // credentialStems are lowercase substrings every CredentialName name

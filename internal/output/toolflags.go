@@ -27,10 +27,15 @@ type toolFlag struct {
 	// only the rest is the secret (openssl -passin pass:X, but not
 	// -passin env:VAR or file:path).
 	valuePrefix string
-	pattern     *regexp.Regexp
+	// envAssign means the value is a NAME=VALUE environment assignment
+	// (docker -eNAME=VALUE, --env NAME=VALUE, --env=NAME=VALUE). Only
+	// VALUE is redacted, and only when NAME is a CredentialName, so
+	// -eHOME=/x, -eLANG=C, and -ePATH=... stay visible.
+	envAssign bool
+	pattern   *regexp.Regexp
 }
 
-var toolSecretFlags = compileToolFlags([]toolFlag{
+var toolSecretFlags = compileToolFlags(append([]toolFlag{
 	{tool: "openssl", flag: "-k", separated: true},
 	{tool: "openssl", flag: "-K", separated: true},
 	{tool: "openssl", flag: "-pass", separated: true, valuePrefix: "pass:"},
@@ -48,7 +53,26 @@ var toolSecretFlags = compileToolFlags([]toolFlag{
 	{tool: "redis-cli", flag: "--pass", separated: true},
 	{tool: "mysql", flag: "-p", glued: true},
 	{tool: "docker", subcommand: "login", flag: "-p", separated: true},
-})
+}, containerEnvFlags()...))
+
+// containerEnvFlags is the glued -eNAME=VALUE and --env NAME=VALUE forms
+// for docker, podman, and nerdctl run, create, and exec. The tool word is
+// still required: a bare -ePRIVATE_KEY=... is not a container env
+// assignment (echo -e, docker build -e).
+func containerEnvFlags() []toolFlag {
+	tools := []string{"docker", "podman", "nerdctl"}
+	subs := []string{"run", "create", "exec"}
+	out := make([]toolFlag, 0, len(tools)*len(subs)*2)
+	for _, tool := range tools {
+		for _, sub := range subs {
+			out = append(out,
+				toolFlag{tool: tool, subcommand: sub, flag: "-e", glued: true, envAssign: true},
+				toolFlag{tool: tool, subcommand: sub, flag: "--env", separated: true, envAssign: true},
+			)
+		}
+	}
+	return out
+}
 
 var knownTools = toolNameSet(toolSecretFlags)
 
@@ -282,6 +306,14 @@ func redactToolFlagsInSegment(segment string) (string, []string) {
 		suffix := flag.pattern.ReplaceAllStringFunc(segment[offset:], func(match string) string {
 			g := flag.pattern.FindStringSubmatch(match)
 			value := g[4]
+			if flag.envAssign {
+				redacted, secrets, ok := redactEnvAssignmentText(value)
+				if !ok {
+					return match
+				}
+				removed = append(removed, secrets...)
+				return g[1] + g[2] + g[3] + redacted
+			}
 			prefix, secret, ok := flag.secretPart(value)
 			if !ok {
 				return match
@@ -350,6 +382,24 @@ func RedactToolArgv(argv []string) ([]string, []string) {
 		for i := anchor; i < len(out); i++ {
 			elem := out[i]
 			switch {
+			case flag.envAssign && flag.separated && elem == flag.flag && i+1 < len(out):
+				if redacted, secrets, ok := redactEnvAssignmentText(out[i+1]); ok {
+					removed = append(removed, secrets...)
+					out[i+1] = redacted
+				}
+				i++
+			case flag.envAssign && flag.separated && strings.HasPrefix(elem, flag.flag+"="):
+				rest := elem[len(flag.flag)+1:]
+				if redacted, secrets, ok := redactEnvAssignmentText(rest); ok {
+					removed = append(removed, secrets...)
+					out[i] = flag.flag + "=" + redacted
+				}
+			case flag.envAssign && flag.glued && len(elem) > len(flag.flag) && strings.HasPrefix(elem, flag.flag):
+				rest := elem[len(flag.flag):]
+				if redacted, secrets, ok := redactEnvAssignmentText(rest); ok {
+					removed = append(removed, secrets...)
+					out[i] = flag.flag + redacted
+				}
 			case flag.separated && elem == flag.flag && i+1 < len(out):
 				if prefix, secret, ok := flag.secretPart(out[i+1]); ok {
 					removed = append(removed, secret)
@@ -370,6 +420,17 @@ func RedactToolArgv(argv []string) ([]string, []string) {
 		}
 	}
 	return out, removed
+}
+
+// redactEnvAssignmentText redacts credential-named NAME=VALUE assignments
+// in text, the bytes after a container -e or --env. It uses
+// RedactAssignments so the name rule and the value boundary match every
+// other assignment: -ePRIVATE_KEY=x redacts x, -eHOME=/x does not, and a
+// value stops at whitespace so a trailing "Bearer ..." stays for the
+// bearer rule. ok is false when text is unchanged.
+func redactEnvAssignmentText(text string) (redacted string, removed []string, ok bool) {
+	redacted, removed = RedactAssignments(text)
+	return redacted, removed, redacted != text
 }
 
 // quoteLike returns replacement wrapped in the same quotes as value, if

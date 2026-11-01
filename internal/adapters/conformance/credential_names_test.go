@@ -19,7 +19,7 @@ import (
 
 // credentialNames are env-style names whose value is a credential even
 // though most do not contain "token" or "password".
-var credentialNames = []string{"SECRET_KEY", "AWS_SECRET_ACCESS_KEY", "PRIVATE_KEY", "DB_PASS"}
+var credentialNames = []string{"SECRET_KEY", "AWS_SECRET_ACCESS_KEY", "PRIVATE_KEY", "DB_PASS", "PASS"}
 
 // plantCredential writes name=value into Gemini hooks and MCP servers,
 // Windsurf and Devin hooks and Windsurf MCP servers, and devcontainer
