@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/vgmartinez/tripcord/internal/model"
 	"github.com/vgmartinez/tripcord/internal/output"
@@ -172,12 +173,31 @@ func StructuralDiscriminator(view map[string]any) string {
 		if count == 0 {
 			continue
 		}
-		name := output.DefaultRedactor(field)
+		name := redactedFieldName(field)
 		for n := 0; n < count; n++ {
 			parts = append(parts, name+"["+strconv.Itoa(n)+"]")
 		}
 	}
 	return strings.Join(parts, ",")
+}
+
+// redactedFieldNames memoizes output.DefaultRedactor on a field name: a
+// scan's payload field names (command, headers, env, url, args, and so
+// on) come from a small, fixed set defined by the adapters themselves,
+// repeated across every entry and every scan, so caching avoids running
+// DefaultRedactor's whole regex pipeline again on a name it has already
+// classified. It is shared across all adapters and sources: a field
+// name is redacted the same way regardless of which one produced it,
+// and the cache never holds a secret value, only field names.
+var redactedFieldNames sync.Map
+
+func redactedFieldName(field string) string {
+	if cached, ok := redactedFieldNames.Load(field); ok {
+		return cached.(string)
+	}
+	name := output.DefaultRedactor(field)
+	redactedFieldNames.Store(field, name)
+	return name
 }
 
 // countRedacted counts occurrences of the Redacted marker in value,
