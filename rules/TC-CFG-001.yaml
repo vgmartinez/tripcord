@@ -22,7 +22,10 @@
 #   relative script piped into a bare shell (./x.sh | sh); a pipe into
 #   Invoke-Expression only when a command in that pipeline fetches, so
 #   oh-my-posh init pwsh | Invoke-Expression is quiet like eval of it.
-# encoded: PowerShell -EncodedCommand, an opaque payload.
+# encoded: PowerShell -EncodedCommand, or decoded content feeding
+#   Invoke-Expression: base64 -d/--decode, FromBase64, or
+#   [Text.Encoding]::GetString, piped in or passed as the argument.
+#   powershell and pwsh -Command and a positional script block are read.
 # nested: a payload nested deeper than the reader follows (eight levels
 #   of $( ), -c, or eval), reported so that nesting cannot hide a fetch.
 #

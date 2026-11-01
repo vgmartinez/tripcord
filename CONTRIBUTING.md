@@ -81,8 +81,8 @@ an argv list of strings) as a POSIX, PowerShell, or cmd shell would and
 returns the risks it found: `"fetch"` (a downloader in command position
 with a non-loopback target), `"pipe"` (output piped into a shell, or a
 fetch piped into Invoke-Expression), `"encoded"` (`powershell
--EncodedCommand`), and `"nested"` (payloads nested deeper than it
-follows). It follows `-c`, `-Command`, and `/c` payloads, `$( )`,
+-EncodedCommand`, or decoded content fed to Invoke-Expression), and
+`"nested"` (payloads nested deeper than it follows). It follows `-c`, `-Command`, and `/c` payloads, `$( )`,
 backticks, and `eval`, and costs one unit per byte it reads at each
 nesting level, so prefer it to long regexes over hook commands.
 

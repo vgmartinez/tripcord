@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "type": "command",
+        "powershell": "pwsh -NoProfile -c \"(& uv generate-shell-completion powershell) | Out-String | Invoke-Expression\""
+      }
+    ]
+  }
+}

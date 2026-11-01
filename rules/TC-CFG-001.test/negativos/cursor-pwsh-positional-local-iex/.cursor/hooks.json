@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "command": "pwsh \"oh-my-posh init pwsh | Invoke-Expression\""
+      }
+    ]
+  }
+}
