@@ -76,10 +76,14 @@ func DefaultLimits() Limits {
 		MaxExpressionBytes: 4 << 10,
 		MaxNesting:         64,
 		// Every core rule on a config file at the adapters' 1 MiB cap
-		// costs under 10M (a 36,000-entry allow list about 3.4M), and
-		// CEL runs at 2 to 20 ns a unit, so 20M is well under a second.
+		// costs under 10M (a 36,000-entry allow list about 3.4M). A unit
+		// takes 8 to 160 ns on an idle machine, the slow end being
+		// regular expressions inside nested comprehensions and
+		// shell.risks on pathological input, and about 300 ns under
+		// load: 20M is up to 6 s, so the timeout sits well past it and
+		// the cost limit, not the clock, ends an expensive evaluation.
 		CostLimit:     20_000_000,
-		EvalTimeout:   5 * time.Second,
+		EvalTimeout:   15 * time.Second,
 		MaxInputBytes: 1 << 20,
 	}
 }
