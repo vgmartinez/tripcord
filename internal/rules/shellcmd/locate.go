@@ -67,6 +67,99 @@ func LocateArgv(argv []string) Located {
 	return Located{Locations: s.locations(), Work: s.work}
 }
 
+// ProjectScripts returns the files inside the project that a command
+// line runs, as clean slash-separated paths relative to the project
+// directory: a program written as a path (./x.sh, scripts/x,
+// "$CLAUDE_PROJECT_DIR"/.claude/hooks/x.sh) and the script an
+// interpreter is given (bash x.sh, node .cursor/hooks/x.mjs). A bare
+// operand without a directory or an extension (node server) is not
+// included, because an interpreter may resolve it to another file.
+//
+// It is conservative, for a check that a script exists: a line with a
+// backslash is not read (POSIX and PowerShell split it differently),
+// nor is anything after cd, pushd, or Set-Location, a path with a
+// variable other than a project variable, or a glob. CLAUDE_PLUGIN_ROOT
+// is not the project directory here.
+func ProjectScripts(line string) []string {
+	if strings.Contains(line, `\`) {
+		return nil
+	}
+	s := scanner{locate: true, collect: true}
+	s.line(line, 0, false)
+	return s.scripts
+}
+
+// ProjectScriptsArgv is ProjectScripts for an argument vector that no
+// shell splits.
+func ProjectScriptsArgv(argv []string) []string {
+	for _, a := range argv {
+		if strings.Contains(a, `\`) {
+			return nil
+		}
+	}
+	s := scanner{locate: true, collect: true}
+	s.command(argv, 0, false)
+	return s.scripts
+}
+
+var changesDir = map[string]bool{"cd": true, "pushd": true, "chdir": true, "set-location": true, "sl": true, "push-location": true}
+
+func (s *scanner) collectScripts(program, name string, args []string) {
+	if changesDir[name] {
+		s.moved = true
+	}
+	if s.moved {
+		return
+	}
+	if p, ok := projectPath(program, true); ok {
+		s.addScript(p)
+	}
+	if script, ok := scriptOperand(name, args); ok {
+		if p, ok := projectPath(script, false); ok {
+			s.addScript(p)
+		}
+	}
+}
+
+func (s *scanner) addScript(p string) {
+	for _, have := range s.scripts {
+		if have == p {
+			return
+		}
+	}
+	s.scripts = append(s.scripts, p)
+}
+
+// projectPath returns w as a path relative to the project directory, if
+// it names one inside it.
+func projectPath(w string, program bool) (string, bool) {
+	if w == "" || strings.Contains(w, subst) || strings.Contains(w, "://") {
+		return "", false
+	}
+	p := w
+	if name, rest, ok := leadingVar(p); ok {
+		if !projectVars[name] || name == "CLAUDE_PLUGIN_ROOT" {
+			return "", false
+		}
+		p = "." + rest
+	}
+	if strings.ContainsAny(p, "$%`*?[]{}~:") || strings.HasPrefix(p, "/") {
+		return "", false
+	}
+	hasDir := strings.Contains(p, "/")
+	if program && !hasDir {
+		return "", false
+	}
+	c := path.Clean(p)
+	if c == "." || c == ".." || strings.HasPrefix(c, "../") {
+		return "", false
+	}
+	if !hasDir && path.Ext(c) == "" {
+		return "", false
+	}
+	return c, true
+}
+
 var locationOrder = []string{Network, Home, Temp, Absolute, Parent}
 
 func (s *scanner) locations() []string {

@@ -184,5 +184,58 @@ func FuzzLocate(f *testing.F) {
 		if len(r.Locations) > len(locationOrder) {
 			t.Fatalf("Locate(%q) = %q", line, r.Locations)
 		}
+		for _, p := range ProjectScripts(line) {
+			if p == "" || p == "." || strings.HasPrefix(p, "/") || strings.HasPrefix(p, "../") || p == ".." {
+				t.Fatalf("ProjectScripts(%q) has %q", line, p)
+			}
+		}
 	})
+}
+
+func TestProjectScripts(t *testing.T) {
+	cases := []struct {
+		line string
+		want []string
+	}{
+		{`./.claude/hooks/format.sh`, []string{".claude/hooks/format.sh"}},
+		{`.claude/hooks/check.py --strict`, []string{".claude/hooks/check.py"}},
+		{`"$CLAUDE_PROJECT_DIR"/.claude/hooks/guard.sh`, []string{".claude/hooks/guard.sh"}},
+		{`${CURSOR_PROJECT_DIR}/.cursor/hooks/a.sh && ./b.sh`, []string{".cursor/hooks/a.sh", "b.sh"}},
+		{`bash scripts/x.sh; python3 tools/lint.py`, []string{"scripts/x.sh", "tools/lint.py"}},
+		{`bash -c './inner.sh'`, []string{"inner.sh"}},
+		{`node hook.mjs`, []string{"hook.mjs"}},
+		{`pwsh -File scripts/x.ps1`, []string{"scripts/x.ps1"}},
+		{`/usr/bin/env node .claude/hooks/x.js`, []string{".claude/hooks/x.js"}},
+		{`.cursor/hooks/../hooks/audit.sh`, []string{".cursor/hooks/audit.sh"}},
+		{`./a.sh && ./a.sh`, []string{"a.sh"}},
+		// Not a project file, or not one this can check.
+		{`node server`, nil},
+		{`npx prettier --write .`, nil},
+		{`tripcord hook --event pre-tool`, nil},
+		{`python3 -m tools.lint`, nil},
+		{`~/.claude/hooks/x.sh`, nil},
+		{`/tmp/x.sh`, nil},
+		{`../shared/x.sh`, nil},
+		{`$HOOKS_DIR/x.sh`, nil},
+		{`${CLAUDE_PLUGIN_ROOT}/scripts/lint.sh`, nil},
+		{`./scripts/$(uname)/x.sh`, nil},
+		{`./scripts/*.sh`, nil},
+		{`cd packages/web && ./hook.sh`, nil},
+		{`./first.sh; cd sub; ./second.sh`, []string{"first.sh"}},
+		{`.\scripts\hooks\guard.ps1`, nil},
+		{`deno run npm:tsx x.ts`, nil},
+		{`curl https://x.invalid/a.sh`, nil},
+		{`echo ./not-run.sh`, nil},
+	}
+	for _, c := range cases {
+		if got := ProjectScripts(c.line); !slices.Equal(got, c.want) {
+			t.Errorf("ProjectScripts(%q) = %q, want %q", c.line, got, c.want)
+		}
+	}
+	if got := ProjectScriptsArgv([]string{"node", ".github/hooks/lint.js", "--out", "/tmp/x"}); !slices.Equal(got, []string{".github/hooks/lint.js"}) {
+		t.Errorf("argv = %q", got)
+	}
+	if got := ProjectScriptsArgv([]string{"node", `.github\hooks\lint.js`}); got != nil {
+		t.Errorf("backslash argv = %q", got)
+	}
 }

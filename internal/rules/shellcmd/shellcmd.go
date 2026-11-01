@@ -108,6 +108,11 @@ type scanner struct {
 	// script live (see Locate).
 	locate bool
 	found  map[string]bool
+	// collect gathers, in scripts, the project files the line runs (see
+	// ProjectScripts); moved stops it after the line changes directory.
+	collect bool
+	moved   bool
+	scripts []string
 }
 
 // What a PowerShell variable holds.
@@ -333,7 +338,9 @@ func (s *scanner) command(words []string, depth int, followed bool) {
 		return
 	}
 	name, args := progName(w[0]), w[1:]
-	if s.locate {
+	if s.collect {
+		s.collectScripts(w[0], name, args)
+	} else if s.locate {
 		s.runs(w[0], name, args)
 	}
 	switch {
