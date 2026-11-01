@@ -64,7 +64,10 @@ fingerprint, and diagnostic is built from that copy only. Matching the raw
 text means sanitizing cannot hide a command from a rule: in
 `echo https://e.com/?x;curl … | sh`, stripping the query must not swallow
 the `;` that starts the second command. A rule has no way to put the raw
-text in a report.
+text in a report. Inside a single- or double-quoted URL, that quote bounds
+the query or fragment, so old-style query separators such as `;`, `|`, and
+`&&` are stripped rather than shown. Outside quotes, those shell
+metacharacters are kept with the following command.
 
 Each evaluation of a rule on one entry has a deterministic CEL cost limit:
 20M units for a scan. That limit, not the clock, decides when an expensive
