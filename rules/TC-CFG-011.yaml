@@ -28,7 +28,7 @@ harness: [claude, copilot, cursor, gemini, windsurf, generic]
 files: ["**"]
 when: |
   config.kind == "instructions" && config.scope == "repo" && config.hidden_chars > 0 &&
-    config.path.matches(r'''(?i)((^|/)(AGENTS|CLAUDE|GEMINI)(\.local)?\.md|(^|/)\.claude/rules/.+\.md|^\.windsurfrules|^\.cursorrules|^\.github/copilot-instructions\.md|^\.github/instructions/.+\.md|^\.github/agents/.+\.agent\.md|(^|/)\.cursor/rules/.+\.mdc?$)''')
+    config.path.matches(r'''(?i)((^|/)(AGENTS|CLAUDE|GEMINI)(\.local)?\.md|(^|/)\.claude/rules/.+\.md|(^|/)\.windsurfrules|^\.cursorrules|^\.github/copilot-instructions\.md|^\.github/instructions/.+\.md|^\.github/agents/.+\.agent\.md|(^|/)\.cursor/rules/.+\.mdc?)$''')
 fix: "Remove the hidden code points (the finding names each one's line and column), then review the instructions as they read without them. If a non-Latin script needs a direction mark, use U+200E or U+200F."
 refs:
   - https://trojansource.codes/

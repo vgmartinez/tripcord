@@ -159,21 +159,34 @@ func FingerprintKey(h model.HiddenChars, ordinal int) string {
 	return fmt.Sprintf("hidden_chars/%d/%s", ordinal, hex.EncodeToString(sum[:8]))
 }
 
-// InstructionPath reports whether rel is one of TC-CFG-011's instruction
-// files. Adapters use it to avoid an invalid-UTF-8 diagnostic on unrelated
-// Markdown instructions.
+// InstructionPath reports whether rel is one of the files TC-CFG-011
+// reads, including nested .claude/rules, .cursor/rules, and
+// .windsurfrules. The test is the rule's path expression: every
+// alternative is matched to the end of the path.
 func InstructionPath(rel string) bool {
-	p := strings.ToLower(strings.TrimPrefix(rel, "./"))
+	p := strings.ToLower(strings.TrimPrefix(strings.ReplaceAll(rel, "\\", "/"), "./"))
 	base := path.Base(p)
 	switch base {
-	case "agents.md", "claude.md", "claude.local.md", "gemini.md", ".windsurfrules", ".cursorrules":
+	case "agents.md", "agents.local.md", "claude.md", "claude.local.md", "gemini.md", "gemini.local.md", ".windsurfrules":
 		return true
 	}
-	return strings.HasPrefix(p, ".claude/rules/") && strings.HasSuffix(p, ".md") ||
-		strings.HasPrefix(p, ".cursor/rules/") && (strings.HasSuffix(p, ".md") || strings.HasSuffix(p, ".mdc")) ||
-		p == ".github/copilot-instructions.md" ||
-		strings.HasPrefix(p, ".github/instructions/") && strings.HasSuffix(p, ".md") ||
-		strings.HasPrefix(p, ".github/agents/") && strings.HasSuffix(p, ".agent.md")
+	if p == ".cursorrules" || p == ".github/copilot-instructions.md" {
+		return true
+	}
+	if under(p, ".claude/rules/") && strings.HasSuffix(p, ".md") {
+		return true
+	}
+	if under(p, ".cursor/rules/") && (strings.HasSuffix(p, ".md") || strings.HasSuffix(p, ".mdc")) {
+		return true
+	}
+	if strings.HasPrefix(p, ".github/instructions/") && strings.HasSuffix(p, ".md") && path.Base(p) != ".md" {
+		return true
+	}
+	return strings.HasPrefix(p, ".github/agents/") && strings.HasSuffix(p, ".agent.md") && len(path.Base(p)) > len(".agent.md")
+}
+
+func under(path, dir string) bool {
+	return strings.HasPrefix(path, dir) || strings.Contains(path, "/"+dir)
 }
 
 // Excerpt describes h for a finding: the number of hidden code points,

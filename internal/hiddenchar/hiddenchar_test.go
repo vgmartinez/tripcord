@@ -55,6 +55,35 @@ func TestScan(t *testing.T) {
 	}
 }
 
+func TestInstructionPath(t *testing.T) {
+	yes := []string{
+		"AGENTS.md", "pkg/CLAUDE.local.md", "GEMINI.md",
+		".claude/rules/style.md", "services/.claude/rules/go/style.md",
+		".cursor/rules/style.mdc", "web/.cursor/rules/ui/forms.md",
+		".windsurfrules", "apps/api/.windsurfrules",
+		".cursorrules", ".github/copilot-instructions.md",
+		".github/instructions/go.instructions.md",
+		".github/agents/review.agent.md",
+	}
+	no := []string{
+		"CLAUDE.md.bak", "pkg/CLAUDE.md.txt",
+		".claude/rules/style.txt", "notes.md",
+		"dir/.cursorrules", ".github/copilot-instructions.md.extra",
+		".github/instructions/.md", ".github/agents/review.md",
+		".cursor/rules/style.mdc.bak",
+	}
+	for _, rel := range yes {
+		if !InstructionPath(rel) {
+			t.Errorf("InstructionPath(%q) = false", rel)
+		}
+	}
+	for _, rel := range no {
+		if InstructionPath(rel) {
+			t.Errorf("InstructionPath(%q) = true", rel)
+		}
+	}
+}
+
 func TestExcerpt(t *testing.T) {
 	cases := map[string]string{
 		"a\u202Eb":                     "1 hidden code point: U+202E (bidi control) at line 1, column 2",
