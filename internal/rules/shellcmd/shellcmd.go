@@ -104,6 +104,10 @@ type scanner struct {
 	// tainted maps a lower-case PowerShell variable name to what was
 	// assigned to it: taintFetch, taintDecoded, or both.
 	tainted map[string]int
+	// locate records, in found, where each command's program and
+	// script live (see Locate).
+	locate bool
+	found  map[string]bool
 }
 
 // What a PowerShell variable holds.
@@ -329,6 +333,9 @@ func (s *scanner) command(words []string, depth int, followed bool) {
 		return
 	}
 	name, args := progName(w[0]), w[1:]
+	if s.locate {
+		s.runs(w[0], name, args)
+	}
 	switch {
 	case posixShells[name]:
 		if p, ok := shellPayload(name, args); ok {
