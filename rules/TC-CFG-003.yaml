@@ -8,14 +8,20 @@
 # mcpServers, OpenCode's command array, Copilot mcp-config.json, and
 # Windsurf mcp_config.json.
 #
-# A pipe counts only in the command string, or because the command is
-# itself a shell (sh -c and the other shells). A literal argument of a
-# non-shell executable, such as node server.js --filter 'a|sh', does not.
-# Inline interpreters are python -c, node -e/--eval, perl -e, ruby -e,
-# and deno eval, whether the flag is in the command string or in args.
+# The command and its args are read as one command line (OpenCode's
+# array is joined). Its first word decides: a shell (sh, bash, zsh,
+# dash, ksh, ash, csh, tcsh, fish, cmd, powershell, pwsh) matches, and
+# an interpreter matches only when its inline-code flag comes before any
+# script or -m: python -c, node -e/--eval, perl -e, ruby -e, deno eval.
+# python -m my_server -c config.yaml and node server.js -e production are
+# a server's own flags and do not match. Other flags may come first
+# (python -u -c), but not a flag that takes a separate value
+# (python -W ignore -c).
 #
-# Not matched: an env, busybox, or $SHELL wrapper around the real
-# command. Those stay a static-matching limit.
+# A pipe counts only in the command string, or because the command is
+# itself a shell. A literal argument of a non-shell executable, such as
+# node server.js --filter 'a|sh', does not.
+#
 id: TC-CFG-003
 pack: tripcord/core
 title: "MCP server launched through a shell, a pipe to sh, or an inline interpreter"
@@ -25,30 +31,14 @@ files: ["**"]
 when: |
   config.kind == "mcp-server" &&
     (!has(payload.type) || (type(payload.type) == string && payload.type in ["", "stdio", "local"])) &&
-    (
-      (has(payload.command) && type(payload.command) == string && (
-        payload.command.matches(r'''(?i)^\s*([^\s]*[/\\])?(sh|bash|zsh|dash|cmd|powershell|pwsh)(\.exe)?(\s|$)''') ||
-        payload.command.matches(r'''(?is)^(?:[^|'"]|'(?:\\.|[^'])*'|"(?:\\.|[^"])*")*\|[ \t]*(?:sudo[ \t]+(?:-[A-Za-z-]+[ \t]+)*)?(?:[^\s;&|]*[/\\])?(?:sh|bash|zsh|dash|powershell|pwsh)(?:\.exe)?(?:$|[\s;&|'"\x60])''') ||
-        payload.command.matches(r'''(?i)^\s*([^\s]*[/\\])?python3?(\.exe)?[ \t]+-c(\s|$)''') ||
-        payload.command.matches(r'''(?i)^\s*([^\s]*[/\\])?(perl|ruby)(\.exe)?[ \t]+-e(\s|$)''') ||
-        payload.command.matches(r'''(?i)^\s*([^\s]*[/\\])?node(\.exe)?[ \t]+(-e|--eval)(\s|$)''') ||
-        payload.command.matches(r'''(?i)^\s*([^\s]*[/\\])?deno(\.exe)?[ \t]+eval(\s|$)''') ||
-        (has(payload.args) && type(payload.args) == list && payload.args.all(a, type(a) == string) && (
-          (payload.command.matches(r'''(?i)^\s*([^\s]*[/\\])?python3?(\.exe)?$''') && payload.args.exists(a, a == "-c")) ||
-          (payload.command.matches(r'''(?i)^\s*([^\s]*[/\\])?node(\.exe)?$''') && payload.args.exists(a, a == "-e" || a == "--eval")) ||
-          (payload.command.matches(r'''(?i)^\s*([^\s]*[/\\])?perl(\.exe)?$''') && payload.args.exists(a, a == "-e")) ||
-          (payload.command.matches(r'''(?i)^\s*([^\s]*[/\\])?ruby(\.exe)?$''') && payload.args.exists(a, a == "-e")) ||
-          (payload.command.matches(r'''(?i)^\s*([^\s]*[/\\])?deno(\.exe)?$''') && payload.args.exists(a, a == "eval"))
-        ))
-      )) ||
-      (has(payload.command) && type(payload.command) == list && payload.command.all(a, type(a) == string) && (
-        payload.command.exists(a, a.matches(r'''(?i)^([^\s]*[/\\])?(sh|bash|zsh|dash|cmd|powershell|pwsh)(\.exe)?$''')) ||
-        (payload.command.exists(a, a.matches(r'''(?i)^([^\s]*[/\\])?python3?(\.exe)?$''')) && payload.command.exists(a, a == "-c")) ||
-        (payload.command.exists(a, a.matches(r'''(?i)^([^\s]*[/\\])?node(\.exe)?$''')) && payload.command.exists(a, a == "-e" || a == "--eval")) ||
-        (payload.command.exists(a, a.matches(r'''(?i)^([^\s]*[/\\])?perl(\.exe)?$''')) && payload.command.exists(a, a == "-e")) ||
-        (payload.command.exists(a, a.matches(r'''(?i)^([^\s]*[/\\])?ruby(\.exe)?$''')) && payload.command.exists(a, a == "-e")) ||
-        (payload.command.exists(a, a.matches(r'''(?i)^([^\s]*[/\\])?deno(\.exe)?$''')) && payload.command.exists(a, a == "eval"))
-      ))
+    has(payload.command) && (
+      [
+        type(payload.command) == string ?
+          payload.command + (has(payload.args) && type(payload.args) == list && payload.args.all(a, type(a) == string) ? " " + payload.args.join(" ") : "") :
+        type(payload.command) == list && payload.command.all(a, type(a) == string) ? payload.command.join(" ") : ""
+      ].exists(h, h.matches(r'''(?i)^\s*(?:[^\s]*[/\\])?(?:(?:(?:ba|z|da|k|a|c|tc|fi)?sh|cmd|powershell|pwsh)(?:\.exe)?(?:\s|$)|python(?:3(?:\.[0-9]+)?)?(?:\.exe)?(?:\s+-[^\sm]\S*)*?\s+-c(?:\s|$)|node(?:\.exe)?(?:\s+-[^\se]\S*)*?\s+(?:-e|--eval)(?:\s|$)|(?:perl|ruby)(?:\.exe)?(?:\s+-[^\se]\S*)*?\s+-e(?:\s|$)|deno(?:\.exe)?\s+eval(?:\s|$))''')) ||
+      (type(payload.command) == string &&
+        payload.command.matches(r'''(?is)^(?:[^|'"]|'(?:\\.|[^'])*'|"(?:\\.|[^"])*"|\|\|)*\|[ \t]*(?:sudo[ \t]+(?:-[A-Za-z-]+[ \t]+)*)?(?:[^\s;&|]*[/\\])?(?:(?:ba|z|da|k|a|c|tc|fi)?sh|powershell|pwsh)(?:\.exe)?(?:$|[\s;&|'"\x60])'''))
     )
 fix: "Point command at the server binary and pass its arguments in args, without a shell, an inline interpreter, or a downloaded script."
 refs:

@@ -215,6 +215,15 @@ func TestCFG003Shapes(t *testing.T) {
 		{"name": "a", "type": "", "command": "zsh"},
 		{"name": "a", "type": "stdio", "command": "dash"},
 		{"name": "a", "type": "local", "command": []any{"sh", "-c", "x"}},
+		{"name": "a", "command": "ksh", "args": []any{"-c", "x"}},
+		{"name": "a", "command": "/bin/ash"},
+		{"name": "a", "command": "fish", "args": []any{"-c", "x"}},
+		{"name": "a", "command": "csh"},
+		{"name": "a", "command": []any{"tcsh", "-c", "x"}},
+		{"name": "a", "command": "echo hi | ksh"},
+		{"name": "a", "command": "python3", "args": []any{"-u", "-c", "x"}},
+		{"name": "a", "command": "/usr/bin/python3.12 -I -c 'x'"},
+		{"name": "a", "command": []any{"node", "--no-warnings", "-e", "x"}},
 	}
 	skip := []map[string]any{
 		{"name": "a", "command": "node", "args": []any{"s.js", "--filter", "a|sh"}},
@@ -237,6 +246,13 @@ func TestCFG003Shapes(t *testing.T) {
 		{"name": "a", "command": []any{"node", "s.js", "--filter", "a|sh"}},
 		{"name": "a", "command": []any{"bash-language-server", "start"}},
 		{"name": "a", "type": 1, "command": "bash"},
+		{"name": "a", "command": "python -m my_server -c config.yaml"},
+		{"name": "a", "command": "python", "args": []any{"-m", "my_server", "-c", "config.yaml"}},
+		{"name": "a", "command": "node server.js -e production"},
+		{"name": "a", "command": "node", "args": []any{"server.js", "-e", "production"}},
+		{"name": "a", "command": []any{"python", "-m", "srv", "-c", "conf.yaml"}},
+		{"name": "a", "command": []any{"ruby", "app.rb", "-e", "prod"}},
+		{"name": "a", "command": "fisher", "args": []any{"update"}},
 	}
 	for _, payload := range match {
 		t.Run("match/"+mustJSON(t, payload), func(t *testing.T) {
