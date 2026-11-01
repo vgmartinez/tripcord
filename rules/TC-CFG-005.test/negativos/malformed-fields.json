@@ -1,0 +1,12 @@
+[
+  {"harness": "claude", "scope": "repo", "path": ".claude/settings.json", "sha256": "",
+   "kind": "permissions", "payload": {"setting": "permissions", "value": "bypassPermissions"}},
+  {"harness": "claude", "scope": "repo", "path": ".claude/settings.json", "sha256": "",
+   "kind": "permissions", "payload": {"setting": "permissions", "value": {"defaultMode": 1}}},
+  {"harness": "claude", "scope": "repo", "path": ".claude/settings.json", "sha256": "",
+   "kind": "permissions", "payload": {"setting": "permissions"}},
+  {"harness": "codex", "scope": "repo", "path": ".codex/config.toml", "sha256": "",
+   "kind": "permissions", "payload": {"setting": "sandbox_mode", "value": ["danger-full-access"]}},
+  {"harness": "codex", "scope": "user", "path": "~/.codex/config.toml", "sha256": "",
+   "kind": "permissions", "payload": {"setting": "sandbox_mode", "value": "danger-full-access"}}
+]

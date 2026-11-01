@@ -1,0 +1,6 @@
+{
+  "permissions": {
+    "defaultMode": "bypassPermissions"
+  },
+  "env": {"NODE_ENV": "development"}
+}

@@ -13,6 +13,7 @@ embedded in the binary.
 | TC-CFG-002 | `.vscode/tasks.json` task with `runOptions.runOn: folderOpen`. Reported once, on the vscode surface, under any `--harness`, because Cursor and Windsurf open the same file. A harness-limited scan reads that one file, not AGENTS.md or the shared skills. |
 | TC-CFG-003 | MCP server normalized by any adapter whose command is a shell (sh, bash, zsh, dash, ksh, ash, csh, tcsh, fish, cmd, PowerShell), a pipe to a shell (read by `shell.risks`, so `./script.sh \| sh` is exempt as in TC-CFG-001), or an inline interpreter (`python -c`, `node -e`/`--eval`, `perl -e`, `ruby -e`, `deno eval`). The inline flag counts only before any script or `-m`, so `python -m srv -c conf.yaml` does not match. |
 | TC-CFG-004 | `permissions.allow` in shared Claude settings. A broad exec wildcard or `Edit(//**)` (the filesystem root, with any number of leading slashes) is high. A broad read or write, including `Read(//**)`, bare `Write`, and the project-relative `Read(/**)`, is medium. One permissions object is one finding, at the first matching severity. |
+| TC-CFG-005 | A shared mode that turns approvals off: `permissions.defaultMode: bypassPermissions` in `.claude/settings.json`, or top-level `sandbox_mode = "danger-full-access"` in `.codex/config.toml`. High. Codex profiles are not read, because Codex ignores them in a project config. [Docs](../docs/rules/TC-CFG-005.md). |
 
 `severity` is the catalog severity and the floor a policy lock uses.
 `severity_when`, when a rule has it, is tried in order once `when` is

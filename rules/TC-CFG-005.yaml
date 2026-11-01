@@ -1,0 +1,39 @@
+# A mode that turns approvals off, committed to the repository, applies
+# to everyone who opens it: the agent then runs every tool call without
+# asking. Novee cites Codex's own threat model, where
+# danger-full-access removes the sandbox that approvals rely on.
+#
+# Claude Code: permissions.defaultMode "bypassPermissions" in shared
+# .claude/settings.json. settings.local.json is personal and is not part
+# of this rule's files.
+# Codex: top-level sandbox_mode = "danger-full-access" in a project
+# .codex/config.toml. A [profiles.<name>] table is not read: Codex
+# ignores profile and profiles in a project config (the adapter marks
+# them ignored_in_project), so a project cannot select one.
+#
+# Values are compared exactly, as both harnesses read them.
+id: TC-CFG-005
+pack: tripcord/core
+title: "Shared config turns off approvals (bypassPermissions or danger-full-access)"
+severity: high
+severity_when:
+  - severity: high
+    when: |
+      config.harness == "claude" && has(payload.setting) && payload.setting == "permissions" &&
+        has(payload.value) && type(payload.value) == map &&
+        has(payload.value.defaultMode) && payload.value.defaultMode == "bypassPermissions"
+  - severity: high
+    when: |
+      config.harness == "codex" && has(payload.setting) && payload.setting == "sandbox_mode" &&
+        has(payload.value) && payload.value == "danger-full-access"
+harness: [claude, codex]
+files:
+  - "**/.claude/settings.json"
+  - "**/.codex/config.toml"
+when: |
+  config.kind == "permissions" && config.scope == "repo"
+fix: "Remove the mode from the shared file. Claude Code: delete permissions.defaultMode bypassPermissions, or use acceptEdits with a narrow allow list. Codex: use sandbox_mode workspace-write. Anyone who needs the mode can pass it on their own command line."
+refs:
+  - https://novee.security/blog/breaking-ai-agent-sandboxes/
+  - https://code.claude.com/docs/en/settings
+  - https://learn.chatgpt.com/docs/config-file/config-basic.md

@@ -1,0 +1,5 @@
+{
+  "permissions": {
+    "allow": ["Bash(grep -rn bypassPermissions docs/)", "Bash(echo danger-full-access)"]
+  }
+}
