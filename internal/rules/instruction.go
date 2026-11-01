@@ -15,8 +15,8 @@ var (
 	instructionOpenPR    = regexp.MustCompile(`(?i)^[ \t]+(?:a[ \t]+)?(?:pull[ \t]+request|pr)\b`)
 	instructionSend      = regexp.MustCompile(`(?i)\b(?:send|post|upload|email|exfiltrate|transmit|forward)\b`)
 	instructionSecret    = regexp.MustCompile(`(?i)(?:\.env(?:\.(?:local|production|development|prod|dev))?(?:\.?(?:[^\w.]|$)|$)|\bprintenv\b|\bprocess\.env\b|\bos\.environ\b|environment variables|\bcredentials\b|\bsecrets?\b|api[_ ]?keys?\b|\btokens?\b|\bpasswords?\b|private key|~/\.aws|~/\.ssh|\bid_rsa\b|\b(?:aws_[a-z0-9_]+|github_token)\b)`)
-	instructionObject    = regexp.MustCompile(`(?i)^[ \t]*(?:(?:--?[a-z][a-z0-9-]*(?:[= ][^ \t]*)?[ \t]+))*?(?:https?://[^ \t]+[ \t]+)?(?:(?:the|all|your|my|our|this|these)[ \t]+)?(?:(?:contents?|values?)[ \t]+of[ \t]+)?(?:\$env:)?(?:[` + "`" + `'"@][ \t]*)?`)
-	instructionModifier  = regexp.MustCompile(`(?i)^[ \t]*(?:-[a-z]|section\b|policy\b|flow\b|count\b|usage\b|budget\b|docs\b|design\b|handling\b|management\b|template\b|reset\b|field\b|requirements\b|page\b|code\b|rotation\b|format\b|limit\b|rules\b|guide\b|example\b|scope\b|refresh\b|expiry\b|validation\b|form\b)`)
+	instructionObject    = regexp.MustCompile(`(?i)^[ \t]*(?:(?:--?[a-z][a-z0-9-]*(?:[= ][^ \t]*)?[ \t]+))*?(?:https?://[^ \t]+[ \t]+)?(?:(?:the|all|your|my|our|this|these|any|every|each|its|their|those)[ \t]+)*(?:(?:contents?|values?)[ \t]+of[ \t]+)?(?:\$env:)?(?:[` + "`" + `'"@][ \t]*)?`)
+	instructionModifier  = regexp.MustCompile(`(?i)^[ \t]*(?:-[a-z]|(?:sections?|polic(?:y|ies)|flows?|counts?|usage|budgets?|docs?|documentation|readme|tables?|runbooks?|design|handling|management|templates?|reset|fields?|requirements?|pages?|code|rotation|formats?|limits?|rules?|guides?|examples?|scopes?|refresh|expiry|expiration|validation|forms?)\b)`)
 	instructionClauseEnd = regexp.MustCompile(`[;]|(?:\.(?:[ \t]|$))`)
 	instructionURL       = regexp.MustCompile(`(?i)\bhttps?://`)
 	instructionNamedSink = regexp.MustCompile(`(?i)\b(?:webhooks?|gist|pastebin|slack|discord)\b`)
@@ -38,6 +38,10 @@ func instructionMatchLine(content string) int {
 			if read[0] == 0 {
 				if strings.EqualFold(rest[read[0]:read[1]], "open") && instructionOpenPR.MatchString(rest[read[1]:]) {
 					continue
+				}
+				verb := strings.ToLower(rest[read[0]:read[1]])
+				if (verb == "curl" || verb == "wget") && instructionSecret.MatchString(instructionClause(rest[read[1]:])) {
+					return line + 1
 				}
 				if instructionDirectSecret(rest[read[1]:]) {
 					return line + 1

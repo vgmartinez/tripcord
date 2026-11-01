@@ -27,11 +27,14 @@
 # ~/.aws, ~/.ssh, id_rsa, and AWS_*/GITHUB_TOKEN-style environment
 # variables. .env.example, .env.sample, .env.template, and .envrc do
 # not count.
-# Between the verb and target, only curl/wget flags, one URL, a
-# determiner, "contents/values of", and one quote, backtick, @, or
-# PowerShell $env: prefix are allowed. Documentation modifiers after
-# the target (for example "token count" or "credentials section") do
-# not count.
+# Between the verb and target, only curl/wget flags, one URL, one or
+# more determiners (the/all/your/any/every/each/its/their/those and the
+# rest), "contents/values of", and one quote, backtick, @, or
+# PowerShell $env: prefix are allowed. curl and wget also match when a
+# secret appears anywhere later in the same clause, so a flag value
+# such as "-d @.env" still counts. Documentation modifiers after the
+# target, singular or plural (for example "token budgets", "API key
+# policies", or "credentials section"), do not count.
 #
 # A line also matches when it begins with send, post, upload,
 # exfiltrate, transmit, or forward and, on that same line, both names a

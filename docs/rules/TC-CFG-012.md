@@ -33,10 +33,14 @@ Reported when the verb is `read`, `cat`, `cp`, `copy`, `open`, `load`,
 | paths | `~/.aws`, `~/.ssh`, `id_rsa` | |
 
 Between a verb and its object, the matcher allows curl/wget flags, one
-URL, a determiner, `contents of` / `values of`, and one quote,
-backtick, `@`, or PowerShell `$env:` prefix. It does not skip arbitrary
-prose. A target followed by a documentation modifier—such as
-`credentials section`, `token count`, `password reset`, or `secrets
+URL, one or more determiners (`the`, `all`, `your`, `any`, `every`,
+`each`, `its`, `their`, `those`, and the rest), `contents of` /
+`values of`, and one quote, backtick, `@`, or PowerShell `$env:`
+prefix. It does not skip arbitrary prose. `curl` and `wget` also match
+when a secret appears anywhere later in the same clause, so a flag
+value such as `-d @.env` still counts. A target followed by a
+documentation modifier, singular or plural—such as `credentials
+section`, `token budgets`, `API key policies`, or `secrets
 template`—is quiet.
 
 Also reported when the verb is `send`, `post`, `upload`, `exfiltrate`,
