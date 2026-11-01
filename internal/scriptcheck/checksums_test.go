@@ -97,3 +97,74 @@ func TestAnnotateChecksums(t *testing.T) {
 		}
 	}
 }
+
+func TestAnnotateChecksumsCaseFoldedAliases(t *testing.T) {
+	sum := strings.Repeat("ab", 32)
+	const (
+		path = ".github/workflows/copilot-setup-steps.yml"
+		run  = `{"setting":"step","run":"curl -fsSLo t.sh https://x.invalid/t.sh && sha256sum -c t.sh.sha256 && sh t.sh"}`
+	)
+	for _, tc := range []struct {
+		name  string
+		setup func(t *testing.T, root string)
+		sums  map[string][]string
+		links []string
+	}{
+		{
+			name: "target symlink to sums",
+			setup: func(t *testing.T, root string) {
+				writeChecksumFile(t, root, "t.sh.sha256", sum+"  t.sh\n")
+				if err := os.Symlink("t.sh.sha256", filepath.Join(root, "T.SH")); err != nil {
+					t.Fatal(err)
+				}
+			},
+			sums:  map[string][]string{"t.sh.sha256": {"t.sh"}},
+			links: []string{"t.sh"},
+		},
+		{
+			name: "target symlink outside root",
+			setup: func(t *testing.T, root string) {
+				writeChecksumFile(t, root, "t.sh.sha256", sum+"  t.sh\n")
+				if err := os.Symlink("/tmp/tripcord-outside.sh", filepath.Join(root, "T.SH")); err != nil {
+					t.Fatal(err)
+				}
+			},
+			sums:  map[string][]string{"t.sh.sha256": {"t.sh"}},
+			links: []string{"t.sh"},
+		},
+		{
+			name: "sums case variant symlink",
+			setup: func(t *testing.T, root string) {
+				writeChecksumFile(t, root, "t.sh.sha256", sum+"  t.sh\n")
+				writeChecksumFile(t, root, "T.sh", sum+"  t.sh\n")
+				if err := os.Symlink("T.sh", filepath.Join(root, "T.SH.SHA256")); err != nil {
+					t.Fatal(err)
+				}
+			},
+			sums: nil,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			tc.setup(t, root)
+			items := []model.ConfigItem{envSetup(model.HarnessCopilot, path, run)}
+			if err := Annotate(root, items); err != nil {
+				t.Fatal(err)
+			}
+			got := items[0]
+			if !maps.EqualFunc(got.ChecksumFiles, tc.sums, slices.Equal[[]string]) {
+				t.Errorf("ChecksumFiles = %q, want %q", got.ChecksumFiles, tc.sums)
+			}
+			if !slices.Equal(got.ChecksumSymlinks, tc.links) {
+				t.Errorf("ChecksumSymlinks = %q, want %q", got.ChecksumSymlinks, tc.links)
+			}
+		})
+	}
+}
+
+func writeChecksumFile(t *testing.T, root, name, data string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(root, name), []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}

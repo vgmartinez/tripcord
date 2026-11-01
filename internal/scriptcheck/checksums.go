@@ -1,10 +1,10 @@
 package scriptcheck
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/vgmartinez/tripcord/internal/adapters"
 	"github.com/vgmartinez/tripcord/internal/model"
@@ -66,19 +66,50 @@ func annotateChecksums(root string, items []model.ConfigItem) error {
 }
 
 func symlinkTargets(root string, payload map[string]any) []string {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		// A target that cannot be inspected must not get checksum credit.
+		return checksumTargets(payload)
+	}
 	var out []string
 	for _, name := range checksumTargets(payload) {
-		info, err := os.Lstat(filepath.Join(root, name))
-		switch {
-		case err == nil && info.Mode()&os.ModeSymlink != 0:
-			out = append(out, name)
-		case err != nil && !errors.Is(err, os.ErrNotExist):
-			// A target that cannot be inspected must not get checksum
-			// credit, including a path raced into an unreadable state.
-			out = append(out, name)
+		for _, entry := range entries {
+			if strings.EqualFold(entry.Name(), name) && !regularEntry(entry) {
+				// This is deliberately case-insensitive: t.sh can open
+				// T.SH on macOS and Windows.
+				out = append(out, name)
+				break
+			}
 		}
 	}
 	return out
+}
+
+func regularSumsFile(root, name string) bool {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return false
+	}
+	for _, entry := range entries {
+		if !strings.EqualFold(entry.Name(), name) {
+			continue
+		}
+		// On a case-insensitive checkout either spelling could be read.
+		// A second spelling is ambiguous even if both are regular files.
+		if entry.Name() != name || !regularEntry(entry) {
+			return false
+		}
+		return true
+	}
+	return false
+}
+
+func regularEntry(entry os.DirEntry) bool {
+	if entry.Type()&os.ModeSymlink != 0 {
+		return false
+	}
+	info, err := entry.Info()
+	return err == nil && info.Mode().IsRegular()
 }
 
 func checksumNames(payload map[string]any) []string {
@@ -134,6 +165,9 @@ func stringsOnly(v []any) []string {
 // file (not a symlink), its parent path must resolve inside root, and it
 // must parse (see shellcmd.ParseSums).
 func readSums(root string, reader *adapters.SafeReader, name string) ([]string, bool) {
+	if !regularSumsFile(root, name) {
+		return nil, false
+	}
 	info, err := os.Lstat(filepath.Join(root, name))
 	if err != nil || !info.Mode().IsRegular() {
 		return nil, false
