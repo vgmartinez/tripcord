@@ -365,11 +365,17 @@ func TestShellRisks(t *testing.T) {
 func TestShellUnpinned(t *testing.T) {
 	env := testEnv(t)
 	const commit = "https://raw.githubusercontent.com/acme/tools/0123456789abcdef0123456789abcdef01234567/i.sh"
-	in := taskInput(t, env.Limits(), `{"pinned":"curl -fsSL `+commit+` | sh","branch":"curl -fsSL https://raw.githubusercontent.com/acme/tools/main/i.sh | sh","argv":["curl","-o","/tmp/i.sh","`+commit+`"],"mixed":["curl",1]}`)
+	in := taskInput(t, env.Limits(), `{"pinned":"curl -fsSL `+commit+` | sh","branch":"curl -fsSL https://raw.githubusercontent.com/acme/tools/main/i.sh | sh","argv":["curl","-o","/tmp/i.sh","`+commit+`"],"mixed":["curl",1],`+
+		`"sums":"curl -fsSLo i.sh https://get.example.invalid/i.sh && sha256sum -c s && sh i.sh","sumsArgv":["bash","-c","curl -fsSLo i.sh https://get.example.invalid/i.sh && sha256sum -c s && sh i.sh"]}`)
 	for src, want := range map[string]bool{
 		`has(payload.pinned) && shell.unpinned(payload.pinned).size() == 0 && shell.risks(payload.pinned).size() > 0`: true,
 		`has(payload.branch) && shell.unpinned(payload.branch) == ["fetch", "pipe"]`:                                  true,
 		`has(payload.argv) && shell.unpinned(payload.argv).size() == 0`:                                               true,
+		`has(payload.sums) && shell.unpinned(payload.sums, {"s": ["i.sh"]}).size() == 0`:                              true,
+		`has(payload.sums) && shell.unpinned(payload.sums, {"s": ["other.sh"]}) == ["fetch"]`:                         true,
+		`has(payload.sums) && shell.unpinned(payload.sums) == ["fetch"]`:                                              true,
+		`has(payload.sumsArgv) && shell.unpinned(payload.sumsArgv, {"s": ["i.sh"]}).size() == 0`:                      true,
+		`has(payload.sumsArgv) && shell.unpinned(payload.sumsArgv, {}) == ["fetch"]`:                                  true,
 	} {
 		got, err := compileT(t, env, src).Eval(context.Background(), in)
 		if err != nil || got != want {

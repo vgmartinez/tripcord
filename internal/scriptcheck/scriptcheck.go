@@ -15,6 +15,10 @@
 // error. A hook in a file with no
 // such directory, such as a Claude plugin's hooks/hooks.json, is not
 // checked, nor is a script ProjectScripts leaves out (see shellcmd).
+//
+// It also reads, for each repository env-setup entry, the committed sums
+// files its sha256sum -c checks name, so TC-CFG-009 can tell a checked
+// download from one checked against a file nobody committed.
 package scriptcheck
 
 import (
@@ -39,7 +43,9 @@ var configDirs = []string{".claude", ".cursor", ".github", ".windsurf", ".devin"
 // a broken symlink, counts as missing. A path that resolves outside root,
 // through a symlink in any component, is recorded by the target's location
 // class, not by its path. root is resolved first so a repository whose own
-// path contains a symlink is not reported as outside itself.
+// path contains a symlink is not reported as outside itself. It also sets
+// ChecksumFiles on every repository env-setup entry (see
+// annotateChecksums).
 func Annotate(root string, items []model.ConfigItem) error {
 	resolvedRoot, err := filepath.EvalSymlinks(root)
 	if err != nil {
@@ -63,7 +69,7 @@ func Annotate(root string, items []model.ConfigItem) error {
 			}
 		}
 	}
-	return nil
+	return annotateChecksums(resolvedRoot, items)
 }
 
 // lookupScript reports whether rel is missing or resolves outside root.

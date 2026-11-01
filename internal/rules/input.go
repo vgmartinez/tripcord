@@ -103,6 +103,7 @@ func emptyConfig() map[string]any {
 	}
 	m["missing_scripts"] = 0
 	m["script_locations"] = []string{}
+	m["checksum_files"] = map[string][]string{}
 	m["hidden_chars"] = 0
 	return m
 }
@@ -111,6 +112,10 @@ func configVars(id string, item model.ConfigItem) map[string]any {
 	locations := item.ScriptLocations
 	if locations == nil {
 		locations = []string{}
+	}
+	sums := item.ChecksumFiles
+	if sums == nil {
+		sums = map[string][]string{}
 	}
 	return map[string]any{
 		"id":               id,
@@ -121,6 +126,7 @@ func configVars(id string, item model.ConfigItem) map[string]any {
 		"kind":             item.Kind.String(),
 		"missing_scripts":  int(item.MissingScripts),
 		"script_locations": locations,
+		"checksum_files":   sums,
 		"hidden_chars":     item.Hidden.Total,
 	}
 }

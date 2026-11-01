@@ -184,7 +184,9 @@ var shellRisks = cel.Function(shellRisksName,
 // shell.unpinned(command) and shell.unpinned([program, arg, ...]) are
 // shell.risks, or an empty list when every fetch in the command is
 // pinned by an immutable URL or a checksum check (see
-// shellcmd.Unpinned).
+// shellcmd.Unpinned). The two-argument form takes config.checksum_files,
+// the committed sums files a sha256sum -c <file> check may cover; without
+// it such a check covers nothing.
 var shellUnpinned = cel.Function(shellUnpinnedName,
 	cel.Overload(overloadShellUnpinnedString, []*cel.Type{cel.StringType}, cel.ListType(cel.StringType),
 		cel.UnaryBinding(func(v ref.Val) ref.Val {
@@ -202,7 +204,54 @@ var shellUnpinned = cel.Function(shellUnpinnedName,
 			}
 			return newRisksList(shellcmd.UnpinnedArgv(argv))
 		})),
+	cel.Overload(overloadShellUnpinnedStringSums, []*cel.Type{cel.StringType, cel.DynType}, cel.ListType(cel.StringType),
+		cel.BinaryBinding(func(v, sumsVal ref.Val) ref.Val {
+			s, ok := v.(types.String)
+			if !ok {
+				return types.MaybeNoSuchOverloadErr(v)
+			}
+			sums, err := sumsMap(sumsVal)
+			if err != nil {
+				return types.WrapErr(err)
+			}
+			return newRisksList(shellcmd.UnpinnedSums(string(s), sums))
+		})),
+	cel.Overload(overloadShellUnpinnedListSums, []*cel.Type{cel.ListType(cel.DynType), cel.DynType}, cel.ListType(cel.StringType),
+		cel.BinaryBinding(func(v, sumsVal ref.Val) ref.Val {
+			argv, err := stringList(shellUnpinnedName, v)
+			if err != nil {
+				return types.WrapErr(err)
+			}
+			sums, err := sumsMap(sumsVal)
+			if err != nil {
+				return types.WrapErr(err)
+			}
+			return newRisksList(shellcmd.UnpinnedArgvSums(argv, sums))
+		})),
 )
+
+// sumsMap reads config.checksum_files: sums file names to the names
+// each lists.
+func sumsMap(v ref.Val) (shellcmd.Sums, error) {
+	m, ok := v.(traits.Mapper)
+	if !ok {
+		return nil, errors.New(shellUnpinnedName + ": checksum files are not a map")
+	}
+	sums := shellcmd.Sums{}
+	for it := m.Iterator(); it.HasNext() == types.True; {
+		k := it.Next()
+		name, ok := k.(types.String)
+		if !ok {
+			return nil, errors.New(shellUnpinnedName + ": checksum file name is not a string")
+		}
+		listed, err := stringList(shellUnpinnedName, m.Get(k))
+		if err != nil {
+			return nil, err
+		}
+		sums[string(name)] = listed
+	}
+	return sums, nil
+}
 
 // shell.locations(command) and shell.locations([program, arg, ...])
 // return where the programs and scripts a hook command runs live:
@@ -337,21 +386,23 @@ func mapString(m traits.Mapper, key string) (string, bool) {
 }
 
 const (
-	hookCommandsName             = "hook.commands"
-	overloadHookCommands         = "hook_commands_dyn"
-	hookArgsName                 = "hook.args"
-	overloadHookArgs             = "hook_args_dyn"
-	hookArgvName                 = "hook.argv"
-	overloadHookArgv             = "hook_argv_dyn"
-	shellRisksName               = "shell.risks"
-	overloadShellRisksString     = "shell_risks_string"
-	overloadShellRisksList       = "shell_risks_list"
-	shellUnpinnedName            = "shell.unpinned"
-	overloadShellUnpinnedString  = "shell_unpinned_string"
-	overloadShellUnpinnedList    = "shell_unpinned_list"
-	shellLocationsName           = "shell.locations"
-	overloadShellLocationsString = "shell_locations_string"
-	overloadShellLocationsList   = "shell_locations_list"
+	hookCommandsName                = "hook.commands"
+	overloadHookCommands            = "hook_commands_dyn"
+	hookArgsName                    = "hook.args"
+	overloadHookArgs                = "hook_args_dyn"
+	hookArgvName                    = "hook.argv"
+	overloadHookArgv                = "hook_argv_dyn"
+	shellRisksName                  = "shell.risks"
+	overloadShellRisksString        = "shell_risks_string"
+	overloadShellRisksList          = "shell_risks_list"
+	shellUnpinnedName               = "shell.unpinned"
+	overloadShellUnpinnedString     = "shell_unpinned_string"
+	overloadShellUnpinnedList       = "shell_unpinned_list"
+	overloadShellUnpinnedStringSums = "shell_unpinned_string_sums"
+	overloadShellUnpinnedListSums   = "shell_unpinned_list_sums"
+	shellLocationsName              = "shell.locations"
+	overloadShellLocationsString    = "shell_locations_string"
+	overloadShellLocationsList      = "shell_locations_list"
 )
 
 // risksList is the list a shell function returns, carrying the work the

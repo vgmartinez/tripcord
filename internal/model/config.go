@@ -76,6 +76,12 @@ type ConfigItem struct {
 	// symlink resolves outside the repository: "home", "temp", "absolute",
 	// or "network". The target path is not kept.
 	ScriptLocations []string `json:"-"`
+	// ChecksumFiles maps each committed sums file a repository env-setup
+	// command checks with sha256sum -c to the file names it lists (see
+	// scriptcheck). It is set after discovery, for rule evaluation only;
+	// a sums file that is missing, outside the repository, or malformed
+	// has no entry.
+	ChecksumFiles map[string][]string `json:"-"`
 	// Hidden is the invisible and direction-changing code points of an
 	// instruction or skill file (see internal/hiddenchar): where each run
 	// of them starts and its first code point, never the text around

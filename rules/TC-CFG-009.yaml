@@ -60,17 +60,17 @@ when: |
   config.kind == "env-setup" && config.scope == "repo" && has(payload.setting) && (
     (config.harness == "copilot" && payload.setting == "step" &&
       has(payload.run) && type(payload.run) == string &&
-      shell.unpinned(payload.run).size() > 0) ||
+      shell.unpinned(payload.run, config.checksum_files).size() > 0) ||
     (config.harness == "cursor" && payload.setting in ["install", "start"] &&
       has(payload.value) && type(payload.value) == string &&
-      shell.unpinned(payload.value).size() > 0) ||
+      shell.unpinned(payload.value, config.checksum_files).size() > 0) ||
     (config.harness == "cursor" && payload.setting == "terminals" &&
       has(payload.command) && type(payload.command) == string &&
-      shell.unpinned(payload.command).size() > 0) ||
+      shell.unpinned(payload.command, config.checksum_files).size() > 0) ||
     (config.harness == "devcontainer" &&
       payload.setting in ["initializeCommand", "onCreateCommand", "updateContentCommand", "postCreateCommand", "postStartCommand", "postAttachCommand"] &&
       has(payload.command) && (type(payload.command) == string || type(payload.command) == list) &&
-      shell.unpinned(payload.command).size() > 0) ||
+      shell.unpinned(payload.command, config.checksum_files).size() > 0) ||
     (config.harness == "devcontainer" && payload.setting == "features" &&
       has(payload.feature) && type(payload.feature) == string &&
       payload.feature.matches(r'''(?i)^https?://''') &&

@@ -2,6 +2,7 @@ package shellcmd
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -34,7 +35,11 @@ import (
 // never a fetch target and never run (names compared case-insensitively),
 // so a fetched file is only ever a run script or a form 3 file. Unusual
 // scripts are not credited; that is the intended trade-off.
-func checksumScript(src string) bool {
+//
+// A form 2 check covers only the files sums lists for its sums file, so
+// a sums file that is not committed to the repository, or does not list
+// the file run, verifies nothing.
+func checksumScript(src string, sums Sums) bool {
 	lists, ok := parseScript(src)
 	if !ok {
 		return false
@@ -50,7 +55,7 @@ func checksumScript(src string) bool {
 			els = append(els, e)
 		}
 	}
-	return checkElements(els, len(lists)-1)
+	return checkElements(els, len(lists)-1, sums)
 }
 
 type elementKind int
@@ -73,7 +78,7 @@ type element struct {
 	standalone bool
 }
 
-func checkElements(els []element, last int) bool {
+func checkElements(els []element, last int, sums Sums) bool {
 	errexit, leading := false, true
 	fetched := map[string]bool{}
 	for _, e := range els {
@@ -102,7 +107,13 @@ func checkElements(els []element, last int) bool {
 		}
 	}
 	covers := func(c element, file string) bool {
-		return c.kind == kindCheck && (c.file == "" || c.file == file)
+		if c.kind != kindCheck {
+			return false
+		}
+		if c.sums != "" {
+			return slices.Contains(sums[c.sums], file)
+		}
+		return c.file == file
 	}
 	anyFetch := false
 	used := map[string]bool{}

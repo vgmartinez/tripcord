@@ -129,12 +129,19 @@ func TestUnpinned(t *testing.T) {
 		{"", nil},
 	}
 	for _, tc := range cases {
-		got := Unpinned(tc.line).Risks
+		got := UnpinnedSums(tc.line, pinnedSums).Risks
 		if !slices.Equal(got, append([]string{}, tc.want...)) {
-			t.Errorf("Unpinned(%q) = %q, want %q", tc.line, got, tc.want)
+			t.Errorf("UnpinnedSums(%q) = %q, want %q", tc.line, got, tc.want)
 		}
 	}
+	line := "curl -fsSLo i.sh " + branchURL + " && sha256sum -c s && sh i.sh"
+	if got := Unpinned(line).Risks; !slices.Equal(got, []string{Fetch}) {
+		t.Errorf("Unpinned without sums files = %q, want fetch", got)
+	}
 }
+
+// pinnedSums is the committed sums files the Unpinned tests assume.
+var pinnedSums = Sums{"i.sh.sha256": {"i.sh"}, "sums.txt": {"i.sh"}, "s": {"i.sh"}, "sums": {"i.sh"}}
 
 func TestUnpinnedArgv(t *testing.T) {
 	cases := []struct {
@@ -151,9 +158,9 @@ func TestUnpinnedArgv(t *testing.T) {
 		{nil, nil},
 	}
 	for _, tc := range cases {
-		got := UnpinnedArgv(tc.argv).Risks
+		got := UnpinnedArgvSums(tc.argv, pinnedSums).Risks
 		if !slices.Equal(got, append([]string{}, tc.want...)) {
-			t.Errorf("UnpinnedArgv(%q) = %q, want %q", tc.argv, got, tc.want)
+			t.Errorf("UnpinnedArgvSums(%q) = %q, want %q", tc.argv, got, tc.want)
 		}
 	}
 }

@@ -25,27 +25,35 @@ import (
 // Package runners (npx, bunx, pnpm and yarn dlx, uvx, pipx run), git
 // clone, inline python or node code, a variable target, and a .NET
 // download are never checksum-verified; a version number or tag is not
-// a pin.
-func Unpinned(line string) Result {
+// a pin. Unpinned has no sums files, so a sha256sum -c <file> check
+// covers nothing; see UnpinnedSums.
+func Unpinned(line string) Result { return UnpinnedSums(line, nil) }
+
+// UnpinnedSums is Unpinned where a sha256sum -c <file> check covers the
+// files sums lists for <file>.
+func UnpinnedSums(line string, sums Sums) Result {
 	var s scanner
 	s.line(line, 0, false)
 	if strings.Contains(line, "`") {
 		s.line(line, 0, true)
 	}
-	return s.unpinnedResult(checksumScript(line))
+	return s.unpinnedResult(checksumScript(line, sums))
 }
 
 // UnpinnedArgv is Unpinned for an argument vector (see RisksArgv). A
 // single command has no checksum check after it, so only an immutable
 // URL pins it, unless the vector is exactly sh or bash, -c, and a
 // script the checksum grammar accepts.
-func UnpinnedArgv(argv []string) Result {
+func UnpinnedArgv(argv []string) Result { return UnpinnedArgvSums(argv, nil) }
+
+// UnpinnedArgvSums is UnpinnedArgv with sums (see UnpinnedSums).
+func UnpinnedArgvSums(argv []string, sums Sums) Result {
 	var s scanner
 	for _, a := range argv {
 		s.work += len(a) + 1
 	}
 	s.command(argv, 0, false)
-	verified := len(argv) == 3 && (argv[0] == "sh" || argv[0] == "bash") && argv[1] == "-c" && checksumScript(argv[2])
+	verified := shellScriptArgv(argv) && checksumScript(argv[2], sums)
 	return s.unpinnedResult(verified)
 }
 
