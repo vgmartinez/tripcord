@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 )
 
@@ -34,21 +35,16 @@ func TestScanDeterministicUnderLoad(t *testing.T) {
 	)
 
 	defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(1))
-	stop := make(chan struct{})
+	var stop atomic.Bool
 	var wg sync.WaitGroup
 	for range 2 {
 		wg.Go(func() {
-			for {
-				select {
-				case <-stop:
-					return
-				default:
-				}
+			for !stop.Load() {
 			}
 		})
 	}
 	defer wg.Wait()
-	defer close(stop)
+	defer stop.Store(true)
 
 	for _, root := range roots {
 		var first string
