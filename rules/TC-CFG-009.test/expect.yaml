@@ -2,42 +2,55 @@
 # internal/rules/fixtures.go, ExpectFile).
 positivos:
   copilot-branch-url-pipe: high
-  copilot-checksum-without-errexit: high
+  copilot-checksum-function-override: high
   copilot-checksum-stdin-from-cat: high
   copilot-checksum-stdin-in-and-list: high
   copilot-checksum-stdin-longer-pipe: high
   copilot-checksum-stdin-without-errexit: high
+  copilot-checksum-trap-err: high
+  copilot-checksum-trap-exit: high
+  copilot-checksum-without-errexit: high
   copilot-curl-pipe-sh: high
+  copilot-download-then-run: high
   copilot-errexit-check-backgrounded: high
   copilot-errexit-check-in-and-list: high
+  copilot-errexit-colon-set-e: high
+  copilot-errexit-echo-set-e: high
+  copilot-errexit-escaped-set-plus-e: high
   copilot-errexit-eval-set-plus-e: high
   copilot-errexit-set-after-fetch: high
   copilot-errexit-set-backgrounded: high
+  copilot-errexit-set-function: high
+  copilot-errexit-shopt-errexit: high
+  copilot-errexit-true-set-e: high
+  copilot-errexit-variable-set-plus-e: high
   copilot-evil-host-sha: high
-  copilot-release-asset-sha: high
-  copilot-trailing-dot-host: high
-  copilot-userinfo-host: high
-  copilot-download-then-run: high
   copilot-oci-digest-curl: high
   copilot-pwsh-iwr-iex: high
+  copilot-release-asset-sha: high
   copilot-set-plus-e: high
   copilot-step-shell-overrides-job: high
+  copilot-trailing-dot-host: high
   copilot-traversal-dot-dotdot: high
-  copilot-traversal-encoded: high
   copilot-traversal-encoded-mixed: high
   copilot-traversal-encoded-upper: high
+  copilot-traversal-encoded: high
   copilot-traversal-github-raw: high
   copilot-traversal-other-repo: high
   copilot-traversal-to-branch: high
-  cursor-traversal-wget: high
+  copilot-userinfo-host: high
+  cursor-checksum-entry-dev-null: high
+  cursor-checksum-entry-other-file: high
+  cursor-checksum-printf-format: high
   cursor-install-curl-pipe: high
   cursor-oci-digest-wget: high
   cursor-start-encoded: high
   cursor-terminal-wget-pipe: high
+  cursor-traversal-wget: high
   devcontainer-feature-tarball: high
   devcontainer-initialize-host: high
   devcontainer-oncreate-array: high
-  devcontainer-postcreate-curl-pipe: high
   devcontainer-postattach: high
+  devcontainer-postcreate-curl-pipe: high
   devcontainer-poststart-base64: high
   devcontainer-updatecontent-object: high
