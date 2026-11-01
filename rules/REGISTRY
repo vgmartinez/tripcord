@@ -7,3 +7,4 @@
 # line: CI compares this file with the pull request base.
 TC-CFG-001 active tripcord/core@2026.11
 TC-CFG-002 active tripcord/core@2026.11
+TC-CFG-003 active tripcord/core@2026.11

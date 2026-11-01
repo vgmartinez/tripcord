@@ -1,0 +1,31 @@
+# A stdio MCP server is a process the agent starts. When the command is
+# a shell, or its arguments pipe into sh, the "server" is an arbitrary
+# script that runs whenever the MCP client starts it: the persistence
+# payload Novee showed at DEF CON 34.
+#
+# The command is a shell when its first word, with any directory and an
+# .exe suffix removed, is a POSIX, Windows, or fish/csh shell. A pipe to
+# sh is "| sh" (or bash, zsh, dash, ksh), optionally through sudo,
+# anywhere in the command and its arguments. Wrappers such as env,
+# nohup, or busybox are not unwrapped.
+id: TC-CFG-003
+pack: tripcord/core
+title: "MCP stdio server launched through a shell or a pipe to sh"
+severity: high
+harness: [claude, cursor, vscode]
+files:
+  - "**/.mcp.json"
+  - "**/mcp.json"
+when: >-
+  config.kind == "mcp-server" &&
+    has(payload.command) && type(payload.command) == string &&
+    (!has(payload.type) || payload.type == "stdio") &&
+    (
+      payload.command.matches(r'''(?i)^\s*([^\s]*[/\\])?(sh|bash|zsh|dash|ksh|mksh|ash|fish|csh|tcsh|cmd|powershell|pwsh)(\.exe)?(\s|$)''') ||
+      (payload.command + (has(payload.args) && type(payload.args) == list && payload.args.all(a, type(a) == string) ? " " + payload.args.join(" ") : ""))
+        .matches(r'''(^|[^|])\|[ \t]*(sudo[ \t]+(-[^\s]*[ \t]+)*)?([^\s|]*/)?(sh|bash|zsh|dash|ksh)($|[\s;&|)])''')
+    )
+fix: "Point command at the server binary and pass its arguments in args, without a shell or a downloaded script."
+refs:
+  - https://novee.security/blog/breaking-ai-agent-sandboxes/
+  - https://code.visualstudio.com/docs/agents/reference/mcp-configuration

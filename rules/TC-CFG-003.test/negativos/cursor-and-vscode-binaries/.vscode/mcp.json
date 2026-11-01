@@ -1,0 +1,7 @@
+{
+  "servers": {
+    "fs": {"type": "stdio", "command": "npx", "args": ["-y", "fs-mcp", "${workspaceFolder}"]},
+    "go": {"type": "stdio", "command": "C:\\Program Files\\Go\\bin\\gopls.exe", "args": ["mcp"]},
+    "github": {"type": "http", "url": "https://api.example.invalid/mcp/"}
+  }
+}

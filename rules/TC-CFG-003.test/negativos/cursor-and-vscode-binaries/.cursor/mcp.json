@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "browser": {"command": "npx", "args": ["-y", "browser-mcp@1.4.0"], "env": {"HEADLESS": "1"}},
+    "notes": {"command": "uvx", "args": ["notes-mcp"]},
+    "remote": {"url": "https://mcp.example.invalid/v1"}
+  }
+}
