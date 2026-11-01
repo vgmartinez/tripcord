@@ -24,27 +24,48 @@ const (
 
 // FixtureExt is the engine fixture format: a JSON ConfigItem, or an
 // array of them. An empty sha256 is filled in as the SHA-256 of the
-// payload bytes. Raw config files are a later step, with the harness
-// adapters.
+// payload bytes.
 const FixtureExt = ".json"
 
-// CheckRuleFixtures runs rule against packDir/<ID>.test/. Every file in
-// positivos/ must produce at least one match and every file in
+// DiscoverFunc normalizes the repository at root into config items, the
+// way `tripcord scan` does. It runs raw config fixtures: a subdirectory
+// of positivos/ or negativos/ is a repository tree of real config files.
+// It returns an error when the tree cannot be read in full.
+type DiscoverFunc func(ctx context.Context, root string) ([]model.ConfigItem, error)
+
+// CheckRuleFixtures runs rule against packDir/<ID>.test/. Every fixture
+// in positivos/ must produce at least one match and every fixture in
 // negativos/ must produce none. Evaluation errors fail either kind.
 // Each directory needs at least one fixture.
-func CheckRuleFixtures(ctx context.Context, env *Env, packDir string, rule *Rule) error {
+//
+// A fixture is a .json engine fixture or a subdirectory holding a raw
+// repository tree, which discover normalizes. A nil discover rejects
+// raw fixtures.
+func CheckRuleFixtures(ctx context.Context, env *Env, packDir string, rule *Rule, discover DiscoverFunc) error {
 	base := filepath.Join(packDir, rule.ID+TestDirSuffix)
 	engine := NewEngine(env, []*Rule{rule})
 	var errs []error
 	for _, kind := range []string{PositiveDir, NegativeDir} {
 		dir := filepath.Join(base, kind)
-		files, err := fixtureFiles(dir)
+		fixtures, err := fixtureEntries(dir, discover != nil)
 		if err != nil {
 			errs = append(errs, err)
 			continue
 		}
-		for _, file := range files {
-			if err := checkFixture(ctx, engine, rule, file, kind == PositiveDir); err != nil {
+		for _, f := range fixtures {
+			var items []model.ConfigItem
+			if f.raw {
+				items, err = discover(ctx, f.path)
+				if err != nil {
+					err = fmt.Errorf("%s: %w", f.path, err)
+				}
+			} else {
+				items, err = readFixture(f.path)
+			}
+			if err == nil {
+				err = checkFixture(ctx, engine, rule, f.path, items, kind == PositiveDir)
+			}
+			if err != nil {
 				errs = append(errs, err)
 			}
 		}
@@ -52,33 +73,43 @@ func CheckRuleFixtures(ctx context.Context, env *Env, packDir string, rule *Rule
 	return errors.Join(errs...)
 }
 
-func fixtureFiles(dir string) ([]string, error) {
+type fixtureEntry struct {
+	path string
+	raw  bool
+}
+
+func fixtureEntries(dir string, rawAllowed bool) ([]fixtureEntry, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", dir, err)
 	}
-	var files []string
+	var out []fixtureEntry
 	for _, e := range entries {
-		if e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+		if strings.HasPrefix(e.Name(), ".") {
 			continue
 		}
 		path := filepath.Join(dir, e.Name())
-		if filepath.Ext(e.Name()) != FixtureExt {
-			return nil, fmt.Errorf("%s: engine fixtures are %s ConfigItem documents; raw config fixtures come with the harness adapters", path, FixtureExt)
+		switch {
+		case e.IsDir() && !rawAllowed:
+			return nil, fmt.Errorf("%s: raw config fixtures need the harness adapters; run them with a DiscoverFunc", path)
+		case e.IsDir():
+			out = append(out, fixtureEntry{path: path, raw: true})
+		case filepath.Ext(e.Name()) != FixtureExt:
+			return nil, fmt.Errorf("%s: a fixture is a %s ConfigItem document or a directory holding a raw config tree", path, FixtureExt)
+		default:
+			out = append(out, fixtureEntry{path: path})
 		}
-		files = append(files, path)
 	}
-	if len(files) == 0 {
+	if len(out) == 0 {
 		return nil, fmt.Errorf("%s: needs at least one fixture", dir)
 	}
-	slices.Sort(files)
-	return files, nil
+	slices.SortFunc(out, func(a, b fixtureEntry) int { return strings.Compare(a.path, b.path) })
+	return out, nil
 }
 
-func checkFixture(ctx context.Context, engine *Engine, rule *Rule, file string, positive bool) error {
-	items, err := readFixture(file)
-	if err != nil {
-		return err
+func checkFixture(ctx context.Context, engine *Engine, rule *Rule, file string, items []model.ConfigItem, positive bool) error {
+	if len(items) == 0 {
+		return fmt.Errorf("%s: no config items", file)
 	}
 	if positive && !slices.ContainsFunc(items, rule.Applies) {
 		return fmt.Errorf("%s: no item matches the rule's harness and files", file)

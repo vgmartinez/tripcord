@@ -31,7 +31,7 @@ func TestRuleFixtures(t *testing.T) {
 			}
 			found = true
 			t.Run(r.ID, func(t *testing.T) {
-				if err := CheckRuleFixtures(context.Background(), env, dir, r); err != nil {
+				if err := CheckRuleFixtures(context.Background(), env, dir, r, adapterDiscover); err != nil {
 					t.Fatal(err)
 				}
 			})
@@ -76,9 +76,13 @@ func TestCheckRuleFixturesFailures(t *testing.T) {
 		"positive out of scope":     {map[string]string{"positivos/a.json": outOfScope, "negativos/b.json": quiet}, "no item matches"},
 		"no negatives":              {map[string]string{"positivos/a.json": trigger}, "negativos"},
 		"empty negatives":           {map[string]string{"positivos/a.json": trigger, "negativos/.keep": ""}, "at least one fixture"},
-		"raw config fixture":        {map[string]string{"positivos/a.json": trigger, "negativos/tasks.yaml": "x: 1"}, "raw config fixtures come with"},
+		"non-json file":             {map[string]string{"positivos/a.json": trigger, "negativos/tasks.yaml": "x: 1"}, "ConfigItem document or a directory"},
 		"invalid item":              {map[string]string{"positivos/a.json": `{"harness":"emacs"}`, "negativos/b.json": quiet}, "harness"},
 		"eval error":                {map[string]string{"positivos/a.json": trigger, "negativos/b.json": `{"harness":"claude","scope":"repo","path":".mcp.json","kind":"mcp-server","payload":{"command":1}}`}, "TEST-CFG-002"},
+		"raw positive quiet":        {map[string]string{"positivos/repo/.mcp.json": `{"mcpServers":{"a":{"command":"node"}}}`, "negativos/b.json": quiet}, "did not trigger"},
+		"raw negative triggers":     {map[string]string{"positivos/a.json": trigger, "negativos/repo/.mcp.json": `{"mcpServers":{"a":{"command":"sh"}}}`}, "negative fixture triggered"},
+		"raw unreadable":            {map[string]string{"positivos/a.json": trigger, "negativos/repo/.mcp.json": `{`}, "not fully read"},
+		"raw empty":                 {map[string]string{"positivos/a.json": trigger, "negativos/repo/README.md": "x"}, "no config items"},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -86,18 +90,29 @@ func TestCheckRuleFixturesFailures(t *testing.T) {
 			for rel, body := range c.files {
 				writeFile(t, filepath.Join(dir, rule.ID+TestDirSuffix, rel), body)
 			}
-			err := CheckRuleFixtures(context.Background(), env, dir, rule)
+			err := CheckRuleFixtures(context.Background(), env, dir, rule, adapterDiscover)
 			if err == nil || !strings.Contains(err.Error(), c.want) {
 				t.Fatalf("err = %v, want %q", err, c.want)
 			}
 		})
 	}
+	t.Run("raw without discover", func(t *testing.T) {
+		dir := t.TempDir()
+		writeFile(t, filepath.Join(dir, rule.ID+TestDirSuffix, "positivos/a.json"), trigger)
+		writeFile(t, filepath.Join(dir, rule.ID+TestDirSuffix, "negativos/repo/.mcp.json"), `{"mcpServers":{"a":{"command":"node"}}}`)
+		err := CheckRuleFixtures(context.Background(), env, dir, rule, nil)
+		if err == nil || !strings.Contains(err.Error(), "need the harness adapters") {
+			t.Fatalf("err = %v", err)
+		}
+	})
 	t.Run("passing", func(t *testing.T) {
 		dir := t.TempDir()
 		writeFile(t, filepath.Join(dir, rule.ID+TestDirSuffix, "positivos/a.json"), "["+trigger+","+quiet+"]")
+		writeFile(t, filepath.Join(dir, rule.ID+TestDirSuffix, "positivos/repo/.mcp.json"), `{"mcpServers":{"a":{"command":"sh"}}}`)
 		writeFile(t, filepath.Join(dir, rule.ID+TestDirSuffix, "negativos/b.json"), quiet)
 		writeFile(t, filepath.Join(dir, rule.ID+TestDirSuffix, "negativos/c.json"), outOfScope)
-		if err := CheckRuleFixtures(context.Background(), env, dir, rule); err != nil {
+		writeFile(t, filepath.Join(dir, rule.ID+TestDirSuffix, "negativos/repo/.mcp.json"), `{"mcpServers":{"a":{"command":"node"}}}`)
+		if err := CheckRuleFixtures(context.Background(), env, dir, rule, adapterDiscover); err != nil {
 			t.Fatal(err)
 		}
 	})
