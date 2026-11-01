@@ -30,28 +30,29 @@ const redacted = "[REDACTED]"
 //
 // Reviewed against https://code.claude.com/docs/en/settings on 2026-10-31.
 var settingKinds = map[string]model.ConfigKind{
-	"permissions":                model.ConfigKindPermissions,
-	"sandbox":                    model.ConfigKindPermissions,
-	"disableAllHooks":            model.ConfigKindPermissions,
-	"allowManagedHooksOnly":      model.ConfigKindPermissions,
-	"allowManagedMcpServersOnly": model.ConfigKindPermissions,
-	"allowedMcpServers":          model.ConfigKindPermissions,
-	"deniedMcpServers":           model.ConfigKindPermissions,
-	"enableAllProjectMcpServers": model.ConfigKindPermissions,
-	"enabledMcpjsonServers":      model.ConfigKindPermissions,
-	"disabledMcpjsonServers":     model.ConfigKindPermissions,
-	"strictKnownMarketplaces":    model.ConfigKindPermissions,
-	"enabledPlugins":             model.ConfigKindPlugin,
-	"extraKnownMarketplaces":     model.ConfigKindPlugin,
-	"env":                        model.ConfigKindEnvSetup,
-	"apiKeyHelper":               model.ConfigKindEnvSetup,
-	"statusLine":                 model.ConfigKindEnvSetup,
-	"subagentStatusLine":         model.ConfigKindEnvSetup,
-	"otelHeadersHelper":          model.ConfigKindEnvSetup,
-	"awsAuthRefresh":             model.ConfigKindEnvSetup,
-	"awsCredentialExport":        model.ConfigKindEnvSetup,
-	"gcpAuthRefresh":             model.ConfigKindEnvSetup,
-	"fileSuggestion":             model.ConfigKindEnvSetup,
+	"permissions":                       model.ConfigKindPermissions,
+	"sandbox":                           model.ConfigKindPermissions,
+	"disableAllHooks":                   model.ConfigKindPermissions,
+	"allowManagedHooksOnly":             model.ConfigKindPermissions,
+	"allowManagedMcpServersOnly":        model.ConfigKindPermissions,
+	"allowedMcpServers":                 model.ConfigKindPermissions,
+	"deniedMcpServers":                  model.ConfigKindPermissions,
+	"enableAllProjectMcpServers":        model.ConfigKindPermissions,
+	"enabledMcpjsonServers":             model.ConfigKindPermissions,
+	"disabledMcpjsonServers":            model.ConfigKindPermissions,
+	"strictKnownMarketplaces":           model.ConfigKindPermissions,
+	"skipDangerousModePermissionPrompt": model.ConfigKindPermissions,
+	"enabledPlugins":                    model.ConfigKindPlugin,
+	"extraKnownMarketplaces":            model.ConfigKindPlugin,
+	"env":                               model.ConfigKindEnvSetup,
+	"apiKeyHelper":                      model.ConfigKindEnvSetup,
+	"statusLine":                        model.ConfigKindEnvSetup,
+	"subagentStatusLine":                model.ConfigKindEnvSetup,
+	"otelHeadersHelper":                 model.ConfigKindEnvSetup,
+	"awsAuthRefresh":                    model.ConfigKindEnvSetup,
+	"awsCredentialExport":               model.ConfigKindEnvSetup,
+	"gcpAuthRefresh":                    model.ConfigKindEnvSetup,
+	"fileSuggestion":                    model.ConfigKindEnvSetup,
 }
 
 // collector accumulates items and diagnostics for one Discover call.
@@ -353,12 +354,28 @@ func (s *src) settingsObject(obj map[string]any) {
 			}
 			value, removed = s.safePayloadValue(name, value)
 		}
+		switch name {
+		case "permissions":
+			raw["skip_dangerous_mode_prompt"] = obj["skipDangerousModePermissionPrompt"] == true
+		case "skipDangerousModePermissionPrompt":
+			raw["bypass_permissions"] = bypassPermissions(obj["permissions"])
+		}
 		payload["value"] = value
 		if command := commandOf(value); command != "" {
 			payload["command"] = s.safeString(command)
 		}
 		s.addDetect(kind, []string{"setting", name}, payload, kit.Removed("value", removed...), raw)
 	}
+}
+
+// bypassPermissions reports whether a permissions value sets
+// defaultMode "bypassPermissions". The permissions item's Detect view
+// carries skip_dangerous_mode_prompt and the
+// skipDangerousModePermissionPrompt item's carries bypass_permissions, so
+// a rule can report the pair once; neither feeds the evidence key.
+func bypassPermissions(value any) bool {
+	perms, ok := value.(map[string]any)
+	return ok && perms["defaultMode"] == "bypassPermissions"
 }
 
 // commandOf returns the shell command a setting runs: the string itself

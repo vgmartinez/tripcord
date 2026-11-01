@@ -609,6 +609,7 @@ func TestCuratedSettingKeys(t *testing.T) {
 		"otelHeadersHelper",
 		"permissions",
 		"sandbox",
+		"skipDangerousModePermissionPrompt",
 		"statusLine",
 		"strictKnownMarketplaces",
 		"subagentStatusLine",
@@ -1023,5 +1024,53 @@ func assertGolden(t *testing.T, name string, got []byte) {
 	}
 	if !bytes.Equal(got, want) {
 		t.Fatalf("%s mismatch\n--- got ---\n%s--- want ---\n%s", name, got, want)
+	}
+}
+
+// TestBypassPairDetectFlags checks that each of permissions and
+// skipDangerousModePermissionPrompt says in its Detect view whether the
+// other is set in the same file, and that the flags stay out of the
+// payload.
+func TestBypassPairDetectFlags(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct {
+		settings   string
+		skip, pair bool
+	}{
+		"both":      {`{"permissions":{"defaultMode":"bypassPermissions"},"skipDangerousModePermissionPrompt":true}`, true, true},
+		"skip only": {`{"permissions":{"defaultMode":"acceptEdits"},"skipDangerousModePermissionPrompt":true}`, true, false},
+		"bypass":    {`{"permissions":{"defaultMode":"bypassPermissions"}}`, false, true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			writeFile(t, filepath.Join(root, ".claude", "settings.json"), tc.settings)
+			got := discover(t, New(Options{}), root)
+			seen := map[string]bool{}
+			for _, item := range got.Items {
+				var payload, detect map[string]any
+				if err := json.Unmarshal(item.Payload, &payload); err != nil {
+					t.Fatal(err)
+				}
+				if err := json.Unmarshal(item.Detect, &detect); err != nil {
+					t.Fatal(err)
+				}
+				setting, _ := payload["setting"].(string)
+				seen[setting] = true
+				switch setting {
+				case "permissions":
+					if detect["skip_dangerous_mode_prompt"] != tc.skip || payload["skip_dangerous_mode_prompt"] != nil {
+						t.Errorf("permissions: detect %v, payload %v", detect, payload)
+					}
+				case "skipDangerousModePermissionPrompt":
+					if detect["bypass_permissions"] != tc.pair || payload["bypass_permissions"] != nil {
+						t.Errorf("skip: detect %v, payload %v", detect, payload)
+					}
+				}
+			}
+			if seen["skipDangerousModePermissionPrompt"] != tc.skip {
+				t.Errorf("skipDangerousModePermissionPrompt emitted = %v, want %v", seen["skipDangerousModePermissionPrompt"], tc.skip)
+			}
+		})
 	}
 }
