@@ -58,6 +58,7 @@ var secrets = []string{
 	"oc-key-111", "oc-tok-222", "oc-q-333", "oc-bearer-444", "oc-q-555", "oc-code-000", "AUTHSECRET",
 	"ws-tok-111", "ws-q-222", "ws-key-333", "ws-q-444",
 	"dc-dock-111", "dc-tok-222", "dc-q-333", "dc-env-444", "dc-run-555", "dc-arg-666",
+	"devin-tok-111", "devin-tok-222",
 }
 
 func mergedRepo(t *testing.T) string {
