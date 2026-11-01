@@ -314,10 +314,7 @@ func redactCommandSecrets(value string) (string, []string) {
 func stripEmbeddedURLSecrets(value string) (string, []string) {
 	var removed []string
 	value = embeddedURL.ReplaceAllStringFunc(value, func(m string) string {
-		stripped, raw, ok := StripEmbeddedURL(m)
-		if !ok {
-			return m
-		}
+		stripped, raw := StripEmbeddedURL(m)
 		if raw != "" {
 			removed = append(removed, raw)
 		}
@@ -328,18 +325,21 @@ func stripEmbeddedURLSecrets(value string) (string, []string) {
 
 // StripEmbeddedURL strips userinfo, query, and fragment from a URL found
 // inside a longer string, as text: the URL is not parsed and rebuilt, so
-// nothing is re-encoded, and a query is removed to the end of the match
-// even when it contains ")" or a backtick. Those two characters, when
-// they end the match, are kept: they close a $( ) or backtick
-// substitution around the URL, and carry no secret. ok is false when
-// there is no host. removedRaw is the removed text, NUL-joined, for
-// KeyDiscriminator only.
-func StripEmbeddedURL(m string) (stripped, removedRaw string, ok bool) {
-	sep := strings.Index(m, "://")
-	if sep < 0 {
-		return "", "", false
+// nothing is re-encoded, and a URL without a host (https://:8443/x) is
+// stripped all the same. A query or fragment runs to the end of the
+// match or to a shell character that ends it: ;, |, \, &&, or a trailing
+// &. That character and the text after it are kept, so the evidence
+// keeps the command's shape (?sig=x|sh keeps |sh), and a ? or # in that
+// text starts another removed part. ")" and a backtick do not end a
+// query, and neither does a single &, its own separator; a run of ")"
+// and backticks that ends the match is kept, since it closes a $( ) or
+// backtick substitution around the URL. removedRaw is the removed text,
+// NUL-joined, for KeyDiscriminator only.
+func StripEmbeddedURL(m string) (stripped, removedRaw string) {
+	prefix, rest := "", m
+	if sep := strings.Index(m, "://"); sep >= 0 {
+		prefix, rest = m[:sep+3], m[sep+3:]
 	}
-	prefix, rest := m[:sep+3], m[sep+3:]
 	authEnd := strings.IndexAny(rest, "/?#")
 	if authEnd < 0 {
 		authEnd = len(rest)
@@ -350,30 +350,93 @@ func StripEmbeddedURL(m string) (stripped, removedRaw string, ok bool) {
 		removed = append(removed, auth[:at])
 		auth = auth[at+1:]
 	}
-	if auth == "" || auth[0] == ':' {
-		return "", "", false
+	var b strings.Builder
+	b.WriteString(prefix)
+	b.WriteString(auth)
+	for len(tail) > 0 {
+		q := strings.IndexAny(tail, "?#")
+		if q < 0 {
+			b.WriteString(tail)
+			break
+		}
+		b.WriteString(tail[:q])
+		end := q + 1 + queryEnd(tail[q+1:])
+		secret := tail[q:end]
+		removed = append(removed, splitSecret(secret)...)
+		if end == len(tail) {
+			closing := len(secret)
+			for closing > 0 && (secret[closing-1] == ')' || secret[closing-1] == '`') {
+				closing--
+			}
+			b.WriteString(secret[closing:])
+		}
+		tail = tail[end:]
 	}
-	path, secret := tail, ""
-	if q := strings.IndexAny(tail, "?#"); q >= 0 {
-		path, secret = tail[:q], tail[q:]
+	out, more := stripUserinfo(b.String())
+	return out, strings.Join(append(removed, more...), "\x00")
+}
+
+// stripUserinfo removes the userinfo of every scheme://user@host left in
+// text, such as a second URL after a pipe.
+func stripUserinfo(text string) (string, []string) {
+	var removed []string
+	var b strings.Builder
+	for {
+		i := strings.Index(text, "://")
+		if i < 0 {
+			break
+		}
+		b.WriteString(text[:i+3])
+		text = text[i+3:]
+		end := strings.IndexAny(text, "/?#;|&\\")
+		if end < 0 {
+			end = len(text)
+		}
+		if at := strings.LastIndexByte(text[:end], '@'); at >= 0 {
+			removed = append(removed, text[:at])
+			text = text[at+1:]
+		}
 	}
+	b.WriteString(text)
+	return b.String(), removed
+}
+
+// queryEnd returns the index in s of the shell character that ends a
+// query or fragment, or len(s).
+func queryEnd(s string) int {
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case ';', '|', '\\':
+			return i
+		case '&':
+			if strings.Trim(s[i:], "&") == "" || strings.HasPrefix(s[i:], "&&") {
+				return i
+			}
+		}
+	}
+	return len(s)
+}
+
+// splitSecret returns the query and fragment text of secret, which starts
+// with ? or #: the query whenever there is a ?, even an empty one, and
+// the fragment only when it is not empty.
+func splitSecret(secret string) []string {
+	var out []string
 	if query, ok := strings.CutPrefix(secret, "?"); ok {
-		frag := ""
+		frag, hasFrag := "", false
 		if h := strings.IndexByte(query, '#'); h >= 0 {
-			query, frag = query[:h], query[h+1:]
+			query, frag, hasFrag = query[:h], query[h+1:], true
 		}
-		removed = append(removed, query)
-		if frag != "" {
-			removed = append(removed, frag)
+		out = append(out, query)
+		if hasFrag && frag != "" {
+			out = append(out, frag)
 		}
-	} else if frag, ok := strings.CutPrefix(secret, "#"); ok && frag != "" {
-		removed = append(removed, frag)
+		return out
 	}
-	closing := len(secret)
-	for closing > 0 && (secret[closing-1] == ')' || secret[closing-1] == '`') {
-		closing--
+	if frag := secret[1:]; frag != "" {
+		out = append(out, frag)
 	}
-	return prefix + auth + path + secret[closing:], strings.Join(removed, "\x00"), true
+	return out
 }
 
 // StripURLSecrets reports whether raw parses as an absolute URL with a

@@ -215,10 +215,7 @@ func redactCommandSecrets(value string) (string, []string) {
 func stripEmbeddedURLSecrets(value string) (string, []string) {
 	var removed []string
 	value = embeddedURL.ReplaceAllStringFunc(value, func(m string) string {
-		stripped, raw, ok := kit.StripEmbeddedURL(m)
-		if !ok {
-			return m
-		}
+		stripped, raw := kit.StripEmbeddedURL(m)
 		if raw != "" {
 			removed = append(removed, raw)
 		}

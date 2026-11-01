@@ -21,10 +21,25 @@ func TestStripEmbeddedURL(t *testing.T) {
 		{"https://e.com/x?", "https://e.com/x", ""},
 		{"https://e.com/x)", "https://e.com/x)", ""},
 		{"https://e.com/a%20b", "https://e.com/a%20b", ""},
+
+		// A shell character ends the query and is kept with what follows.
+		{`https://e.com/?x\`, `https://e.com/\`, "x"},
+		{`https://e.com/x#\`, `https://e.com/x\`, ""},
+		{"https://e.com/?x;npx", "https://e.com/;npx", "x"},
+		{"https://c.com/z?sig=S1|sh", "https://c.com/z|sh", "sig=S1"},
+		{"https://e.com/?a=1&&curl", "https://e.com/&&curl", "a=1"},
+		{"https://e.com/?a=1&", "https://e.com/&", "a=1"},
+		{"https://e.com/?a|b?sig=S2", "https://e.com/|b", "a\x00sig=S2"},
+		{"https://e.com/?a|https://u:S3@h/x?s=S4", "https://e.com/|https://h/x", "a\x00s=S4\x00u:S3"},
+
+		// No host: the query and fragment still go.
+		{"https://:8443/x?sig=S5", "https://:8443/x", "sig=S5"},
+		{"https:///x?sig=S6#S7", "https:///x", "sig=S6\x00S7"},
+		{"file:///etc/x?s=S8", "file:///etc/x", "s=S8"},
 	} {
-		got, removed, ok := StripEmbeddedURL(tc.in)
-		if !ok || got != tc.want || removed != tc.removed {
-			t.Errorf("StripEmbeddedURL(%q) = %q, %q, %v; want %q, %q", tc.in, got, removed, ok, tc.want, tc.removed)
+		got, removed := StripEmbeddedURL(tc.in)
+		if got != tc.want || removed != tc.removed {
+			t.Errorf("StripEmbeddedURL(%q) = %q, %q; want %q, %q", tc.in, got, removed, tc.want, tc.removed)
 		}
 		for _, s := range []string{"S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9"} {
 			if strings.Contains(got, s) {
@@ -32,31 +47,38 @@ func TestStripEmbeddedURL(t *testing.T) {
 			}
 		}
 	}
-	for _, in := range []string{"file:///etc/x?s=1", "https://:80/x", "https:///x"} {
-		if _, _, ok := StripEmbeddedURL(in); ok {
-			t.Errorf("StripEmbeddedURL(%q) ok, want no host", in)
-		}
-	}
 }
 
 // FuzzStripEmbeddedURL checks that what StripEmbeddedURL keeps of a
-// match has no query, fragment, or userinfo left in it.
+// match never has query or fragment text, nor userinfo, left in it,
+// whether or not the URL has a host.
 func FuzzStripEmbeddedURL(f *testing.F) {
 	for _, seed := range []string{
 		"https://e.com/x?a=)&sig=S", "https://u:p@e.com/(x)?s#f)", "https://e.com/x?a=`&s`", "http://h/#a)b",
+		"https://:8443/x?sig=S", "https:///x?s#f", `https://e.com/?x\`, "https://e.com/?a|https://u:p@h/?s",
 	} {
 		f.Add(seed)
 	}
 	f.Fuzz(func(t *testing.T, s string) {
 		for _, m := range embeddedURL.FindAllString(s, -1) {
-			got, _, ok := StripEmbeddedURL(m)
-			if !ok {
-				continue
-			}
+			got, _ := StripEmbeddedURL(m)
 			rest := got[strings.Index(got, "://")+3:]
-			auth, _, _ := strings.Cut(rest, "/")
-			if strings.ContainsAny(rest, "?#") || strings.Contains(auth, "@") {
-				t.Fatalf("StripEmbeddedURL(%q) = %q", m, got)
+			if strings.ContainsAny(rest, "?#") {
+				t.Fatalf("StripEmbeddedURL(%q) = %q keeps query or fragment text", m, got)
+			}
+			for r := got; ; {
+				i := strings.Index(r, "://")
+				if i < 0 {
+					break
+				}
+				r = r[i+3:]
+				end := strings.IndexAny(r, "/?#;|&\\")
+				if end < 0 {
+					end = len(r)
+				}
+				if strings.Contains(r[:end], "@") {
+					t.Fatalf("StripEmbeddedURL(%q) = %q keeps userinfo", m, got)
+				}
 			}
 		}
 	})
