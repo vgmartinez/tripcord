@@ -2,6 +2,7 @@ package devin
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -354,6 +355,115 @@ func TestMultiDocumentBlueprintPartialError(t *testing.T) {
 	got := kittest.Discover(t, New(Options{}), root)
 	if len(got.Items) != 0 || !got.HasDiag("invalid YAML") {
 		t.Fatalf("got %+v", got)
+	}
+}
+
+func detectField(t *testing.T, item model.ConfigItem, name string) (any, bool) {
+	t.Helper()
+	if len(item.Detect) == 0 {
+		return nil, false
+	}
+	var detect map[string]any
+	if err := json.Unmarshal(item.Detect, &detect); err != nil {
+		t.Fatalf("detect = %s: %v", item.Detect, err)
+	}
+	v, ok := detect["working-directory"]
+	return v, ok
+}
+
+// TestWorkingDirectoryNestedBlueprint checks that a blueprint that is
+// not the repository's own .devin/blueprint.yaml marks every command
+// with working-directory, so TC-CFG-009's checksum credit (which
+// scriptcheck resolves against the repository root) fails closed
+// instead of crediting a sums file or symlink check this adapter cannot
+// place: the blueprint's actual build directory is not documented.
+func TestWorkingDirectoryNestedBlueprint(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(root, "packages", "a", ".devin", "blueprint.yaml"), "maintenance: npm ci\n")
+	got := kittest.Discover(t, New(Options{}), root)
+	items := got.Find("packages/a/.devin/blueprint.yaml", model.ConfigKindEnvSetup)
+	if len(items) != 1 {
+		t.Fatalf("items = %+v", items)
+	}
+	if _, ok := detectField(t, items[0], "working-directory"); !ok {
+		t.Fatalf("detect = %s, want working-directory", items[0].Detect)
+	}
+}
+
+// TestWorkingDirectoryRootBlueprintUnset checks that an ordinary,
+// repository-root blueprint with no cd does not get the marker: it
+// would otherwise deny checksum credit to every blueprint, defeating
+// the negative fixtures that pin a download with sha256sum.
+func TestWorkingDirectoryRootBlueprintUnset(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(root, ".devin", "blueprint.yaml"), "maintenance: npm ci\n")
+	got := kittest.Discover(t, New(Options{}), root)
+	items := got.Find(".devin/blueprint.yaml", model.ConfigKindEnvSetup)
+	if len(items) != 1 {
+		t.Fatalf("items = %+v", items)
+	}
+	if _, ok := detectField(t, items[0], "working-directory"); ok {
+		t.Fatalf("detect = %s, want no working-directory", items[0].Detect)
+	}
+}
+
+// TestWorkingDirectoryCDCarriesForward checks that a bare cd in
+// initialize marks every later maintenance command, and that a bare cd
+// partway through a maintenance entry marks every command after it: per
+// Devin's docs, a blueprint's build shares one shell, so there is no
+// reason to think a later section or entry resets the directory an
+// earlier one left behind.
+func TestWorkingDirectoryCDCarriesForward(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(root, ".devin", "blueprint.yaml"), `initialize: cd sub
+maintenance:
+  - echo first
+  - cd sub2 && npm ci
+  - echo last
+`)
+	got := kittest.Discover(t, New(Options{}), root)
+	items := got.Find(".devin/blueprint.yaml", model.ConfigKindEnvSetup)
+	marked := map[string]bool{}
+	for _, item := range items {
+		p := kittest.Payload(t, item)
+		command, _ := p["command"].(string)
+		_, ok := detectField(t, item, "working-directory")
+		marked[command] = ok
+	}
+	want := map[string]bool{
+		"cd sub":            true,
+		"echo first":        true,
+		"cd sub2 && npm ci": true,
+		"echo last":         true,
+	}
+	for cmd, w := range want {
+		if marked[cmd] != w {
+			t.Errorf("working-directory[%q] = %v, want %v (all = %v)", cmd, marked[cmd], w, marked)
+		}
+	}
+}
+
+// TestWorkingDirectoryCDInSubshellDoesNotCarry checks that a cd written
+// inside (...) or $(...) stays local to that subshell: a command after
+// it is not marked, and a sums file or symlink check later in the same
+// maintenance list still gets checksum credit at the repository root.
+func TestWorkingDirectoryCDInSubshellDoesNotCarry(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	kittest.WriteFile(t, filepath.Join(root, ".devin", "blueprint.yaml"), `maintenance:
+  - (cd other && npm ci)
+  - echo $(cd sub && pwd)
+  - echo after-subshell-cd
+`)
+	got := kittest.Discover(t, New(Options{}), root)
+	items := got.Find(".devin/blueprint.yaml", model.ConfigKindEnvSetup)
+	for _, item := range items {
+		if _, ok := detectField(t, item, "working-directory"); ok {
+			t.Errorf("%+v: working-directory set for a cd confined to a subshell", kittest.Payload(t, item))
+		}
 	}
 }
 

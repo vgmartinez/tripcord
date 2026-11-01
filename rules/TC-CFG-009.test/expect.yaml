@@ -83,6 +83,10 @@ positivos:
   devcontainer-postcreate-curl-pipe: high
   devcontainer-poststart-base64: high
   devcontainer-updatecontent-object: high
+  devin-cd-carries-into-maintenance: high
+  devin-cd-carries-within-maintenance: high
   devin-initialize-curl-pipe: high
   devin-maintenance-list-curl: high
   devin-multi-document-initialize: high
+  devin-nested-blueprint-case-alias-symlink: high
+  devin-nested-blueprint-root-sums: high

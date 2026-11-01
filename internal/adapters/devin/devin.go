@@ -92,10 +92,17 @@ func (a *Adapter) Discover(ctx context.Context, repoRoot string) ([]model.Config
 		if !ok {
 			continue
 		}
-		(&file{Source: c.Source(model.ScopeRepo, rel, raw)}).blueprint(raw)
+		(&file{Source: c.Source(model.ScopeRepo, rel, raw), elsewhere: rel != rootBlueprint}).blueprint(raw)
 	}
 	return c.Result()
 }
+
+// rootBlueprint is the exact path Devin v0 documents: the repository's
+// own .devin/blueprint.yaml. isBlueprint also matches a nested path, or
+// one reached only by a case-insensitive match, which this adapter
+// still reads, but whose current directory at build time it cannot
+// resolve; see file.elsewhere.
+const rootBlueprint = ".devin/blueprint.yaml"
 
 // isBlueprint reports whether rel is .devin/blueprint.yaml at any depth.
 // Matching is case-insensitive.
