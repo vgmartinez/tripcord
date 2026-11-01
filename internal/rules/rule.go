@@ -51,10 +51,13 @@ type Spec struct {
 	Refs         []string       `yaml:"refs"`
 }
 
-// SeverityWhen is one per-match severity clause.
+// SeverityWhen is one per-match severity clause. Title, when set,
+// replaces the rule title on the findings of that clause, for a match
+// whose reason the rule title does not say.
 type SeverityWhen struct {
 	Severity string `yaml:"severity"`
 	When     string `yaml:"when"`
+	Title    string `yaml:"title"`
 }
 
 // ParseSpec decodes and validates one rule document. It does not
@@ -161,9 +164,11 @@ func validateRef(ref string) error {
 	return nil
 }
 
-// SeverityClause is a compiled per-match severity.
+// SeverityClause is a compiled per-match severity. Title is empty when
+// the clause keeps the rule title.
 type SeverityClause struct {
 	Severity model.Severity
+	Title    string
 	When     *Expr
 }
 
@@ -202,7 +207,7 @@ func Compile(spec *Spec, manifest PackRef, env *Env) (*Rule, error) {
 			return nil, fmt.Errorf("severity_when[%d]: %w", i, err)
 		}
 		sev, _ := model.ParseSeverity(clause.Severity)
-		clauses[i] = SeverityClause{Severity: sev, When: expr}
+		clauses[i] = SeverityClause{Severity: sev, Title: strings.TrimSpace(clause.Title), When: expr}
 	}
 	sev, _ := model.ParseSeverity(spec.Severity)
 	harness := make([]model.Harness, len(spec.Harness))
@@ -229,19 +234,26 @@ func Compile(spec *Spec, manifest PackRef, env *Env) (*Rule, error) {
 // clauses matches only when one is true: ok is false otherwise. A clause
 // that fails to evaluate is an error, the same as the when expression.
 func (r *Rule) SeverityFor(ctx context.Context, in *Input) (sev model.Severity, ok bool, err error) {
+	clause, ok, err := r.clauseFor(ctx, in)
+	return clause.Severity, ok, err
+}
+
+// clauseFor is SeverityFor returning the whole clause. A rule without
+// clauses matches with its own severity and no title override.
+func (r *Rule) clauseFor(ctx context.Context, in *Input) (SeverityClause, bool, error) {
 	if len(r.SeverityWhen) == 0 {
-		return r.Severity, true, nil
+		return SeverityClause{Severity: r.Severity}, true, nil
 	}
 	for _, clause := range r.SeverityWhen {
 		matched, err := clause.When.Eval(ctx, in)
 		if err != nil {
-			return "", false, err
+			return SeverityClause{}, false, err
 		}
 		if matched {
-			return clause.Severity, true, nil
+			return clause, true, nil
 		}
 	}
-	return "", false, nil
+	return SeverityClause{}, false, nil
 }
 
 // Applies reports whether item is in scope for r: its harness is listed

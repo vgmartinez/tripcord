@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"cmp"
 	"context"
 	"errors"
 
@@ -44,6 +45,8 @@ type Match struct {
 	Rule     *Rule
 	Item     model.ConfigItem
 	Severity model.Severity
+	// Title is the matching clause's title, or empty for the rule title.
+	Title string
 }
 
 // ConfigConfidence is the confidence of a config rule match. Config
@@ -70,7 +73,7 @@ func (m Match) Finding(severity model.Severity, decision model.Decision) (model.
 	f := model.Finding{
 		Schema:      model.SchemaFinding,
 		Rule:        m.Rule.ID,
-		Title:       m.Rule.Title,
+		Title:       cmp.Or(m.Title, m.Rule.Title),
 		Severity:    severity,
 		Decision:    decision,
 		Confidence:  ConfigConfidence,
@@ -167,7 +170,7 @@ func (e *Engine) ScanConfig(ctx context.Context, items []model.ConfigItem) Resul
 			if !ok {
 				continue
 			}
-			sev, matched, err := r.SeverityFor(ctx, in)
+			clause, matched, err := r.clauseFor(ctx, in)
 			if err != nil {
 				res.Errors = append(res.Errors, evalError(r.ID, item, err))
 				continue
@@ -175,7 +178,7 @@ func (e *Engine) ScanConfig(ctx context.Context, items []model.ConfigItem) Resul
 			if !matched {
 				continue
 			}
-			res.Matches = append(res.Matches, Match{Rule: r, Item: item, Severity: sev})
+			res.Matches = append(res.Matches, Match{Rule: r, Item: item, Severity: clause.Severity, Title: clause.Title})
 		}
 	}
 	return res
