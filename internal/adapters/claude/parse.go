@@ -355,6 +355,12 @@ func (s *src) settingsObject(obj map[string]any) {
 			value, removed = s.safePayloadValue(name, value)
 		}
 		switch name {
+		case "enabledPlugins":
+			raw["enabled_plugins"] = enabledPlugins(s, obj[name])
+		case "extraKnownMarketplaces":
+			if _, ok := obj[name].(map[string]any); !ok {
+				s.warn("extraKnownMarketplaces must be an object keyed by marketplace name")
+			}
 		case "permissions":
 			raw["skip_dangerous_mode_prompt"] = obj["skipDangerousModePermissionPrompt"] == true
 		case "skipDangerousModePermissionPrompt":
@@ -366,6 +372,33 @@ func (s *src) settingsObject(obj map[string]any) {
 		}
 		s.addDetect(kind, []string{"setting", name}, payload, kit.Removed("value", removed...), raw)
 	}
+}
+
+// enabledPlugins returns the plugin ids an enabledPlugins object turns
+// on, sorted, for the setting's Detect view: a rule cannot read map
+// values by a variable key. A value that is not an object, or an entry
+// that is not a bool, is a diagnostic.
+func enabledPlugins(s *src, value any) []string {
+	m, ok := value.(map[string]any)
+	if !ok {
+		s.warn("enabledPlugins must be an object of plugin ids to booleans")
+		return []string{}
+	}
+	out := []string{}
+	invalid := false
+	for _, id := range sortedKeys(m) {
+		switch m[id] {
+		case true:
+			out = append(out, id)
+		case false:
+		default:
+			invalid = true
+		}
+	}
+	if invalid {
+		s.warn("enabledPlugins values must be booleans")
+	}
+	return out
 }
 
 // bypassPermissions reports whether a permissions value sets
