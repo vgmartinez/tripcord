@@ -96,7 +96,7 @@ var (
 // value of the fixture appears, and every positive is still reported.
 func TestScanConfigCorporaNeverLeak(t *testing.T) {
 	t.Parallel()
-	for _, id := range []string{"TC-CFG-001", "TC-CFG-005", "TC-CFG-006", "TC-CFG-007", "TC-CFG-008"} {
+	for _, id := range []string{"TC-CFG-001", "TC-CFG-005", "TC-CFG-006", "TC-CFG-007", "TC-CFG-008", "TC-CFG-009", "TC-CFG-010", "TC-CFG-011"} {
 		corpus := "../../rules/" + id + ".test"
 		for _, kind := range []string{"positivos", "negativos"} {
 			entries, err := os.ReadDir(filepath.Join(corpus, kind))

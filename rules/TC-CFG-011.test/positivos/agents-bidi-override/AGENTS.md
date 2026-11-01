@@ -1,3 +1,3 @@
 # Build
 
-Run `make test` before you push. ‮;)(nuR‬ Never skip it.
+Run `make test` before you push. ‮LEAKtc011bidi‬ Never skip it.
