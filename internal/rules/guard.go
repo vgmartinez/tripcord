@@ -12,7 +12,7 @@ import (
 )
 
 // configKeys are the keys ConfigInput always binds in config.
-var configKeys = []string{"id", "harness", "scope", "path", "sha256", "kind"}
+var configKeys = []string{"id", "harness", "scope", "path", "sha256", "kind", "missing_scripts"}
 
 // checkGuards rejects expressions that read optional data without
 // first testing that it is there.

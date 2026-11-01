@@ -65,11 +65,12 @@ first true clause is that match's severity, so one permissions object
 can be high and another medium. An item no clause accepts is not a
 match, so `when` holds only what the clauses share and each pattern is
 written once. A policy severity override replaces the per-match
-result.
+result. A clause may also set `title`, which replaces the rule title on
+its findings when the rule title does not say why that match fired.
 
 `when` sees these variables:
 
-- `config`: the config item (`id`, `harness`, `scope`, `path`, `sha256`, `kind`).
+- `config`: the config item (`id`, `harness`, `scope`, `path`, `sha256`, `kind`), and `missing_scripts`: on a repository hook, how many project-relative scripts it runs are not in the scanned tree (0 otherwise; see `internal/scriptcheck`).
 - `payload`: the item's parsed content.
 - `task`: the same as `payload` when `config.kind == "task"`, otherwise empty.
 - `event`: a `tripcord.event/v1` event, for event rules. Every

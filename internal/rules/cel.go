@@ -14,6 +14,7 @@ import (
 	"cel.dev/cel-go/ext"
 	"cel.dev/cel-go/interpreter"
 
+	"github.com/vgmartinez/tripcord/internal/model"
 	"github.com/vgmartinez/tripcord/internal/rules/shellcmd"
 )
 
@@ -199,12 +200,8 @@ var shellLocations = cel.Function(shellLocationsName,
 		})),
 )
 
-// hookCommandFields are the payload fields an adapter puts a hook's
-// command line in, in the order hook.commands returns them.
-var hookCommandFields = []string{"command", "exec", "bash", "powershell", "commandWindows", "command_windows", "windows", "linux", "osx"}
-
 // hook.commands(payload) returns the string values of a hook payload's
-// command fields (hookCommandFields); a missing or non-string field is
+// command fields (model.HookCommandFields); a missing or non-string field is
 // skipped. hook.argv(payload) returns [exec or command] + args when
 // args is a list of strings, and [] otherwise. They let a rule read
 // every command field without restating the list in each clause.
@@ -216,7 +213,7 @@ var hookCommands = cel.Function(hookCommandsName,
 				return types.NewStringList(types.DefaultTypeAdapter, nil)
 			}
 			var out []string
-			for _, k := range hookCommandFields {
+			for _, k := range model.HookCommandFields {
 				if s, ok := mapString(m, k); ok {
 					out = append(out, s)
 				}

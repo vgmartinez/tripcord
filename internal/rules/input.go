@@ -101,17 +101,19 @@ func emptyConfig() map[string]any {
 	for _, k := range configKeys {
 		m[k] = ""
 	}
+	m["missing_scripts"] = 0
 	return m
 }
 
 func configVars(id string, item model.ConfigItem) map[string]any {
 	return map[string]any{
-		"id":      id,
-		"harness": item.Harness.String(),
-		"scope":   item.Scope.String(),
-		"path":    item.Path,
-		"sha256":  item.SHA256,
-		"kind":    item.Kind.String(),
+		"id":              id,
+		"harness":         item.Harness.String(),
+		"scope":           item.Scope.String(),
+		"path":            item.Path,
+		"sha256":          item.SHA256,
+		"kind":            item.Kind.String(),
+		"missing_scripts": int(item.MissingScripts),
 	}
 }
 

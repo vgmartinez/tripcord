@@ -19,6 +19,7 @@ import (
 	"github.com/vgmartinez/tripcord/internal/adapters/opencode"
 	"github.com/vgmartinez/tripcord/internal/adapters/windsurf"
 	"github.com/vgmartinez/tripcord/internal/model"
+	"github.com/vgmartinez/tripcord/internal/scriptcheck"
 )
 
 // adapterDiscover runs every adapter on the repository scope of root,
@@ -78,6 +79,9 @@ func adapterDiscover(ctx context.Context, root string) ([]model.ConfigItem, erro
 	}
 	if len(blocking) > 0 {
 		return nil, fmt.Errorf("config not fully read: %s", strings.Join(blocking, "; "))
+	}
+	if err := scriptcheck.Annotate(root, items); err != nil {
+		return nil, err
 	}
 	return items, nil
 }

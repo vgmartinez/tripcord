@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -66,7 +67,24 @@ type ConfigItem struct {
 	// fingerprint is built from Payload. It is nil when the adapter
 	// keeps no raw view, and rules then read Payload.
 	Detect DetectPayload `json:"-"`
+	// MissingScripts is how many project-relative scripts a repository
+	// hook runs that are not in the scanned tree (see scriptcheck). It is
+	// set after discovery, for rule evaluation only, and is a count so
+	// that no path from the raw command is kept.
+	MissingScripts ScriptCount `json:"-"`
 }
+
+// ScriptCount is a number of scripts (see ConfigItem.MissingScripts).
+type ScriptCount int
+
+// String returns the count in decimal.
+func (n ScriptCount) String() string { return strconv.Itoa(int(n)) }
+
+// HookCommandFields are the payload fields an adapter puts a hook's
+// command line in: Claude, Codex, Cursor, Windsurf, and Gemini use
+// command; Copilot uses bash, powershell, or exec with args; the rest
+// are per-platform variants.
+var HookCommandFields = []string{"command", "exec", "bash", "powershell", "commandWindows", "command_windows", "windows", "linux", "osx"}
 
 // DetectPayload is an unsanitized JSON payload (see ConfigItem.Detect).
 // It has no JSON form and prints as a placeholder under every fmt verb,

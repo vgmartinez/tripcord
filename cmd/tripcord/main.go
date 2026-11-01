@@ -36,6 +36,7 @@ import (
 	"github.com/vgmartinez/tripcord/internal/pathx"
 	"github.com/vgmartinez/tripcord/internal/policy"
 	"github.com/vgmartinez/tripcord/internal/rules"
+	"github.com/vgmartinez/tripcord/internal/scriptcheck"
 )
 
 // version is the build version. Override it at link time:
@@ -198,6 +199,11 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 			return scanInternalError(stderr, fmt.Errorf("%s discovery: %w", adapter.Harness(), err))
 		}
 		items = append(items, discovered...)
+	}
+	if repoScope {
+		if err := scriptcheck.Annotate(root, items); err != nil {
+			return scanInternalError(stderr, fmt.Errorf("hook scripts: %w", err))
+		}
 	}
 	diagnostics = adapters.DedupeEscapingSymlinkDiagnostics(diagnostics)
 	if opts.since != "" {
