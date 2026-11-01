@@ -91,9 +91,18 @@ func TestLocate(t *testing.T) {
 		// Network.
 		{`deno run https://cdn.example.invalid/hook.ts`, []string{Network}},
 		{`https://hooks.example.invalid/notify`, []string{Network}},
-		// A POSIX shell reads \\ as one backslash, so an unquoted UNC
-		// path is \fileserver\... there: absolute, not a share.
-		{`\\fileserver\share\hooks\x.cmd`, []string{Absolute}},
+		// A UNC path is a share in every field, bare or quoted: a POSIX
+		// shell would read \\ as one backslash, but cmd.exe and
+		// PowerShell run it from the share, and a hook does not say which
+		// shell runs it.
+		{`\\fileserver\share\hooks\x.cmd`, []string{Network}},
+		{`"\\fileserver\share\hooks\x.ps1" -Mode check`, []string{Network}},
+		{`powershell -NoProfile -File \\fileserver\share\x.ps1`, []string{Network}},
+		{`& \\10.0.0.5\hooks$\x.ps1`, []string{Network}},
+		{`cmd /c \\fileserver\share\x.cmd`, []string{Network}},
+		{`bash -c '\\fileserver\share\x.sh'`, []string{Network}},
+		{`./a\\b.sh`, nil},
+		{`\\$x\y.sh`, []string{Absolute}},
 		{`'\\fileserver\share\hooks\x.cmd'`, []string{Network}},
 		{`//fileserver/share/x.sh`, []string{Network}},
 		{`http://localhost:8080/hook`, nil},

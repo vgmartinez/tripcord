@@ -78,8 +78,12 @@ func lex(src string, ps bool) (toks []token, subs []string) {
 			inWord = true
 			i = psEscape(src, i, &b)
 		case c == '\\':
+			wordStart := !inWord
 			inWord = true
 			switch {
+			case wordStart && uncStart(src, i):
+				b.WriteString(`\\`)
+				i += 2
 			case next == '\n':
 				i += 2
 			case next != 0 && strings.IndexByte(" \t'\"\\$`|&;<>()#*?[]{}~!", next) >= 0:
@@ -198,6 +202,18 @@ func endsWord(c byte) bool {
 	return strings.IndexByte(" \t\r\n|&;()", c) >= 0
 }
 
+// uncStart reports \\host at src[i], the start of a UNC path. It is kept
+// as written at the start of a word, bare or double-quoted, rather than
+// read as one escaped backslash: cmd.exe and PowerShell run \\host\share
+// from the share, and a hook command does not say which shell runs it.
+func uncStart(src string, i int) bool {
+	if i+2 >= len(src) || src[i+1] != '\\' {
+		return false
+	}
+	c := src[i+2]
+	return c == '-' || c == '_' || c == '.' || isDigit(c) || isLetter(c)
+}
+
 // lexDouble reads a double-quoted string starting at i, just past the
 // opening quote, and returns the index past the closing one.
 func lexDouble(src string, i int, ps bool, b *strings.Builder, subs *[]string) int {
@@ -206,6 +222,9 @@ func lexDouble(src string, i int, ps bool, b *strings.Builder, subs *[]string) i
 		switch {
 		case c == '"':
 			return i + 1
+		case c == '\\' && b.Len() == 0 && uncStart(src, i):
+			b.WriteString(`\\`)
+			i += 2
 		case c == '\\' && i+1 < len(src) && strings.IndexByte("\"\\$`\n", src[i+1]) >= 0:
 			if src[i+1] != '\n' {
 				b.WriteByte(src[i+1])
