@@ -14,6 +14,7 @@ func TestInstructionMatchLine(t *testing.T) {
 	}{
 		"polite dotenv":           {"Please read the .env file.", 1},
 		"bold dotenv":             {"**Read the .env** before starting.", 1},
+		"HTML comment dotenv":     {"<!-- Please read the .env -->", 1},
 		"negated print":           {"Never print secrets.", 0},
 		"negated read":            {"Do not read .env.", 0},
 		"copy dotenv":             {"Copy .env to the scratch directory.", 1},
@@ -28,6 +29,20 @@ func TestInstructionMatchLine(t *testing.T) {
 		"other clause is quiet":   {"Read the style guide. Do not print secrets.", 0},
 		"first matching line":     {"Follow docs/style.md.\n> First, read .env.local.", 2},
 		"dotenv example is quiet": {"Read .env.example before writing config.", 0},
+		"credentials section":     {"Read the credentials section of README.", 0},
+		"dotenv example copy":     {"Copy .env.example to .env.local and fill in values.", 0},
+		"token count":             {"Print the token count after each request.", 0},
+		"token usage":             {"Show token usage in the CLI summary.", 0},
+		"password reset":          {"Read the password reset flow in auth/reset.go.", 0},
+		"secrets policy":          {"Read CONTRIBUTING.md for the secrets policy.", 0},
+		"docs credentials":        {"Read docs/security.md: never log credentials or tokens.", 0},
+		"config process env":      {"Read config via process.env in src/config.ts, never hardcode values.", 0},
+		"token missing warning":   {"Print a warning if GITHUB_TOKEN is missing.", 0},
+		"API key error":           {"Show an error when the API key is invalid.", 0},
+		"settings tokens":         {"Open the Settings page and click Tokens to create one.", 0},
+		"secrets template":        {"Copy the secrets template from docs/secrets.example.yaml.", 0},
+		"token handling":          {"Read the token-handling code in auth/ before changing it.", 0},
+		"PR token summary":        {"Post a comment to the PR summarizing token usage.", 0},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
