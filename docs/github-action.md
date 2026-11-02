@@ -7,8 +7,12 @@ release binary. No release is published.
 
 By default it builds the tree that contains the action
 (`github.action_path`). Set `ref` to build another commit of this
-action's repository instead. Set `binary` to an existing executable to
-skip the build. `actions/setup-go` caches modules for the build.
+action's repository instead. That checkout lives at `tripcord-src` in
+the workspace only long enough to compile. The binary is written under
+`RUNNER_TEMP`, and the checkout is removed before the scan, so the
+default `path` of `.` does not include Tripcord's own tree. Set
+`binary` to an existing executable to skip the build.
+`actions/setup-go` caches modules for the build.
 
 An empty `fail-on` leaves the threshold to the CLI and the repository
 policy. The action passes `--fail-on` only when the caller sets the

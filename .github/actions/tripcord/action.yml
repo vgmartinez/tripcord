@@ -107,6 +107,13 @@ runs:
         cd "$TRIPCORD_ROOT"
         CGO_ENABLED=0 go build -trimpath -o "${RUNNER_TEMP}/tripcord" ./cmd/tripcord
         echo "path=${RUNNER_TEMP}/tripcord" >> "$GITHUB_OUTPUT"
+    - id: clean-source
+      if: inputs.binary == '' && inputs.ref != ''
+      shell: bash
+      run: |
+        set -euo pipefail
+        test -n "${GITHUB_WORKSPACE}"
+        rm -rf "${GITHUB_WORKSPACE}/tripcord-src"
     - id: tool
       shell: bash
       env:

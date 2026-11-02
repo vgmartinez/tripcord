@@ -176,6 +176,77 @@ func TestTripcordActionContract(t *testing.T) {
 	})
 }
 
+func TestRefCheckoutIsRemovedBeforeDefaultPathScan(t *testing.T) {
+	action := parseAction(t)
+	if got := action.Inputs["path"].Default; got != "." {
+		t.Fatalf("path default = %q, want .", got)
+	}
+	checkout, build, clean, scan := -1, -1, -1, -1
+	for i, step := range action.Runs.Steps {
+		switch {
+		case strings.HasPrefix(step.Uses, "actions/checkout@"):
+			checkout = i
+			if !strings.Contains(step.If, "inputs.ref != ''") {
+				t.Fatal("checkout is not limited to a set ref")
+			}
+			if step.With["path"] != "tripcord-src" {
+				t.Fatalf("checkout path = %#v, want tripcord-src", step.With["path"])
+			}
+		case step.ID == "build":
+			build = i
+		case step.ID == "clean-source":
+			clean = i
+			if !strings.Contains(step.If, "inputs.ref != ''") {
+				t.Fatal("source cleanup is not limited to a set ref")
+			}
+			if !strings.Contains(step.Run, `test -n "${GITHUB_WORKSPACE}"`) || !strings.Contains(step.Run, `rm -rf "${GITHUB_WORKSPACE}/tripcord-src"`) {
+				t.Fatalf("source cleanup does not remove the workspace checkout:\n%s", step.Run)
+			}
+		case step.ID == "scan":
+			scan = i
+			if !strings.Contains(step.Run, `"$TRIPCORD_PATH"`) {
+				t.Fatal("scan does not use the path input")
+			}
+		}
+	}
+	if checkout < 0 || build < 0 || clean < 0 || scan < 0 {
+		t.Fatalf("missing step index checkout=%d build=%d clean=%d scan=%d", checkout, build, clean, scan)
+	}
+	if !(checkout < build && build < clean && clean < scan) {
+		t.Fatalf("ref checkout is still in the tree at scan time: checkout=%d build=%d clean=%d scan=%d", checkout, build, clean, scan)
+	}
+}
+
+type actionFile struct {
+	Inputs map[string]struct {
+		Default string `yaml:"default"`
+	} `yaml:"inputs"`
+	Runs struct {
+		Steps []actionStep `yaml:"steps"`
+	} `yaml:"runs"`
+}
+
+type actionStep struct {
+	ID   string            `yaml:"id"`
+	If   string            `yaml:"if"`
+	Uses string            `yaml:"uses"`
+	Run  string            `yaml:"run"`
+	With map[string]string `yaml:"with"`
+}
+
+func parseAction(t *testing.T) actionFile {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("..", "..", ".github", "actions", "tripcord", "action.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var action actionFile
+	if err := yaml.Unmarshal(data, &action); err != nil {
+		t.Fatalf("parse action.yml: %v", err)
+	}
+	return action
+}
+
 func buildTripcord(t *testing.T) string {
 	t.Helper()
 	bin := filepath.Join(t.TempDir(), "tripcord")
