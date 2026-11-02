@@ -51,10 +51,14 @@ Usage:
   tripcord help
   tripcord version
   tripcord scan [PATH] [flags]
+  tripcord pr-context [flags]
 
 scan performs static configuration scanning only. --scope selects repository
 (the default), user, managed, or all. The default does not read the home
 directory or system settings.
+pr-context reports whether a pull request looks agent-authored. It reads a
+GitHub pull_request event and the commits in base..head, and exits 0
+whether or not an agent is detected.
 --secrets (v1) and --all (v1) are not available.
 `
 
@@ -73,6 +77,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return writeString(stdout, version+"\n")
 	case "scan":
 		return runScan(args[1:], stdout, stderr)
+	case "pr-context":
+		return runPrContext(args[1:], stdout, stderr)
 	default:
 		msg := fmt.Sprintf("tripcord: unknown command %q\n\n%s", args[0], usage)
 		writeString(stderr, msg)

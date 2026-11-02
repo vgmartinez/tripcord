@@ -1,0 +1,8 @@
+{
+  "action": "opened",
+  "pull_request": {
+    "user": {"login": "claude-bot"},
+    "head": {"ref": "feature/claude-fix", "sha": "0123456789abcdef0123456789abcdef01234567"},
+    "base": {"ref": "main", "sha": "89abcdef89abcdef89abcdef89abcdef89abcdef"}
+  }
+}

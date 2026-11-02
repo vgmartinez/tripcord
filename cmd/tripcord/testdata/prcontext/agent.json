@@ -1,0 +1,8 @@
+{
+  "action": "opened",
+  "pull_request": {
+    "user": {"login": "octocat"},
+    "head": {"ref": "cursor/add-thing", "sha": "__HEAD__"},
+    "base": {"ref": "main", "sha": "__BASE__"}
+  }
+}
