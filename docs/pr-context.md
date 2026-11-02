@@ -126,9 +126,14 @@ Commits are `git rev-list` / `git log` of `base..head` and
 `git notes --ref=ai show`. Nothing is fetched. A missing note is skipped.
 A base or head the clone does not contain (a shallow checkout) is a
 warning: author and branch signals are still reported, and the command
-still exits 0. At most 5000 commits are read (the newest), and a commit
-message or authorship note past its size cap is skipped with a warning
-rather than failing the command.
+still exits 0. At most 5000 commits are read (the newest). Each
+commit message keeps its first 64KiB and its last 64KiB, which is enough
+for `Co-authored-by` trailers; a longer message drops the middle, and
+that trim is silent. Across every field of every commit record, at most
+128MiB is retained. Past that budget a later message keeps only its
+trailer tail, shortened to whatever budget remains, or is dropped when
+nothing remains, and one warning is emitted. An authorship note larger
+than 2MiB is skipped with its own warning. Neither cap fails the command.
 
 A checkout action that defaults to a shallow clone (one commit) will
 usually miss `base` entirely, turning every commit and note signal into a
@@ -143,14 +148,16 @@ out the pull request so commit and note signals are not silently skipped:
 ```
 
 Once `base` and `head` are known (from the event or from `--base`/`--head`),
-a failure to read commits or notes — git is missing, the repository is
-unusable, or a log record cannot be read — no longer aborts the command.
-It is reported as a warning, commit and note signals are simply absent,
-and the pull request's login and branch signals are still detected,
-rendered to stdout, and written to `GITHUB_OUTPUT`. The command still
-exits non-zero in that case (see Exit codes below); the output is written
-before the process exits so a caller gets the login/branch verdict even
-when it goes on to treat the nonzero exit as a failure.
+the pull request's login and branch are judged and, when `GITHUB_OUTPUT`
+is set, written before any commit is read. A failure to read commits or
+notes — git is missing, the repository is unusable, or a log record
+cannot be read — does not undo that write. It is reported as a warning,
+commit and note signals are simply absent, and stdout still carries the
+login and branch verdict. The command still exits non-zero in that case
+(see Exit codes below). If the read succeeds and the commits add agents,
+`GITHUB_OUTPUT` is appended again; GitHub Actions keeps the last value of
+each name. The first write is what remains if the process is killed
+while the commits are being read.
 
 A revision that starts with `-` or contains git revision syntax (`..`,
 `^`, `:`, `~`, `@`, and globs) is rejected before git runs.
@@ -192,12 +199,15 @@ is_agent=true
 agents=claude,cursor
 ```
 
-`agents` has no spaces. `GITHUB_OUTPUT` is opened refusing to follow a
-symlink and is required to be a regular file (so a FIFO cannot hang the
-command); either case is refused with exit 3. If the file already has
-content that does not end in a newline, a newline is written first, so
-appending never runs into a previous line (`agents=...is_agent=false`
-without one).
+`agents` has no spaces. The login and branch lines are written before
+commits are read. When commits add an agent those lines did not already
+name, the same two lines are appended again and the second value wins;
+when they do not, the file is left as the single block. `GITHUB_OUTPUT`
+is opened refusing to follow a symlink and is required to be a regular
+file (so a FIFO cannot hang the command); either case is refused with
+exit 3, before commits are read. If the file already has content that
+does not end in a newline, a newline is written first, so appending
+never runs into a previous line (`agents=...is_agent=false` without one).
 
 ## Exit codes
 

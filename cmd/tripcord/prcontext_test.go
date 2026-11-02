@@ -110,8 +110,13 @@ func TestPrContextAgentFixture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(written) != "is_agent=true\nagents=claude,copilot,cursor\n" {
-		t.Fatalf("GITHUB_OUTPUT = %q", written)
+	// Login/branch is written before commits are read (cursor, from the
+	// branch). Commits then add claude and copilot, so a second block is
+	// appended. GitHub Actions uses the last value of each name.
+	early := "is_agent=true\nagents=cursor\n"
+	final := "is_agent=true\nagents=claude,copilot,cursor\n"
+	if string(written) != early+final {
+		t.Fatalf("GITHUB_OUTPUT = %q, want the login/branch block then the commit block", written)
 	}
 }
 
@@ -188,8 +193,11 @@ func TestPrContextOversizedCommitFieldStillDetectsBot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(string(written), "is_agent=true\n") {
-		t.Fatalf("GITHUB_OUTPUT = %q, want is_agent=true", written)
+	// The oversized commit adds no agent, so the login/branch block is
+	// written once, before the log is read, and not appended again.
+	want := "is_agent=true\nagents=claude,cursor\n"
+	if string(written) != want {
+		t.Fatalf("GITHUB_OUTPUT = %q, want %q", written, want)
 	}
 }
 
@@ -221,8 +229,11 @@ func TestPrContextNonRepoStillDetectsBot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(string(written), "is_agent=true\n") {
-		t.Fatalf("GITHUB_OUTPUT = %q, want is_agent=true", written)
+	// Written from the event before ReadCommits fails, and not rewritten:
+	// commits were not read, so they cannot add agents.
+	want := "is_agent=true\nagents=claude,cursor\n"
+	if string(written) != want {
+		t.Fatalf("GITHUB_OUTPUT = %q, want %q", written, want)
 	}
 }
 

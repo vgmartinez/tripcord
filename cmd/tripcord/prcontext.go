@@ -70,11 +70,24 @@ func runPrContext(args []string, stdout, stderr io.Writer) int {
 	if repo == "" {
 		repo = "."
 	}
-	// A commit or notes read failure does not abort: the event already
-	// carries the PR author's login and branch, which Detect can judge on
-	// their own. commits and notes signals are simply missing, same as a
-	// shallow checkout that misses the range. readErr is kept and only
-	// decides the exit code, after stdout and GITHUB_OUTPUT are written.
+	// Login and branch are known before git runs. Write them first so a
+	// commit-read failure, including the process being killed while the
+	// log is read, leaves that verdict in GITHUB_OUTPUT.
+	early := prcontext.Detect(prcontext.Input{
+		PRLogin:      ev.Login,
+		PRAuthorType: ev.AuthorType,
+		Branch:       branch,
+		BranchSource: branchSource,
+	})
+	if outputPath != "" {
+		if err := appendGitHubOutput(outputPath, early); err != nil {
+			return prContextFail(stderr, err, false)
+		}
+	}
+	// A commit or notes read failure does not abort: commits and notes
+	// signals are simply missing, same as a shallow checkout that misses
+	// the range. readErr is kept and only decides the exit code, after
+	// stdout is written and GITHUB_OUTPUT has been updated.
 	commits, warnings, readErr := prcontext.ReadCommits(context.Background(), repo, ev.Base, ev.Head)
 	if readErr != nil {
 		commits = nil
@@ -95,7 +108,10 @@ func runPrContext(args []string, stdout, stderr io.Writer) int {
 	if writeString(stdout, rendered) != int(exitcode.OK) {
 		return int(exitcode.Internal)
 	}
-	if outputPath != "" {
+	// Append again only when commits add agents. A second identical
+	// block would change a file that previously held one, and GitHub
+	// Actions already keeps the last value of each name.
+	if outputPath != "" && prcontext.FormatOutput(result) != prcontext.FormatOutput(early) {
 		if err := appendGitHubOutput(outputPath, result); err != nil {
 			return prContextFail(stderr, err, false)
 		}
