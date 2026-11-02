@@ -67,6 +67,9 @@ func TestTripcordActionContract(t *testing.T) {
 			t.Errorf("action does not expose pr-context output %s", name)
 		}
 	}
+	if action.Outputs["tc-cfg-014"].Value == "" {
+		t.Error("action does not expose the TC-CFG-014 outcome")
+	}
 
 	const (
 		checkout    = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
@@ -137,6 +140,9 @@ func TestTripcordActionContract(t *testing.T) {
 	}
 	if strings.Contains(prContext, "${{") {
 		t.Fatal("pr-context interpolates an expression into run")
+	}
+	if !strings.Contains(prContext, "could not make a policy decision") {
+		t.Fatal("pr-context does not warn when reviews are unavailable")
 	}
 	if !strings.Contains(text, "core.warning") || !strings.Contains(text, "catch (error)") {
 		t.Fatal("fork and read-only publishing does not warn")
@@ -261,10 +267,63 @@ func TestMissingSARIFFileWarnsWithoutBlamingTheToken(t *testing.T) {
 	}
 }
 
+func TestTripcordActionPropagatesPolicyExit(t *testing.T) {
+	action := parseAction(t)
+	var apply string
+	for _, step := range action.Runs.Steps {
+		if step.ID == "apply-exit-code" {
+			apply = step.Run
+		}
+	}
+	if apply == "" {
+		t.Fatal("action has no policy exit-code step")
+	}
+
+	run := func(t *testing.T, reviewsFile, prContextStatus string) (int, string) {
+		t.Helper()
+		cmd := exec.Command("bash", "-c", apply)
+		cmd.Env = append(os.Environ(),
+			"TRIPCORD_SCAN_STATUS=0",
+			"TRIPCORD_PR_CONTEXT_STATUS="+prContextStatus,
+			"TRIPCORD_REVIEWS_FILE="+reviewsFile,
+		)
+		out, err := cmd.CombinedOutput()
+		return exitCode(t, err), string(out)
+	}
+
+	reviewsFile := filepath.Join(t.TempDir(), "reviews.json")
+	if err := os.WriteFile(reviewsFile, []byte("[]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Run("deny with reviews file fails", func(t *testing.T) {
+		if code, out := run(t, reviewsFile, "1"); code != 1 {
+			t.Fatalf("policy deny = %d, want 1\n%s", code, out)
+		}
+	})
+	t.Run("incomplete reviews file fails", func(t *testing.T) {
+		if code, out := run(t, reviewsFile, "3"); code != 3 {
+			t.Fatalf("incomplete review file = %d, want 3\n%s", code, out)
+		}
+	})
+	t.Run("review read error fails", func(t *testing.T) {
+		if code, out := run(t, reviewsFile, "4"); code != 4 {
+			t.Fatalf("review read error = %d, want 4\n%s", code, out)
+		}
+	})
+	t.Run("incomplete without reviews file warns", func(t *testing.T) {
+		if code, out := run(t, "", "3"); code != 0 {
+			t.Fatalf("missing review file = %d, want 0\n%s", code, out)
+		}
+	})
+}
+
 type actionFile struct {
 	Inputs map[string]struct {
 		Default string `yaml:"default"`
 	} `yaml:"inputs"`
+	Outputs map[string]struct {
+		Value string `yaml:"value"`
+	} `yaml:"outputs"`
 	Runs struct {
 		Steps []actionStep `yaml:"steps"`
 	} `yaml:"runs"`

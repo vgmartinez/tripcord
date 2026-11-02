@@ -7,19 +7,25 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
 
+const maxSymlinkHops = 40
+
+var driveLetterTarget = regexp.MustCompile(`^[A-Za-z]:`)
+
 // TestTrackedSymlinksStayInRepo fails when a committed symlink uses an
-// absolute target or a relative target that leaves the repository.
+// absolute target or resolves outside the repository.
 // GitHub's action download follows such a link while extracting the
 // repository tarball.
 func TestTrackedSymlinksStayInRepo(t *testing.T) {
 	root := repoRoot(t)
-	for path, target := range trackedSymlinks(t, root) {
-		if symlinkEscapes(root, path, target) {
-			t.Errorf("tracked symlink %s -> %q leaves the repository", path, target)
+	links := trackedSymlinks(t, root)
+	for path := range links {
+		if err := symlinkEscapes(root, links, path); err != nil {
+			t.Errorf("tracked symlink %s: %v", path, err)
 		}
 	}
 }
@@ -34,6 +40,7 @@ func TestGitArchiveExtractsAction(t *testing.T) {
 	dest := t.TempDir()
 	tr := tar.NewReader(bytes.NewReader(archive))
 	sawAction := false
+	links := map[string]string{}
 	for {
 		hdr, err := tr.Next()
 		if err == io.EOF {
@@ -70,17 +77,21 @@ func TestGitArchiveExtractsAction(t *testing.T) {
 				sawAction = true
 			}
 		case tar.TypeSymlink:
-			if symlinkEscapes(dest, target, hdr.Linkname) {
-				t.Fatalf("archive symlink %s -> %q leaves the extract directory", hdr.Name, hdr.Linkname)
-			}
-			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.Symlink(hdr.Linkname, target); err != nil {
-				t.Fatal(err)
-			}
+			links[name] = hdr.Linkname
 		default:
 			t.Fatalf("archive entry %s has type %q", hdr.Name, hdr.Typeflag)
+		}
+	}
+	for path, target := range links {
+		if err := symlinkEscapes(dest, links, path); err != nil {
+			t.Fatalf("archive symlink %s -> %q: %v", path, target, err)
+		}
+		linkPath := filepath.Join(dest, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(linkPath), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(target, linkPath); err != nil {
+			t.Fatal(err)
 		}
 	}
 	if !sawAction {
@@ -110,20 +121,141 @@ func trackedSymlinks(t *testing.T, root string) map[string]string {
 	return out
 }
 
-func symlinkEscapes(root, linkPath, target string) bool {
-	if filepath.IsAbs(target) {
-		return true
+func TestSymlinkEscapesChainedLinks(t *testing.T) {
+	root := t.TempDir()
+	links := map[string]string{
+		"zz/up":  "..",
+		"zz/esc": "up/..",
 	}
-	absLink := linkPath
-	if !filepath.IsAbs(absLink) {
-		absLink = filepath.Join(root, filepath.FromSlash(linkPath))
+	if err := symlinkEscapes(root, links, "zz/esc"); err == nil {
+		t.Fatal("chained symlinks zz/up -> .. and zz/esc -> up/.. escape the root")
 	}
-	resolved := filepath.Clean(filepath.Join(filepath.Dir(absLink), filepath.FromSlash(target)))
-	rel, err := filepath.Rel(root, resolved)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
-		return true
+}
+
+func TestSymlinkEscapesLoop(t *testing.T) {
+	root := t.TempDir()
+	links := map[string]string{
+		"one": "two",
+		"two": "one",
 	}
-	return false
+	if err := symlinkEscapes(root, links, "one"); err == nil {
+		t.Fatal("symlink loop was accepted")
+	}
+}
+
+func TestSymlinkEscapesAbsoluteTargets(t *testing.T) {
+	root := t.TempDir()
+	for _, target := range []string{"/tmp", `C:\temp`, `C:temp`, `\\server\share`} {
+		t.Run(target, func(t *testing.T) {
+			links := map[string]string{"link": target}
+			if err := symlinkEscapes(root, links, "link"); err == nil {
+				t.Fatalf("target %q was accepted", target)
+			}
+		})
+	}
+}
+
+// symlinkEscapes resolves tracked links without following the filesystem.
+// It rejects targets that GitHub's tar extractor could follow outside root.
+func symlinkEscapes(root string, links map[string]string, linkPath string) error {
+	root, err := filepath.Abs(root)
+	if err != nil {
+		return err
+	}
+	link, err := pathInsideRoot(root, linkPath)
+	if err != nil {
+		return err
+	}
+	target, ok := links[link]
+	if !ok {
+		return os.ErrNotExist
+	}
+	if absoluteTarget(target) {
+		return os.ErrPermission
+	}
+	parts := cleanPathParts(filepath.Dir(link))
+	pending := splitPath(target)
+	seen := map[string]bool{}
+	for len(pending) > 0 {
+		part := pending[0]
+		pending = pending[1:]
+		switch part {
+		case "", ".":
+			continue
+		case "..":
+			if len(parts) == 0 {
+				return os.ErrPermission
+			}
+			parts = parts[:len(parts)-1]
+			continue
+		}
+		parts = append(parts, part)
+		path := strings.Join(parts, "/")
+		target, ok = links[path]
+		if !ok {
+			continue
+		}
+		if absoluteTarget(target) {
+			return os.ErrPermission
+		}
+		if seen[path] {
+			return os.ErrInvalid
+		}
+		seen[path] = true
+		if len(seen) > maxSymlinkHops {
+			return os.ErrInvalid
+		}
+		parts = parts[:len(parts)-1]
+		pending = append(splitPath(target), pending...)
+	}
+	return nil
+}
+
+func pathInsideRoot(root, path string) (string, error) {
+	if filepath.IsAbs(path) {
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return "", err
+		}
+		path = rel
+	}
+	parts := []string{}
+	for _, part := range splitPath(filepath.ToSlash(path)) {
+		switch part {
+		case "", ".":
+		case "..":
+			if len(parts) == 0 {
+				return "", os.ErrPermission
+			}
+			parts = parts[:len(parts)-1]
+		default:
+			parts = append(parts, part)
+		}
+	}
+	return strings.Join(parts, "/"), nil
+}
+
+func splitPath(path string) []string {
+	return strings.FieldsFunc(filepath.ToSlash(path), func(r rune) bool {
+		return r == '/'
+	})
+}
+
+func cleanPathParts(path string) []string {
+	parts := []string{}
+	for _, part := range splitPath(path) {
+		if part != "" && part != "." {
+			parts = append(parts, part)
+		}
+	}
+	return parts
+}
+
+func absoluteTarget(target string) bool {
+	return filepath.IsAbs(target) ||
+		strings.HasPrefix(target, "/") ||
+		strings.HasPrefix(target, `\\`) ||
+		driveLetterTarget.MatchString(target)
 }
 
 func repoRoot(t *testing.T) string {

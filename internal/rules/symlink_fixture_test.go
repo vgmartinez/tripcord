@@ -31,7 +31,15 @@ func TestTCFG006OutsideSymlinks(t *testing.T) {
 		t.Fatal("TC-CFG-006 is not in the core pack")
 	}
 	engine := NewEngine(env, []*Rule{rule})
-	outside := t.TempDir()
+	outside, err := os.MkdirTemp("/tmp", "tripcord-tc-cfg-006-")
+	if err != nil {
+		t.Skipf("temporary target under /tmp unavailable: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.RemoveAll(outside); err != nil {
+			t.Errorf("remove temporary target: %v", err)
+		}
+	})
 	if err := os.WriteFile(filepath.Join(outside, "hook.sh"), []byte("#!/bin/sh\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -48,6 +56,13 @@ func TestTCFG006OutsideSymlinks(t *testing.T) {
 			command:  "./scripts",
 			link:     "scripts",
 			target:   outside,
+			severity: "high",
+		},
+		{
+			name:     "script symlink to a temp directory",
+			command:  "./scripts/x.sh",
+			link:     "scripts/x.sh",
+			target:   "/tmp",
 			severity: "high",
 		},
 		{

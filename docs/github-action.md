@@ -28,10 +28,12 @@ The action runs three scans with that binary:
 It then runs `tripcord pr-context` with the same binary. Set
 `reviews-file` to a JSON array of pull request reviews to pass
 `--reviews-file`. An empty value skips the flag. The array stays on
-disk and is not printed. The action outputs `is_agent` and `agents`
-are that command's `GITHUB_OUTPUT` values. A pr-context read error is
-a warning and does not fail the job; the scan exit code does, after
-the reports are published.
+disk and is not printed. The action outputs `is_agent`, `agents`, and
+`tc-cfg-014` are that command's `GITHUB_OUTPUT` values. After reports
+are published, a TC-CFG-014 denial (exit 1) fails the job. With
+`reviews-file`, incomplete or invalid review data (exit 3 or 4) also
+fails the job; without it, exits 3 and 4 warn and leave the job green.
+The scan exit code also fails the job after reports are published.
 
 `pr-context` reads commits between the pull request base and head. The
 checkout of the repository being scanned needs `fetch-depth: 0`. A

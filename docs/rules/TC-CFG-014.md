@@ -125,8 +125,11 @@ is still applied, and a lock there rejects a weaker base policy.
   review array, or include a `reviews` array on the event. If neither
   is present, the result is incomplete whenever a classified path
   changed. Fetching the reviews is left to the workflow.
-- It does not change the composite action. Callers of `tripcord
-  pr-context` see the exit code directly.
+- The composite action forwards its optional `reviews-file` input to
+  `pr-context`. It fails after publishing when TC-CFG-014 denies
+  (exit 1), and also fails on an incomplete or invalid review file
+  (exit 3 or 4). Without `reviews-file`, exits 3 and 4 warn without
+  failing the action.
 
 ## References
 
