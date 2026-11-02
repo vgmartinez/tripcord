@@ -92,11 +92,12 @@ func stripExtras(spec string) string {
 	return spec[:i] + spec[i+end+1:]
 }
 
+// splitPy splits at the first operator character in the text, so the
+// name never keeps part of a later clause.
 func splitPy(spec string) (name, ver, mode string) {
-	for _, op := range []string{"===", "==", "~=", "!=", ">=", "<=", ">", "<"} {
-		if i := strings.Index(spec, op); i > 0 {
-			return strings.TrimSpace(spec[:i]), spec[i:], "constraint"
-		}
+	spec = strings.TrimSpace(spec)
+	if i := strings.IndexAny(spec, "=<>!~ "); i > 0 {
+		return spec[:i], strings.TrimSpace(spec[i:]), "constraint"
 	}
 	if i := strings.LastIndex(spec, "@"); i > 0 {
 		return spec[:i], spec[i+1:], "at"

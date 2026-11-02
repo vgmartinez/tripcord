@@ -18,6 +18,7 @@ positivos:
   claude-kali-gpt-module: high
   claude-kali-gpt-git-unpinned: high
   cursor-multi-advisory: high
+  claude-uvx-range-upper-first: high
 negativos:
   claude-npx-object-arg: error
   malformed-fields.json: error

@@ -29,6 +29,8 @@ func TestLaunchers(t *testing.T) {
 		{[]string{"uv", "tool", "run", "--from", "mcp-server-git==2025.9.0", "mcp-server-git"}, advisory.EcoPyPI, "mcp-server-git", advisory.KindExact, "2025.9.0"},
 		{[]string{"uv", "run", "--with", "prefab-ui==0.20.2", "server.py"}, advisory.EcoPyPI, "prefab-ui", advisory.KindExact, "0.20.2"},
 		{[]string{"pipx", "run", "--spec", "mcp-server-git==2025.12.1", "mcp-server-git"}, advisory.EcoPyPI, "mcp-server-git", advisory.KindExact, "2025.12.1"},
+		{[]string{"uvx", "--from", "mcp-server-git<2025.9.25,>=2025.1", "mcp-server-git"}, advisory.EcoPyPI, "mcp-server-git", advisory.KindRange, "<2025.9.25,>=2025.1"},
+		{[]string{"uvx", "--from", "mcp-server-git >=2025.1, <2025.9.25", "mcp-server-git"}, advisory.EcoPyPI, "mcp-server-git", advisory.KindRange, ">=2025.1, <2025.9.25"},		{[]string{"python3", "-m", "kali_gpt.tools.mcp_server"}, advisory.EcoModule, "kali_gpt.tools.mcp_server", advisory.KindUnpinned, ""},
 		{[]string{"python3.12", "kali_gpt/tools/mcp_server.py"}, advisory.EcoModule, "kali_gpt/tools/mcp_server.py", advisory.KindUnpinned, ""},
 		{[]string{"docker", "run", "-i", "--rm", "mcp/git:latest"}, advisory.EcoDocker, "docker.io/mcp/git", advisory.KindUnpinned, "latest"},
 		{[]string{"docker", "container", "run", "registry:5000/ns/img:1.2.3@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, advisory.EcoDocker, "registry:5000/ns/img", advisory.KindExact, "1.2.3"},
