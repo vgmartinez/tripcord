@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/vgmartinez/tripcord/internal/preopen/preopentest"
 )
@@ -138,6 +139,42 @@ func TestFetchCleansUpOnError(t *testing.T) {
 		t.Fatalf("Fetch with a cancelled context = %v", err)
 	}
 	assertEmpty(t, tmp)
+}
+
+// TestFetchOversizeBlobDoesNotHang is the hostile case: a blob larger
+// than the byte budget. readBlob rejects it without consuming the body.
+// cat-file is then blocked writing the rest, and Wait must not hang.
+func TestFetchOversizeBlobDoesNotHang(t *testing.T) {
+	prev := maxTotalBytes
+	maxTotalBytes = 64 << 10
+	t.Cleanup(func() { maxTotalBytes = prev })
+
+	git := preopentest.RequireTools(t)
+	repo := filepath.Join(t.TempDir(), "repo")
+	preopentest.Git(t, git, filepath.Dir(repo), "init", "-q", "repo")
+	blob := make([]byte, 1<<20)
+	if err := os.WriteFile(filepath.Join(repo, "a"), blob, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	preopentest.Git(t, git, repo, "add", "-A")
+	preopentest.Git(t, git, repo, "commit", "-q", "-m", "oversize")
+
+	// The deadline is a backstop so a regression fails the test instead
+	// of wedging CI. A fixed run returns as soon as the blob is refused.
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	start := time.Now()
+	_, err := Fetch(ctx, repo)
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Fatalf("Fetch took %s; cat-file was still writing the rejected blob", elapsed)
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		t.Fatal("Fetch hung until the deadline")
+	}
+	var targetErr *TargetError
+	if !errors.As(err, &targetErr) || !strings.Contains(err.Error(), "larger than") {
+		t.Fatalf("Fetch = %v, want a TargetError refusing the blob", err)
+	}
 }
 
 func TestFetchEmptyRepository(t *testing.T) {

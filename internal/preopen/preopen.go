@@ -39,6 +39,10 @@ const (
 	MaxTotalBytes = 1 << 30
 )
 
+// maxTotalBytes is the byte budget materialize enforces. Tests lower it
+// so an over-budget blob can be small.
+var maxTotalBytes int64 = MaxTotalBytes
+
 // ErrGitMissing reports that git could not be found or started.
 var ErrGitMissing = errors.New("git is not installed")
 
@@ -352,7 +356,13 @@ func materialize(ctx context.Context, git, gitDir, tree string) error {
 	if len(entries) > MaxEntries {
 		return fmt.Errorf("tree has %d entries, more than the %d preopen writes", len(entries), MaxEntries)
 	}
-	cat := command(ctx, git, "--git-dir", gitDir, "cat-file", "--batch")
+	// catCtx is cancelled when writing the tree fails. cat-file --batch
+	// writes the whole object before it reads the next request, so leaving
+	// an over-budget blob unread blocks it on the stdout pipe and Wait
+	// never returns. Cancelling kills the process before Wait.
+	catCtx, cancelCat := context.WithCancel(ctx)
+	defer cancelCat()
+	cat := command(catCtx, git, "--git-dir", gitDir, "cat-file", "--batch")
 	stdin, err := cat.StdinPipe()
 	if err != nil {
 		return err
@@ -367,6 +377,9 @@ func materialize(ctx context.Context, git, gitDir, tree string) error {
 		return fmt.Errorf("%w: %w", ErrGitMissing, err)
 	}
 	writeErr := writeEntries(ctx, entries, tree, stdin, bufio.NewReader(stdout))
+	if writeErr != nil {
+		cancelCat()
+	}
 	_ = stdin.Close()
 	waitErr := cat.Wait()
 	if writeErr != nil {
@@ -419,7 +432,7 @@ func writeEntries(ctx context.Context, entries []treeEntry, tree string, req io.
 		if e.kind != "blob" {
 			return fmt.Errorf("tree entry %q: unexpected object type %q", e.path, e.kind)
 		}
-		data, err := readBlob(req, resp, e.oid, MaxTotalBytes-total)
+		data, err := readBlob(req, resp, e.oid, maxTotalBytes-total)
 		if err != nil {
 			return fmt.Errorf("tree entry %q: %w", e.path, err)
 		}
@@ -448,7 +461,7 @@ func readBlob(req io.Writer, resp *bufio.Reader, oid string, budget int64) ([]by
 		return nil, fmt.Errorf("unexpected cat-file header %q", strings.TrimSpace(header))
 	}
 	if size > budget {
-		return nil, fmt.Errorf("tree is larger than the %d bytes preopen writes", MaxTotalBytes)
+		return nil, fmt.Errorf("tree is larger than the %d bytes preopen writes", maxTotalBytes)
 	}
 	data := make([]byte, size+1)
 	if _, err := io.ReadFull(resp, data); err != nil {
