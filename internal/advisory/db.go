@@ -532,7 +532,12 @@ func matchAffected(a Advisory, aff Affected, ref PackageRef) (Hit, bool, error) 
 		}
 		ok = gitMatch(aff, ref, advisoryFixed(a))
 	case EcoModule:
-		ok = !advisoryFixed(a) && signatureMatch(aff, ref)
+		var sig string
+		sig, ok = signatureMatch(aff, ref)
+		ok = ok && !advisoryFixed(a)
+		// The argv path can be absolute; only the signature is stable
+		// and free of local paths.
+		ref.Name, ref.Spec = sig, sig
 	default:
 		return Hit{}, false, nil
 	}
@@ -607,16 +612,17 @@ func isHex(s string) bool {
 	return s != ""
 }
 
-func signatureMatch(aff Affected, ref PackageRef) bool {
+// signatureMatch returns the signature ref matched, never ref's own path.
+func signatureMatch(aff Affected, ref PackageRef) (string, bool) {
 	for _, sig := range aff.Signatures {
 		if sig.Module != "" && ref.Name == sig.Module {
-			return true
+			return sig.Module, true
 		}
 		if sig.PathSuffix != "" && pathSuffixMatch(sig.PathSuffix, ref.Name) {
-			return true
+			return strings.ReplaceAll(sig.PathSuffix, `\`, `/`), true
 		}
 	}
-	return false
+	return "", false
 }
 
 func pathSuffixMatch(sig, path string) bool {

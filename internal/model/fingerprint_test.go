@@ -135,6 +135,18 @@ func TestFingerprintGoldens(t *testing.T) {
 			preimage: `{"v":1,"rule":"TC-CFG-023","location":{"harness":"claude","scope":"repo","path":".mcp.json"},"evidence":[{"config":{"id":"claude:repo:.mcp.json","key":"mcp/ui"},"excerpt":"pkg:pypi/prefab-ui@0.20.2 TCA-2026-0001"}]}`,
 			want:     "tcf_a1cb87faa8f6cff3",
 		},
+		{
+			name:    "advisory module signature",
+			rule:    "TC-CFG-023",
+			harness: HarnessClaude,
+			path:    ".mcp.json",
+			evidence: []Evidence{{
+				Config:  &ConfigRef{ID: "claude:repo:.mcp.json", Key: "mcp/kali"},
+				Excerpt: "pkg:generic/kali_gpt/tools/mcp_server.py TCA-2026-0002",
+			}},
+			preimage: `{"v":1,"rule":"TC-CFG-023","location":{"harness":"claude","scope":"repo","path":".mcp.json"},"evidence":[{"config":{"id":"claude:repo:.mcp.json","key":"mcp/kali"},"excerpt":"pkg:generic/kali_gpt/tools/mcp_server.py TCA-2026-0002"}]}`,
+			want:     "tcf_ae4bd8fa3ea4035c",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

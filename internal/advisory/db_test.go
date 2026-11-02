@@ -89,11 +89,18 @@ func TestSeedList(t *testing.T) {
 	if err != nil || len(hits) != 1 || hits[0].ID != "TCA-2026-0002" {
 		t.Fatalf("module = %+v %v", hits, err)
 	}
+	abs := "/home/someone/src/kali-gpt/kali_gpt/tools/mcp_server.py"
 	hits, err = db.Match([]PackageRef{{
-		Ecosystem: EcoModule, Name: "src/kali_gpt/tools/mcp_server.py", Kind: KindUnpinned,
+		Ecosystem: EcoModule, Name: abs, Spec: abs, Kind: KindUnpinned,
 	}})
 	if err != nil || len(hits) != 1 {
 		t.Fatalf("path = %+v %v", hits, err)
+	}
+	if h := hits[0]; h.Name != "kali_gpt/tools/mcp_server.py" || h.Spec != h.Name || h.PURL != "pkg:generic/kali_gpt/tools/mcp_server.py" {
+		t.Fatalf("path hit carries the argv path: %+v", h)
+	}
+	if text := Title("kali", hits) + Excerpt(hits); strings.Contains(text, "/home/") {
+		t.Fatalf("local path in title or excerpt: %s", text)
 	}
 
 	// Unpinned specs do not match an advisory that has a fix.

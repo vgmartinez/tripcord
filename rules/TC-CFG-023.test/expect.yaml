@@ -16,6 +16,7 @@ positivos:
   claude-npm-exec: high
   claude-agent-frontmatter: critical
   claude-kali-gpt-module: high
+  claude-kali-gpt-abs-path: high
   claude-kali-gpt-git-unpinned: high
   claude-kali-gpt-git-tag: high
   claude-kali-gpt-git-commit: high

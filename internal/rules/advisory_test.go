@@ -70,4 +70,25 @@ func TestAdvisoryFinding(t *testing.T) {
 	if !strings.Contains(f.Title, "fixed in 2026.1.14") {
 		t.Fatalf("title %q", f.Title)
 	}
+
+	var prints []string
+	for _, p := range []string{"/home/alice/kali-gpt/kali_gpt/tools/mcp_server.py", "/home/bob/src/kali_gpt/tools/mcp_server.py"} {
+		mod := item
+		mod.Payload = []byte(`{"name":"kali","command":"python3","args":["` + p + `"]}`)
+		res = NewEngine(env, []*Rule{rule}).ScanConfig(context.Background(), []model.ConfigItem{mod})
+		if len(res.Matches) != 1 {
+			t.Fatalf("module path %+v %v", res.Matches, res.Errors)
+		}
+		f, err = res.Matches[0].Finding(res.Matches[0].Severity, model.DecisionWarn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if f.Evidence[0].Excerpt != "pkg:generic/kali_gpt/tools/mcp_server.py TCA-2026-0002" || strings.Contains(f.Title, "/home/") {
+			t.Fatalf("module finding carries the local path: excerpt %q title %q", f.Evidence[0].Excerpt, f.Title)
+		}
+		prints = append(prints, f.Fingerprint)
+	}
+	if prints[0] != prints[1] {
+		t.Fatalf("module fingerprint depends on the local path: %v", prints)
+	}
 }
