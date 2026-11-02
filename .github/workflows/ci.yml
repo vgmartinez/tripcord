@@ -316,3 +316,24 @@ jobs:
             exit 1
           fi
           echo "DCO sign-off present on ${#commits[@]} commit(s)."
+
+  tripcord:
+    name: local action
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Prepare empty scan directory
+        shell: bash
+        run: mkdir -p -- "${RUNNER_TEMP}/tripcord-ci"
+
+      - name: Tripcord
+        uses: ./.github/actions/tripcord # zizmor: ignore[self-repository] load this checkout's action
+        with:
+          path: ${{ runner.temp }}/tripcord-ci
+          upload-sarif: "false"
+          comment: "false"

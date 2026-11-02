@@ -25,10 +25,13 @@ The action runs three scans with that binary:
 - a SARIF report, uploaded to GitHub code scanning by default; and
 - a Markdown report, which can optionally be posted to a pull request.
 
-It then runs `tripcord pr-context` with the same binary. The action
-outputs `is_agent` and `agents` are that command's `GITHUB_OUTPUT`
-values. A pr-context read error is a warning and does not fail the job;
-the scan exit code does, after the reports are published.
+It then runs `tripcord pr-context` with the same binary. Set
+`reviews-file` to a JSON array of pull request reviews to pass
+`--reviews-file`. An empty value skips the flag. The array stays on
+disk and is not printed. The action outputs `is_agent` and `agents`
+are that command's `GITHUB_OUTPUT` values. A pr-context read error is
+a warning and does not fail the job; the scan exit code does, after
+the reports are published.
 
 `pr-context` reads commits between the pull request base and head. The
 checkout of the repository being scanned needs `fetch-depth: 0`. A

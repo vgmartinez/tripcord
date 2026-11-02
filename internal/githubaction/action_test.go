@@ -125,6 +125,19 @@ func TestTripcordActionContract(t *testing.T) {
 	if !strings.Contains(prContext, "pr-context --format gha") {
 		t.Fatal("action does not run pr-context with the built binary")
 	}
+	reviews, ok := action.Inputs["reviews-file"]
+	if !ok {
+		t.Fatal("action has no reviews-file input")
+	}
+	if reviews.Default != "" {
+		t.Fatalf("reviews-file default = %q, want empty", reviews.Default)
+	}
+	if !strings.Contains(prContext, `if [ -n "$TRIPCORD_REVIEWS_FILE" ]`) || !strings.Contains(prContext, `--reviews-file "$TRIPCORD_REVIEWS_FILE"`) {
+		t.Fatal("pr-context does not pass --reviews-file only when the caller sets it")
+	}
+	if strings.Contains(prContext, "${{") {
+		t.Fatal("pr-context interpolates an expression into run")
+	}
 	if !strings.Contains(text, "core.warning") || !strings.Contains(text, "catch (error)") {
 		t.Fatal("fork and read-only publishing does not warn")
 	}
