@@ -230,8 +230,13 @@ so appending never runs into a previous line
 
 ## TC-CFG-014
 
-After the agent verdict is written, an agent-authored pull request is
-checked for changed paths. The diff is `git diff -z --raw` of `base...head` (the merge-base,
+After the agent verdict is written, the rule runs for an agent-authored
+pull request and for any other bot: a pull request author with
+`user.type` `Bot` or a `[bot]` login, or a commit author, committer, or
+`Co-authored-by` trailer with a `[bot]` login, including
+`github-actions[bot]` and `dependabot[bot]`. That does not change
+`is_agent` or `agents`. The pull request is then checked for changed
+paths. The diff is `git diff -z --raw` of `base...head` (the merge-base,
 which is the pull request's own files, not changes that landed on the
 base branch later). The raw modes are how a symlink (`120000`) or
 gitlink (`160000`) is recognized. A path that contains a control

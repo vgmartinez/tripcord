@@ -22,8 +22,12 @@ needs the pull request author, the review list, and the diff.
 ## How it is decided
 
 `pr-context` reuses its own agent detection. This rule does not keep a
-second identity table. The author is an agent when that detection's
-`agent` field is true.
+second identity table. It also runs for any bot, which is wider than
+`agent`: a pull request author with `user.type` `Bot` or a login ending
+in `[bot]`, and a commit author, committer, or `Co-authored-by` trailer
+with a `[bot]` login. That includes `github-actions[bot]` and
+`dependabot[bot]`. `is_agent` and `agents` are unchanged; a bot that is
+not in the agent tables still leaves `agent` false.
 
 A changed path is agent config when one of the installed adapters
 classifies it. Classification is the adapter's existing path check. The

@@ -427,6 +427,68 @@ func commitAgentChange(t *testing.T, git string, change func(repo string)) (repo
 	return repo, base, head
 }
 
+func TestCfg014AnyBotWithoutMarkingTheAgentVerdict(t *testing.T) {
+	clearPrContextEnv(t)
+	git := lookGit(t)
+
+	t.Run("dependabot author", func(t *testing.T) {
+		repo, base, head := commitHooks(t, git, "Ada Lovelace", "ada@example.com", "Ada Lovelace", "ada@example.com", "add hooks")
+		assertBotMatch(t, repo, base, head, "dependabot[bot]", "Bot", "feature/hooks")
+	})
+	t.Run("github-actions committer", func(t *testing.T) {
+		repo, base, head := commitHooks(t, git, "Ada Lovelace", "ada@example.com", "github-actions[bot]", "41898282+github-actions[bot]@users.noreply.github.com", "add hooks")
+		assertBotMatch(t, repo, base, head, "octocat", "User", "feature/hooks")
+	})
+	t.Run("dependabot trailer", func(t *testing.T) {
+		msg := "add hooks\n\nCo-authored-by: dependabot[bot] <dependabot[bot]@users.noreply.github.com>\n"
+		repo, base, head := commitHooks(t, git, "Ada Lovelace", "ada@example.com", "Ada Lovelace", "ada@example.com", msg)
+		assertBotMatch(t, repo, base, head, "octocat", "User", "feature/hooks")
+	})
+}
+
+func commitHooks(t *testing.T, git, author, authorEmail, committer, committerEmail, message string) (repo, base, head string) {
+	t.Helper()
+	repo = initRepo(t)
+	base = strings.TrimSpace(gitOut(t, git, repo, "rev-parse", "HEAD"))
+	runGitCmd(t, git, repo, "checkout", "-q", "-b", "feature/hooks")
+	if err := os.MkdirAll(filepath.Join(repo, ".cursor"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, ".cursor", "hooks.json"), []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitCmd(t, git, repo, "add", "--", ".cursor/hooks.json")
+	cmd := exec.Command(git, "commit", "-q", "-m", message)
+	cmd.Dir = repo
+	cmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME="+author,
+		"GIT_AUTHOR_EMAIL="+authorEmail,
+		"GIT_COMMITTER_NAME="+committer,
+		"GIT_COMMITTER_EMAIL="+committerEmail,
+	)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("commit: %v\n%s", err, out)
+	}
+	head = strings.TrimSpace(gitOut(t, git, repo, "rev-parse", "HEAD"))
+	return repo, base, head
+}
+
+func assertBotMatch(t *testing.T, repo, base, head, login, authorType, branch string) {
+	t.Helper()
+	body := `{"pull_request":{"user":{"login":"` + login + `","type":"` + authorType + `"},"head":{"ref":"` + branch + `","sha":"` + head + `"},"base":{"sha":"` + base + `"}},"reviews":[]}`
+	event := writeTemp(t, "event.json", body)
+	code, stdout, stderr, output := runCfg014Args(t, repo, event, "text")
+	if code != int(exitcode.Findings) {
+		t.Fatalf("exit %d, want 1\nstderr: %s\nstdout: %s", code, stderr, stdout)
+	}
+	if !strings.Contains(stdout, "agent: false\n") || !strings.Contains(stdout, "tc-cfg-014: match\n") {
+		t.Fatalf("stdout = %s", stdout)
+	}
+	if !strings.Contains(output, "is_agent=false\n") || strings.Contains(output, "is_agent=true") || !strings.Contains(output, "tc_cfg_014=match\n") {
+		t.Fatalf("GITHUB_OUTPUT = %q", output)
+	}
+}
+
 func TestCfg014IgnoresOrdinaryFilesAndHumanAuthors(t *testing.T) {
 	clearPrContextEnv(t)
 	git := lookGit(t)

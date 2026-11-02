@@ -133,12 +133,18 @@ func runPrContext(args []string, stdout, stderr io.Writer) int {
 		Commits:      commits,
 		Warnings:     warnings,
 	})
-	// TC-CFG-014 runs only after the agent verdict is known, and only
-	// when the commit read itself succeeded. A fatal read still reports
-	// that verdict and keeps its own exit code.
+	// TC-CFG-014 runs when pr-context classified an agent, and also when
+	// any bot identity is present. The second check does not change
+	// is_agent or agents. A fatal commit read still reports that verdict
+	// and keeps its own exit code.
 	var outcome cfg014.Outcome
 	var diffErr error
-	if readErr == nil && result.Agent {
+	inScope := result.Agent || prcontext.BotInvolved(prcontext.Input{
+		PRLogin:      ev.Login,
+		PRAuthorType: ev.AuthorType,
+		Commits:      commits,
+	})
+	if readErr == nil && inScope {
 		diff, err := prcontext.ChangedPaths(context.Background(), repo, ev.Base, ev.Head)
 		if err != nil {
 			diffErr = err
