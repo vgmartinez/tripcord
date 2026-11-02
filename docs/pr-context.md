@@ -272,11 +272,15 @@ can add `.tripcord/policy.yaml` with `mode: audit`, `mode: warn`, or
 `fail-on: critical` and would otherwise exit 0. `pr-context` runs
 `git show <base>:.tripcord/policy.yaml` and reads every relative file
 that policy extends from the same revision. It never reads
-`.tripcord/policy.local.yaml`. When `base` is not in the clone there
-is no repository layer, and the defaults apply: `enforce` and fail-on
-`high`. The machine-managed org policy is still loaded. A lock there
-rejects a weaker mode or a higher fail-on from the base policy, which
-is a policy error (exit 3) rather than a pass.
+`.tripcord/policy.local.yaml`. When `base` is not in the clone, the
+directory is not a git repository, or the base commit has no
+`.tripcord/policy.yaml`, there is no repository layer, and the
+defaults apply: `enforce` and fail-on `high`. That missing layer is
+not an internal error. A git I/O failure other than those, such as a
+permission error, still exits 4. The machine-managed org policy is
+still loaded. A lock there rejects a weaker mode or a higher fail-on
+from the base policy, which is a policy error (exit 3) rather than a
+pass.
 
 Human approval is each user's latest non-`COMMENTED` review, and that
 review has to be `APPROVED` (any casing) with `commit_id` equal to the

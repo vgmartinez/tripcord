@@ -266,6 +266,27 @@ func TestCfg014PullRequestPolicyCannotWeakenTheRule(t *testing.T) {
 	}
 }
 
+func TestCfg014AbsentBasePolicyUsesDefaults(t *testing.T) {
+	clearPrContextEnv(t)
+	git := lookGit(t)
+	repo := initRepo(t)
+	base := strings.TrimSpace(gitOut(t, git, repo, "rev-parse", "HEAD"))
+	effective, err := loadPrContextPolicyFrom(context.Background(), repo, base, "")
+	if err != nil {
+		t.Fatalf("absent policy: %v", err)
+	}
+	if effective.Mode != policy.ModeEnforce || effective.FailOn != "high" {
+		t.Fatalf("mode=%s fail-on=%s, want enforce/high", effective.Mode, effective.FailOn)
+	}
+	checkoutHooks(t, git, repo)
+	head := strings.TrimSpace(gitOut(t, git, repo, "rev-parse", "HEAD"))
+	code, stdout, stderr, output := runCfg014(t, repo, "empty-reviews.json", base, head, "json")
+	if code != int(exitcode.Findings) {
+		t.Fatalf("exit %d, want 1\nstderr: %s\nstdout: %s", code, stderr, stdout)
+	}
+	assertCfg014Decision(t, stdout, output, "deny")
+}
+
 func TestCfg014OrgLockBeatsBaseAudit(t *testing.T) {
 	clearPrContextEnv(t)
 	git := lookGit(t)

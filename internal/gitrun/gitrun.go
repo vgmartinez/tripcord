@@ -75,8 +75,13 @@ func ConfigArgs() []string {
 // Env is the environment for git. Every inherited GIT_* variable is
 // dropped, as is SSH_ASKPASS, so neither the caller's environment nor its
 // config files can add a hook, helper, or filter.
+// GIT_CEILING_DIRECTORIES is kept. It only stops discovery from walking
+// above a directory; it does not select config, hooks, or a different
+// repository. Tests set it so a temp directory inside a checkout is not
+// read as that checkout.
 func Env() []string {
-	env := make([]string, 0, len(os.Environ())+8)
+	ceiling := os.Getenv("GIT_CEILING_DIRECTORIES")
+	env := make([]string, 0, len(os.Environ())+9)
 	for _, entry := range os.Environ() {
 		key, _, _ := strings.Cut(entry, "=")
 		upper := strings.ToUpper(key)
@@ -85,7 +90,7 @@ func Env() []string {
 		}
 		env = append(env, entry)
 	}
-	return append(env,
+	env = append(env,
 		"GIT_CONFIG_NOSYSTEM=1",
 		"GIT_CONFIG_GLOBAL="+os.DevNull,
 		"GIT_TERMINAL_PROMPT=0",
@@ -94,6 +99,10 @@ func Env() []string {
 		"GIT_ALLOW_PROTOCOL=https:ssh:file",
 		"GIT_PROTOCOL_FROM_USER=0",
 	)
+	if ceiling != "" {
+		env = append(env, "GIT_CEILING_DIRECTORIES="+ceiling)
+	}
+	return env
 }
 
 // Command builds a git command in repo (or the current directory, when

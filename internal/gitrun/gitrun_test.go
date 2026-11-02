@@ -40,6 +40,15 @@ func TestConfigArgsMatchTheHardenedSet(t *testing.T) {
 	}
 }
 
+func containsEnv(env []string, want string) bool {
+	for _, entry := range env {
+		if entry == want {
+			return true
+		}
+	}
+	return false
+}
+
 func containsPair(args []string, value string) bool {
 	for i := 0; i+1 < len(args); i += 2 {
 		if args[i] == "-c" && args[i+1] == value {
@@ -55,14 +64,19 @@ func TestEnvDropsInheritedGitSettings(t *testing.T) {
 	t.Setenv("GIT_CONFIG_KEY_0", "core.hooksPath")
 	t.Setenv("GIT_CONFIG_VALUE_0", "/tmp/hooks")
 	t.Setenv("GIT_SSH_COMMAND", "sh -c id")
+	t.Setenv("GIT_DIR", "/tmp/not-the-repo")
 	t.Setenv("SSH_ASKPASS", "/tmp/ask")
+	t.Setenv("GIT_CEILING_DIRECTORIES", "/tmp/ceiling")
 	env := Env()
 	for _, entry := range env {
 		key, _, _ := strings.Cut(entry, "=")
 		switch strings.ToUpper(key) {
-		case "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0", "GIT_SSH_COMMAND", "SSH_ASKPASS":
+		case "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0", "GIT_SSH_COMMAND", "GIT_DIR", "SSH_ASKPASS":
 			t.Errorf("Env kept %s", key)
 		}
+	}
+	if !containsEnv(env, "GIT_CEILING_DIRECTORIES=/tmp/ceiling") {
+		t.Error("Env dropped GIT_CEILING_DIRECTORIES")
 	}
 	for _, want := range []string{
 		"GIT_CONFIG_NOSYSTEM=1",

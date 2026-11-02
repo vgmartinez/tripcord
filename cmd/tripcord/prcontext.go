@@ -114,8 +114,9 @@ func runPrContext(args []string, stdout, stderr io.Writer) int {
 	// a bad policy file does not drop that verdict. The repository
 	// layers come from the base revision. The checkout is the pull
 	// request's own merge, and policy.local.yaml is never read. A
-	// missing base uses the surface defaults. The managed org policy
-	// is still applied, and its locks still win.
+	// missing base, or a directory that is not a git repository, uses
+	// the surface defaults. The managed org policy is still applied,
+	// and its locks still win.
 	effective, err := loadPrContextPolicy(repo, ev.Base)
 	if err != nil {
 		return prContextFail(stderr, err, false)
@@ -600,16 +601,19 @@ func loadPrContextPolicyFrom(ctx context.Context, repo, base, managed string) (*
 	return policy.Load(opts)
 }
 
-// errBaseUnavailable means base is not a revision in this clone. The
-// repository policy layer is then absent and the surface defaults apply.
+// errBaseUnavailable means base cannot supply a repository policy: the
+// directory is not a git repository, or the revision is not in this
+// clone. The repository policy layer is then absent and the surface
+// defaults apply. A missing policy blob is os.ErrNotExist and means the
+// same thing for the root file. Other git failures stay errors.
 var errBaseUnavailable = errors.New("base revision is not available")
 
 // materializeBasePolicy writes <base>:.tripcord/policy.yaml and the
 // relative files it extends into dest, using paths relative to the
-// repository root. A missing file or a missing base leaves dest empty.
-// policy.local.yaml is never written. Absolute extends are left for
-// policy.Load, which reads them from the machine rather than the
-// checkout.
+// repository root. A missing file, a missing base, or a directory that
+// is not a git repository leaves dest empty. policy.local.yaml is never
+// written. Absolute extends are left for policy.Load, which reads them
+// from the machine rather than the checkout.
 func materializeBasePolicy(ctx context.Context, repo, base, dest string) error {
 	seen := map[string]bool{}
 	var walk func(rel string, required bool, depth int) error
@@ -725,7 +729,8 @@ func gitShowBlob(ctx context.Context, repo, rev, rel string) ([]byte, error) {
 		strings.Contains(msg, "bad revision"),
 		strings.Contains(msg, "unknown revision"),
 		strings.Contains(msg, "ambiguous argument"),
-		strings.Contains(msg, "needed a single revision"):
+		strings.Contains(msg, "needed a single revision"),
+		strings.Contains(msg, "not a git repository"):
 		return nil, errBaseUnavailable
 	default:
 		return nil, err

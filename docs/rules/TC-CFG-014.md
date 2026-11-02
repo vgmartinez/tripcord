@@ -106,10 +106,11 @@ same way `scan` applies a merged policy: `pr-context` loads
 `.tripcord/policy.yaml` and the relative files it extends from the
 pull request's base revision, for the `pr-context` surface. It does
 not read the checkout, and it never reads `.tripcord/policy.local.yaml`.
-With no policy file on base, or when base is not in the clone, the
-mode is `enforce` and fail-on is `high`, so the decision is `deny` and
-a match exits 1. A `mode` or `fail-on` already on base replaces those
-defaults. `mode: audit`, `mode: warn`, and `fail-on: critical` on base
+With no policy file on base, when base is not in the clone, or when
+the directory is not a git repository, the mode is `enforce` and
+fail-on is `high`, so the decision is `deny` and a match exits 1.
+That missing layer is not an internal error. A `mode` or `fail-on`
+already on base replaces those defaults. `mode: audit`, `mode: warn`, and `fail-on: critical` on base
 still report the match and `tc_cfg_014=match`, and exit 0. The same
 values added by the pull request do not. The machine-managed org policy
 is still applied, and a lock there rejects a weaker base policy.
