@@ -212,7 +212,7 @@ func TestRefCheckoutIsRemovedBeforeDefaultPathScan(t *testing.T) {
 	if checkout < 0 || build < 0 || clean < 0 || scan < 0 {
 		t.Fatalf("missing step index checkout=%d build=%d clean=%d scan=%d", checkout, build, clean, scan)
 	}
-	if !(checkout < build && build < clean && clean < scan) {
+	if checkout >= build || build >= clean || clean >= scan {
 		t.Fatalf("ref checkout is still in the tree at scan time: checkout=%d build=%d clean=%d scan=%d", checkout, build, clean, scan)
 	}
 }
