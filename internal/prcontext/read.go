@@ -48,10 +48,6 @@ const maxIdentityField = 4 << 10
 // maxNoteBytes bounds one refs/notes/ai note. A larger note is skipped.
 const maxNoteBytes = 2 << 20
 
-// logFormat is one record per commit, fields separated by \x1e and the
-// record terminated by NUL. %B is the message, trailers included.
-const logFormat = "%H%x1e%an%x1e%ae%x1e%cn%x1e%ce%x1e%B%x00"
-
 // ReadCommits lists commits reachable from head and not from base, and
 // each commit's refs/notes/ai note when it has one. Missing notes are
 // not an error. A range the clone does not contain returns a warning and
@@ -93,7 +89,7 @@ func ReadCommits(ctx context.Context, repo, base, head string) ([]Commit, []stri
 	if limit == 0 {
 		return nil, warnings, nil
 	}
-	commits, limited, err := readLog(ctx, repo, rangeSpec, limit)
+	commits, limited, err := readCommitObjects(ctx, repo, rangeSpec, limit)
 	if err != nil {
 		warning, fatal := revisionWarning(err, rangeSpec)
 		if fatal != nil {
@@ -104,20 +100,29 @@ func ReadCommits(ctx context.Context, repo, base, head string) ([]Commit, []stri
 	if limited {
 		warnings = append(warnings, fmt.Sprintf("commit records kept at most %d bytes; later messages kept only their trailer tail or were dropped", maxRecordBytes))
 	}
+	var oversizedNotes, malformedNotes int
 	for i := range commits {
-		note, status, err := readNote(ctx, repo, commits[i].SHA)
+		tools, status, err := readNote(ctx, repo, commits[i].SHA)
 		if err != nil {
 			return nil, nil, err
 		}
 		switch status {
 		case noteOK:
-			commits[i].Note = note
+			commits[i].NoteTools = tools
 		case noteAbsent:
 		case noteTooBig:
-			warnings = append(warnings, fmt.Sprintf("commit %s: authorship note is larger than %d bytes and was skipped", commits[i].SHA, maxNoteBytes))
+			oversizedNotes++
+		case noteNotAuthorship:
+			malformedNotes++
 		default:
 			panic(fmt.Sprintf("prcontext: unhandled note status %d", status))
 		}
+	}
+	if oversizedNotes > 0 {
+		warnings = append(warnings, fmt.Sprintf("%d authorship notes were larger than %d bytes and were skipped", oversizedNotes, maxNoteBytes))
+	}
+	if malformedNotes > 0 {
+		warnings = append(warnings, fmt.Sprintf("%d authorship notes were not git-ai authorship logs and were skipped", malformedNotes))
 	}
 	return commits, warnings, nil
 }
@@ -128,6 +133,7 @@ const (
 	noteOK noteStatus = iota
 	noteAbsent
 	noteTooBig
+	noteNotAuthorship
 )
 
 func git(ctx context.Context, repo string, args ...string) ([]byte, error) {
@@ -179,74 +185,305 @@ func (e *historyError) Error() string {
 	return "commit range " + e.rangeSpec + " is not in this clone; commit and note signals were skipped"
 }
 
-func readLog(ctx context.Context, repo, rangeSpec string, limit int) ([]Commit, bool, error) {
-	args := []string{
-		"--no-pager", "--no-optional-locks",
-		"log", "-n", strconv.Itoa(limit),
-		"--format=" + logFormat,
-		"--end-of-options", rangeSpec,
-	}
-	cmd, err := gitrun.Command(ctx, repo, args...)
+// readCommitObjects gets only the bounded set of object IDs with rev-list
+// and streams each raw commit through cat-file. git log formats every commit
+// in the child process before it writes stdout, so a compact pack can make
+// the child expand gigabytes of commit messages at once.
+func readCommitObjects(ctx context.Context, repo, rangeSpec string, limit int) ([]Commit, bool, error) {
+	raw, err := git(ctx, repo, "rev-list", "-n", strconv.Itoa(limit), "--end-of-options", rangeSpec)
 	if err != nil {
 		return nil, false, err
 	}
-	stdout, err := cmd.StdoutPipe()
+	shas := strings.Fields(string(raw))
+	var budget recordBudget
+	var commits []Commit
+	catCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	cat, err := gitrun.Command(catCtx, repo, "--no-pager", "--no-optional-locks", "cat-file", "--batch")
+	if err != nil {
+		return nil, false, err
+	}
+	stdin, err := cat.StdinPipe()
+	if err != nil {
+		return nil, false, err
+	}
+	stdout, err := cat.StdoutPipe()
 	if err != nil {
 		return nil, false, err
 	}
 	var stderr capped
 	stderr.max = 4096
-	cmd.Stderr = &stderr
-	if err := cmd.Start(); err != nil {
+	cat.Stderr = &stderr
+	if err := cat.Start(); err != nil {
 		return nil, false, fmt.Errorf("%w: %w", gitrun.ErrNotInstalled, err)
 	}
-	commits, limited, readErr := parseLog(stdout)
-	_, _ = io.Copy(io.Discard, stdout)
-	waitErr := cmd.Wait()
+	in := bufio.NewReader(stdout)
+	var readErr error
+	for _, sha := range shas {
+		if budget.remaining() < 64 {
+			budget.limited = true
+			break
+		}
+		commit, err := readBatchCommit(stdin, in, sha, &budget)
+		if err != nil {
+			readErr = err
+			break
+		}
+		commits = append(commits, commit)
+	}
+	stopped := readErr != nil || budget.limited
+	if stopped {
+		// cat-file writes a whole object before it reads another request.
+		// Cancelling makes Wait bounded when parsing stops early.
+		cancel()
+	}
+	_ = stdin.Close()
+	waitErr := cat.Wait()
 	if readErr != nil {
 		return nil, false, readErr
+	}
+	if budget.limited {
+		if err := ctx.Err(); err != nil {
+			return nil, false, err
+		}
+		return commits, true, nil
 	}
 	if waitErr != nil {
 		if errors.Is(waitErr, context.Canceled) || errors.Is(waitErr, context.DeadlineExceeded) {
 			return nil, false, waitErr
 		}
-		return nil, false, &gitrun.ExitError{Args: []string{"log"}, Stderr: strings.TrimSpace(stderr.String()), Err: waitErr}
+		return nil, false, &gitrun.ExitError{Args: []string{"cat-file", "--batch"}, Stderr: strings.TrimSpace(stderr.String()), Err: waitErr}
 	}
-	// git log prints newest first. Signals read oldest first, and a
-	// capped range still keeps the newest commits (the ones just read).
+	// rev-list emits newest first. Signals consume oldest first.
 	for i, j := 0, len(commits)-1; i < j; i, j = i+1, j-1 {
 		commits[i], commits[j] = commits[j], commits[i]
 	}
-	return commits, limited, nil
+	return commits, budget.limited, nil
 }
 
-// errRecordBudget stops parseLog before a record whose SHA would not
-// fit in the byte budget. It is not a failure: the commits already read
-// are returned, and ReadCommits adds a warning.
-var errRecordBudget = errors.New("commit record byte budget exhausted")
+// readBatchCommit requests sha and parses its raw commit object. The
+// cat-file response is "<sha> commit <size>\n", exactly size raw bytes,
+// then a framing newline.
+func readBatchCommit(req io.Writer, resp *bufio.Reader, sha string, budget *recordBudget) (Commit, error) {
+	if !hexSHA(sha) {
+		return Commit{}, fmt.Errorf("rev-list returned an unexpected commit %q", sha)
+	}
+	if _, err := io.WriteString(req, sha+"\n"); err != nil {
+		return Commit{}, err
+	}
+	header, err := resp.ReadString('\n')
+	if err != nil {
+		return Commit{}, err
+	}
+	fields := strings.Fields(header)
+	if len(fields) != 3 || fields[0] != sha || fields[1] != "commit" {
+		return Commit{}, fmt.Errorf("unexpected cat-file header %q", strings.TrimSpace(header))
+	}
+	size, err := strconv.ParseInt(fields[2], 10, 64)
+	if err != nil || size < 0 {
+		return Commit{}, fmt.Errorf("unexpected cat-file header %q", strings.TrimSpace(header))
+	}
+	body := &io.LimitedReader{R: resp, N: size}
+	in := bufio.NewReader(body)
+	commit, parseErr := parseRawCommit(in, sha, budget)
+	_, drainErr := io.Copy(io.Discard, in)
+	framing, framingErr := resp.ReadByte()
+	switch {
+	case parseErr != nil:
+		return Commit{}, parseErr
+	case drainErr != nil:
+		return Commit{}, drainErr
+	case framingErr != nil:
+		return Commit{}, framingErr
+	case framing != '\n':
+		return Commit{}, errors.New("unexpected cat-file framing")
+	}
+	return commit, nil
+}
 
-func parseLog(r io.Reader) ([]Commit, bool, error) {
-	in := bufio.NewReader(r)
-	var budget recordBudget
-	var commits []Commit
+// parseRawCommit reads raw commit headers and then its message. Identity
+// lines are scanned byte by byte, so an attacker-controlled name cannot
+// allocate an unbounded line before the 4KiB cap applies.
+func parseRawCommit(r *bufio.Reader, sha string, budget *recordBudget) (Commit, error) {
+	if budget.remaining() < 64 {
+		budget.limited = true
+		return Commit{}, errRecordBudget
+	}
+	commit := Commit{SHA: sha}
+	budget.charge(len(sha))
 	for {
-		fields, err := readRecord(in, &budget)
-		if errors.Is(err, io.EOF) || errors.Is(err, errRecordBudget) {
-			return commits, budget.limited, nil
+		peek, err := r.Peek(1)
+		if errors.Is(err, io.EOF) {
+			return Commit{}, errors.New("raw commit headers were not terminated")
 		}
 		if err != nil {
-			return nil, false, err
+			return Commit{}, err
 		}
-		if fields.identity[0] == "" {
+		if peek[0] == '\n' {
+			_, _ = r.ReadByte()
+			break
+		}
+		switch {
+		case hasPrefix(r, "author "):
+			commit.AuthorName, commit.AuthorEmail, err = readRawIdentity(r, "author ", budget)
+		case hasPrefix(r, "committer "):
+			commit.CommitterName, commit.CommitterEmail, err = readRawIdentity(r, "committer ", budget)
+		default:
+			err = discardRawLine(r)
+		}
+		if err != nil {
+			return Commit{}, err
+		}
+	}
+	message, err := readRawMessage(r, budget)
+	if err != nil {
+		return Commit{}, err
+	}
+	commit.Message = message
+	return commit, nil
+}
+
+func hasPrefix(r *bufio.Reader, prefix string) bool {
+	b, err := r.Peek(len(prefix))
+	return err == nil && string(b) == prefix
+}
+
+// readRawIdentity consumes an author or committer header. It retains only
+// capped name/email fields and discards timestamps and oversized data.
+func readRawIdentity(r *bufio.Reader, prefix string, budget *recordBudget) (string, string, error) {
+	for range prefix {
+		if _, err := r.ReadByte(); err != nil {
+			return "", "", err
+		}
+	}
+	nameCap := min(maxIdentityField, budget.remaining())
+	if nameCap < maxIdentityField {
+		budget.limited = true
+	}
+	var name, email bytes.Buffer
+	for {
+		b, err := r.ReadByte()
+		if errors.Is(err, io.EOF) {
+			return "", "", errors.New("raw commit identity was not terminated")
+		}
+		if err != nil {
+			return "", "", err
+		}
+		if b == '\n' {
+			budget.charge(name.Len())
+			return name.String(), "", nil
+		}
+		if b != '<' {
+			if name.Len() < nameCap {
+				name.WriteByte(b)
+			}
 			continue
 		}
-		commit, err := parseRecordFields(fields)
-		if err != nil {
-			return nil, false, err
+		if name.Len() > 0 && name.Bytes()[name.Len()-1] == ' ' {
+			name.Truncate(name.Len() - 1)
 		}
-		commits = append(commits, commit)
+		budget.charge(name.Len())
+		emailCap := min(maxIdentityField, budget.remaining())
+		if emailCap < maxIdentityField {
+			budget.limited = true
+		}
+		for {
+			b, err = r.ReadByte()
+			if errors.Is(err, io.EOF) {
+				return "", "", errors.New("raw commit identity was not terminated")
+			}
+			if err != nil {
+				return "", "", err
+			}
+			if b == '>' || b == '\n' {
+				break
+			}
+			if email.Len() < emailCap {
+				email.WriteByte(b)
+			}
+		}
+		budget.charge(email.Len())
+		if b == '\n' {
+			return name.String(), email.String(), nil
+		}
+		if err := discardRawLine(r); err != nil {
+			return "", "", err
+		}
+		return name.String(), email.String(), nil
 	}
 }
+
+func discardRawLine(r *bufio.Reader) error {
+	for {
+		b, err := r.ReadByte()
+		if errors.Is(err, io.EOF) {
+			return errors.New("raw commit header was not terminated")
+		}
+		if err != nil {
+			return err
+		}
+		if b == '\n' {
+			return nil
+		}
+	}
+}
+
+// readRawMessage reads the remainder of a raw commit object. Unlike the old
+// porcelain log parser it ends at EOF of this object's bounded reader, not
+// at a NUL record separator.
+func readRawMessage(r *bufio.Reader, budget *recordBudget) (string, error) {
+	room := budget.remaining()
+	if room <= 0 {
+		budget.limited = true
+		_, err := io.Copy(io.Discard, r)
+		return "", err
+	}
+	headCap := maxMessageHead
+	tailCap := maxMessageTail
+	if room < headCap+tailCap {
+		budget.limited = true
+		headCap = 0
+		tailCap = min(tailCap, room)
+	}
+	var b strings.Builder
+	tail := make([]byte, tailCap)
+	tailStart, tailLen := 0, 0
+	headLen := 0
+	for {
+		c, err := r.ReadByte()
+		if errors.Is(err, io.EOF) {
+			if tailLen > 0 {
+				writeRing(&b, tail, tailStart, tailLen)
+			}
+			message := b.String()
+			budget.charge(len(message))
+			return message, nil
+		}
+		if err != nil {
+			return "", err
+		}
+		if headLen < headCap {
+			b.WriteByte(c)
+			headLen++
+			continue
+		}
+		if tailCap == 0 {
+			continue
+		}
+		if tailLen < tailCap {
+			tail[(tailStart+tailLen)%tailCap] = c
+			tailLen++
+			continue
+		}
+		tail[tailStart] = c
+		tailStart = (tailStart + 1) % tailCap
+	}
+}
+
+// errRecordBudget stops reading before a record whose SHA would not fit in
+// the byte budget. It is not a failure: the commits already read are
+// returned, and ReadCommits adds a warning.
+var errRecordBudget = errors.New("commit record byte budget exhausted")
 
 // recordBudget tracks bytes retained from git log records.
 type recordBudget struct {
@@ -270,6 +507,8 @@ func (b *recordBudget) charge(n int) {
 // recordFields holds one git-log record. identity is SHA, author name,
 // author email, committer name, committer email. message is already the
 // single string that is retained: it is not copied again.
+//
+//nolint:unused // retained only for focused legacy parser tests.
 type recordFields struct {
 	identity [5]string
 	message  string
@@ -284,6 +523,8 @@ type recordFields struct {
 // than any legitimate name cannot prevent every separator from being
 // found: the record is always six fields, one of which may be truncated,
 // rather than a record the parser cannot split at all.
+//
+//nolint:unused // retained only for focused legacy parser tests.
 func readRecord(r *bufio.Reader, budget *recordBudget) (recordFields, error) {
 	var fields recordFields
 	if _, err := r.Peek(1); err != nil {
@@ -328,6 +569,8 @@ func readRecord(r *bufio.Reader, budget *recordBudget) (recordFields, error) {
 // bytes. maxKeep may be zero, in which case the field is discarded.
 // Reaching the end of input before a separator means git's output was
 // cut off mid-record.
+//
+//nolint:unused // retained only for focused legacy parser tests.
 func readIdentityField(r *bufio.Reader, maxKeep int) ([]byte, error) {
 	var buf bytes.Buffer
 	for {
@@ -475,21 +718,6 @@ func writeRing(b *strings.Builder, ring []byte, start, n int) {
 	_, _ = b.Write(ring[:n-(len(ring)-start)])
 }
 
-func parseRecordFields(fields recordFields) (Commit, error) {
-	sha := fields.identity[0]
-	if !hexSHA(sha) {
-		return Commit{}, fmt.Errorf("git log record has an unexpected commit %q", sha)
-	}
-	return Commit{
-		SHA:            sha,
-		AuthorName:     fields.identity[1],
-		AuthorEmail:    fields.identity[2],
-		CommitterName:  fields.identity[3],
-		CommitterEmail: fields.identity[4],
-		Message:        fields.message,
-	}, nil
-}
-
 func hexSHA(s string) bool {
 	if len(s) != 40 && len(s) != 64 {
 		return false
@@ -504,42 +732,46 @@ func hexSHA(s string) bool {
 	return true
 }
 
-func readNote(ctx context.Context, repo, sha string) (string, noteStatus, error) {
+func readNote(ctx context.Context, repo, sha string) ([]string, noteStatus, error) {
 	cmd, err := gitrun.Command(ctx, repo, "--no-pager", "--no-optional-locks", "notes", "--ref=ai", "show", "--end-of-options", sha)
 	if err != nil {
-		return "", 0, err
+		return nil, 0, err
 	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return "", 0, err
+		return nil, 0, err
 	}
 	var stderr capped
 	stderr.max = 4096
 	cmd.Stderr = &stderr
 	if err := cmd.Start(); err != nil {
-		return "", 0, fmt.Errorf("%w: %w", gitrun.ErrNotInstalled, err)
+		return nil, 0, fmt.Errorf("%w: %w", gitrun.ErrNotInstalled, err)
 	}
-	var buf bytes.Buffer
-	_, copyErr := io.Copy(&buf, io.LimitReader(stdout, maxNoteBytes+1))
+	limited := &io.LimitedReader{R: stdout, N: maxNoteBytes + 1}
+	tools, parseErr := toolsFromNoteReader(limited)
+	_, copyErr := io.Copy(io.Discard, limited)
 	_, _ = io.Copy(io.Discard, stdout)
 	waitErr := cmd.Wait()
 	if copyErr != nil {
-		return "", 0, copyErr
+		return nil, 0, copyErr
 	}
 	if errors.Is(waitErr, context.Canceled) || errors.Is(waitErr, context.DeadlineExceeded) {
-		return "", 0, waitErr
+		return nil, 0, waitErr
 	}
-	if buf.Len() > maxNoteBytes {
-		return "", noteTooBig, nil
+	if limited.N == 0 {
+		return nil, noteTooBig, nil
 	}
 	if waitErr != nil {
 		msg := strings.ToLower(stderr.String())
 		if strings.Contains(msg, "no note found") {
-			return "", noteAbsent, nil
+			return nil, noteAbsent, nil
 		}
-		return "", 0, &gitrun.ExitError{Args: []string{"notes", "show"}, Stderr: strings.TrimSpace(stderr.String()), Err: waitErr}
+		return nil, 0, &gitrun.ExitError{Args: []string{"notes", "show"}, Stderr: strings.TrimSpace(stderr.String()), Err: waitErr}
 	}
-	return buf.String(), noteOK, nil
+	if parseErr != nil {
+		return nil, noteNotAuthorship, nil
+	}
+	return tools, noteOK, nil
 }
 
 // capped collects at most max bytes of a git diagnostic.

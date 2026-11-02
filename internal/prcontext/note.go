@@ -1,6 +1,8 @@
 package prcontext
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
@@ -14,15 +16,21 @@ import (
 // no tools and no error. An unreadable note returns an error so the
 // caller can warn and continue.
 func toolsFromNote(note string) ([]string, error) {
-	meta := noteMetadata(note)
-	if strings.TrimSpace(meta) == "" {
-		return nil, errNotAuthorshipLog
+	return toolsFromNoteReader(strings.NewReader(note))
+}
+
+// toolsFromNoteReader parses an authorship note without retaining its text.
+// Only the small tool ids that Detection needs escape this function.
+func toolsFromNoteReader(r io.Reader) ([]string, error) {
+	meta, err := noteMetadataReader(bufio.NewReader(r))
+	if err != nil {
+		return nil, err
 	}
 	var doc struct {
 		Sessions map[string]noteRecord `json:"sessions"`
 		Prompts  map[string]noteRecord `json:"prompts"`
 	}
-	dec := json.NewDecoder(strings.NewReader(meta))
+	dec := json.NewDecoder(meta)
 	if err := dec.Decode(&doc); err != nil {
 		return nil, errNotAuthorshipLog
 	}
@@ -70,21 +78,53 @@ type errNote string
 
 func (e errNote) Error() string { return string(e) }
 
-// noteMetadata returns the JSON section of a git-ai log. The log is an
-// attestation section, a line that is exactly "---", then JSON. A note
-// that is only JSON (no divider) is accepted whole.
-func noteMetadata(note string) string {
-	lines := strings.Split(strings.ReplaceAll(note, "\r\n", "\n"), "\n")
-	for i, line := range lines {
-		if line == "---" {
-			return strings.Join(lines[i+1:], "\n")
+// noteMetadataReader returns a reader positioned at the JSON section of a
+// git-ai log. The prefix is read one bounded line at a time: notes may be
+// attacker-controlled, so an unterminated prefix line cannot allocate
+// arbitrarily while we look for the "---" divider.
+func noteMetadataReader(r *bufio.Reader) (io.Reader, error) {
+	for {
+		line, tooLong, err := readNoteLine(r, 64<<10)
+		if err != nil && !errors.Is(err, io.EOF) {
+			return nil, err
+		}
+		if len(bytes.TrimSpace(line)) > 0 {
+			trimmed := bytes.TrimSpace(line)
+			if trimmed[0] == '{' {
+				return io.MultiReader(bytes.NewReader(line), r), nil
+			}
+		}
+		if !tooLong && string(bytes.TrimRight(line, "\r\n")) == "---" {
+			return r, nil
+		}
+		if err != nil {
+			return nil, errNotAuthorshipLog
 		}
 	}
-	trimmed := strings.TrimSpace(note)
-	if strings.HasPrefix(trimmed, "{") {
-		return trimmed
+}
+
+// readNoteLine returns at most keep bytes of one line while still consuming
+// that whole line. It reports a line that exceeded keep separately.
+func readNoteLine(r *bufio.Reader, keep int) ([]byte, bool, error) {
+	var line bytes.Buffer
+	tooLong := false
+	for {
+		b, err := r.ReadByte()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return line.Bytes(), tooLong, io.EOF
+			}
+			return nil, false, err
+		}
+		if line.Len() < keep {
+			line.WriteByte(b)
+		} else {
+			tooLong = true
+		}
+		if b == '\n' {
+			return line.Bytes(), tooLong, nil
+		}
 	}
-	return ""
 }
 
 func validTool(tool string) bool {

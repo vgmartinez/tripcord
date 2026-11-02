@@ -1,11 +1,13 @@
 package prcontext
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -80,8 +82,8 @@ func TestReadCommitsTrailersNotesAndMissingHistory(t *testing.T) {
 	if len(commits) != 1 || commits[0].SHA != head {
 		t.Fatalf("commits = %+v, want only %s", commits, head)
 	}
-	if !strings.Contains(commits[0].Note, `"tool":"cursor"`) {
-		t.Fatalf("note = %q", commits[0].Note)
+	if got := strings.Join(commits[0].NoteTools, ","); got != "cursor" {
+		t.Fatalf("note tools = %q", got)
 	}
 	got := Detect(Input{Branch: "cursor/add-thing", Commits: commits, Warnings: warnings})
 	if strings.Join(got.Agents, ",") != "claude,copilot,cursor" {
@@ -161,6 +163,103 @@ func TestReadCommitsOversizedIdentityField(t *testing.T) {
 	}
 	if commits[0].Message != "malicious commit\n" {
 		t.Fatalf("Message = %q, fields after the oversized one were lost", commits[0].Message)
+	}
+}
+
+func TestReadCommitsStreamsNotesAndCollapsesMalformedWarnings(t *testing.T) {
+	git := requireGit(t)
+	repo := t.TempDir()
+	gitCmd(t, repo, "init", "-q", "-b", "main")
+	gitCmd(t, repo, "config", "user.email", "t@example.invalid")
+	gitCmd(t, repo, "config", "user.name", "t")
+	if err := os.WriteFile(filepath.Join(repo, "a.txt"), []byte("a\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitCmd(t, repo, "add", "a.txt")
+	gitCmd(t, repo, "commit", "-q", "-m", "init")
+	base := strings.TrimSpace(gitOutput(t, git, repo, "rev-parse", "HEAD"))
+
+	// Every note points at the same 2MiB blob. Retaining note text on each
+	// Commit makes this modest repository retain hundreds of MiB; streaming
+	// them leaves only the tool id on each commit.
+	const noteCount = 8
+	note := "---\n" + `{"sessions":{"s":{"agent_id":{"tool":"cursor"}}},"padding":"` + strings.Repeat("x", (2<<20)-128) + `"}` + "\n"
+	notePath := filepath.Join(t.TempDir(), "note")
+	if err := os.WriteFile(notePath, []byte(note), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < noteCount; i++ {
+		gitCmd(t, repo, "commit", "-q", "--allow-empty", "-m", "with note")
+		sha := strings.TrimSpace(gitOutput(t, git, repo, "rev-parse", "HEAD"))
+		gitCmd(t, repo, "notes", "--ref=ai", "add", "-F", notePath, sha)
+	}
+	head := strings.TrimSpace(gitOutput(t, git, repo, "rev-parse", "HEAD"))
+
+	runtime.GC()
+	var before runtime.MemStats
+	runtime.ReadMemStats(&before)
+	commits, warnings, err := ReadCommits(context.Background(), repo, base, head)
+	runtime.GC()
+	var after runtime.MemStats
+	runtime.ReadMemStats(&after)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(warnings) != 0 || len(commits) != noteCount {
+		t.Fatalf("commits %d warnings %v", len(commits), warnings)
+	}
+	for _, c := range commits {
+		if c.Note != "" || strings.Join(c.NoteTools, ",") != "cursor" {
+			t.Fatalf("retained note %q tools %v", c.Note, c.NoteTools)
+		}
+	}
+	const slack = 24 << 20
+	if after.HeapAlloc > before.HeapAlloc+slack {
+		t.Fatalf("heap grew %d bytes, want at most %d while streaming %d notes", after.HeapAlloc-before.HeapAlloc, slack, noteCount)
+	}
+
+	badPath := filepath.Join(t.TempDir(), "bad-note")
+	if err := os.WriteFile(badPath, []byte("not a git-ai log\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range commits[:3] {
+		gitCmd(t, repo, "notes", "--ref=ai", "add", "-f", "-F", badPath, c.SHA)
+	}
+	_, warnings, err = ReadCommits(context.Background(), repo, base, head)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(warnings) != 1 || warnings[0] != "3 authorship notes were not git-ai authorship logs and were skipped" {
+		t.Fatalf("warnings = %v", warnings)
+	}
+}
+
+// TestLargeNotesRSS reproduces the shared-note shape without paying for 300
+// separate git notes processes. Each reader exposes the same 2MiB note blob,
+// as refs/notes/ai does when many notes point at one object. Set
+// TRIPCORD_NOTE_REPRO=1 to run it under a process memory limit.
+func TestLargeNotesRSS(t *testing.T) {
+	if os.Getenv("TRIPCORD_NOTE_REPRO") == "" {
+		t.Skip("set TRIPCORD_NOTE_REPRO=1 to stream 300 large git-ai notes")
+	}
+	const (
+		n      = 300
+		rssCap = 256 << 20
+	)
+	note := []byte("---\n" + `{"sessions":{"s":{"agent_id":{"tool":"cursor"}}},"padding":"` + strings.Repeat("x", (2<<20)-128) + `"}` + "\n")
+	for range n {
+		tools, err := toolsFromNoteReader(bytes.NewReader(note))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Join(tools, ",") != "cursor" {
+			t.Fatalf("tools = %v", tools)
+		}
+	}
+	hwm := vmHWM(t)
+	t.Logf("streamed %d %d-byte notes; VmHWM %d bytes", n, len(note), hwm)
+	if hwm > rssCap {
+		t.Fatalf("VmHWM %d bytes exceeds %d", hwm, rssCap)
 	}
 }
 

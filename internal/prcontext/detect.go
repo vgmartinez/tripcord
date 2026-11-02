@@ -46,8 +46,11 @@ type Commit struct {
 	CommitterName  string
 	CommitterEmail string
 	Message        string
-	// Note is the refs/notes/ai note for SHA, or empty when the commit
-	// has none.
+	// NoteTools are the validated tool ids extracted while refs/notes/ai was
+	// streamed. ReadCommits never retains the original note text.
+	NoteTools []string
+	// Note is accepted only for callers that construct Commit directly. It is
+	// parsed by Detect for compatibility; ReadCommits leaves it empty.
 	Note string
 }
 
@@ -88,13 +91,14 @@ func Detect(in Input) Result {
 		for _, trailer := range coAuthors(c.Message) {
 			b.trailer(trailer, from+" trailer")
 		}
-		if c.Note == "" {
-			continue
-		}
-		tools, err := toolsFromNote(c.Note)
-		if err != nil {
-			warnings = append(warnings, fmt.Sprintf("commit %s: %s", c.SHA, err.Error()))
-			continue
+		tools := c.NoteTools
+		if tools == nil && c.Note != "" {
+			var err error
+			tools, err = toolsFromNote(c.Note)
+			if err != nil {
+				warnings = append(warnings, fmt.Sprintf("commit %s: %s", c.SHA, err.Error()))
+				continue
+			}
 		}
 		for _, tool := range tools {
 			b.add(TypeGitAI, canonicalAgent(tool), tool, from+" refs/notes/ai")

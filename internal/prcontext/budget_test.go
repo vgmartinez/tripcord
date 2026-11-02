@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -79,7 +78,11 @@ func TestReadMessageDroppedWhenBudgetSpent(t *testing.T) {
 
 func TestReadRecordStopsBeforeTruncatingSHA(t *testing.T) {
 	budget := recordBudget{used: maxRecordBytes - 63}
-	_, err := readRecord(bufio.NewReader(strings.NewReader(string(logRecord("hello\n")))), &budget)
+	_, err := parseRawCommit(
+		bufio.NewReader(bytes.NewReader(rawCommitObject("hello\n"))),
+		"0123456789abcdef0123456789abcdef01234567",
+		&budget,
+	)
 	if !errors.Is(err, errRecordBudget) {
 		t.Fatalf("err = %v, want errRecordBudget", err)
 	}
@@ -96,7 +99,7 @@ func TestReadRecordStopsBeforeTruncatingSHA(t *testing.T) {
 func TestRecordByteBudget(t *testing.T) {
 	const extra = 64 << 10
 	message := strings.Repeat("x", maxMessageHead) + strings.Repeat("m", extra) + strings.Repeat("y", maxMessageTail) + budgetTrailer
-	rec := logRecord(message)
+	rec := rawCommitObject(message)
 	n := maxRecordBytes/(maxMessageHead+maxMessageTail) + 8
 	if n*len(message) <= maxRecordBytes {
 		t.Fatalf("fixture retains %d bytes if uncapped, which does not exceed %d", n*len(message), maxRecordBytes)
@@ -105,14 +108,22 @@ func TestRecordByteBudget(t *testing.T) {
 	runtime.GC()
 	var before runtime.MemStats
 	runtime.ReadMemStats(&before)
-	commits, limited, err := parseLog(&repeatReader{rec: rec, n: n})
+	var budget recordBudget
+	var commits []Commit
+	for range n {
+		commit, err := parseRawCommit(bufio.NewReader(bytes.NewReader(rec)), "0123456789abcdef0123456789abcdef01234567", &budget)
+		if errors.Is(err, errRecordBudget) {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		commits = append(commits, commit)
+	}
 	runtime.GC()
 	var after runtime.MemStats
 	runtime.ReadMemStats(&after)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !limited {
+	if !budget.limited {
 		t.Fatal("limited = false, want the record budget exhausted")
 	}
 	if len(commits) == 0 || len(commits) >= n {
@@ -270,7 +281,7 @@ func TestLargeMessagesRSS(t *testing.T) {
 }
 
 func TestBigMessageReaderParses(t *testing.T) {
-	commits, limited, err := parseLog(&bigMessageReader{n: 2, size: maxMessageHead + maxMessageTail + 128})
+	commits, limited, err := parseRawMessages(2, maxMessageHead+maxMessageTail+128)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -303,7 +314,7 @@ func TestSyntheticMessageBudgetRSS(t *testing.T) {
 		msgSize = 4 << 20
 		rssCap  = 512 << 20
 	)
-	commits, limited, err := parseLog(&bigMessageReader{n: n, size: msgSize})
+	commits, limited, err := parseRawMessages(n, msgSize)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -338,114 +349,35 @@ func TestSyntheticMessageBudgetRSS(t *testing.T) {
 	}
 }
 
-// bigMessageReader yields n git-log records whose messages are size
-// bytes of 'x' plus budgetTrailer, generated as they are read.
-type bigMessageReader struct {
-	n, size int
-	rec     int
-	// phase 0 is the identity header, 1 the message body, 2 the
-	// trailer, 3 the record's NUL and the newline git prints after it.
-	phase, pos int
-}
-
-func (r *bigMessageReader) Read(p []byte) (int, error) {
-	if len(p) == 0 {
-		return 0, nil
-	}
-	const header = "0123456789abcdef0123456789abcdef01234567\x1eAnn\x1eann@example.invalid\x1eCam\x1ecam@example.invalid\x1e"
-	const end = "\x00\n"
-	wrote := 0
-	for wrote < len(p) {
-		if r.rec >= r.n {
-			if wrote == 0 {
-				return 0, io.EOF
-			}
-			return wrote, nil
+func parseRawMessages(n, size int) ([]Commit, bool, error) {
+	var budget recordBudget
+	var commits []Commit
+	for range n {
+		message := strings.Repeat("x", size) + budgetTrailer
+		commit, err := parseRawCommit(
+			bufio.NewReader(bytes.NewReader(rawCommitObject(message))),
+			"0123456789abcdef0123456789abcdef01234567",
+			&budget,
+		)
+		if errors.Is(err, errRecordBudget) {
+			return commits, true, nil
 		}
-		switch r.phase {
-		case 0:
-			if r.pos >= len(header) {
-				r.phase, r.pos = 1, 0
-				continue
-			}
-			n := copy(p[wrote:], header[r.pos:])
-			r.pos += n
-			wrote += n
-		case 1:
-			if r.pos >= r.size {
-				r.phase, r.pos = 2, 0
-				continue
-			}
-			n := r.size - r.pos
-			if n > len(p)-wrote {
-				n = len(p) - wrote
-			}
-			for i := 0; i < n; i++ {
-				p[wrote+i] = 'x'
-			}
-			r.pos += n
-			wrote += n
-		case 2:
-			if r.pos >= len(budgetTrailer) {
-				r.phase, r.pos = 3, 0
-				continue
-			}
-			n := copy(p[wrote:], budgetTrailer[r.pos:])
-			r.pos += n
-			wrote += n
-		case 3:
-			if r.pos >= len(end) {
-				r.phase, r.pos = 0, 0
-				r.rec++
-				continue
-			}
-			n := copy(p[wrote:], end[r.pos:])
-			r.pos += n
-			wrote += n
-		default:
-			return wrote, errors.New("bad synthetic log phase")
+		if err != nil {
+			return nil, false, err
+		}
+		commits = append(commits, commit)
+		if budget.limited {
+			return commits, true, nil
 		}
 	}
-	return wrote, nil
+	return commits, budget.limited, nil
 }
 
-func logRecord(message string) []byte {
-	var b bytes.Buffer
-	b.WriteString("0123456789abcdef0123456789abcdef01234567")
-	b.WriteByte(0x1e)
-	b.WriteString("Ann")
-	b.WriteByte(0x1e)
-	b.WriteString("ann@example.invalid")
-	b.WriteByte(0x1e)
-	b.WriteString("Cam")
-	b.WriteByte(0x1e)
-	b.WriteString("cam@example.invalid")
-	b.WriteByte(0x1e)
-	b.WriteString(message)
-	b.WriteByte(0)
-	b.WriteByte('\n')
-	return b.Bytes()
-}
-
-// repeatReader yields rec n times without retaining more than one copy
-// of the record.
-type repeatReader struct {
-	rec []byte
-	n   int
-	off int
-}
-
-func (r *repeatReader) Read(p []byte) (int, error) {
-	if r.n <= 0 {
-		return 0, io.EOF
-	}
-	n := copy(p, r.rec[r.off:])
-	r.off += n
-	if r.off == len(r.rec) {
-		r.off = 0
-		r.n--
-	}
-	return n, nil
+func rawCommitObject(message string) []byte {
+	return []byte("tree 0123456789012345678901234567890123456789\n" +
+		"author Ann <ann@example.invalid> 1700000000 +0000\n" +
+		"committer Cam <cam@example.invalid> 1700000000 +0000\n\n" +
+		message)
 }
 
 func vmHWM(t *testing.T) uint64 {

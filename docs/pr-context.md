@@ -122,8 +122,11 @@ The branch prefix then comes from `--head` unless it is a 40- or
 64-character commit id. The pull request author is only known from the
 event.
 
-Commits are `git rev-list` / `git log` of `base..head` and
-`git notes --ref=ai show`. Nothing is fetched. A missing note is skipped.
+Commit ids are `git rev-list` of `base..head`; each raw object is then
+streamed one at a time with `git cat-file --batch`, rather than formatted by
+`git log`. `git notes --ref=ai show` streams each authorship note and keeps
+only the validated tool ids, never the note text. Nothing is fetched. A
+missing note is skipped.
 A base or head the clone does not contain (a shallow checkout) is a
 warning: author and branch signals are still reported, and the command
 still exits 0. At most 5000 commits are read (the newest). Each
@@ -133,7 +136,8 @@ that trim is silent. Across every field of every commit record, at most
 128MiB is retained. Past that budget a later message keeps only its
 trailer tail, shortened to whatever budget remains, or is dropped when
 nothing remains, and one warning is emitted. An authorship note larger
-than 2MiB is skipped with its own warning. Neither cap fails the command.
+than 2MiB is skipped; malformed git-ai notes are summarized in one warning
+with their count. Neither cap fails the command.
 
 A checkout action that defaults to a shallow clone (one commit) will
 usually miss `base` entirely, turning every commit and note signal into a
