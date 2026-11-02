@@ -102,12 +102,18 @@ Text and `gha` keep the pr-context report. A match or an incomplete
 result adds a `tc-cfg-014:` section. JSON adds `tc_cfg_014` and, for a
 match, one `tripcord.finding/v1` document. The finding's severity
 defaults to high and its decision follows the repository policy, the
-same way `scan` applies it: `pr-context` loads `.tripcord/policy.yaml`
-for the `pr-context` surface. With no policy file the mode is `enforce`
-and fail-on is `high`, so the decision is `deny` and a match exits 1.
-An explicit `mode` or `fail-on` replaces those defaults. `mode: audit`,
-`mode: warn`, and `fail-on: critical` still report the match and
-`tc_cfg_014=match`, and exit 0. `GITHUB_OUTPUT` gains `tc_cfg_014=match` or
+same way `scan` applies a merged policy: `pr-context` loads
+`.tripcord/policy.yaml` and the relative files it extends from the
+pull request's base revision, for the `pr-context` surface. It does
+not read the checkout, and it never reads `.tripcord/policy.local.yaml`.
+With no policy file on base, or when base is not in the clone, the
+mode is `enforce` and fail-on is `high`, so the decision is `deny` and
+a match exits 1. A `mode` or `fail-on` already on base replaces those
+defaults. `mode: audit`, `mode: warn`, and `fail-on: critical` on base
+still report the match and `tc_cfg_014=match`, and exit 0. The same
+values added by the pull request do not. The machine-managed org policy
+is still applied, and a lock there rejects a weaker base policy.
+`GITHUB_OUTPUT` gains `tc_cfg_014=match` or
 `tc_cfg_014=incomplete` only when the result is not clear.
 
 ## What this does not do

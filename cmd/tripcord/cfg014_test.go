@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,6 +13,7 @@ import (
 
 	"github.com/vgmartinez/tripcord/internal/cfg014"
 	"github.com/vgmartinez/tripcord/internal/exitcode"
+	"github.com/vgmartinez/tripcord/internal/policy"
 )
 
 func TestCfg014AgentConfigChange(t *testing.T) {
@@ -193,78 +196,140 @@ func TestCfg014ReviewsFile(t *testing.T) {
 	})
 }
 
-func TestCfg014PolicyDoesNotFailBelowItsThreshold(t *testing.T) {
+func TestCfg014PolicyOnBaseDoesNotFailBelowItsThreshold(t *testing.T) {
+	clearPrContextEnv(t)
+	git := lookGit(t)
+	cases := []struct {
+		name     string
+		body     string
+		decision string
+	}{
+		{name: "audit mode", body: "version: 1\nmode: audit\n", decision: "audit"},
+		{name: "fail-on critical", body: "version: 1\nmode: enforce\nfail-on: critical\n", decision: "deny"},
+		{name: "extends on base", body: "version: 1\nextends: ./floor.yaml\n", decision: "audit"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := initRepo(t)
+			files := map[string]string{".tripcord/policy.yaml": tc.body}
+			if tc.name == "extends on base" {
+				files[".tripcord/floor.yaml"] = "version: 1\nmode: audit\n"
+			}
+			commitFiles(t, git, repo, "base policy", files)
+			base := strings.TrimSpace(gitOut(t, git, repo, "rev-parse", "HEAD"))
+			checkoutHooks(t, git, repo)
+			head := strings.TrimSpace(gitOut(t, git, repo, "rev-parse", "HEAD"))
+			code, stdout, stderr, output := runCfg014(t, repo, "empty-reviews.json", base, head, "json")
+			if code != int(exitcode.OK) {
+				t.Fatalf("exit %d, want 0\nstderr: %s\nstdout: %s", code, stderr, stdout)
+			}
+			assertCfg014Decision(t, stdout, output, tc.decision)
+		})
+	}
+}
+
+func TestCfg014PullRequestPolicyCannotWeakenTheRule(t *testing.T) {
+	clearPrContextEnv(t)
+	git := lookGit(t)
+	cases := []struct {
+		name  string
+		files map[string]string
+	}{
+		{name: "audit mode", files: map[string]string{".tripcord/policy.yaml": "version: 1\nmode: audit\n"}},
+		{name: "fail-on critical", files: map[string]string{".tripcord/policy.yaml": "version: 1\nmode: enforce\nfail-on: critical\n"}},
+		{name: "policy.local.yaml", files: map[string]string{".tripcord/policy.local.yaml": "version: 1\nmode: audit\n"}},
+		{name: "extends changed on the pull request", files: map[string]string{".tripcord/floor.yaml": "version: 1\nmode: audit\n"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := initRepo(t)
+			if tc.name == "extends changed on the pull request" {
+				commitFiles(t, git, repo, "base floor", map[string]string{
+					".tripcord/policy.yaml": "version: 1\nextends: ./floor.yaml\n",
+					".tripcord/floor.yaml":  "version: 1\nmode: enforce\nfail-on: high\n",
+				})
+			}
+			base := strings.TrimSpace(gitOut(t, git, repo, "rev-parse", "HEAD"))
+			runGitCmd(t, git, repo, "checkout", "-q", "-b", "feature/hooks")
+			files := map[string]string{".cursor/hooks.json": "{}\n"}
+			for rel, body := range tc.files {
+				files[rel] = body
+			}
+			commitFiles(t, git, repo, "agent change", files)
+			head := strings.TrimSpace(gitOut(t, git, repo, "rev-parse", "HEAD"))
+			code, stdout, stderr, output := runCfg014(t, repo, "empty-reviews.json", base, head, "json")
+			if code != int(exitcode.Findings) {
+				t.Fatalf("exit %d, want 1\nstderr: %s\nstdout: %s", code, stderr, stdout)
+			}
+			assertCfg014Decision(t, stdout, output, "deny")
+		})
+	}
+}
+
+func TestCfg014OrgLockBeatsBaseAudit(t *testing.T) {
 	clearPrContextEnv(t)
 	git := lookGit(t)
 	repo := initRepo(t)
+	commitFiles(t, git, repo, "audit base", map[string]string{
+		".tripcord/policy.yaml": "version: 1\nmode: audit\n",
+	})
 	base := strings.TrimSpace(gitOut(t, git, repo, "rev-parse", "HEAD"))
-	runGitCmd(t, git, repo, "checkout", "-q", "-b", "feature/hooks")
-	if err := os.MkdirAll(filepath.Join(repo, ".cursor"), 0o755); err != nil {
+	managed := filepath.Join(t.TempDir(), "managed.yaml")
+	if err := os.WriteFile(managed, []byte("version: 1\nmode: enforce\nlocked:\n  mode: true\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(repo, ".cursor", "hooks.json"), []byte("{}\n"), 0o644); err != nil {
-		t.Fatal(err)
+	_, err := loadPrContextPolicyFrom(context.Background(), repo, base, managed)
+	if err == nil || !strings.Contains(err.Error(), "locked") {
+		t.Fatalf("org lock err = %v, want a mode lock", err)
 	}
-	runGitCmd(t, git, repo, "add", ".cursor/hooks.json")
-	runGitCmd(t, git, repo, "-c", "user.email=ada@example.com", "-c", "user.name=Ada Lovelace", "commit", "-q", "-m", "add hooks")
-	head := strings.TrimSpace(gitOut(t, git, repo, "rev-parse", "HEAD"))
-	event := writeCfg014Event(t, "empty-reviews.json", base, head)
-	if err := os.MkdirAll(filepath.Join(repo, ".tripcord"), 0o755); err != nil {
-		t.Fatal(err)
+	var pol *policy.Error
+	if !errors.As(err, &pol) || pol.ExitCode() != exitcode.Config {
+		t.Fatalf("err = %v, want a policy config error", err)
 	}
+}
 
-	t.Run("audit mode", func(t *testing.T) {
-		body := "version: 1\nmode: audit\n"
-		if err := os.WriteFile(filepath.Join(repo, ".tripcord", "policy.yaml"), []byte(body), 0o644); err != nil {
+func commitFiles(t *testing.T, git, repo, message string, files map[string]string) {
+	t.Helper()
+	var paths []string
+	for rel, body := range files {
+		full := filepath.Join(repo, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		code, stdout, stderr, output := runCfg014Args(t, repo, event, "json")
-		if code != int(exitcode.OK) {
-			t.Fatalf("exit %d, want 0\nstderr: %s\nstdout: %s", code, stderr, stdout)
-		}
-		var got struct {
-			TCCFG014 string `json:"tc_cfg_014"`
-			Finding  struct {
-				Severity string `json:"severity"`
-				Decision string `json:"decision"`
-			} `json:"finding"`
-		}
-		if err := json.Unmarshal([]byte(stdout), &got); err != nil {
-			t.Fatalf("json: %v\n%s", err, stdout)
-		}
-		if got.TCCFG014 != "match" || got.Finding.Severity != "high" || got.Finding.Decision != "audit" {
-			t.Fatalf("decoded = %+v", got)
-		}
-		if !strings.Contains(output, "tc_cfg_014=match\n") {
-			t.Fatalf("GITHUB_OUTPUT = %q", output)
-		}
-	})
-	t.Run("fail-on critical", func(t *testing.T) {
-		body := "version: 1\nmode: enforce\nfail-on: critical\n"
-		if err := os.WriteFile(filepath.Join(repo, ".tripcord", "policy.yaml"), []byte(body), 0o644); err != nil {
+		if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		code, stdout, stderr, output := runCfg014Args(t, repo, event, "json")
-		if code != int(exitcode.OK) {
-			t.Fatalf("exit %d, want 0\nstderr: %s\nstdout: %s", code, stderr, stdout)
-		}
-		var got struct {
-			TCCFG014 string `json:"tc_cfg_014"`
-			Finding  struct {
-				Severity string `json:"severity"`
-				Decision string `json:"decision"`
-			} `json:"finding"`
-		}
-		if err := json.Unmarshal([]byte(stdout), &got); err != nil {
-			t.Fatalf("json: %v\n%s", err, stdout)
-		}
-		if got.TCCFG014 != "match" || got.Finding.Severity != "high" || got.Finding.Decision != "deny" {
-			t.Fatalf("decoded = %+v", got)
-		}
-		if !strings.Contains(output, "tc_cfg_014=match\n") {
-			t.Fatalf("GITHUB_OUTPUT = %q", output)
-		}
-	})
+		paths = append(paths, rel)
+	}
+	args := append([]string{"add", "--"}, paths...)
+	runGitCmd(t, git, repo, args...)
+	runGitCmd(t, git, repo, "-c", "user.email=ada@example.com", "-c", "user.name=Ada Lovelace", "commit", "-q", "-m", message)
+}
+
+func checkoutHooks(t *testing.T, git, repo string) {
+	t.Helper()
+	runGitCmd(t, git, repo, "checkout", "-q", "-b", "feature/hooks")
+	commitFiles(t, git, repo, "add hooks", map[string]string{".cursor/hooks.json": "{}\n"})
+}
+
+func assertCfg014Decision(t *testing.T, stdout, output, decision string) {
+	t.Helper()
+	var got struct {
+		TCCFG014 string `json:"tc_cfg_014"`
+		Finding  struct {
+			Severity string `json:"severity"`
+			Decision string `json:"decision"`
+		} `json:"finding"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &got); err != nil {
+		t.Fatalf("json: %v\n%s", err, stdout)
+	}
+	if got.TCCFG014 != "match" || got.Finding.Severity != "high" || got.Finding.Decision != decision {
+		t.Fatalf("decoded = %+v, want decision %s", got, decision)
+	}
+	if !strings.Contains(output, "tc_cfg_014=match\n") {
+		t.Fatalf("GITHUB_OUTPUT = %q", output)
+	}
 }
 
 func TestCfg014ControlCharacterPaths(t *testing.T) {

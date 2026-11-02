@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
+	"path/filepath"
 	"strings"
 
 	"encoding/json"
@@ -25,11 +27,11 @@ pr-context reads a GitHub pull_request event and the commits in base..head
 and reports whether the pull request looks agent-authored. It exits 0
 whether or not an agent is detected. When that author is an agent and
 the diff changes a file an adapter classifies, TC-CFG-014 exits 1 if no
-human approved the pull request and the repository policy fails the
-finding. The default is enforce, fail-on high. mode: audit, mode: warn,
-or a fail-on above the finding still reports the match and exits 0.
-The command exits 3 when the reviews, the diff, or the policy cannot
-be read.
+human approved the pull request and the base revision's policy fails
+the finding. The default is enforce, fail-on high. A mode or fail-on
+on that base revision still applies; one added by the pull request
+does not. The command exits 3 when the reviews, the diff, or the
+policy cannot be read.
 
 --reviews-file is a JSON array of review objects, the shape of
 GET /pulls/{n}/reviews concatenated across pages. It is the complete
@@ -108,11 +110,13 @@ func runPrContext(args []string, stdout, stderr io.Writer) int {
 			return prContextFail(stderr, err, false)
 		}
 	}
-	// Policy is loaded the same way scan loads it, after the login and
-	// branch verdict is written, so a bad policy file does not drop that
-	// verdict. The surface default is enforce and fail-on high. An
-	// explicit mode or fail-on replaces those defaults.
-	effective, err := loadPrContextPolicy(repo)
+	// Policy is loaded after the login and branch verdict is written, so
+	// a bad policy file does not drop that verdict. The repository
+	// layers come from the base revision. The checkout is the pull
+	// request's own merge, and policy.local.yaml is never read. A
+	// missing base uses the surface defaults. The managed org policy
+	// is still applied, and its locks still win.
+	effective, err := loadPrContextPolicy(repo, ev.Base)
 	if err != nil {
 		return prContextFail(stderr, err, false)
 	}
@@ -551,17 +555,168 @@ func cfg014Links(repo, base, head string, diff prcontext.Diff) ([]cfg014.ExtraHi
 	return extra, remaps, reason, nil
 }
 
-func loadPrContextPolicy(repo string) (*policy.Effective, error) {
+func loadPrContextPolicy(repo, base string) (*policy.Effective, error) {
+	return loadPrContextPolicyFrom(context.Background(), repo, base, "")
+}
+
+// loadPrContextPolicyFrom loads the pr-context policy. managed is the
+// org file; empty uses the platform managed path. Repository layers are
+// copied out of base with git show. The checkout is not a policy source.
+func loadPrContextPolicyFrom(ctx context.Context, repo, base, managed string) (*policy.Effective, error) {
 	env, catalog, err := loadRules(scanLimits())
 	if err != nil {
 		return nil, err
 	}
-	return policy.Load(policy.Options{
-		RepoRoot: repo,
+	root, err := os.MkdirTemp("", "tripcord-base-policy-")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = os.RemoveAll(root) }()
+	if err := materializeBasePolicy(ctx, repo, base, root); err != nil {
+		return nil, err
+	}
+	opts := policy.Options{
+		RepoRoot: root,
 		Surface:  policy.SurfacePRContext,
 		Env:      env,
 		Catalog:  catalog,
-	})
+	}
+	if managed != "" {
+		opts.ManagedPolicy = managed
+	}
+	return policy.Load(opts)
+}
+
+// errBaseUnavailable means base is not a revision in this clone. The
+// repository policy layer is then absent and the surface defaults apply.
+var errBaseUnavailable = errors.New("base revision is not available")
+
+// materializeBasePolicy writes <base>:.tripcord/policy.yaml and the
+// relative files it extends into dest, using paths relative to the
+// repository root. A missing file or a missing base leaves dest empty.
+// policy.local.yaml is never written. Absolute extends are left for
+// policy.Load, which reads them from the machine rather than the
+// checkout.
+func materializeBasePolicy(ctx context.Context, repo, base, dest string) error {
+	seen := map[string]bool{}
+	var walk func(rel string, required bool, depth int) error
+	walk = func(rel string, required bool, depth int) error {
+		if depth > policy.MaxExtendsDepth {
+			return &policy.Error{Source: rel, Err: fmt.Errorf("extends is nested deeper than %d", policy.MaxExtendsDepth)}
+		}
+		if seen[rel] {
+			return nil
+		}
+		if rel == policy.LocalFile {
+			return &policy.Error{Source: rel, Err: errors.New("pr-context does not load .tripcord/policy.local.yaml")}
+		}
+		data, err := gitShowBlob(ctx, repo, base, rel)
+		if errors.Is(err, os.ErrNotExist) || errors.Is(err, errBaseUnavailable) {
+			if !required {
+				return nil
+			}
+			return &policy.Error{Source: rel, Err: fmt.Errorf("%s does not exist in base", rel)}
+		}
+		if err != nil {
+			return err
+		}
+		if len(data) > policy.MaxFileBytes {
+			return &policy.Error{Source: rel, Err: fmt.Errorf("policy is %d bytes, limit %d", len(data), policy.MaxFileBytes)}
+		}
+		parsed, err := policy.Parse(data)
+		if err != nil {
+			return &policy.Error{Source: rel, Err: err}
+		}
+		seen[rel] = true
+		if err := writeRepoFile(dest, rel, data); err != nil {
+			return err
+		}
+		for _, entry := range parsed.Extends {
+			kind, _, err := policy.ParseExtends(entry)
+			if err != nil {
+				return &policy.Error{Source: rel, Err: err}
+			}
+			if kind != policy.ExtendsPath || strings.HasPrefix(entry, "/") {
+				continue
+			}
+			next, err := repoRelExtend(rel, entry)
+			if err != nil {
+				return &policy.Error{Source: rel, Err: err}
+			}
+			if err := walk(next, true, depth+1); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	return walk(policy.RepoFile, false, 0)
+}
+
+func repoRelExtend(from, entry string) (string, error) {
+	if strings.ContainsAny(entry, "\x00\r\n") {
+		return "", fmt.Errorf("extends %s contains a control character", entry)
+	}
+	joined := path.Clean(path.Join(path.Dir(from), filepath.ToSlash(entry)))
+	if !validPolicyRel(joined) {
+		return "", fmt.Errorf("extends %s escapes the repository", entry)
+	}
+	if joined == policy.LocalFile {
+		return "", errors.New("extends is not allowed to .tripcord/policy.local.yaml")
+	}
+	return joined, nil
+}
+
+func validPolicyRel(rel string) bool {
+	if rel == "" || strings.Contains(rel, ":") || strings.Contains(rel, "\\") || strings.ContainsAny(rel, "\x00\r\n") {
+		return false
+	}
+	if path.IsAbs(rel) || rel != path.Clean(rel) {
+		return false
+	}
+	return rel != "." && rel != ".." && !strings.HasPrefix(rel, "../")
+}
+
+func writeRepoFile(dest, rel string, data []byte) error {
+	if !validPolicyRel(rel) {
+		return &policy.Error{Source: rel, Err: errors.New("policy path is not inside the repository")}
+	}
+	full := filepath.Join(dest, filepath.FromSlash(rel))
+	if err := os.MkdirAll(filepath.Dir(full), 0o700); err != nil {
+		return err
+	}
+	return os.WriteFile(full, data, 0o600)
+}
+
+func gitShowBlob(ctx context.Context, repo, rev, rel string) ([]byte, error) {
+	if err := prcontext.ValidateRev("base", rev); err != nil {
+		return nil, err
+	}
+	if !validPolicyRel(rel) {
+		return nil, &policy.Error{Source: rel, Err: errors.New("policy path is not inside the repository")}
+	}
+	spec := rev + ":" + rel
+	out, err := gitrun.Run(ctx, repo, "--no-pager", "--no-optional-locks", "show", "--no-textconv", "--end-of-options", spec)
+	if err == nil {
+		return out, nil
+	}
+	var exitErr *gitrun.ExitError
+	if !errors.As(err, &exitErr) {
+		return nil, err
+	}
+	msg := strings.ToLower(exitErr.Stderr)
+	switch {
+	case strings.Contains(msg, "does not exist in"),
+		strings.Contains(msg, "exists on disk, but not"):
+		return nil, os.ErrNotExist
+	case strings.Contains(msg, "invalid object name"),
+		strings.Contains(msg, "bad revision"),
+		strings.Contains(msg, "unknown revision"),
+		strings.Contains(msg, "ambiguous argument"),
+		strings.Contains(msg, "needed a single revision"):
+		return nil, errBaseUnavailable
+	default:
+		return nil, err
+	}
 }
 
 func prContextFail(stderr io.Writer, err error, config bool) int {
