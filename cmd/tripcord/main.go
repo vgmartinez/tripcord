@@ -103,48 +103,78 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 	if errors.Is(err, errHelpWrite) {
 		return int(exitcode.Internal)
 	}
+	target := scanTarget{prog: "tripcord scan"}
 	if err != nil {
-		return scanConfigError(stderr, err)
+		return target.configError(stderr, err)
 	}
 	if opts.secrets || opts.all {
-		return scanConfigError(stderr, errors.New("secret scanning lands in v1; v0 supports --config only"))
+		return target.configError(stderr, errors.New("secret scanning lands in v1; v0 supports --config only"))
 	}
 	root, err := scanRoot(opts.path)
 	if err != nil {
-		return scanConfigError(stderr, err)
+		return target.configError(stderr, err)
 	}
+	target.root, target.policyRoot = root, root
+	return scanTree(target, opts, stdout, stderr)
+}
+
+// scanTarget is the tree scanTree reads. prog prefixes every message.
+// policyRoot holds the repository policy files (.tripcord/policy.yaml
+// and policy.local.yaml); it is root for scan, and a directory with no
+// policy for preopen, which must not let a cloned repository set its
+// own policy or exceptions.
+type scanTarget struct {
+	prog       string
+	root       string
+	policyRoot string
+}
+
+func (t scanTarget) configError(stderr io.Writer, err error) int {
+	writeString(stderr, t.prog+": "+redactHomeFromError(err)+"\n")
+	return int(exitcode.Config)
+}
+
+func (t scanTarget) internalError(stderr io.Writer, err error) int {
+	writeString(stderr, t.prog+": "+redactHomeFromError(err)+"\n")
+	return int(exitcode.Internal)
+}
+
+// scanTree scans t.root with opts, writes the findings, and returns the
+// scan exit code.
+func scanTree(t scanTarget, opts scanOptions, stdout, stderr io.Writer) int {
+	root := t.root
 	env, catalog, err := loadRules(scanLimits())
 	if err != nil {
-		return scanInternalError(stderr, err)
+		return t.internalError(stderr, err)
 	}
-	policyOpts := policy.Options{RepoRoot: root, RepoPolicy: opts.policy, Surface: policy.SurfaceScan, Env: env, Catalog: catalog}
+	policyOpts := policy.Options{RepoRoot: t.policyRoot, RepoPolicy: opts.policy, Surface: policy.SurfaceScan, Env: env, Catalog: catalog}
 	if opts.orgPolicy != "" {
 		policyOpts.OrgPolicy = []string{opts.orgPolicy}
 	}
 	effective, err := policy.Load(policyOpts)
 	if err != nil {
-		return scanConfigError(stderr, err)
+		return t.configError(stderr, err)
 	}
 	if opts.failOn != "" {
 		sev, err := model.ParseSeverity(opts.failOn)
 		if err != nil {
-			return scanConfigError(stderr, fmt.Errorf("--fail-on: %w", err))
+			return t.configError(stderr, fmt.Errorf("--fail-on: %w", err))
 		}
 		if err := effective.ApplyFailOn(sev); err != nil {
-			return scanConfigError(stderr, err)
+			return t.configError(stderr, err)
 		}
 	}
 	requested, err := parseHarnesses(opts.harnesses)
 	if err != nil {
-		return scanConfigError(stderr, err)
+		return t.configError(stderr, err)
 	}
 	repoScope, userScope, managedScope, err := parseScope(opts.scope)
 	if err != nil {
-		return scanConfigError(stderr, err)
+		return t.configError(stderr, err)
 	}
 	key, keyNote, err := loadFingerprintKey()
 	if err != nil {
-		return scanConfigError(stderr, err)
+		return t.configError(stderr, err)
 	}
 	registry, err := adapters.NewRegistry(
 		claude.New(claude.Options{SkipRepo: !repoScope, IncludeUser: userScope, IncludeManaged: managedScope, FingerprintKey: key}),
@@ -159,11 +189,11 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 		generic.New(generic.Options{SkipRepo: !repoScope, IncludeUser: userScope, FingerprintKey: key}),
 	)
 	if err != nil {
-		return scanInternalError(stderr, err)
+		return t.internalError(stderr, err)
 	}
 	selected, err := registry.Select(root, requested)
 	if err != nil {
-		return scanConfigError(stderr, err)
+		return t.configError(stderr, err)
 	}
 	// The editor opens .vscode/tasks.json whichever agent is in use, so
 	// a scan limited by --harness still reads it once. Only that file:
@@ -173,7 +203,7 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 	}
 	var items []model.ConfigItem
 	var diagnostics []adapters.Diagnostic
-	if keyNote != "" && writeString(stderr, "tripcord scan: "+keyNote+"\n") != int(exitcode.OK) {
+	if keyNote != "" && writeString(stderr, t.prog+": "+keyNote+"\n") != int(exitcode.OK) {
 		return int(exitcode.Internal)
 	}
 	for _, owner := range registry.ImpliedOwners(requested) {
@@ -190,13 +220,13 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 		case errors.As(err, &partial):
 			diagnostics = append(diagnostics, partial.Diagnostics...)
 		case err != nil:
-			return scanInternalError(stderr, fmt.Errorf("%s discovery: %w", adapter.Harness(), err))
+			return t.internalError(stderr, fmt.Errorf("%s discovery: %w", adapter.Harness(), err))
 		}
 		items = append(items, discovered...)
 	}
 	if repoScope {
 		if err := scriptcheck.Annotate(root, items); err != nil {
-			return scanInternalError(stderr, fmt.Errorf("hook scripts: %w", err))
+			return t.internalError(stderr, fmt.Errorf("hook scripts: %w", err))
 		}
 	}
 	diagnostics = adapters.DedupeEscapingSymlinkDiagnostics(diagnostics)
@@ -205,9 +235,9 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 		if err != nil {
 			var invoke *gitInvokeError
 			if errors.As(err, &invoke) && invoke.missing {
-				return scanInternalError(stderr, err)
+				return t.internalError(stderr, err)
 			}
-			return scanConfigError(stderr, err)
+			return t.configError(stderr, err)
 		}
 		items = slices.DeleteFunc(items, func(item model.ConfigItem) bool {
 			return item.Scope != model.ScopeRepo || !changed[item.Path]
@@ -230,7 +260,7 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 		}
 		finding, err := match.Finding(effective.Severity(match.Rule.ID, base), decision(effective.Mode))
 		if err != nil {
-			return scanInternalError(stderr, err)
+			return t.internalError(stderr, err)
 		}
 		findings = append(findings, finding)
 	}
@@ -243,37 +273,37 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		var pathErr *output.PathError
 		if errors.As(err, &pathErr) {
-			return scanConfigError(stderr, err)
+			return t.configError(stderr, err)
 		}
-		return scanInternalError(stderr, err)
+		return t.internalError(stderr, err)
 	}
 	blocking, notes := partitionDiagnostics(diagnostics)
 	if err := handle.SetDiagnostics(outputDiagnostics(blocking)); err != nil {
 		_ = handle.Close()
-		return scanInternalError(stderr, err)
+		return t.internalError(stderr, err)
 	}
 	for _, finding := range findings {
 		if err := handle.Write(finding); err != nil {
 			_ = handle.Close()
-			return scanInternalError(stderr, err)
+			return t.internalError(stderr, err)
 		}
 	}
 	if err := handle.Flush(); err != nil {
 		_ = handle.Close()
-		return scanInternalError(stderr, err)
+		return t.internalError(stderr, err)
 	}
 	if err := handle.Close(); err != nil {
-		return scanInternalError(stderr, err)
+		return t.internalError(stderr, err)
 	}
 	// Exit 3 wins over exit 1: an incomplete scan is not a clean result.
 	// Informational diagnostics are printed and do not change the exit code.
 	for _, d := range append(append([]adapters.Diagnostic{}, blocking...), notes...) {
-		if writeString(stderr, "tripcord scan: "+output.TerminalLine(d.String())+"\n") != int(exitcode.OK) {
+		if writeString(stderr, t.prog+": "+output.TerminalLine(d.String())+"\n") != int(exitcode.OK) {
 			return int(exitcode.Internal)
 		}
 	}
 	if len(blocking) > 0 {
-		if writeString(stderr, "tripcord scan: configuration could not be fully read or evaluated; the scan is incomplete\n") != int(exitcode.OK) {
+		if writeString(stderr, t.prog+": configuration could not be fully read or evaluated; the scan is incomplete\n") != int(exitcode.OK) {
 			return int(exitcode.Internal)
 		}
 		return int(exitcode.Config)
@@ -281,7 +311,7 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 	for _, finding := range findings {
 		fails, err := effective.Fails(finding.Severity)
 		if err != nil {
-			return scanInternalError(stderr, err)
+			return t.internalError(stderr, err)
 		}
 		if fails {
 			return int(exitcode.Findings)
@@ -701,20 +731,10 @@ var loadRules = func(limits rules.Limits) (*rules.Env, *rules.Catalog, error) {
 	return env, catalog, nil
 }
 
-func scanConfigError(stderr io.Writer, err error) int {
-	writeString(stderr, "tripcord scan: "+redactHomeFromError(err)+"\n")
-	return int(exitcode.Config)
-}
-
-func scanInternalError(stderr io.Writer, err error) int {
-	writeString(stderr, "tripcord scan: "+redactHomeFromError(err)+"\n")
-	return int(exitcode.Internal)
-}
-
 // redactHomeFromError rewrites the running user's home directory to "~"
 // in err's message, the same way sanitizeGitStderr already does for
-// git's own diagnostics. scanConfigError and scanInternalError are the
-// only two paths every scan error passes through (--output's
+// git's own diagnostics. scanTarget's configError and internalError are
+// the only two paths every scan error passes through (--output's
 // output.PathError, --policy/--org-policy's policy.Error, and the scan
 // PATH argument's wrapped os.Stat/filepath.Abs failures among them), so
 // redacting here covers all of them without each caller needing to
