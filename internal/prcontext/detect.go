@@ -97,7 +97,7 @@ func Detect(in Input) Result {
 			continue
 		}
 		for _, tool := range tools {
-			b.add(TypeGitAI, normalizedAgent(tool), tool, from+" refs/notes/ai")
+			b.add(TypeGitAI, canonicalAgent(tool), tool, from+" refs/notes/ai")
 		}
 	}
 	agents := make([]string, 0, len(b.agents))

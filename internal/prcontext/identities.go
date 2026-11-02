@@ -63,6 +63,26 @@ var branchPrefixes = []agentID{
 	{match: "devin/", agent: "devin"},
 }
 
+// canonicalAliases map a lowercased git-ai tool name onto a canonical
+// agent id. The raw tool string stays in the signal value. A tool that
+// is already a canonical id, or that is not listed, passes through
+// lowercased.
+var canonicalAliases = []agentID{
+	{match: "claude-code", agent: "claude"},
+}
+
+// canonicalAgent maps a git-ai tool name to the id stored on
+// signals[].agent and in agents[].
+func canonicalAgent(tool string) string {
+	tool = strings.ToLower(strings.TrimSpace(tool))
+	for _, id := range canonicalAliases {
+		if tool == id.match {
+			return id.agent
+		}
+	}
+	return tool
+}
+
 func agentForLogin(login string) (agent string, ok bool) {
 	login = strings.ToLower(strings.TrimSpace(login))
 	// A login counts only with the [bot] suffix. Bare names such as

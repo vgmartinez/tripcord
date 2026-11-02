@@ -14,7 +14,7 @@ Four signals are checked. A match on any of them sets `agent` to true.
 | Bot login | `bot-login` | The pull request author's login, and each commit's author and committer name or GitHub noreply address. A login matches only with the `[bot]` suffix. When the event includes `user.type`, the pull request author matches only if that type is `Bot`. Commit authors have no `user.type`, and an event that omits it is matched on the login alone. |
 | `Co-authored-by` | `co-authored-by` | Trailer addresses and bot logins in the trailing trailer block of a commit message. A mention earlier in the message is not a trailer. |
 | Branch prefix | `branch-prefix` | The head branch name starts with a known prefix, including the slash. The comparison is case-sensitive. |
-| git-ai note | `git-ai` | An authorship log on `refs/notes/ai` ([git-ai](https://github.com/git-ai-project/git-ai)) whose session or legacy prompt record names an agent tool. |
+| git-ai note | `git-ai` | An authorship log on `refs/notes/ai` ([git-ai](https://github.com/git-ai-project/git-ai)) whose session or legacy prompt record names an agent tool. The raw tool is `signals[].value`; `signals[].agent` is the canonical id. |
 
 The identity tables are **unverified** ([#34](https://github.com/vgmartinez/tripcord/issues/34)). They are one list each in
 `internal/prcontext/identities.go`, and each list carries:
@@ -68,10 +68,28 @@ Codex has no trailer address. It is recognized only as
 | `codex/` | codex |
 | `devin/` | devin |
 
-git-ai tool names are not in these tables. The tool string from the note
-is the agent id, lowercased (`cursor`, `claude`, `copilot`, ...). A tool
-name that is not a single token (letters, digits, and `._+-`) is ignored.
-A note that records only humans is not a signal.
+### Canonical agent ids
+
+`agents[]` and `signals[].agent` use these ids. Logins, trailer addresses,
+and branch prefixes come from the tables above. A git-ai tool is mapped
+through `canonicalAliases` in `internal/prcontext/identities.go`; a tool
+that is not listed passes through lowercased, so `claude` stays `claude`
+and an unknown tool such as `amp` stays `amp`. The raw tool string is
+kept in `signals[].value`.
+
+| Canonical id | Logins | Trailer addresses | Branch prefixes | git-ai aliases |
+| --- | --- | --- | --- | --- |
+| claude | `claude[bot]` | `noreply@anthropic.com` | `claude/` | `claude-code` |
+| codex | `chatgpt-codex-connector[bot]` | | `codex/` | |
+| copilot | `copilot-swe-agent[bot]`, `copilot[bot]` | `copilot@github.com` | `copilot/` | |
+| cursor | `cursor[bot]` | `cursoragent@cursor.com` | `cursor/` | |
+| devin | `devin-ai-integration[bot]` | | `devin/` | |
+| jules | `google-labs-jules[bot]` | | | |
+| opencode | | `noreply@opencode.ai` | | |
+| windsurf | | `windsurf@codeium.com` | | |
+
+A tool name that is not a single token (letters, digits, and `._+-`) is
+ignored. A note that records only humans is not a signal.
 
 ## Inputs
 

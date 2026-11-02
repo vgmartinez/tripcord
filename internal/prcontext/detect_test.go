@@ -148,6 +148,32 @@ func TestDetectRejectsUnsafeToolName(t *testing.T) {
 	}
 }
 
+func TestCanonicalGitAI(t *testing.T) {
+	t.Parallel()
+	sha := "0123456789abcdef0123456789abcdef01234567"
+	for _, tc := range []struct {
+		tool  string
+		agent string
+		value string
+	}{
+		{tool: "claude-code", agent: "claude", value: "claude-code"},
+		{tool: "Claude-Code", agent: "claude", value: "Claude-Code"},
+		{tool: "amp", agent: "amp", value: "amp"},
+		{tool: "AMP", agent: "amp", value: "AMP"},
+	} {
+		t.Run(tc.tool, func(t *testing.T) {
+			t.Parallel()
+			got := Detect(Input{Commits: []Commit{{SHA: sha, Note: aiNote(tc.tool)}}})
+			if !got.Agent || len(got.Agents) != 1 || got.Agents[0] != tc.agent {
+				t.Fatalf("agents = %v, want %s", got.Agents, tc.agent)
+			}
+			if len(got.Signals) != 1 || got.Signals[0].Agent != tc.agent || got.Signals[0].Value != tc.value {
+				t.Fatalf("signal = %+v", got.Signals)
+			}
+		})
+	}
+}
+
 func TestPRAuthorType(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {

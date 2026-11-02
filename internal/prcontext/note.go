@@ -102,11 +102,6 @@ func validTool(tool string) bool {
 	return true
 }
 
-// normalizedAgent lowercases a git-ai tool name into an agent id.
-func normalizedAgent(tool string) string {
-	return strings.ToLower(strings.TrimSpace(tool))
-}
-
 // oneLine collapses whitespace so a signal value stays on one text line.
 func oneLine(s string) string {
 	return strings.Join(strings.Fields(strings.ReplaceAll(s, "\x00", "")), " ")
