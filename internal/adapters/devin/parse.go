@@ -212,6 +212,11 @@ func (f *file) workingDirectory(command string) (string, bool) {
 // an argument such as "git -C ." does not count. A slash continues a
 // token that already starts with a dot, so the dot is not flushed as its
 // own word.
+//
+// The command word stays open after a keyword or prefix that introduces
+// it (then, do, else, elif, time, if, while, until, builtin, command,
+// nohup, env, and "!"), and after a leading NAME=value assignment.
+// eval and exec are prefixes too; they also flag on their own.
 func hasShellState(command string) bool {
 	depth := 0
 	var quote byte
@@ -227,8 +232,12 @@ func hasShellState(command string) bool {
 			return atCommand
 		}
 		switch text {
-		case "cd", "pushd", "popd", "eval", "source", "exec", "function":
+		case "cd", "pushd", "popd", "source", "function", "eval", "exec":
 			return true
+		}
+		if isCommandPrefix(text) || (atCommand && isShellAssignment(text)) {
+			atCommand = true
+			return false
 		}
 		atCommand = false
 		return false
@@ -272,11 +281,13 @@ func hasShellState(command string) bool {
 			word = append(word, '/')
 		case depth == 0 && isShellWord(c):
 			word = append(word, c)
+		case depth == 0 && continuesAssignment(word, c):
+			word = append(word, c)
 		case depth == 0:
 			if flush() {
 				return true
 			}
-			if c == ';' || c == '&' || c == '|' || c == '\n' || c == '{' || c == '}' {
+			if c == ';' || c == '&' || c == '|' || c == '\n' || c == '{' || c == '}' || c == '!' {
 				atCommand = true
 			}
 		}
@@ -284,8 +295,55 @@ func hasShellState(command string) bool {
 	return flush()
 }
 
+// isCommandPrefix reports whether word introduces the following command
+// word instead of being that command. eval and exec are not listed: they
+// flag on their own before this is consulted.
+func isCommandPrefix(word string) bool {
+	switch word {
+	case "then", "do", "else", "elif", "time", "if", "while", "until", "builtin", "command", "nohup", "env":
+		return true
+	default:
+		return false
+	}
+}
+
+// isShellAssignment reports whether word is a leading NAME=value shell
+// assignment. The value may be empty. Anything after the first "=" is
+// the value, so the name is only the characters before it.
+func isShellAssignment(word string) bool {
+	name, _, ok := strings.Cut(word, "=")
+	if !ok || name == "" {
+		return false
+	}
+	for i := 0; i < len(name); i++ {
+		c := name[i]
+		switch {
+		case c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z':
+		case c >= '0' && c <= '9' && i > 0:
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// continuesAssignment reports whether c is still part of an assignment
+// value. "=" joins the name via isShellWord; a slash or similar character
+// would otherwise end the word and look like the command.
+func continuesAssignment(word []byte, c byte) bool {
+	if !isShellAssignment(string(word)) {
+		return false
+	}
+	switch c {
+	case ' ', '\t', '\n', '\r', ';', '&', '|', '(', ')', '{', '}', '<', '>':
+		return false
+	default:
+		return true
+	}
+}
+
 func isShellWord(c byte) bool {
-	return c == '_' || c == '-' || c == '.' ||
+	return c == '_' || c == '-' || c == '.' || c == '=' ||
 		c >= 'a' && c <= 'z' ||
 		c >= 'A' && c <= 'Z' ||
 		c >= '0' && c <= '9'
