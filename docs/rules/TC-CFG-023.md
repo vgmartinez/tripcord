@@ -119,6 +119,8 @@ No Docker advisory is seeded. Image parsing is covered by unit tests.
   are not guesses.
 - A range that still admits a fixed version, such as `^0.6.0` when
   0.6.3 is fixed.
+- A version specifier over 256 bytes or 32 clauses. It is opaque, so a
+  long `!=` list cannot make the scan quadratic.
 - An advisory that is not in the embedded list yet.
 - An argument the sanitizer replaced with `[REDACTED]`. A package spec
   such as `figma-developer-mcp@0.6.2` is not redacted. A spec whose
