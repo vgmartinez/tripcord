@@ -53,6 +53,15 @@ Team hooks distributed from the dashboard are a separate mechanism; see
 - Team hooks distributed from the Cursor dashboard
   (`~/.cursor/managed/team_*/hooks/`): these are scripts, not a
   `hooks.json`, and are not read.
+- A file-level switch that turns every hook off. Cursor's hooks
+  reference lists one global option, `version`
+  ([Cursor hooks](https://cursor.com/docs/hooks), reviewed 2026-11-02).
+  Loading Claude Code hooks is gated by Cursor Settings → Agents →
+  Third-Party Imports → Include Third-Party Plugins, Skills, and Other
+  Configs
+  ([Third Party Hooks](https://cursor.com/docs/reference/third-party-hooks)),
+  which is not a key in a committed file. This adapter does not emit a
+  kill switch, and TC-CFG-016 has no Cursor clause.
 - Agent transcripts.
 - `.vscode/settings.json` (`task.allowAutomaticTasks`,
   `chat.tools.autoApprove`), which several Cursor surfaces also honor:

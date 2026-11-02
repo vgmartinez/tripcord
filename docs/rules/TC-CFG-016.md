@@ -21,6 +21,28 @@ own once its hook mode ships (see [docs/README.md](../README.md),
 | GitHub Copilot | `disableAllHooks: true` (`.github/copilot/settings.json`, or `.github/hooks/*.json`'s own `disableAllHooks`) |
 | Gemini CLI | `hooksConfig.enabled: false` |
 
+Cursor and Windsurf are not in the table. Neither documents a
+file-level setting that turns every hook off, and this rule does not
+guess a key.
+
+Cursor's hooks reference lists one global option, `version`
+([Cursor hooks](https://cursor.com/docs/hooks), reviewed 2026-11-02).
+Loading Claude Code hooks is a Cursor Settings toggle, Agents →
+Third-Party Imports → Include Third-Party Plugins, Skills, and Other
+Configs
+([Third Party Hooks](https://cursor.com/docs/reference/third-party-hooks)).
+That toggle is not a key in a committed file.
+
+Windsurf's Cascade hooks page
+([Cascade hooks](https://docs.windsurf.com/windsurf/cascade/hooks)),
+reviewed for this adapter on 2026-10-31, documents handler fields
+`command`, `powershell`, `show_output`, and `working_directory`, and no
+disable-all key. Fetched again on 2026-11-02, that URL serves Devin
+Local's customization page. That page does not document a committed
+disable-all key either. It says hooks neither load nor run while a
+workspace is open in Restricted Mode, which is a workspace mode, not a
+setting in `hooks.json`.
+
 Gemini CLI's `hooksConfig.disabled` is a list of specific hook names,
 not a blanket switch; this rule does not try to tell which hook a
 partial disable targets, the same way it does not try to tell which
@@ -44,6 +66,12 @@ Not reported:
   pull request's base and head could cover deletion directly; this
   rule covers only the config precondition that defeats hooks
   wholesale, which is detectable, and useful, on a single tree today.
+- A tree that contains `.tripcord/policy.yaml` or
+  `.tripcord/bootstrap.sh` but no hook invoking tripcord is not
+  reported. v0 has no `tripcord init` subcommand
+  ([fingerprint.md](../fingerprint.md) records that), so there is no
+  `init --embed` output that names the wiring files such a check would
+  compare against. A missing file emits no config item.
 - Tripcord does not yet register its own hook in any harness (hook mode
   is implemented later; see [docs/README.md](../README.md),
   "Decisions"). This rule's finding stands on its own merits
@@ -87,4 +115,7 @@ blanket switch.
 - [Claude Code hooks](https://code.claude.com/docs/en/hooks)
 - [Copilot hooks reference](https://docs.github.com/en/copilot/reference/hooks-reference)
 - [Gemini CLI documentation](https://geminicli.com/docs/)
+- [Cursor hooks](https://cursor.com/docs/hooks)
+- [Cursor third-party hooks](https://cursor.com/docs/reference/third-party-hooks)
+- [Cascade hooks](https://docs.windsurf.com/windsurf/cascade/hooks)
 - [Novee: The Sandbox is a Suggestion](https://novee.security/blog/breaking-ai-agent-sandboxes/)

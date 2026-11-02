@@ -11,6 +11,11 @@
 # hooks by id and is not read here, the same way this pack does not try
 # to tell which hook a partial disable targets).
 #
+# Cursor and Windsurf are not in harness: neither documents a
+# file-level key that turns every hook off. Cursor's only global hooks
+# option is version; Windsurf's Cascade handler fields have no such
+# key. See docs/rules/TC-CFG-016.md. No key is guessed here.
+#
 # What this rule does not do: tell whether a hook that used to be
 # present (Tripcord's own, once it registers one, or any other) was
 # removed. That needs a base tree to diff against, which a single scan

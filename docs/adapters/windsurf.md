@@ -107,6 +107,15 @@ adapter.
   adapter.
 - Windsurf editor settings (`settings.json`, terminal auto-execution
   allow and deny lists).
+- A file-level switch that turns every hook off. Cascade handler fields
+  are `command`, `powershell`, `show_output`, and `working_directory`
+  ([Cascade hooks](https://docs.windsurf.com/windsurf/cascade/hooks),
+  reviewed 2026-10-31), and that list has no such key. Fetched on
+  2026-11-02, the same URL serves Devin Local's customization page,
+  which also documents no committed disable-all key. It says hooks
+  neither load nor run while a workspace is open in Restricted Mode;
+  that is a workspace mode, not a `hooks.json` setting. This adapter
+  does not invent a key, and TC-CFG-016 has no Windsurf clause.
 
 ## Sources
 
