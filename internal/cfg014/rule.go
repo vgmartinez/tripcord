@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/vgmartinez/tripcord/internal/model"
 	"github.com/vgmartinez/tripcord/internal/prcontext"
@@ -47,10 +48,12 @@ type Classifier interface {
 // Input is everything Evaluate needs. PathsKnown is false when the diff
 // could not be read. Truncated is true when the diff was longer than the
 // reader kept. Reviews.Available is false when the event had no reviews
-// array.
+// array. Head is the pull request head SHA; an approval counts only when
+// its commit_id equals Head.
 type Input struct {
 	Agent       bool
 	Author      string
+	Head        string
 	Paths       []string
 	PathsKnown  bool
 	Truncated   bool
@@ -69,10 +72,12 @@ type Outcome struct {
 
 // Evaluate applies TC-CFG-014. A pull request pr-context did not classify
 // as agent-authored is clear. So is an agent-authored pull request that
-// does not change a classified path. Human approval is an APPROVED review
-// whose user.type is User, whose login does not end in [bot], and whose
-// login is not the pull request author's. A qualifying review counts even
-// when Reviews.Available is false, because a single exposed approval is
+// does not change a classified path. Human approval is the latest
+// non-COMMENTED review from a user, and that review has to be APPROVED
+// on Head. user.type is User, the login does not end in [bot], and the
+// login is not the pull request author's. Review state is compared
+// case-insensitively. A qualifying review counts even when
+// Reviews.Available is false, because a single exposed approval is
 // positive evidence. Anything else, when a classified path changed and
 // the reviews array is missing, is incomplete.
 func Evaluate(in Input) Outcome {
@@ -86,7 +91,7 @@ func Evaluate(in Input) Outcome {
 		return Outcome{Status: StatusIncomplete, Reason: "changed paths could not be read"}
 	}
 	hits := classifiedPaths(in.Paths, in.Classifiers)
-	approved := humanApproval(in.Author, in.Reviews)
+	approved := humanApproval(in.Author, in.Head, in.Reviews)
 	if in.Truncated && len(hits) == 0 && !approved {
 		return Outcome{Status: StatusIncomplete, Reason: "the diff was truncated before an agent-config path was found"}
 	}
@@ -153,8 +158,8 @@ func classifiedPaths(paths []string, classifiers []Classifier) []classified {
 	return out
 }
 
-func humanApproval(author string, reviews prcontext.ReviewSet) bool {
-	for _, review := range reviews.Reviews {
+func humanApproval(author, head string, reviews prcontext.ReviewSet) bool {
+	for _, review := range latestReviews(reviews.Reviews) {
 		if review.State != "APPROVED" || review.UserType != "User" {
 			continue
 		}
@@ -165,9 +170,77 @@ func humanApproval(author string, reviews prcontext.ReviewSet) bool {
 		if author != "" && strings.EqualFold(login, author) {
 			continue
 		}
+		if !sameCommit(review.CommitID, head) {
+			continue
+		}
 		return true
 	}
 	return false
+}
+
+// latestReviews keeps, for each login, that user's last review whose
+// state is not COMMENTED. Reviews are ordered by submitted_at when both
+// sides have a timestamp, and by array order otherwise. State is returned
+// in upper case.
+func latestReviews(reviews []prcontext.Review) []prcontext.Review {
+	type row struct {
+		review  prcontext.Review
+		index   int
+		when    time.Time
+		hasWhen bool
+	}
+	grouped := map[string][]row{}
+	var order []string
+	for i, review := range reviews {
+		state := strings.ToUpper(strings.TrimSpace(review.State))
+		if state == "" || state == "COMMENTED" {
+			continue
+		}
+		review.State = state
+		key := strings.ToLower(review.Login)
+		if _, ok := grouped[key]; !ok {
+			order = append(order, key)
+		}
+		item := row{review: review, index: i}
+		if when, ok := parseSubmitted(review.SubmittedAt); ok {
+			item.when = when
+			item.hasWhen = true
+		}
+		grouped[key] = append(grouped[key], item)
+	}
+	out := make([]prcontext.Review, 0, len(order))
+	for _, key := range order {
+		rows := grouped[key]
+		slices.SortStableFunc(rows, func(a, b row) int {
+			if a.hasWhen && b.hasWhen {
+				if c := a.when.Compare(b.when); c != 0 {
+					return c
+				}
+			}
+			return a.index - b.index
+		})
+		out = append(out, rows[len(rows)-1].review)
+	}
+	return out
+}
+
+func parseSubmitted(value string) (time.Time, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return time.Time{}, false
+	}
+	for _, layout := range []string{time.RFC3339Nano, time.RFC3339} {
+		if when, err := time.Parse(layout, value); err == nil {
+			return when, true
+		}
+	}
+	return time.Time{}, false
+}
+
+func sameCommit(commitID, head string) bool {
+	commitID = strings.TrimSpace(commitID)
+	head = strings.TrimSpace(head)
+	return commitID != "" && head != "" && strings.EqualFold(commitID, head)
 }
 
 func findingFor(hits []classified) (model.Finding, error) {

@@ -5,6 +5,6 @@
     "base": {"sha": "__BASE__"}
   },
   "reviews": [
-    {"state": "APPROVED", "user": {"login": "Ada", "type": "User"}}
+    {"state": "APPROVED", "commit_id": "__HEAD__", "user": {"login": "Ada", "type": "User"}}
   ]
 }

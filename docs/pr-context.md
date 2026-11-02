@@ -237,9 +237,14 @@ files, not changes that landed on the base branch later). A path counts
 when one of the installed adapters classifies it. That is the same
 path check the adapter uses during a scan. It does not read the file.
 
-Human approval is an `APPROVED` review whose `user.type` is `User`,
-whose login does not end in `[bot]`, and whose login is not the pull
-request author's (compared case-insensitively). A `reviews` array,
+Human approval is each user's latest non-`COMMENTED` review, and that
+review has to be `APPROVED` (any casing) with `commit_id` equal to the
+pull request head. `user.type` is `User`, the login does not end in
+`[bot]`, and the login is not the pull request author's (compared
+case-insensitively). An approval of the base SHA, or a later
+`CHANGES_REQUESTED` from the same user, does not clear the finding.
+Reviews are ordered by `submitted_at`, then by array order.
+A `reviews` array,
 including `[]`, is the whole set. `--reviews-file` supplies that array
 when the event does not: it is the complete set, and `pr-context` still
 makes no API call. Fetching the pages belongs in a later workflow.

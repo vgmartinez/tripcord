@@ -19,7 +19,8 @@ func (f fakeClassifier) Classifies(rel string) bool { return f.paths[rel] }
 
 func TestEvaluate(t *testing.T) {
 	cursor := fakeClassifier{harness: model.HarnessCursor, paths: map[string]bool{".cursor/hooks.json": true}}
-	human := prcontext.Review{State: "APPROVED", Login: "Ada", UserType: "User"}
+	const headSHA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	human := prcontext.Review{State: "APPROVED", Login: "Ada", UserType: "User", CommitID: headSHA}
 	tests := []struct {
 		name   string
 		in     Input
@@ -38,12 +39,12 @@ func TestEvaluate(t *testing.T) {
 		},
 		{
 			name:   "agent config with a human approval",
-			in:     Input{Agent: true, Author: "claude[bot]", Paths: []string{".cursor/hooks.json"}, PathsKnown: true, Reviews: prcontext.ReviewSet{Available: true, Reviews: []prcontext.Review{human}}, Classifiers: []Classifier{cursor}},
+			in:     Input{Agent: true, Author: "claude[bot]", Head: headSHA, Paths: []string{".cursor/hooks.json"}, PathsKnown: true, Reviews: prcontext.ReviewSet{Available: true, Reviews: []prcontext.Review{human}}, Classifiers: []Classifier{cursor}},
 			status: StatusClear,
 		},
 		{
 			name:   "lone approval still clears",
-			in:     Input{Agent: true, Author: "claude[bot]", Paths: []string{".cursor/hooks.json"}, PathsKnown: true, Reviews: prcontext.ReviewSet{Reviews: []prcontext.Review{human}}, Classifiers: []Classifier{cursor}},
+			in:     Input{Agent: true, Author: "claude[bot]", Head: headSHA, Paths: []string{".cursor/hooks.json"}, PathsKnown: true, Reviews: prcontext.ReviewSet{Reviews: []prcontext.Review{human}}, Classifiers: []Classifier{cursor}},
 			status: StatusClear,
 		},
 		{
@@ -133,17 +134,101 @@ func TestCaseInsensitiveAuthorAndLogin(t *testing.T) {
 	if got.Status != StatusMatch {
 		t.Fatalf("status = %s, want match so the author cannot approve themselves under different case", got.Status)
 	}
+	const headSHA = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 	other := Evaluate(Input{
 		Agent:      true,
 		Author:     "claude[bot]",
+		Head:       headSHA,
 		Paths:      []string{".cursor/hooks.json"},
 		PathsKnown: true,
 		Reviews: prcontext.ReviewSet{Reviews: []prcontext.Review{{
-			State: "approved", Login: "Grace", UserType: "User",
+			State: "approved", Login: "Grace", UserType: "User", CommitID: headSHA,
 		}}},
 		Classifiers: []Classifier{cursor},
 	})
-	if other.Status != StatusIncomplete {
-		t.Fatalf("lowercase state = %s, want incomplete; only APPROVED counts", other.Status)
+	if other.Status != StatusClear {
+		t.Fatalf("lowercase state = %s, want clear; approved is normalized", other.Status)
+	}
+}
+
+func TestStaleAndSupersededReviewsDoNotClear(t *testing.T) {
+	cursor := fakeClassifier{harness: model.HarnessCursor, paths: map[string]bool{".cursor/hooks.json": true}}
+	const (
+		headSHA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+		baseSHA = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	)
+	base := Input{
+		Agent:       true,
+		Author:      "claude[bot]",
+		Head:        headSHA,
+		Paths:       []string{".cursor/hooks.json"},
+		PathsKnown:  true,
+		Classifiers: []Classifier{cursor},
+	}
+	approve := func(commit, state, at string) prcontext.Review {
+		return prcontext.Review{State: state, Login: "Ada", UserType: "User", CommitID: commit, SubmittedAt: at}
+	}
+	tests := []struct {
+		name    string
+		reviews []prcontext.Review
+		status  Status
+	}{
+		{
+			name:    "approval of the base sha",
+			reviews: []prcontext.Review{approve(baseSHA, "APPROVED", "")},
+			status:  StatusMatch,
+		},
+		{
+			name:    "approval of a random sha",
+			reviews: []prcontext.Review{approve("0123456789abcdef0123456789abcdef01234567", "APPROVED", "")},
+			status:  StatusMatch,
+		},
+		{
+			name:    "approval with no commit id",
+			reviews: []prcontext.Review{approve("", "APPROVED", "")},
+			status:  StatusMatch,
+		},
+		{
+			name: "approved then changes requested",
+			reviews: []prcontext.Review{
+				approve(headSHA, "APPROVED", "2026-01-01T00:00:00Z"),
+				approve(headSHA, "CHANGES_REQUESTED", "2026-01-02T00:00:00Z"),
+			},
+			status: StatusMatch,
+		},
+		{
+			name: "changes requested then approved, array order without timestamps",
+			reviews: []prcontext.Review{
+				approve(headSHA, "CHANGES_REQUESTED", ""),
+				approve(headSHA, "approved", ""),
+			},
+			status: StatusClear,
+		},
+		{
+			name: "approval followed by a comment still counts",
+			reviews: []prcontext.Review{
+				approve(headSHA, "APPROVED", "2026-01-01T00:00:00Z"),
+				approve(headSHA, "COMMENTED", "2026-01-03T00:00:00Z"),
+			},
+			status: StatusClear,
+		},
+		{
+			name: "later submitted_at wins over array order",
+			reviews: []prcontext.Review{
+				approve(headSHA, "CHANGES_REQUESTED", "2026-01-02T00:00:00Z"),
+				approve(headSHA, "APPROVED", "2026-01-01T00:00:00Z"),
+			},
+			status: StatusMatch,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			in := base
+			in.Reviews = prcontext.ReviewSet{Available: true, Reviews: tc.reviews}
+			got := Evaluate(in)
+			if got.Status != tc.status {
+				t.Fatalf("status = %s, want %s (%s)", got.Status, tc.status, got.Reason)
+			}
+		})
 	}
 }

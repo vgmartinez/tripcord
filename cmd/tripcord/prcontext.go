@@ -146,6 +146,7 @@ func runPrContext(args []string, stdout, stderr io.Writer) int {
 			outcome = cfg014.Evaluate(cfg014.Input{
 				Agent:       true,
 				Author:      ev.Login,
+				Head:        ev.Head,
 				Paths:       diff.Paths,
 				PathsKnown:  !diff.Missing,
 				Truncated:   diff.Truncated,

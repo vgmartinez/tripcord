@@ -34,12 +34,20 @@ The diff is `git diff --name-status -z base...head`: files the pull
 request changed relative to the merge base. Both sides of a rename or
 copy are included. A deletion counts.
 
-Human approval is one review the event exposes with all of:
+Human approval is one user's latest review that is not `COMMENTED`,
+and that review has all of:
 
-- `state` exactly `APPROVED`
+- `state` `APPROVED`, compared case-insensitively (`approved` counts)
+- `commit_id` equal to the pull request head SHA, so an approval of
+  the base or of an earlier commit does not survive a later push
 - `user.type` exactly `User`
 - `user.login` not ending in `[bot]`
 - `user.login` different from the pull request author, ignoring case
+
+Reviews are ordered by `submitted_at` when it is present on the reviews
+being compared, and by array order otherwise. A later
+`CHANGES_REQUESTED` from the same user replaces an earlier approval.
+`COMMENTED` does not.
 
 A `reviews` array, including an empty array, is the complete set.
 `--reviews-file` is that array when the event does not carry one: a

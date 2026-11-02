@@ -106,7 +106,7 @@ func TestCfg014ReviewsFile(t *testing.T) {
 	event := writeCfg014Event(t, "no-reviews.json", base, head)
 
 	t.Run("approval in the file clears", func(t *testing.T) {
-		reviews := writeTemp(t, "reviews.json", `[{"state":"APPROVED","user":{"login":"Ada","type":"User"}}]`)
+		reviews := writeTemp(t, "reviews.json", `[{"state":"APPROVED","commit_id":"`+head+`","user":{"login":"Ada","type":"User"}}]`)
 		code, stdout, stderr, output := runCfg014Args(t, repo, event, "text", "--reviews-file", reviews)
 		if code != int(exitcode.OK) {
 			t.Fatalf("exit %d, want 0\nstderr: %s\nstdout: %s", code, stderr, stdout)
@@ -127,7 +127,7 @@ func TestCfg014ReviewsFile(t *testing.T) {
 	})
 	t.Run("file replaces event reviews", func(t *testing.T) {
 		ev := writeCfg014Event(t, "empty-reviews.json", base, head)
-		reviews := writeTemp(t, "reviews.json", `[{"state":"APPROVED","user":{"login":"Ada","type":"User"}}]`)
+		reviews := writeTemp(t, "reviews.json", `[{"state":"approved","commit_id":"`+head+`","user":{"login":"Ada","type":"User"}}]`)
 		code, stdout, stderr, _ := runCfg014Args(t, repo, ev, "text", "--reviews-file", reviews)
 		if code != int(exitcode.OK) || strings.Contains(stdout, "tc-cfg-014:") {
 			t.Fatalf("exit %d, want the file to win\nstderr: %s\nstdout: %s", code, stderr, stdout)
@@ -155,6 +155,27 @@ func TestCfg014ReviewsFile(t *testing.T) {
 					t.Fatalf("stderr = %s", stderr)
 				}
 			})
+		}
+	})
+	t.Run("stale approval does not clear", func(t *testing.T) {
+		for _, commitID := range []string{base, "0123456789abcdef0123456789abcdef01234567"} {
+			body := `[{"state":"APPROVED","commit_id":"` + commitID + `","user":{"login":"Ada","type":"User"}}]`
+			reviews := writeTemp(t, "reviews.json", body)
+			code, stdout, stderr, _ := runCfg014Args(t, repo, event, "text", "--reviews-file", reviews)
+			if code != int(exitcode.Findings) {
+				t.Fatalf("commit %s exit %d, want 1\nstderr: %s\nstdout: %s", commitID, code, stderr, stdout)
+			}
+		}
+	})
+	t.Run("changes requested after approval does not clear", func(t *testing.T) {
+		body := `[
+			{"state":"APPROVED","commit_id":"` + head + `","submitted_at":"2026-01-01T00:00:00Z","user":{"login":"Ada","type":"User"}},
+			{"state":"CHANGES_REQUESTED","commit_id":"` + head + `","submitted_at":"2026-01-02T00:00:00Z","user":{"login":"Ada","type":"User"}}
+		]`
+		reviews := writeTemp(t, "reviews.json", body)
+		code, stdout, stderr, _ := runCfg014Args(t, repo, event, "text", "--reviews-file", reviews)
+		if code != int(exitcode.Findings) {
+			t.Fatalf("exit %d, want 1\nstderr: %s\nstdout: %s", code, stderr, stdout)
 		}
 	})
 	t.Run("symlink", func(t *testing.T) {
