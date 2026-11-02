@@ -1,1 +1,1 @@
-/tmp/tripcord-outside.sh
+inside-link-target
