@@ -1,0 +1,10 @@
+{
+  "pull_request": {
+    "user": {"login": "claude[bot]", "type": "Bot"},
+    "head": {"ref": "feature/hooks", "sha": "__HEAD__"},
+    "base": {"sha": "__BASE__"}
+  },
+  "reviews": [
+    {"state": "APPROVED", "commit_id": "__HEAD__", "user": {"login": "Ada", "type": "User"}}
+  ]
+}

@@ -68,6 +68,10 @@ func New(options Options) *Adapter {
 // Harness implements adapters.Adapter.
 func (*Adapter) Harness() model.Harness { return model.SurfaceGeneric }
 
+// Classifies reports whether rel is a shared file this adapter reads.
+// It uses the same path rules as discovery and does not open the file.
+func (*Adapter) Classifies(rel string) bool { return classify(rel) != roleNone }
+
 // Detect reports whether the repository has a shared file, or a shared
 // path that cannot be read safely.
 func (a *Adapter) Detect(repoRoot string) bool {

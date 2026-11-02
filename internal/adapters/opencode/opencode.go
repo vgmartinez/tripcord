@@ -73,6 +73,12 @@ func New(options Options) *Adapter {
 // Harness implements adapters.Adapter.
 func (*Adapter) Harness() model.Harness { return model.HarnessOpenCode }
 
+// Classifies reports whether rel is a file this adapter reads. It uses
+// the same path rules as discovery and does not open the file. Nested
+// plugin and tool files are included; discovery notes them and does not
+// treat them as the loaded entrypoint.
+func (*Adapter) Classifies(rel string) bool { return classify(rel) != roleNone }
+
 // SharedOwners implements adapters.SharedReader: OpenCode also loads
 // AGENTS.md and shared skills (generic), and falls back to CLAUDE.md and
 // .claude/skills (claude).

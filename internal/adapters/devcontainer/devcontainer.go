@@ -47,6 +47,9 @@ func New(options Options) *Adapter {
 // Harness implements adapters.Adapter.
 func (*Adapter) Harness() model.Harness { return model.SurfaceDevcontainer }
 
+// Classifies reports whether rel is a Dev Container file this adapter reads.
+func (*Adapter) Classifies(rel string) bool { return isConfig(rel) }
+
 // Detect reports whether the repository holds a Dev Container
 // configuration, or a config path that cannot be read safely.
 func (a *Adapter) Detect(repoRoot string) bool {

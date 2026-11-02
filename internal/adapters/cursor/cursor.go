@@ -58,6 +58,10 @@ func New(options Options) *Adapter {
 // Harness implements adapters.Adapter.
 func (*Adapter) Harness() model.Harness { return model.HarnessCursor }
 
+// Classifies reports whether rel is a file this adapter reads. It uses
+// the same path rules as discovery and does not open the file.
+func (*Adapter) Classifies(rel string) bool { return classify(rel) != roleNone }
+
 // SharedOwners implements adapters.SharedReader: Cursor also loads
 // AGENTS.md and .vscode files (generic) and Claude Code hooks (claude).
 func (*Adapter) SharedOwners() []model.Harness {

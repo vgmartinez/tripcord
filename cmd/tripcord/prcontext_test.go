@@ -209,7 +209,17 @@ func TestPrContextOversizedCommitFieldStillDetectsBot(t *testing.T) {
 // GITHUB_OUTPUT must reflect the event's bot author.
 func TestPrContextNonRepoStillDetectsBot(t *testing.T) {
 	clearPrContextEnv(t)
-	notARepo := t.TempDir()
+	// t.TempDir often lives inside this module. Git would then walk up
+	// to the checkout and report a missing object instead of "not a git
+	// repository", which is the failure CI sees. The ceiling stops that
+	// walk. gitrun keeps GIT_CEILING_DIRECTORIES and drops every other
+	// GIT_* variable.
+	ceiling := t.TempDir()
+	t.Setenv("GIT_CEILING_DIRECTORIES", ceiling)
+	notARepo := filepath.Join(ceiling, "work")
+	if err := os.Mkdir(notARepo, 0o700); err != nil {
+		t.Fatal(err)
+	}
 	event := filepath.Join(t.TempDir(), "event.json")
 	body := `{"pull_request":{"user":{"login":"claude[bot]","type":"Bot"},"head":{"ref":"cursor/x","sha":"0000000000000000000000000000000000000000"},"base":{"sha":"1111111111111111111111111111111111111111"}}}`
 	if err := os.WriteFile(event, []byte(body), 0o644); err != nil {
