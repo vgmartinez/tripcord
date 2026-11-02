@@ -328,3 +328,63 @@ jobs:
     with:
       # GitHub-hosted RUNNER_TEMP, outside the checkout. The called workflow creates it.
       path: /home/runner/work/_temp/tripcord-ci
+
+  local-action:
+    name: local action
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Prepare empty scan directory
+        shell: bash
+        run: mkdir -p -- "${RUNNER_TEMP}/tripcord-ci"
+
+      - name: Tripcord
+        uses: ./.github/actions/tripcord # zizmor: ignore[self-repository] load this checkout's action
+        with:
+          path: ${{ runner.temp }}/tripcord-ci
+          upload-sarif: "false"
+          comment: "false"
+
+      - name: Write TC-CFG-014 deny stub
+        shell: bash
+        run: |
+          cat > "${RUNNER_TEMP}/tripcord-deny" <<'EOF'
+          #!/usr/bin/env bash
+          case "$1" in
+            scan)
+              exit 0
+              ;;
+            pr-context)
+              echo "tc_cfg_014=match" >> "$GITHUB_OUTPUT"
+              exit 1
+              ;;
+            *)
+              exit 2
+              ;;
+          esac
+          EOF
+          chmod +x "${RUNNER_TEMP}/tripcord-deny"
+
+      - id: tripcord-deny
+        name: TC-CFG-014 denial fails the action
+        continue-on-error: true
+        uses: ./.github/actions/tripcord # zizmor: ignore[self-repository] test this checkout's deny handling
+        with:
+          binary: ${{ runner.temp }}/tripcord-deny
+          path: ${{ runner.temp }}/tripcord-ci
+          upload-sarif: "false"
+          comment: "false"
+
+      - name: Assert TC-CFG-014 denial
+        shell: bash
+        env:
+          TRIPCORD_OUTCOME: ${{ steps.tripcord-deny.outcome }}
+          TRIPCORD_TC_CFG_014: ${{ steps.tripcord-deny.outputs.tc-cfg-014 }}
+        run: |
+          test "$TRIPCORD_OUTCOME" = "failure"
+          test "$TRIPCORD_TC_CFG_014" = "match"

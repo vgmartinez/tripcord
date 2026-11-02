@@ -3,11 +3,6 @@
 # fail to evaluate instead of matching.
 positivos:
   claude-agent-frontmatter: high
-  claude-symlink-dir-etc: medium
-  claude-symlink-dir-tmp: high
-  claude-symlink-system: medium
-  claude-symlink-broken: medium
-  claude-symlink-tmp: high
   claude-bash-tmp-payload: high
   claude-home-script: high
   claude-http-remote: high

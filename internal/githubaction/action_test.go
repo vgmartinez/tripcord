@@ -67,6 +67,9 @@ func TestTripcordActionContract(t *testing.T) {
 			t.Errorf("action does not expose pr-context output %s", name)
 		}
 	}
+	if action.Outputs["tc-cfg-014"].Value == "" {
+		t.Error("action does not expose the TC-CFG-014 outcome")
+	}
 
 	const (
 		checkout    = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
@@ -125,14 +128,21 @@ func TestTripcordActionContract(t *testing.T) {
 	if !strings.Contains(prContext, "pr-context --format gha") {
 		t.Fatal("action does not run pr-context with the built binary")
 	}
-	if got := action.Inputs["reviews-file"].Default; got != "" {
-		t.Fatalf("reviews-file default = %q, want empty", got)
+	reviews, ok := action.Inputs["reviews-file"]
+	if !ok {
+		t.Fatal("action has no reviews-file input")
+	}
+	if reviews.Default != "" {
+		t.Fatalf("reviews-file default = %q, want empty", reviews.Default)
 	}
 	if !strings.Contains(prContext, `if [ -n "$TRIPCORD_REVIEWS_FILE" ]`) || !strings.Contains(prContext, `--reviews-file "$TRIPCORD_REVIEWS_FILE"`) {
 		t.Fatal("pr-context does not pass --reviews-file only when the caller sets it")
 	}
 	if strings.Contains(prContext, "${{") {
 		t.Fatal("pr-context interpolates an expression into run")
+	}
+	if !strings.Contains(prContext, "could not make a policy decision") {
+		t.Fatal("pr-context does not warn when reviews are unavailable")
 	}
 	if !strings.Contains(text, "core.warning") || !strings.Contains(text, "catch (error)") {
 		t.Fatal("fork and read-only publishing does not warn")
@@ -257,21 +267,117 @@ func TestMissingSARIFFileWarnsWithoutBlamingTheToken(t *testing.T) {
 	}
 }
 
+func TestTripcordActionPropagatesPolicyExit(t *testing.T) {
+	action := parseAction(t)
+	var apply actionStep
+	for i, step := range action.Runs.Steps {
+		if step.ID == "apply-exit-code" {
+			if i != len(action.Runs.Steps)-1 {
+				t.Fatal("Apply scan exit code is not the final action step")
+			}
+			apply = step
+		}
+	}
+	if apply.Run == "" {
+		t.Fatal("action has no policy exit-code step")
+	}
+	if apply.Name != "Apply scan exit code" {
+		t.Fatalf("final step name = %q, want Apply scan exit code", apply.Name)
+	}
+	if apply.If != "steps.scan.outputs.exit-code != ''" {
+		t.Fatalf("final step if = %q", apply.If)
+	}
+	if apply.ContinueOnError {
+		t.Fatal("final step must not continue on error")
+	}
+	wantEnv := map[string]string{
+		"TRIPCORD_SCAN_STATUS":       "${{ steps.scan.outputs.exit-code }}",
+		"TRIPCORD_PR_CONTEXT_STATUS": "${{ steps.pr-context.outputs.exit-code }}",
+		"TRIPCORD_REVIEWS_FILE":      "${{ inputs.reviews-file }}",
+	}
+	if len(apply.Env) != len(wantEnv) {
+		t.Fatalf("final step env = %#v, want %#v", apply.Env, wantEnv)
+	}
+	for name, want := range wantEnv {
+		if got := apply.Env[name]; got != want {
+			t.Fatalf("final step env %s = %q, want %q", name, got, want)
+		}
+	}
+
+	run := func(t *testing.T, scanStatus, reviewsFile, prContextStatus string) (int, string) {
+		t.Helper()
+		cmd := exec.Command("bash", "-c", apply.Run)
+		cmd.Env = append(os.Environ(),
+			"TRIPCORD_SCAN_STATUS="+scanStatus,
+			"TRIPCORD_PR_CONTEXT_STATUS="+prContextStatus,
+			"TRIPCORD_REVIEWS_FILE="+reviewsFile,
+		)
+		out, err := cmd.CombinedOutput()
+		return exitCode(t, err), string(out)
+	}
+
+	reviewsFile := filepath.Join(t.TempDir(), "reviews.json")
+	if err := os.WriteFile(reviewsFile, []byte("[]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Run("deny with reviews file fails", func(t *testing.T) {
+		if code, out := run(t, "0", reviewsFile, "1"); code != 1 {
+			t.Fatalf("policy deny = %d, want 1\n%s", code, out)
+		}
+	})
+	t.Run("deny without reviews file fails", func(t *testing.T) {
+		if code, out := run(t, "0", "", "1"); code != 1 {
+			t.Fatalf("policy deny without reviews = %d, want 1\n%s", code, out)
+		}
+	})
+	t.Run("incomplete reviews file fails", func(t *testing.T) {
+		if code, out := run(t, "0", reviewsFile, "3"); code != 3 {
+			t.Fatalf("incomplete review file = %d, want 3\n%s", code, out)
+		}
+	})
+	t.Run("review read error fails", func(t *testing.T) {
+		if code, out := run(t, "0", reviewsFile, "4"); code != 4 {
+			t.Fatalf("review read error = %d, want 4\n%s", code, out)
+		}
+	})
+	t.Run("incomplete without reviews file warns", func(t *testing.T) {
+		if code, out := run(t, "0", "", "3"); code != 0 {
+			t.Fatalf("missing review file = %d, want 0\n%s", code, out)
+		}
+	})
+	t.Run("missing policy status fails", func(t *testing.T) {
+		if code, out := run(t, "0", "", ""); code == 0 {
+			t.Fatalf("missing policy status = %d, want non-zero\n%s", code, out)
+		}
+	})
+	t.Run("scan exit code wins", func(t *testing.T) {
+		if code, out := run(t, "2", reviewsFile, "1"); code != 2 {
+			t.Fatalf("scan exit = %d, want 2\n%s", code, out)
+		}
+	})
+}
+
 type actionFile struct {
 	Inputs map[string]struct {
 		Default string `yaml:"default"`
 	} `yaml:"inputs"`
+	Outputs map[string]struct {
+		Value string `yaml:"value"`
+	} `yaml:"outputs"`
 	Runs struct {
 		Steps []actionStep `yaml:"steps"`
 	} `yaml:"runs"`
 }
 
 type actionStep struct {
-	ID   string            `yaml:"id"`
-	If   string            `yaml:"if"`
-	Uses string            `yaml:"uses"`
-	Run  string            `yaml:"run"`
-	With map[string]string `yaml:"with"`
+	ID              string            `yaml:"id"`
+	Name            string            `yaml:"name"`
+	If              string            `yaml:"if"`
+	Uses            string            `yaml:"uses"`
+	Run             string            `yaml:"run"`
+	With            map[string]string `yaml:"with"`
+	Env             map[string]string `yaml:"env"`
+	ContinueOnError bool              `yaml:"continue-on-error"`
 }
 
 func parseAction(t *testing.T) actionFile {

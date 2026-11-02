@@ -50,8 +50,11 @@ outputs:
     description: pr-context agents output, comma-separated.
     value: ${{ steps.pr-context.outputs.agents }}
   pr-context-exit-code:
-    description: Exit code from pr-context. A non-zero read does not fail the job.
+    description: Exit code from pr-context.
     value: ${{ steps.pr-context.outputs.exit-code }}
+  tc-cfg-014:
+    description: TC-CFG-014 outcome from pr-context, when it is not clear.
+    value: ${{ steps.pr-context.outputs.tc_cfg_014 }}
 runs:
   using: composite
   steps:
@@ -184,8 +187,8 @@ runs:
         fi
         status=$?
         echo "exit-code=$status" >> "$GITHUB_OUTPUT"
-        if [ "$status" -ne 0 ]; then
-          echo "::warning::tripcord pr-context exited ${status}; is_agent and agents may be incomplete"
+        if [ -z "$TRIPCORD_REVIEWS_FILE" ] && { [ "$status" -eq 3 ] || [ "$status" -eq 4 ]; }; then
+          echo "::warning::tripcord pr-context could not make a policy decision (exit ${status}) without reviews-file; the job continues"
         fi
         exit 0
     - name: Upload SARIF
@@ -263,9 +266,39 @@ runs:
           } catch (error) {
             core.warning(`Tripcord comment skipped: ${error.message}`);
           }
-    - name: Apply scan exit code
-      if: steps.scan.outputs.exit-code != '' && steps.scan.outputs.exit-code != '0'
+    - id: apply-exit-code
+      name: Apply scan exit code
+      if: steps.scan.outputs.exit-code != ''
       shell: bash
       env:
-        TRIPCORD_STATUS: ${{ steps.scan.outputs.exit-code }}
-      run: exit "$TRIPCORD_STATUS"
+        TRIPCORD_SCAN_STATUS: ${{ steps.scan.outputs.exit-code }}
+        TRIPCORD_PR_CONTEXT_STATUS: ${{ steps.pr-context.outputs.exit-code }}
+        TRIPCORD_REVIEWS_FILE: ${{ inputs.reviews-file }}
+      run: |
+        if [ "$TRIPCORD_SCAN_STATUS" -ne 0 ]; then
+          exit "$TRIPCORD_SCAN_STATUS"
+        fi
+        case "$TRIPCORD_PR_CONTEXT_STATUS" in
+          0)
+            exit 0
+            ;;
+          "")
+            echo "::error::tripcord pr-context did not report an exit code"
+            exit 1
+            ;;
+          1)
+            echo "::error::tripcord pr-context denied the pull request under TC-CFG-014"
+            exit 1
+            ;;
+          3|4)
+            if [ -n "$TRIPCORD_REVIEWS_FILE" ]; then
+              echo "::error::tripcord pr-context could not validate TC-CFG-014 with reviews-file (exit ${TRIPCORD_PR_CONTEXT_STATUS})"
+              exit "$TRIPCORD_PR_CONTEXT_STATUS"
+            fi
+            exit 0
+            ;;
+          *)
+            echo "::error::tripcord pr-context failed with unexpected exit ${TRIPCORD_PR_CONTEXT_STATUS}"
+            exit "$TRIPCORD_PR_CONTEXT_STATUS"
+            ;;
+        esac
