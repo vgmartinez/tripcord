@@ -1,0 +1,26 @@
+[
+  {
+    "harness": "claude",
+    "scope": "repo",
+    "path": ".mcp.json",
+    "sha256": "",
+    "kind": "mcp-server",
+    "payload": {"name": "ok", "command": "npx", "args": ["-y", "some-other-server@1.0.0"]}
+  },
+  {
+    "harness": "claude",
+    "scope": "repo",
+    "path": ".mcp.json",
+    "sha256": "",
+    "kind": "mcp-server",
+    "payload": {"name": "bad", "command": "npx", "args": ["-y", {"pkg": "figma-developer-mcp@0.6.2"}]}
+  },
+  {
+    "harness": "claude",
+    "scope": "repo",
+    "path": ".mcp.json",
+    "sha256": "",
+    "kind": "mcp-server",
+    "payload": {"name": "sse", "type": "sse", "command": "npx", "args": ["-y", "figma-developer-mcp@0.6.2"], "url": "https://example.invalid/sse"}
+  }
+]

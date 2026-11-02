@@ -28,7 +28,8 @@ func TestSeverityClausesAreCovered(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pack, err := LoadDir("../../rules", env)
+	core := corePackWithSymlinks(t)
+	pack, err := LoadDir(core, env)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +43,7 @@ func TestSeverityClausesAreCovered(t *testing.T) {
 				mutant := *r
 				mutant.SeverityWhen = slices.Clone(r.SeverityWhen)
 				mutant.SeverityWhen[i].When = never
-				if err := CheckRuleFixtures(context.Background(), env, "../../rules", &mutant, adapterDiscover); err == nil {
+				if err := CheckRuleFixtures(context.Background(), env, core, &mutant, adapterDiscover); err == nil {
 					t.Fatalf("fixtures still pass with severity_when[%d] (%s) disabled", i, r.SeverityWhen[i].Severity)
 				}
 			})

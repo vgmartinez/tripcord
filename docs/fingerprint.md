@@ -503,7 +503,13 @@ An array of items built from each `Evidence`'s non-empty normalized
 `config` and `excerpt`:
 
 - `excerpt`: `strings.Fields`-joined with a single `U+0020` (Unicode
-  white space collapsed, ends dropped).
+  white space collapsed, ends dropped). A TC-CFG-023 finding
+  (`evidence: advisory`) puts the canonical package URLs and the
+  matched TCA ids in that excerpt, so a new advisory id changes the
+  fingerprint and an exception that named the old fingerprint stops
+  covering the finding. The finding title and its reference list are
+  not hashed. Alias, summary, and range edits that do not change the
+  matched TCA ids leave the fingerprint alone.
 - `config`: an object, omitted when `Evidence.Config` is absent. `id`
   is `strings.TrimSpace` of `Config.ID`. `key` is `strings.TrimSpace` of
   `Config.Key` and is omitted when that is empty. The object itself is

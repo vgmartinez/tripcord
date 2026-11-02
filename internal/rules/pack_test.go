@@ -67,6 +67,9 @@ func TestLoadCore(t *testing.T) {
 	if len(pack.Rules) != len(activeEntries(pack.Registry)) {
 		t.Fatalf("%d rules, %d active registry entries", len(pack.Rules), len(activeEntries(pack.Registry)))
 	}
+	if pack.AdvisoryCount() != 8 || pack.LatestAdvisoryReview() != "2026-11-02" {
+		t.Fatalf("advisories %d reviewed %s", pack.AdvisoryCount(), pack.LatestAdvisoryReview())
+	}
 }
 
 // TestCoreMatchesDisk checks that the embedded pack is the rules/ tree.
@@ -142,6 +145,7 @@ func TestLoadPackRejects(t *testing.T) {
 		"missing refs": {func(m map[string]string) {
 			m["ACME-CFG-001.yaml"] = strings.Replace(fixtureRule("ACME-CFG-001", "acme/demo"), "refs: [https://example.com/doc]\n", "", 1)
 		}, "refs"},
+		"bad advisories": {func(m map[string]string) { m["ADVISORIES.json"] = "{" }, "advisories"},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {

@@ -7,5 +7,5 @@ import "embed"
 
 // FS holds the pack files at its root.
 //
-//go:embed REGISTRY *.yaml
+//go:embed REGISTRY ADVISORIES.json *.yaml
 var FS embed.FS

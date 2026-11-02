@@ -1,0 +1,8 @@
+{
+  "mcp": {
+    "figma": {
+      "type": "local",
+      "command": ["npx", "-y", "figma-developer-mcp@0.6.0"]
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "s": {
+      "command": "uvx",
+      "args": [
+        "--with",
+        "prefab-ui==0.21.0",
+        "my-fastmcp-server"
+      ]
+    }
+  }
+}

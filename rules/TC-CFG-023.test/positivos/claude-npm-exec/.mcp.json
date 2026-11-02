@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "figma": {
+      "command": "npm",
+      "args": ["exec", "--yes", "figma-developer-mcp@0.6.2"]
+    }
+  }
+}

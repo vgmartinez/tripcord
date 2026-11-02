@@ -25,6 +25,7 @@ embedded in the binary.
 | TC-CFG-014 | An agent-config change in a pull request whose author `pr-context` classifies as a bot or agent, with no human approval. Not a CEL rule: `tripcord pr-context` evaluates it from the event's reviews and the `base...head` diff. A classified path is one an adapter already recognizes. No `rules/TC-CFG-014.yaml` and no `rules/REGISTRY` line. [Docs](../docs/rules/TC-CFG-014.md). |
 | TC-CFG-015 | Shared Claude `permissions.allow` WebFetch or `sandbox.network.allowedDomains` entry naming a host with a public read-back channel. Sandbox coverage is deliberately limited to Hugging Face, Pastebin, webhook.site, and gists; package registries remain allowed for installs. `raw.githubusercontent.com` and `github.io` are excluded as false positives; revisiting the list is [issue #38](https://github.com/vgmartinez/tripcord/issues/38). High. Ref CVE-2026-54316. [Docs](../docs/rules/TC-CFG-015.md). |
 | TC-CFG-016 | A shared setting that turns off every hook at once: Claude Code and Copilot `disableAllHooks: true`, Gemini CLI `hooksConfig.enabled: false`. Cursor and Windsurf document no such key. High: this also disables any hook-based guard the harness would otherwise run, including Tripcord's own once hook mode ships. Detecting that a previously-present hook was deleted needs a base to diff against and is out of scope here; see [docs](../docs/rules/TC-CFG-016.md). |
+| TC-CFG-023 | Stdio MCP server whose package spec can resolve only to a version in the offline list `ADVISORIES.json` (npx, bunx, npm exec, pnpm/yarn dlx, uvx, uv tool run, uv run --with, pipx run, docker/podman run, and, when the advisory has no fix, a Python module or git URL). Unpinned specs do not match unless that advisory has no fixed version. Critical advisories stay critical; moderate and low are reported high. No network lookup. [Docs](../docs/rules/TC-CFG-023.md). |
 
 `severity` is the catalog severity and the floor a policy lock uses.
 `severity_when`, when a rule has it, is tried in order once `when` is
@@ -36,7 +37,7 @@ Static matching does not expand `$VAR` or `$(echo cur)l`. Split quotes
 such as `c''url` are joined as a shell would, and `LOCALHOST` is
 loopback like `localhost`. It does not unwrap `nohup`, `xargs`,
 `env -S`, `busybox`, or `start /b` in a hook, or an `env`, `busybox`,
-or `$SHELL` wrapper around an MCP command. Nested `.vscode/tasks.json` files and `.code-workspace`
+or `$SHELL` wrapper around an MCP command. TC-CFG-023 shares that limit and does not match an unpinned package spec unless the advisory has no fixed version. Nested `.vscode/tasks.json` files and `.code-workspace`
 tasks are out of scope.
 
 The format, the id registry, and fixtures are described in

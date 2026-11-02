@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "s": {
+      "command": "python",
+      "args": [
+        "-m",
+        "kali_gpt_fixed.mcp_server"
+      ]
+    }
+  }
+}

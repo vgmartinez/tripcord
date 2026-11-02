@@ -181,6 +181,15 @@ TC-CFG-002 active tripcord/core@2026.11
 To withdraw a rule, delete its YAML and change the line to `retired`.
 Do not remove lines. CI compares the file with the pull request base.
 
+`rules/ADVISORIES.json` is the offline package-advisory list used by
+TC-CFG-023. It ships in the free core pack. Ids are `TCA-YYYY-NNNN`,
+append-only, and never reused; set `withdrawn` to a date instead of
+deleting an entry. CI checks the file next to `REGISTRY`: ids are
+unique, the document matches the schema, and an id is not removed or
+un-withdrawn. A critical advisory ships in a pack patch. Every other
+advisory ships in the monthly release. The list is embedded. Querying
+OSV is future work, and v0.1 has no online mode.
+
 ### Fixtures
 
 `rules/<ID>.test/positivos/` holds inputs that must trigger the rule and
@@ -196,6 +205,12 @@ one fixture. A fixture is either of:
   scope on and an empty environment, so a host `COPILOT_HOME` or
   `XDG_CONFIG_HOME` cannot redirect it. Use it for user-scope files such
   as `~/.copilot/mcp-config.json`.
+  Do not commit a symlink. GitHub's action download fails on any
+  tracked symlink, so `TestNoTrackedSymlinks` rejects them. Add the link
+  to `fixtureSymlinks` in `internal/rules/fixture_symlinks_test.go`
+  instead; the fixture tests copy the pack to a temp directory and
+  create it there. A link whose target is outside the repository goes
+  in a test of its own, such as `TestTCFG006OutsideSymlinks`.
 - A `.json` engine fixture: a config item, or an array of them, with
   `sha256` optionally left empty. Use it for payloads an adapter would
   not produce from a real file, such as a field of the wrong type:

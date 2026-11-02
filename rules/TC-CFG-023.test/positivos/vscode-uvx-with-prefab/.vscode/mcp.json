@@ -1,0 +1,9 @@
+// JSONC: VS Code names the object servers, not mcpServers.
+{
+  "servers": {
+    "ui": {
+      "command": "uvx",
+      "args": ["--with", "prefab-ui==0.20.2", "my-fastmcp-server"]
+    }
+  }
+}

@@ -1,6 +1,7 @@
 package conformance
 
 import (
+	"context"
 	"encoding/json"
 	"path/filepath"
 	"strings"
@@ -143,5 +144,72 @@ func TestMCPArgvRedactionNeverRestoresOtherSecrets(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// TestMCPPackageSpecIsNotRedacted checks that a pinned package spec
+// survives sanitizing and matches TC-CFG-023, and that a spec whose
+// version is a credential shape is replaced with [REDACTED] and does
+// not match. A git URL's userinfo is not copied into the payload. The
+// detection view still has that userinfo, so the spec stays opaque and
+// does not match either.
+func TestMCPPackageSpecIsNotRedacted(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	const token = "ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	body := `{
+	  "mcpServers": {
+	    "figma": {"command": "npx", "args": ["-y", "figma-developer-mcp@0.6.2", "--stdio"]},
+	    "secret": {"command": "npx", "args": ["-y", "figma-developer-mcp@` + token + `"]},
+	    "kali": {"command": "uvx", "args": ["--from", "git+https://user:` + token + `@github.com/alishahid74/kali-gpt", "kali-gpt"]}
+	  }
+	}`
+	kittest.WriteFile(t, filepath.Join(root, ".mcp.json"), body)
+	got := discoverAll(t, root, allAdapters(t.TempDir(), false))
+	var claudeItems []model.ConfigItem
+	for _, item := range got.byAdapter[model.HarnessClaude] {
+		if item.Kind == model.ConfigKindMCPServer {
+			claudeItems = append(claudeItems, item)
+		}
+	}
+	if len(claudeItems) != 3 {
+		t.Fatalf("claude MCP items = %d", len(claudeItems))
+	}
+	var sawPackage, sawRedacted bool
+	for _, item := range claudeItems {
+		payload := string(item.Payload)
+		if strings.Contains(payload, token) {
+			t.Fatalf("payload keeps the token: %s", payload)
+		}
+		if strings.Contains(payload, "figma-developer-mcp@0.6.2") {
+			sawPackage = true
+		}
+		if strings.Contains(payload, "figma-developer-mcp@[REDACTED]") {
+			sawRedacted = true
+		}
+	}
+	if !sawPackage || !sawRedacted {
+		t.Fatalf("package spec kept %v, redacted spec %v", sawPackage, sawRedacted)
+	}
+	env, err := rules.NewEnv(rules.DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	pack, err := rules.LoadCore(env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rule *rules.Rule
+	for _, r := range pack.Rules {
+		if r.ID == "TC-CFG-023" {
+			rule = r
+		}
+	}
+	res := rules.NewEngine(env, []*rules.Rule{rule}).ScanConfig(context.Background(), claudeItems)
+	if len(res.Errors) > 0 || len(res.Matches) != 1 {
+		t.Fatalf("matches %d errors %v", len(res.Matches), res.Errors)
+	}
+	if !strings.Contains(string(res.Matches[0].Item.Payload), "figma-developer-mcp@0.6.2") {
+		t.Fatalf("matched %s", res.Matches[0].Item.Payload)
 	}
 }

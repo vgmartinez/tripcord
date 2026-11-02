@@ -1,0 +1,175 @@
+{
+  "format": 1,
+  "advisories": [
+    {
+      "id": "TCA-2026-0001",
+      "aliases": ["CVE-2026-120338", "GHSA-3g72-rrqc-f76c"],
+      "summary": "prefab-ui before 0.21.0 lets a Generative UI sandbox escape read and write host files through its Pyodide JavaScript bridge",
+      "severity": "critical",
+      "affected": [
+        {
+          "ecosystem": "pypi",
+          "name": "prefab-ui",
+          "ranges": [{"introduced": "0.14.0", "fixed": "0.21.0"}]
+        }
+      ],
+      "refs": [
+        "https://osv.dev/vulnerability/CVE-2026-120338",
+        "https://github.com/advisories/GHSA-3g72-rrqc-f76c",
+        "https://nvd.nist.gov/vuln/detail/CVE-2026-120338",
+        "https://github.com/PrefectHQ/prefab"
+      ],
+      "added": "tripcord/core@2026.11",
+      "reviewed": "2026-11-02"
+    },
+    {
+      "id": "TCA-2026-0002",
+      "aliases": ["CVE-2026-117569"],
+      "summary": "kali-gpt through commit a608c74e99910232dd208fee99de860458672b82 passes MCP scanner tool parameters to a shell",
+      "severity": "high",
+      "affected": [
+        {
+          "ecosystem": "git",
+          "repo": "https://github.com/alishahid74/kali-gpt",
+          "affected_commits": ["a608c74e99910232dd208fee99de860458672b82"]
+        },
+        {
+          "ecosystem": "module",
+          "signatures": [
+            {"module": "kali_gpt.tools.mcp_server"},
+            {"path_suffix": "kali_gpt/tools/mcp_server.py"}
+          ]
+        }
+      ],
+      "refs": [
+        "https://nvd.nist.gov/vuln/detail/CVE-2026-117569",
+        "https://osv.dev/vulnerability/CVE-2026-117569",
+        "https://github.com/alishahid74/kali-gpt/issues/12",
+        "https://github.com/alishahid74/kali-gpt"
+      ],
+      "added": "tripcord/core@2026.11",
+      "reviewed": "2026-11-02"
+    },
+    {
+      "id": "TCA-2026-0003",
+      "aliases": ["CVE-2025-53967", "CVE-2025-15061", "GHSA-gxw4-4fc5-9gr5"],
+      "summary": "figma-developer-mcp before 0.6.3 has a command injection",
+      "severity": "high",
+      "affected": [
+        {
+          "ecosystem": "npm",
+          "name": "figma-developer-mcp",
+          "ranges": [{"fixed": "0.6.3"}]
+        }
+      ],
+      "refs": [
+        "https://osv.dev/vulnerability/GHSA-gxw4-4fc5-9gr5",
+        "https://github.com/advisories/GHSA-gxw4-4fc5-9gr5",
+        "https://nvd.nist.gov/vuln/detail/CVE-2025-53967",
+        "https://nvd.nist.gov/vuln/detail/CVE-2025-15061"
+      ],
+      "added": "tripcord/core@2026.11",
+      "reviewed": "2026-11-02"
+    },
+    {
+      "id": "TCA-2026-0004",
+      "aliases": ["CVE-2025-6514", "GHSA-6xpm-ggf7-wc3p"],
+      "summary": "mcp-remote from 0.0.5 before 0.1.16 has an OS command injection",
+      "severity": "critical",
+      "affected": [
+        {
+          "ecosystem": "npm",
+          "name": "mcp-remote",
+          "ranges": [{"introduced": "0.0.5", "fixed": "0.1.16"}]
+        }
+      ],
+      "refs": [
+        "https://osv.dev/vulnerability/GHSA-6xpm-ggf7-wc3p",
+        "https://github.com/advisories/GHSA-6xpm-ggf7-wc3p",
+        "https://nvd.nist.gov/vuln/detail/CVE-2025-6514"
+      ],
+      "added": "tripcord/core@2026.11",
+      "reviewed": "2026-11-02"
+    },
+    {
+      "id": "TCA-2026-0005",
+      "aliases": ["CVE-2025-68143", "GHSA-5cgr-j3jf-jw3v"],
+      "summary": "mcp-server-git before 2025.9.25 is affected by CVE-2025-68143",
+      "severity": "moderate",
+      "affected": [
+        {
+          "ecosystem": "pypi",
+          "name": "mcp-server-git",
+          "ranges": [{"fixed": "2025.9.25"}]
+        }
+      ],
+      "refs": [
+        "https://osv.dev/vulnerability/GHSA-5cgr-j3jf-jw3v",
+        "https://github.com/advisories/GHSA-5cgr-j3jf-jw3v",
+        "https://nvd.nist.gov/vuln/detail/CVE-2025-68143"
+      ],
+      "added": "tripcord/core@2026.11",
+      "reviewed": "2026-11-02"
+    },
+    {
+      "id": "TCA-2026-0006",
+      "aliases": ["CVE-2025-68144", "GHSA-9xwc-hfwc-8w59"],
+      "summary": "mcp-server-git before 2025.12.18 is affected by CVE-2025-68144",
+      "severity": "moderate",
+      "affected": [
+        {
+          "ecosystem": "pypi",
+          "name": "mcp-server-git",
+          "ranges": [{"fixed": "2025.12.18"}]
+        }
+      ],
+      "refs": [
+        "https://osv.dev/vulnerability/GHSA-9xwc-hfwc-8w59",
+        "https://github.com/advisories/GHSA-9xwc-hfwc-8w59",
+        "https://nvd.nist.gov/vuln/detail/CVE-2025-68144"
+      ],
+      "added": "tripcord/core@2026.11",
+      "reviewed": "2026-11-02"
+    },
+    {
+      "id": "TCA-2026-0007",
+      "aliases": ["CVE-2025-68145", "GHSA-j22h-9j4x-23w5"],
+      "summary": "mcp-server-git before 2025.12.18 is affected by CVE-2025-68145",
+      "severity": "moderate",
+      "affected": [
+        {
+          "ecosystem": "pypi",
+          "name": "mcp-server-git",
+          "ranges": [{"fixed": "2025.12.18"}]
+        }
+      ],
+      "refs": [
+        "https://osv.dev/vulnerability/GHSA-j22h-9j4x-23w5",
+        "https://github.com/advisories/GHSA-j22h-9j4x-23w5",
+        "https://nvd.nist.gov/vuln/detail/CVE-2025-68145"
+      ],
+      "added": "tripcord/core@2026.11",
+      "reviewed": "2026-11-02"
+    },
+    {
+      "id": "TCA-2026-0008",
+      "aliases": ["CVE-2026-27735", "GHSA-vjqx-cfc4-9h6v"],
+      "summary": "mcp-server-git before 2026.1.14 is affected by CVE-2026-27735",
+      "severity": "moderate",
+      "affected": [
+        {
+          "ecosystem": "pypi",
+          "name": "mcp-server-git",
+          "ranges": [{"fixed": "2026.1.14"}]
+        }
+      ],
+      "refs": [
+        "https://osv.dev/vulnerability/GHSA-vjqx-cfc4-9h6v",
+        "https://github.com/advisories/GHSA-vjqx-cfc4-9h6v",
+        "https://nvd.nist.gov/vuln/detail/CVE-2026-27735"
+      ],
+      "added": "tripcord/core@2026.11",
+      "reviewed": "2026-11-02"
+    }
+  ]
+}

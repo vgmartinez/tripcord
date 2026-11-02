@@ -1,0 +1,33 @@
+# A stdio MCP server started by a package runner (npx, npm exec, pnpm or
+# yarn dlx, bunx, uvx, uv tool run, uv run --with, pipx run) or by
+# docker or podman run, whose package spec can resolve only to versions
+# in the offline list rules/ADVISORIES.json.
+#
+# A spec with no version, @latest, another dist-tag, an image without a
+# version tag, or a git ref that is a branch does not match, unless the
+# advisory has no fixed version; then any git ref matches, a commit or
+# a tag included. Moderate and low advisories are
+# reported high: the default fail-on high has to stop them. Critical
+# stays critical. There is no network lookup in v0.1.
+#
+id: TC-CFG-023
+pack: tripcord/core
+title: "MCP server pins a package version with a known vulnerability"
+severity: high
+evidence: advisory
+harness: [claude, codex, copilot, cursor, gemini, opencode, windsurf, vscode]
+files: ["**"]
+when: |
+  config.kind == "mcp-server" &&
+    (!has(payload.type) || (type(payload.type) == string && payload.type in ["", "stdio", "local"])) &&
+    has(payload.command) &&
+    mcp.vulns(payload).size() > 0
+severity_when:
+  - severity: critical
+    when: mcp.vulns(payload).exists(v, has(v.severity) && v.severity == "critical")
+  - severity: high
+    when: "true"
+fix: "Pin the MCP server package to the fixed version named in the finding, or remove the server when no fixed version exists."
+refs:
+  - https://osv.dev/
+  - https://nvd.nist.gov/
