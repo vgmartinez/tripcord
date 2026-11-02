@@ -5,7 +5,8 @@
 #
 # A spec with no version, @latest, another dist-tag, an image without a
 # version tag, or a git ref that is a branch does not match, unless the
-# advisory has no fixed version. Moderate and low advisories are
+# advisory has no fixed version; then any git ref matches, a commit or
+# a tag included. Moderate and low advisories are
 # reported high: the default fail-on high has to stop them. Critical
 # stays critical. There is no network lookup in v0.1.
 #

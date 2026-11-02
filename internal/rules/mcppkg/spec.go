@@ -208,12 +208,12 @@ func parseGitSpec(spec string) advisory.PackageRef {
 	switch gitRefKind(rev) {
 	case advisory.KindExact:
 		ref.Kind = advisory.KindExact
-		ref.Version = strings.ToLower(rev)
-	case advisory.KindUnpinned:
-		ref.Kind = advisory.KindUnpinned
-	default:
-		ref.Kind = advisory.KindOpaque
 		ref.Version = rev
+		if isHex(rev) {
+			ref.Version = strings.ToLower(rev)
+		}
+	default:
+		ref.Kind = advisory.KindUnpinned
 	}
 	return ref
 }
@@ -247,6 +247,8 @@ func atIsRef(body string, at int) bool {
 	return at > scheme+3+slash
 }
 
+// gitRefKind treats a commit and a version tag as explicit refs. Any
+// other name is a branch, which is unpinned.
 func gitRefKind(rev string) string {
 	if rev == "" {
 		return advisory.KindUnpinned
@@ -255,7 +257,7 @@ func gitRefKind(rev string) string {
 		return advisory.KindExact
 	}
 	if versionTag.MatchString(rev) {
-		return advisory.KindOpaque
+		return advisory.KindExact
 	}
 	return advisory.KindUnpinned
 }

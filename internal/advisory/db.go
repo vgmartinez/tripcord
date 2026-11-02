@@ -530,9 +530,9 @@ func matchAffected(a Advisory, aff Affected, ref PackageRef) (Hit, bool, error) 
 		if opaque || repo != ref.Repo {
 			return Hit{}, false, nil
 		}
-		ok = gitMatch(aff, ref)
+		ok = gitMatch(aff, ref, advisoryFixed(a))
 	case EcoModule:
-		ok = !hasFixed(aff) && signatureMatch(aff, ref)
+		ok = !advisoryFixed(a) && signatureMatch(aff, ref)
 	default:
 		return Hit{}, false, nil
 	}
@@ -569,9 +569,16 @@ func versionMatch(aff Affected, ref PackageRef) (bool, error) {
 	}
 }
 
-func gitMatch(aff Affected, ref PackageRef) bool {
+// gitMatch matches any ref, commit, tag, or branch, when the advisory
+// has no fix: no ref of the repository is known to be safe. With a fix,
+// only an affected commit matches. Git entries carry no ranges, so
+// fixed is decided over the whole advisory.
+func gitMatch(aff Affected, ref PackageRef, fixed bool) bool {
 	switch ref.Kind {
 	case KindExact:
+		if !fixed {
+			return ref.Version != ""
+		}
 		refHex := strings.ToLower(ref.Version)
 		if len(refHex) < 7 || !isHex(refHex) {
 			return false
@@ -583,7 +590,7 @@ func gitMatch(aff Affected, ref PackageRef) bool {
 		}
 		return false
 	case KindUnpinned:
-		return !hasFixed(aff)
+		return !fixed
 	default:
 		return false
 	}
@@ -616,6 +623,15 @@ func pathSuffixMatch(sig, path string) bool {
 	path = strings.TrimPrefix(strings.ReplaceAll(path, `\`, `/`), "./")
 	sig = strings.ReplaceAll(sig, `\`, `/`)
 	return path == sig || strings.HasSuffix(path, "/"+sig)
+}
+
+func advisoryFixed(a Advisory) bool {
+	for _, aff := range a.Affected {
+		if hasFixed(aff) {
+			return true
+		}
+	}
+	return false
 }
 
 func hasFixed(aff Affected) bool {

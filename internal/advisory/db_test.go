@@ -70,6 +70,19 @@ func TestSeedList(t *testing.T) {
 		t.Fatalf("unpinned git purl %s", hits[0].PURL)
 	}
 
+	for _, rev := range []string{"v3.0.0", "4df42a5", "a608c74e99910232dd208fee99de860458672b82"} {
+		hits, err = db.Match([]PackageRef{{
+			Ecosystem: EcoGit,
+			Name:      "github.com/alishahid74/kali-gpt",
+			Repo:      "https://github.com/alishahid74/kali-gpt",
+			Kind:      KindExact,
+			Version:   rev,
+		}})
+		if err != nil || len(hits) != 1 || hits[0].PURL != "pkg:generic/github.com/alishahid74/kali-gpt@"+rev {
+			t.Fatalf("kali git @%s = %+v %v", rev, hits, err)
+		}
+	}
+
 	hits, err = db.Match([]PackageRef{{
 		Ecosystem: EcoModule, Name: "kali_gpt.tools.mcp_server", Kind: KindUnpinned,
 	}})

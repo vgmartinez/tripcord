@@ -39,6 +39,12 @@ another dist-tag, `:latest`, or a git branch does not match when the
 advisory has a fixed version. It does match when the advisory has no
 fixed version, because every current resolution is still affected.
 
+A git ref of 7 to 40 hex digits is a commit, a ref shaped like a version
+(`v3.0.0`) is a tag, and any other name is a branch. When the advisory
+has no fixed version, any ref matches: a commit, a tag, a branch, or no
+ref. When it has one, only a commit listed in `affected_commits`
+matches. Tags are not listed in advisories, because a tag can be moved.
+
 `pip install` is not a launcher. `sh -c` around a package command is
 already TC-CFG-003.
 
@@ -79,10 +85,10 @@ prefab-ui is a library. It matches only when the argv names it, for
 example `--with prefab-ui==0.20.2`. A transitive dependency of another
 package is not visible here.
 
-The Kali-GPT git fixture is illustrative. The repository URL and the
-module signature come from the advisory. The command token after the
-git URL is a placeholder, not a verified console entry point. There is
-no published package to pin.
+The Kali-GPT git fixtures (no ref, `@v3.0.0`, and `@4df42a5`) are
+illustrative. The repository URL and the module signature come from the
+advisory. The command token after the git URL is a placeholder, not a
+verified console entry point. There is no published package to pin.
 
 No Docker advisory is seeded. Image parsing is covered by unit tests.
 
