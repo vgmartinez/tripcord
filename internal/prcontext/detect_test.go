@@ -148,6 +148,36 @@ func TestDetectRejectsUnsafeToolName(t *testing.T) {
 	}
 }
 
+func TestPRAuthorType(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		typ  string
+		want bool
+	}{
+		{name: "type User", typ: "User", want: false},
+		{name: "type Bot", typ: "Bot", want: true},
+		{name: "no type field", typ: "", want: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := Detect(Input{PRLogin: "claude[bot]", PRAuthorType: tc.typ})
+			if got.Agent != tc.want || (tc.want && (len(got.Signals) != 1 || got.Signals[0].Agent != "claude")) {
+				t.Fatalf("Detect(type %q) = %+v, want agent %v", tc.typ, got, tc.want)
+			}
+			if !tc.want && len(got.Signals) != 0 {
+				t.Fatalf("type %q matched: %+v", tc.typ, got.Signals)
+			}
+		})
+	}
+	// A commit author has no user.type. The [bot] login still matches.
+	sha := "0123456789abcdef0123456789abcdef01234567"
+	got := Detect(Input{Commits: []Commit{{SHA: sha, AuthorName: "claude[bot]"}}})
+	if !got.Agent || got.Signals[0].Source != "commit "+sha+" author" {
+		t.Fatalf("commit author = %+v", got)
+	}
+}
+
 func TestParseEvent(t *testing.T) {
 	t.Parallel()
 	ev, err := ParseEvent([]byte(`{"action":"opened","pull_request":{"user":{"login":"octocat"},"head":{"ref":"cursor/x","sha":"abc"},"base":{"sha":"def"}}}`))
@@ -158,8 +188,16 @@ func TestParseEvent(t *testing.T) {
 		t.Fatalf("event = %+v", ev)
 	}
 	ev, err = ParseEvent([]byte(`{"user":{"login":"claude[bot]"},"head":{"ref":"claude/y","sha":"abc"},"base":{"sha":"def"}}`))
-	if err != nil || ev.Login != "claude[bot]" {
+	if err != nil || ev.Login != "claude[bot]" || ev.AuthorType != "" {
 		t.Fatalf("bare pull_request = %+v, %v", ev, err)
+	}
+	ev, err = ParseEvent([]byte(`{"pull_request":{"user":{"login":"claude[bot]","type":"User"},"head":{"ref":"a","sha":"abc"},"base":{"sha":"def"}}}`))
+	if err != nil || ev.AuthorType != "User" {
+		t.Fatalf("type User = %+v, %v", ev, err)
+	}
+	ev, err = ParseEvent([]byte(`{"pull_request":{"user":{"login":"claude[bot]","type":"Bot"},"head":{"ref":"a","sha":"abc"},"base":{"sha":"def"}}}`))
+	if err != nil || ev.AuthorType != "Bot" {
+		t.Fatalf("type Bot = %+v, %v", ev, err)
 	}
 	for _, raw := range []string{``, `[]`, `{"zen":"x"}`, "{\"pull_request\":{\"user\":{\"login\":\"a\\nb\"}}}"} {
 		if _, err := ParseEvent([]byte(raw)); err == nil {

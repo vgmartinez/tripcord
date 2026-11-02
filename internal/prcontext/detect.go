@@ -55,7 +55,10 @@ type Commit struct {
 // from, either "pull_request.head.ref" or "--head". Warnings from reading
 // git are copied onto the result.
 type Input struct {
-	PRLogin      string
+	PRLogin string
+	// PRAuthorType is GitHub's user.type for the pull request author.
+	// Empty means the event did not include it.
+	PRAuthorType string
 	Branch       string
 	BranchSource string
 	Commits      []Commit
@@ -67,7 +70,7 @@ type Input struct {
 func Detect(in Input) Result {
 	b := &builder{seen: map[string]bool{}, agents: map[string]bool{}}
 	warnings := append([]string{}, in.Warnings...)
-	if agent, ok := agentForLogin(in.PRLogin); ok {
+	if agent, ok := agentForPRLogin(in.PRLogin, in.PRAuthorType); ok {
 		b.add(TypeBotLogin, agent, in.PRLogin, "pull_request.user.login")
 	}
 	branch := strings.TrimPrefix(in.Branch, "refs/heads/")

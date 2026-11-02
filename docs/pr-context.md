@@ -11,7 +11,7 @@ Four signals are checked. A match on any of them sets `agent` to true.
 
 | Signal | `type` | What is matched |
 | --- | --- | --- |
-| Bot login | `bot-login` | The pull request author's login, and each commit's author and committer name or GitHub noreply address. |
+| Bot login | `bot-login` | The pull request author's login, and each commit's author and committer name or GitHub noreply address. A login matches only with the `[bot]` suffix. When the event includes `user.type`, the pull request author matches only if that type is `Bot`. Commit authors have no `user.type`, and an event that omits it is matched on the login alone. |
 | `Co-authored-by` | `co-authored-by` | Trailer addresses and bot logins in the trailing trailer block of a commit message. A mention earlier in the message is not a trailer. |
 | Branch prefix | `branch-prefix` | The head branch name starts with a known prefix, including the slash. The comparison is case-sensitive. |
 | git-ai note | `git-ai` | An authorship log on `refs/notes/ai` ([git-ai](https://github.com/git-ai-project/git-ai)) whose session or legacy prompt record names an agent tool. |

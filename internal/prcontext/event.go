@@ -9,10 +9,13 @@ import (
 
 // Event is the part of a GitHub pull_request payload pr-context reads.
 type Event struct {
-	Login  string
-	Branch string
-	Base   string
-	Head   string
+	Login string
+	// AuthorType is GitHub's pull_request.user.type ("Bot", "User", ...).
+	// Empty means the event did not include the field.
+	AuthorType string
+	Branch     string
+	Base       string
+	Head       string
 }
 
 // ParseEvent reads a GitHub workflow event. The file may be the whole
@@ -34,7 +37,8 @@ func ParseEvent(data []byte) (Event, error) {
 	}
 	var pr struct {
 		User struct {
-			Login string `json:"login"`
+			Login string  `json:"login"`
+			Type  *string `json:"type"`
 		} `json:"user"`
 		Head struct {
 			Ref string `json:"ref"`
@@ -48,11 +52,15 @@ func ParseEvent(data []byte) (Event, error) {
 		return Event{}, &InputError{Msg: fmt.Sprintf("event JSON: %v", err)}
 	}
 	ev := Event{Login: pr.User.Login, Branch: pr.Head.Ref, Base: pr.Base.SHA, Head: pr.Head.SHA}
+	if pr.User.Type != nil {
+		ev.AuthorType = strings.TrimSpace(*pr.User.Type)
+	}
 	if ev.Login == "" && ev.Branch == "" && ev.Base == "" && ev.Head == "" {
 		return Event{}, &InputError{Msg: "event has no pull_request"}
 	}
 	for _, field := range []struct{ name, value string }{
 		{"pull_request.user.login", ev.Login},
+		{"pull_request.user.type", ev.AuthorType},
 		{"pull_request.head.ref", ev.Branch},
 		{"pull_request.base.sha", ev.Base},
 		{"pull_request.head.sha", ev.Head},

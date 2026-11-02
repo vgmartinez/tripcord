@@ -65,7 +65,9 @@ var branchPrefixes = []agentID{
 
 func agentForLogin(login string) (agent string, ok bool) {
 	login = strings.ToLower(strings.TrimSpace(login))
-	if login == "" {
+	// A login counts only with the [bot] suffix. Bare names such as
+	// "claude" are not bot accounts.
+	if login == "" || !strings.HasSuffix(login, "[bot]") {
 		return "", false
 	}
 	for _, id := range botLogins {
@@ -74,6 +76,18 @@ func agentForLogin(login string) (agent string, ok bool) {
 		}
 	}
 	return "", false
+}
+
+// agentForPRLogin matches the pull request author. When authorType is
+// set, it is GitHub's user.type and must be "Bot". A [bot] login whose
+// type is present and not "Bot" does not match. An empty authorType
+// means the event omitted user.type, and the login table decides alone.
+// Commit authors have no user.type and use agentForLogin directly.
+func agentForPRLogin(login, authorType string) (agent string, ok bool) {
+	if authorType != "" && authorType != "Bot" {
+		return "", false
+	}
+	return agentForLogin(login)
 }
 
 func agentForEmail(email string) (agent string, ok bool) {

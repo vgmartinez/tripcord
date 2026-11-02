@@ -76,6 +76,7 @@ func runPrContext(args []string, stdout, stderr io.Writer) int {
 	}
 	result := prcontext.Detect(prcontext.Input{
 		PRLogin:      ev.Login,
+		PRAuthorType: ev.AuthorType,
 		Branch:       branch,
 		BranchSource: branchSource,
 		Commits:      commits,
