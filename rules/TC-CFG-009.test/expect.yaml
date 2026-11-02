@@ -90,3 +90,4 @@ positivos:
   devin-multi-document-initialize: high
   devin-nested-blueprint-case-alias-symlink: high
   devin-nested-blueprint-root-sums: high
+  devin-null-document-curl: high

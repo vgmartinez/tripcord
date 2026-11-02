@@ -103,8 +103,8 @@ type YAMLDocument struct {
 // uses, decodes only the stream's first document and silently drops the
 // rest with no error; a harness that honors every document in a
 // blueprint, such as Devin's .devin/blueprint.yaml, must decode with
-// yaml.NewDecoder in a loop instead. An empty document is skipped, same
-// as DecodeYAML's doc.Kind == 0 case. Aliases, merge keys, and nesting
+// yaml.NewDecoder in a loop instead. An empty or null document is skipped,
+// same as DecodeYAML's doc.Kind == 0 case. Aliases, merge keys, and nesting
 // are bounded the same as DecodeYAML. On an error decoding one document,
 // the documents decoded so far are returned along with the error, so a
 // caller can still act on what parsed before the failure.
@@ -126,6 +126,9 @@ func DecodeYAMLDocuments(raw []byte, product string, folded ...string) ([]YAMLDo
 		}
 		if doc.Kind != yaml.DocumentNode || len(doc.Content) != 1 {
 			return docs, warnings, errors.New("not one YAML document")
+		}
+		if doc.Content[0].Tag == "!!null" {
+			continue
 		}
 		d := &yamlDecoder{product: product, folded: folded}
 		value, err := d.value(doc.Content[0], 0, "")

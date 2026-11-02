@@ -467,6 +467,27 @@ func TestDecodeYAML(t *testing.T) {
 	}
 }
 
+func TestDecodeYAMLDocumentsSkipsNullDocuments(t *testing.T) {
+	t.Parallel()
+	docs, warnings, err := DecodeYAMLDocuments([]byte(`first: document
+---
+# A document containing only a comment.
+---
+~
+---
+last: document
+`), "Devin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(warnings) != 0 {
+		t.Fatalf("warnings = %v, want none", warnings)
+	}
+	if len(docs) != 2 {
+		t.Fatalf("documents = %d, want 2", len(docs))
+	}
+}
+
 func TestDecodeYAMLAliases(t *testing.T) {
 	t.Parallel()
 	t.Run("normal anchor and alias workflow parses and is scanned", func(t *testing.T) {
