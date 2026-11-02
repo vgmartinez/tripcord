@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "s": {
+      "command": "env",
+      "args": [
+        "FOO=1",
+        "npx",
+        "figma-developer-mcp@0.6.2"
+      ]
+    }
+  }
+}

@@ -71,3 +71,19 @@ func (c *Catalog) Rules() []*Rule { return append([]*Rule(nil), c.rules...) }
 
 // Packs returns the packs in load order.
 func (c *Catalog) Packs() []*Pack { return append([]*Pack(nil), c.packs...) }
+
+// Advisories reports how many non-withdrawn advisories the packs carry
+// and the newest reviewed date among them. The list ships inside the
+// free core pack; there is no separate catalog command.
+func (c *Catalog) Advisories() (count int, latestReview string) {
+	if c == nil {
+		return 0, ""
+	}
+	for _, p := range c.packs {
+		count += p.AdvisoryCount()
+		if rev := p.LatestAdvisoryReview(); rev > latestReview {
+			latestReview = rev
+		}
+	}
+	return count, latestReview
+}

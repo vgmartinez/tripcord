@@ -3,10 +3,15 @@ package rules
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 
+	"github.com/vgmartinez/tripcord/internal/advisory"
 	"github.com/vgmartinez/tripcord/internal/hiddenchar"
 	"github.com/vgmartinez/tripcord/internal/model"
+	"github.com/vgmartinez/tripcord/internal/rules/mcppkg"
 )
 
 // Engine evaluates compiled rules against config items.
@@ -48,6 +53,9 @@ type Match struct {
 	Severity model.Severity
 	// Title is the matching clause's title, or empty for the rule title.
 	Title string
+	// Advisories are the embedded hits behind an evidence:advisory
+	// match. The finding's excerpt, title, and refs are built from them.
+	Advisories []advisory.Hit
 }
 
 // ConfigConfidence is the confidence of a config rule match. Config
@@ -97,6 +105,15 @@ func (m Match) Finding(severity model.Severity, decision model.Decision) (model.
 			loc.Line = &line
 		}
 	}
+	title := cmp.Or(m.Title, m.Rule.Title)
+	refs := append([]string(nil), m.Rule.Refs...)
+	if m.Rule.Evidence == EvidenceAdvisory && len(m.Advisories) > 0 {
+		evidence[0].Excerpt = advisory.Excerpt(m.Advisories)
+		if m.Title == "" {
+			title = advisory.Title(serverName(m.Item), m.Advisories)
+		}
+		refs = advisory.Refs(m.Rule.Refs, m.Advisories)
+	}
 	if loc.Line == nil && m.Item.Line > 0 {
 		line := m.Item.Line
 		loc.Line = &line
@@ -108,13 +125,13 @@ func (m Match) Finding(severity model.Severity, decision model.Decision) (model.
 	f := model.Finding{
 		Schema:      model.SchemaFinding,
 		Rule:        m.Rule.ID,
-		Title:       cmp.Or(m.Title, m.Rule.Title),
+		Title:       title,
 		Severity:    severity,
 		Decision:    decision,
 		Confidence:  ConfigConfidence,
 		Evidence:    evidence,
 		Location:    loc,
-		Refs:        append([]string(nil), m.Rule.Refs...),
+		Refs:        refs,
 		Fix:         m.Rule.Fix,
 		Fingerprint: fp,
 	}
@@ -215,10 +232,42 @@ func (e *Engine) ScanConfig(ctx context.Context, items []model.ConfigItem) Resul
 			if !matched {
 				continue
 			}
-			res.Matches = append(res.Matches, Match{Rule: r, Item: item, Severity: clause.Severity, Title: clause.Title})
+			match := Match{Rule: r, Item: item, Severity: clause.Severity, Title: clause.Title}
+			if r.Evidence == EvidenceAdvisory {
+				hits, err := advisoryHits(in, e.env.Advisories())
+				if err != nil {
+					res.Errors = append(res.Errors, evalError(r.ID, item, err))
+					continue
+				}
+				match.Advisories = hits
+			}
+			res.Matches = append(res.Matches, match)
 		}
 	}
 	return res
+}
+
+func advisoryHits(in *Input, db *advisory.DB) ([]advisory.Hit, error) {
+	raw, _ := in.vars[VarPayload].(map[string]any)
+	refs, _, err := mcppkg.ParsePayload(raw)
+	if err != nil {
+		return nil, fmt.Errorf("mcp: %w", ErrHookArgs)
+	}
+	if db == nil {
+		return nil, nil
+	}
+	return db.Match(refs)
+}
+
+func serverName(item model.ConfigItem) string {
+	var payload map[string]any
+	if err := json.Unmarshal(item.Payload, &payload); err != nil {
+		return "server"
+	}
+	if name, ok := payload["name"].(string); ok && strings.TrimSpace(name) != "" {
+		return name
+	}
+	return "server"
 }
 
 func evalError(rule string, item model.ConfigItem, err error) EvalError {

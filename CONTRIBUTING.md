@@ -181,6 +181,15 @@ TC-CFG-002 active tripcord/core@2026.11
 To withdraw a rule, delete its YAML and change the line to `retired`.
 Do not remove lines. CI compares the file with the pull request base.
 
+`rules/ADVISORIES.json` is the offline package-advisory list used by
+TC-CFG-023. It ships in the free core pack. Ids are `TCA-YYYY-NNNN`,
+append-only, and never reused; set `withdrawn` to a date instead of
+deleting an entry. CI checks the file next to `REGISTRY`: ids are
+unique, the document matches the schema, and an id is not removed or
+un-withdrawn. A critical advisory ships in a pack patch. Every other
+advisory ships in the monthly release. The list is embedded. Querying
+OSV is future work, and v0.1 has no online mode.
+
 ### Fixtures
 
 `rules/<ID>.test/positivos/` holds inputs that must trigger the rule and

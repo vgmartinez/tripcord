@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -15,7 +16,9 @@ import (
 	"cel.dev/cel-go/ext"
 	"cel.dev/cel-go/interpreter"
 
+	"github.com/vgmartinez/tripcord/internal/advisory"
 	"github.com/vgmartinez/tripcord/internal/model"
+	"github.com/vgmartinez/tripcord/internal/rules/mcppkg"
 	"github.com/vgmartinez/tripcord/internal/rules/shellcmd"
 )
 
@@ -127,16 +130,47 @@ var (
 
 // Env compiles expressions against the Tripcord variables. It has the
 // CEL standard library, the cel-go strings extension, shell.risks,
-// shell.unpinned, shell.locations, hook.commands, and hook.argv. None can read files, the network, the clock, or the
-// environment. matches() uses Go's RE2 engine and the shell functions a
-// single pass of the shellcmd reader; all run in linear time.
+// shell.unpinned, shell.locations, hook.commands, hook.argv,
+// mcp.packages, and mcp.vulns. None can read files, the network, the
+// clock, or the environment. matches() uses Go's RE2 engine and the
+// shell functions a single pass of the shellcmd reader; the MCP
+// functions compare an argv with the offline advisory list. All run in
+// linear time.
 type Env struct {
-	env    *cel.Env
-	limits Limits
+	env        *cel.Env
+	limits     Limits
+	advisories *advisory.DB
+}
+
+// EnvOption configures an environment.
+type EnvOption func(*Env)
+
+// WithAdvisories attaches the offline advisory list mcp.vulns consults.
+// Without one, mcp.vulns returns an empty list.
+func WithAdvisories(db *advisory.DB) EnvOption {
+	return func(e *Env) { e.SetAdvisories(db) }
+}
+
+// SetAdvisories replaces the advisory list. LoadPack calls it after
+// NewEnv, so the CEL functions, which close over this environment, see
+// the list on the next evaluation.
+func (e *Env) SetAdvisories(db *advisory.DB) {
+	if e != nil {
+		e.advisories = db
+	}
+}
+
+// Advisories returns the list attached to e, or nil.
+func (e *Env) Advisories() *advisory.DB {
+	if e == nil {
+		return nil
+	}
+	return e.advisories
 }
 
 // NewEnv returns an environment with the given limits.
-func NewEnv(limits Limits) (*Env, error) {
+func NewEnv(limits Limits, opts ...EnvOption) (*Env, error) {
+	e := &Env{limits: limits}
 	env, err := cel.NewEnv(
 		cel.Variable(VarConfig, cel.MapType(cel.StringType, cel.DynType)),
 		cel.Variable(VarPayload, cel.DynType),
@@ -150,13 +184,19 @@ func NewEnv(limits Limits) (*Env, error) {
 		hookArgs,
 		hookArgv,
 		instructionFirstMatchLine,
+		e.mcpPackages(),
+		e.mcpVulns(),
 		cel.ParserExpressionSizeLimit(limits.MaxExpressionBytes),
 		cel.ParserRecursionLimit(limits.MaxNesting),
 	)
 	if err != nil {
 		return nil, err
 	}
-	return &Env{env: env, limits: limits}, nil
+	e.env = env
+	for _, opt := range opts {
+		opt(e)
+	}
+	return e, nil
 }
 
 // shell.risks(command) and shell.risks([program, arg, ...]) return what a
@@ -452,6 +492,10 @@ const (
 	overloadHookArgs                       = "hook_args_dyn"
 	hookArgvName                           = "hook.argv"
 	overloadHookArgv                       = "hook_argv_dyn"
+	mcpPackagesName                        = "mcp.packages"
+	overloadMCPPackages                    = "mcp_packages_dyn"
+	mcpVulnsName                           = "mcp.vulns"
+	overloadMCPVulns                       = "mcp_vulns_dyn"
 	instructionFirstMatchLineName          = "instruction.first_match_line"
 	overloadInstructionFirstMatchLine      = "instruction_first_match_line_string"
 	shellRisksName                         = "shell.risks"
@@ -484,6 +528,13 @@ func newWorkList(items []string, work int) risksList {
 	return risksList{Lister: types.NewStringList(types.DefaultTypeAdapter, items), work: uint64(work)}
 }
 
+// workList is a list whose construction read work bytes. mcp.packages
+// and mcp.vulns return one so the cost limit can charge the argv.
+type workList struct {
+	traits.Lister
+	work uint64
+}
+
 // shellCost charges shell.risks and shell.locations one unit per byte
 // the reader read, at every nesting level it read it: about
 // len × (depth + 1). The reader takes a few nanoseconds a byte, so this
@@ -491,7 +542,10 @@ func newWorkList(items []string, work int) risksList {
 // not the clock, decides when a long command is too much.
 func shellCost(result ref.Val) *uint64 {
 	n := uint64(1)
-	if r, ok := result.(risksList); ok {
+	switch r := result.(type) {
+	case risksList:
+		n += r.work
+	case workList:
 		n += r.work
 	}
 	return &n
@@ -504,10 +558,12 @@ func shellCost(result ref.Val) *uint64 {
 type costEstimator struct{}
 
 func (costEstimator) CallCost(function, _ string, _ []ref.Val, result ref.Val) *uint64 {
-	if function != shellRisksName && function != shellUnpinnedName && function != shellLocationsName {
+	switch function {
+	case shellRisksName, shellUnpinnedName, shellLocationsName, mcpPackagesName, mcpVulnsName:
+		return shellCost(result)
+	default:
 		return nil
 	}
-	return shellCost(result)
 }
 
 func stringList(function string, v ref.Val) ([]string, error) {
@@ -643,6 +699,119 @@ func ctxError(ctx context.Context) error {
 // isAbsent reports a lookup of a key or index that is not in the input.
 // cel-go reports these as *types.Err without a sentinel, so the message
 // prefix is the only signal.
+// mcp.packages(payload) lists the packages a known launcher would
+// install. mcp.vulns(payload) lists the embedded advisories those
+// packages match. Both fail like hook.args when an argument is not a
+// string, number, or bool. With no advisory list, mcp.vulns is empty.
+func (e *Env) mcpPackages() cel.EnvOption {
+	return cel.Function(mcpPackagesName,
+		cel.Overload(overloadMCPPackages, []*cel.Type{cel.DynType}, cel.ListType(cel.DynType),
+			cel.UnaryBinding(func(v ref.Val) ref.Val {
+				return e.mcpCall(v, false)
+			})))
+}
+
+func (e *Env) mcpVulns() cel.EnvOption {
+	return cel.Function(mcpVulnsName,
+		cel.Overload(overloadMCPVulns, []*cel.Type{cel.DynType}, cel.ListType(cel.DynType),
+			cel.UnaryBinding(func(v ref.Val) ref.Val {
+				return e.mcpCall(v, true)
+			})))
+}
+
+func (e *Env) mcpCall(v ref.Val, vulns bool) ref.Val {
+	payload, err := nativePayload(v)
+	if err != nil {
+		return types.WrapErr(err)
+	}
+	refs, work, err := mcppkg.ParsePayload(payload)
+	if err != nil {
+		return types.WrapErr(fmt.Errorf("mcp: %w", ErrHookArgs))
+	}
+	var items []map[string]any
+	if vulns {
+		var hits []advisory.Hit
+		if e != nil && e.advisories != nil {
+			hits, err = e.advisories.Match(refs)
+			if err != nil {
+				return types.WrapErr(err)
+			}
+		}
+		items = hitMaps(hits)
+	} else {
+		items = refMaps(refs)
+	}
+	return newMapList(items, work)
+}
+
+var payloadMapType = reflect.TypeOf(map[string]any{})
+
+func nativePayload(v ref.Val) (map[string]any, error) {
+	if v == nil {
+		return map[string]any{}, nil
+	}
+	if _, ok := v.(types.Null); ok {
+		return map[string]any{}, nil
+	}
+	got, err := v.ConvertToNative(payloadMapType)
+	if err != nil {
+		return map[string]any{}, nil
+	}
+	m, ok := got.(map[string]any)
+	if !ok || m == nil {
+		return map[string]any{}, nil
+	}
+	return m, nil
+}
+
+func refMaps(refs []advisory.PackageRef) []map[string]any {
+	out := make([]map[string]any, len(refs))
+	for i, r := range refs {
+		out[i] = map[string]any{
+			"ecosystem": r.Ecosystem,
+			"name":      r.Name,
+			"spec":      r.Spec,
+			"kind":      r.Kind,
+			"version":   r.Version,
+		}
+	}
+	return out
+}
+
+func hitMaps(hits []advisory.Hit) []map[string]any {
+	out := make([]map[string]any, len(hits))
+	for i, h := range hits {
+		aliases := h.Aliases
+		if aliases == nil {
+			aliases = []string{}
+		}
+		out[i] = map[string]any{
+			"id":        h.ID,
+			"aliases":   aliases,
+			"severity":  h.Severity,
+			"ecosystem": h.Ecosystem,
+			"name":      h.Name,
+			"spec":      h.Spec,
+			"kind":      h.Kind,
+			"fixed":     h.Fixed,
+		}
+	}
+	return out
+}
+
+func newMapList(items []map[string]any, work int) ref.Val {
+	native := make([]any, len(items))
+	for i, m := range items {
+		native[i] = m
+	}
+	val := types.DefaultTypeAdapter.NativeToValue(native)
+	list, ok := val.(traits.Lister)
+	if !ok {
+		return types.WrapErr(errors.New("mcp result is not a list"))
+	}
+	return workList{Lister: list, work: uint64(work)}
+}
+
 func isAbsent(err error) bool {
 	var celErr *types.Err
 	if !errors.As(err, &celErr) {

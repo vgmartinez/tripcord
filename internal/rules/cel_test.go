@@ -538,3 +538,79 @@ func TestFunctionAllowlist(t *testing.T) {
 		}
 	}
 }
+
+func TestMCPVulnsCostAndArgs(t *testing.T) {
+	args := make([]string, 0, 1000)
+	for i := 0; i < 1000; i++ {
+		args = append(args, "pkg")
+	}
+	raw, err := json.Marshal(map[string]any{"command": "npx", "args": args})
+	if err != nil {
+		t.Fatal(err)
+	}
+	limits := DefaultLimits()
+	env, err := NewEnv(limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	in, err := ConfigInput(model.ConfigItem{
+		Harness: model.HarnessClaude,
+		Scope:   model.ScopeRepo,
+		Path:    ".mcp.json",
+		Kind:    model.ConfigKindMCPServer,
+		Payload: raw,
+	}, limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := compileT(t, env, `mcp.vulns(payload).size() >= 0`).Eval(context.Background(), in); err != nil {
+		t.Fatal(err)
+	}
+	limits.CostLimit = 8
+	env, err = NewEnv(limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	long := strings.Repeat("a", 64)
+	raw, err = json.Marshal(map[string]any{"command": "npx", "args": []string{"-y", "pkg@" + long}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	in, err = ConfigInput(model.ConfigItem{
+		Harness: model.HarnessClaude,
+		Scope:   model.ScopeRepo,
+		Path:    ".mcp.json",
+		Kind:    model.ConfigKindMCPServer,
+		Payload: raw,
+	}, limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = compileT(t, env, `mcp.vulns(payload).size() >= 0`).Eval(context.Background(), in)
+	if !errors.Is(err, ErrCostLimit) {
+		t.Fatalf("cost err = %v", err)
+	}
+	raw, err = json.Marshal(map[string]any{"command": "npx", "args": []any{"-y", map[string]any{"pkg": "x"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	limits = DefaultLimits()
+	env, err = NewEnv(limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	in, err = ConfigInput(model.ConfigItem{
+		Harness: model.HarnessClaude,
+		Scope:   model.ScopeRepo,
+		Path:    ".mcp.json",
+		Kind:    model.ConfigKindMCPServer,
+		Payload: raw,
+	}, limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = compileT(t, env, `mcp.vulns(payload).size() >= 0`).Eval(context.Background(), in)
+	if !errors.Is(err, ErrHookArgs) {
+		t.Fatalf("args err = %v", err)
+	}
+}

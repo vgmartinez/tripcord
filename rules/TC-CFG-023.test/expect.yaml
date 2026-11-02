@@ -1,0 +1,23 @@
+# Invalid server arguments must make the scan incomplete rather than let a
+# vulnerable pinned MCP server escape detection.
+positivos:
+  claude-npx-figma-exact: high
+  cursor-npx-mcp-remote: critical
+  vscode-uvx-with-prefab: critical
+  vscode-uvx-with-prefab-pep503: critical
+  codex-uvx-from-git-server: high
+  gemini-uvx-at-exact: high
+  opencode-command-array: high
+  copilot-pipx-spec: high
+  windsurf-npx-range-excludes-fix: high
+  claude-npx-package-flag: high
+  claude-pnpm-dlx: high
+  claude-bunx: critical
+  claude-npm-exec: high
+  claude-agent-frontmatter: critical
+  claude-kali-gpt-module: high
+  claude-kali-gpt-git-unpinned: high
+  cursor-multi-advisory: high
+negativos:
+  claude-npx-object-arg: error
+  malformed-fields.json: error

@@ -49,6 +49,8 @@ join
 lastIndexOf
 lowerAscii
 matches
+mcp.packages
+mcp.vulns
 replace
 reverse
 shell.locations

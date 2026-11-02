@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "s": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "other-mcp",
+        "--plugin",
+        "figma-developer-mcp@0.6.2"
+      ]
+    }
+  }
+}

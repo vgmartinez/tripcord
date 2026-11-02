@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "git": {
+      "command": "pipx",
+      "args": ["run", "--spec", "mcp-server-git==2025.12.1", "mcp-server-git"]
+    }
+  }
+}

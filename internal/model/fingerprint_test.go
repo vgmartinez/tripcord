@@ -121,6 +121,20 @@ func TestFingerprintGoldens(t *testing.T) {
 			preimage: `{"v":1,"rule":"TC-CFG-003","location":{"harness":"claude","scope":"repo"},"evidence":[{"config":{"id":"claude:repo:.claude/settings.json"}}]}`,
 			want:     "tcf_301e4605a5ed0534",
 		},
+		{
+			// evidence:advisory hashes the canonical purl and the TCA ids.
+			// A new advisory id changes this fingerprint; the title does not.
+			name:    "advisory excerpt",
+			rule:    "TC-CFG-023",
+			harness: HarnessClaude,
+			path:    ".mcp.json",
+			evidence: []Evidence{{
+				Config:  &ConfigRef{ID: "claude:repo:.mcp.json", Key: "mcp/ui"},
+				Excerpt: "pkg:pypi/prefab-ui@0.20.2 TCA-2026-0001",
+			}},
+			preimage: `{"v":1,"rule":"TC-CFG-023","location":{"harness":"claude","scope":"repo","path":".mcp.json"},"evidence":[{"config":{"id":"claude:repo:.mcp.json","key":"mcp/ui"},"excerpt":"pkg:pypi/prefab-ui@0.20.2 TCA-2026-0001"}]}`,
+			want:     "tcf_a1cb87faa8f6cff3",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

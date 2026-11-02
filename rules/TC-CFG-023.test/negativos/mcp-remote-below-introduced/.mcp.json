@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "s": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote@0.0.4",
+        "https://example.invalid/sse"
+      ]
+    }
+  }
+}

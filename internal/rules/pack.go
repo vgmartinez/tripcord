@@ -8,6 +8,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/vgmartinez/tripcord/internal/advisory"
 	"github.com/vgmartinez/tripcord/internal/strictyaml"
 )
 
@@ -32,6 +33,25 @@ type Pack struct {
 	Source   string
 	Rules    []*Rule
 	Registry *Registry
+	// Advisories is the pack's offline list, or nil when the pack has
+	// no ADVISORIES.json. Withdrawn entries are omitted from Count.
+	Advisories *advisory.DB
+}
+
+// AdvisoryCount is the number of advisories that have not been withdrawn.
+func (p *Pack) AdvisoryCount() int {
+	if p == nil {
+		return 0
+	}
+	return p.Advisories.Count()
+}
+
+// LatestAdvisoryReview is the newest reviewed date in the list.
+func (p *Pack) LatestAdvisoryReview() string {
+	if p == nil {
+		return ""
+	}
+	return p.Advisories.LatestReview()
 }
 
 // LoadPack loads the pack at the root of fsys. source labels errors.
@@ -40,8 +60,10 @@ type Pack struct {
 // rule. Each rule's pack field names the manifest pack and inherits its
 // version, and its id
 // must be active in REGISTRY. Every active id must have a rule file and
-// no retired id may have one. <ID>.test/ fixture directories and other
-// non-YAML files are ignored. All problems are reported together.
+// no retired id may have one. ADVISORIES.json, when present, is the
+// offline advisory list and is validated here. <ID>.test/ fixture
+// directories and other non-YAML files are ignored. All problems are
+// reported together.
 func LoadPack(fsys fs.FS, source string, env *Env) (*Pack, error) {
 	raw, err := readLimited(fsys, ManifestFile, maxManifestBytes)
 	if err != nil {
@@ -77,6 +99,10 @@ func LoadPack(fsys fs.FS, source string, env *Env) (*Pack, error) {
 		return nil, wrap(source, err)
 	}
 	pack := &Pack{Ref: ref, Source: source, Registry: reg}
+	db, err := loadAdvisories(fsys, source)
+	if err != nil {
+		errs = append(errs, err)
+	}
 	seen := map[string]bool{}
 	for _, entry := range entries {
 		name := entry.Name()
@@ -109,7 +135,26 @@ func LoadPack(fsys fs.FS, source string, env *Env) (*Pack, error) {
 	if len(errs) > 0 {
 		return nil, errors.Join(errs...)
 	}
+	pack.Advisories = db
+	if db != nil && env != nil {
+		env.SetAdvisories(db)
+	}
 	return pack, nil
+}
+
+func loadAdvisories(fsys fs.FS, source string) (*advisory.DB, error) {
+	raw, err := readLimited(fsys, advisory.AdvisoryFile, 1<<20)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, wrap(source, err)
+	}
+	db, err := advisory.Parse(raw)
+	if err != nil {
+		return nil, invalid(path.Join(source, advisory.AdvisoryFile), "%v", err)
+	}
+	return db, nil
 }
 
 func loadRule(fsys fs.FS, name, id string, ref PackRef, reg *Registry, env *Env) (*Rule, error) {

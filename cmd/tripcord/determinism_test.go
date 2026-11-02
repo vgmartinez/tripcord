@@ -128,6 +128,8 @@ var deterministicFixtureTrees = []string{
 	"TC-CFG-015.test/negativos/narrow-safe-domain",
 	"TC-CFG-016.test/positivos/claude-disable-all-hooks",
 	"TC-CFG-016.test/negativos/claude-disable-false",
+	"TC-CFG-023.test/positivos/claude-npx-figma-exact",
+	"TC-CFG-023.test/negativos/figma-fixed-exact",
 }
 
 // deterministicFixtureRoots copies the fixed raw fixture subset into

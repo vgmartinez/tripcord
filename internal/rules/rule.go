@@ -35,8 +35,10 @@ const MaxRuleBytes = 64 << 10
 // keys are rejected. evidence, when present, names what a finding's
 // excerpt describes besides the config citation: hidden_chars is the
 // item's hidden code points by code point, line, and column (see
-// internal/hiddenchar), never the text they hide. severity_when, when
-// present, is tried in order after when is true: the first true clause
+// internal/hiddenchar), never the text they hide. advisory is the
+// canonical package URLs and TCA ids of the embedded advisories that
+// matched (see internal/advisory). severity_when, when present,
+// is tried in order after when is true: the first true clause
 // is the severity of that match, and an item no clause accepts is not a
 // match. when then holds only what the clauses share, so a pattern is
 // written once. severity is the rule's catalog severity and the floor a
@@ -62,6 +64,7 @@ type Spec struct {
 const (
 	EvidenceHiddenChars      = "hidden_chars"
 	EvidenceInstructionMatch = "instruction_match"
+	EvidenceAdvisory         = "advisory"
 )
 
 // SeverityWhen is one per-match severity clause. Title, when set,
@@ -141,8 +144,8 @@ func (s *Spec) Validate() error {
 	if len(s.Refs) == 0 {
 		return errors.New("refs needs at least one incident or official documentation link")
 	}
-	if s.Evidence != "" && s.Evidence != EvidenceHiddenChars && s.Evidence != EvidenceInstructionMatch {
-		return fmt.Errorf("evidence %q: want %s, %s, or nothing", s.Evidence, EvidenceHiddenChars, EvidenceInstructionMatch)
+	if s.Evidence != "" && s.Evidence != EvidenceHiddenChars && s.Evidence != EvidenceInstructionMatch && s.Evidence != EvidenceAdvisory {
+		return fmt.Errorf("evidence %q: want %s, %s, %s, or nothing", s.Evidence, EvidenceHiddenChars, EvidenceInstructionMatch, EvidenceAdvisory)
 	}
 	for _, ref := range s.Refs {
 		if err := validateRef(ref); err != nil {
@@ -200,7 +203,7 @@ type Rule struct {
 	Fix          string
 	Refs         []string
 	When         *Expr
-	// Evidence is the spec's evidence: "" or EvidenceHiddenChars.
+	// Evidence is the spec's evidence: "", hidden_chars, instruction_match, or advisory.
 	Evidence string
 }
 
