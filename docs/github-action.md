@@ -30,6 +30,11 @@ outputs `is_agent` and `agents` are that command's `GITHUB_OUTPUT`
 values. A pr-context read error is a warning and does not fail the job;
 the scan exit code does, after the reports are published.
 
+`pr-context` reads commits between the pull request base and head. The
+checkout of the repository being scanned needs `fetch-depth: 0`. A
+shallow clone usually does not contain `base`, so commit and note
+signals are skipped and only the pull request login and branch remain.
+
 Publishing runs when the scan recorded an exit code. A pull request
 whose head repository differs from its base repository skips both the
 SARIF upload and the comment and emits a warning. A missing SARIF file,
@@ -40,6 +45,7 @@ upload code scanning results. None of these cases fails the job.
 ```yaml
 - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
   with:
+    fetch-depth: 0
     persist-credentials: false
 - uses: ./.github/actions/tripcord
 ```
