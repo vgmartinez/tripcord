@@ -14,8 +14,12 @@
 # a `permissions.allow` entry naming one of a short, conservative list
 # of hosts with that write-then-observe design: Hugging Face (model,
 # dataset, and Space repos, counted as downloads server-side), PyPI and
-# npm (public per-release download counts), and Pastebin and
-# webhook.site (an anonymous paste or request catcher is the product).
+# npm (public per-release download counts), Pastebin and webhook.site
+# (an anonymous paste or request catcher is the product), and
+# gist.githubusercontent.com (anyone can publish a gist, and that host
+# serves the file). raw.githubusercontent.com and github.io are left
+# off: they show up in ordinary allowlists often enough to be false
+# positives. Revisiting the list with real allowlists is issue #38.
 # A much larger set of sites host attacker-reachable content; this list
 # is deliberately narrow, to the ones with a documented or
 # purpose-built read-back channel, not every third-party host an agent
@@ -37,7 +41,7 @@ when: |
     has(payload.value) && type(payload.value) == map &&
     has(payload.value.allow) && type(payload.value.allow) == list &&
     payload.value.allow.exists(e, type(e) == string &&
-      e.matches(r'''(?i)^\s*webfetch\(\s*domain:\s*(\*\.)?(huggingface\.co|hf\.co|pypi\.org|files\.pythonhosted\.org|npmjs\.com|registry\.npmjs\.org|pastebin\.com|webhook\.site)\s*\)\s*$'''))
+      e.matches(r'''(?i)^\s*webfetch\(\s*domain:\s*(\*\.)?(huggingface\.co|hf\.co|pypi\.org|files\.pythonhosted\.org|npmjs\.com|registry\.npmjs\.org|pastebin\.com|webhook\.site|gist\.githubusercontent\.com)\s*\)\s*$'''))
 fix: "Remove the host from permissions.allow, or scope the fetch further than WebFetch can express (a wrapper script that only reads one fixed, pinned file). If the project genuinely needs to fetch Hugging Face card text or a package index page, treat the result as untrusted input, the way a browsed web page is treated, rather than pre-approving the fetch."
 refs:
   - https://nvd.nist.gov/vuln/detail/CVE-2026-54316

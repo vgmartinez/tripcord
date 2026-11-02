@@ -37,6 +37,7 @@ with that write-then-observe design.
 | `npmjs.com`, `registry.npmjs.org` | Anyone can publish a package; per-version download counts are public. |
 | `pastebin.com` | An anonymous paste that anyone can later read is the product. |
 | `webhook.site` | A disposable endpoint that records and replays every request it receives is the product. |
+| `gist.githubusercontent.com` | Anyone can publish a gist, and this host serves that file to a fetch. |
 
 This list is deliberately narrow: it is the hosts with a documented or
 purpose-built read-back channel, not every third-party site an agent
@@ -49,11 +50,14 @@ segment (`WebFetch(domain:*.huggingface.co)` is also reported).
 
 Not reported:
 
-- A domain not on the list, such as `WebFetch(domain:docs.anthropic.com)`
-  or `WebFetch(domain:raw.githubusercontent.com)`. GitHub's raw-content
-  host serves attacker-reachable content too, but this rule's list is
-  scoped to hosts with a known read-back channel, not content hosting in
-  general; see "Limits" below.
+- A domain not on the list, such as `WebFetch(domain:docs.anthropic.com)`,
+  `WebFetch(domain:raw.githubusercontent.com)`, or
+  `WebFetch(domain:*.github.io)`. Those last two serve
+  attacker-reachable content, and they are left off on purpose:
+  `raw.githubusercontent.com` and `github.io` show up in ordinary
+  allowlists often enough that flagging them would be a false positive.
+  Revisiting the list with real allowlists is
+  [issue #38](https://github.com/vgmartinez/tripcord/issues/38).
 - A bare `WebFetch` or `WebFetch(domain:*)` allow, which is TC-CFG-004's
   broad-rule finding, not this one.
 - `settings.local.json`, which is personal and is not part of this
@@ -61,13 +65,13 @@ Not reported:
 
 ## Limits
 
-- The host list above is a starting set, chosen conservatively from
-  hosts with a demonstrated or purpose-built read-back channel. It is
-  not a general content-hosting blocklist, and it does not cover every
-  host that could serve as a side channel (for example, a host with
-  public visit analytics the repository owner can view). Extending it
-  is a product decision for the rule's maintainer, not something this
-  rule infers from a domain's general popularity.
+- The host list above is a starting set. v0 includes
+  `gist.githubusercontent.com` and excludes `raw.githubusercontent.com`
+  and `github.io` because those two are common in real allowlists.
+  Extending or shrinking the list is a product decision, tracked in
+  [issue #38](https://github.com/vgmartinez/tripcord/issues/38), not
+  something this rule infers from a domain's popularity. It is not a
+  general content-hosting blocklist.
 - Only `permissions.allow` entries of the exact `WebFetch(domain:...)`
   shape are read; a wrapper script that fetches the same host through
   `Bash` is not analyzed by this rule.
@@ -84,10 +88,22 @@ Reported, high:
 {"permissions": {"allow": ["WebFetch(domain:*.pastebin.com)"]}}
 ```
 
+```json
+{"permissions": {"allow": ["WebFetch(domain:gist.githubusercontent.com)"]}}
+```
+
 Not reported:
 
 ```json
 {"permissions": {"allow": ["WebFetch(domain:docs.anthropic.com)"]}}
+```
+
+```json
+{"permissions": {"allow": ["WebFetch(domain:raw.githubusercontent.com)"]}}
+```
+
+```json
+{"permissions": {"allow": ["WebFetch(domain:*.github.io)"]}}
 ```
 
 ```json
