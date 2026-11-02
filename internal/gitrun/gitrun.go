@@ -3,8 +3,9 @@
 // it controls: no hooks, no inherited Git configuration, no credential
 // helper, no prompt, and no transport other than https, ssh, and file.
 //
-// The preopen command carries its own copy of these settings until that
-// change merges and can call this package.
+// Both pr-context (internal/prcontext) and preopen (internal/preopen)
+// build their git invocations on this package, so the hardening lives
+// in one place.
 package gitrun
 
 import (
@@ -130,15 +131,17 @@ func Run(ctx context.Context, repo string, args ...string) ([]byte, error) {
 		}
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
-			return nil, &ExitError{Args: args, Stderr: sanitize(stderr.String()), Err: err}
+			return nil, &ExitError{Args: args, Stderr: Sanitize(stderr.String()), Err: err}
 		}
 		return nil, fmt.Errorf("%w: %w", ErrNotInstalled, err)
 	}
 	return out, nil
 }
 
-// sanitize keeps git's diagnostic to one bounded line.
-func sanitize(s string) string {
+// Sanitize keeps a git diagnostic to one bounded line, for a caller
+// building its own ExitError around a command this package did not run
+// end to end (for example one using Command for streaming I/O).
+func Sanitize(s string) string {
 	s = strings.TrimSpace(strings.ReplaceAll(s, "\r", ""))
 	s = strings.ReplaceAll(s, "\n", "; ")
 	const limit = 1024

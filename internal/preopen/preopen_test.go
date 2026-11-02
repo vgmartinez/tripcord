@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/vgmartinez/tripcord/internal/gitrun"
 	"github.com/vgmartinez/tripcord/internal/preopen/preopentest"
 )
 
@@ -98,7 +99,7 @@ func TestFetchRunsNothing(t *testing.T) {
 }
 
 func TestFetchRejectsTransports(t *testing.T) {
-	git := preopentest.RequireTools(t)
+	preopentest.RequireTools(t)
 	tmp := privateTemp(t)
 	sentinel := filepath.Join(t.TempDir(), "ext")
 	ext := "ext::sh -c touch% " + filepath.ToSlash(sentinel)
@@ -115,9 +116,9 @@ func TestFetchRejectsTransports(t *testing.T) {
 	// The protocol settings refuse ext:: and git:// even when the target
 	// check is bypassed.
 	for _, url := range []string{ext, "git://127.0.0.1:9/repo"} {
-		err := clone(context.Background(), git, url, filepath.Join(t.TempDir(), "c"))
-		var exitErr *gitExitError
-		if !errors.As(err, &exitErr) || !strings.Contains(exitErr.detail, "not allowed") {
+		err := clone(context.Background(), url, filepath.Join(t.TempDir(), "c"))
+		var exitErr *gitrun.ExitError
+		if !errors.As(err, &exitErr) || !strings.Contains(exitErr.Stderr, "not allowed") {
 			t.Errorf("clone(%q) = %v, want git to refuse the transport", url, err)
 		}
 	}
@@ -403,21 +404,8 @@ func TestEnsureParentsRefusesSymlinkedParent(t *testing.T) {
 	assertEmpty(t, outside)
 }
 
-func TestGitEnvDropsInheritedGitSettings(t *testing.T) {
-	t.Setenv("GIT_CONFIG_PARAMETERS", "'core.hooksPath'='/x'")
-	t.Setenv("GIT_SSH_COMMAND", "sh -c id")
-	t.Setenv("SSH_ASKPASS", "/x")
-	env := gitEnv()
-	for _, entry := range env {
-		key, _, _ := strings.Cut(entry, "=")
-		switch key {
-		case "GIT_CONFIG_PARAMETERS", "GIT_SSH_COMMAND", "SSH_ASKPASS":
-			t.Errorf("gitEnv kept %s", entry)
-		}
-	}
-	for _, want := range []string{"GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=" + os.DevNull, "GIT_TERMINAL_PROMPT=0", "GIT_LFS_SKIP_SMUDGE=1"} {
-		if !slices.Contains(env, want) {
-			t.Errorf("gitEnv lacks %s", want)
-		}
-	}
-}
+// The hardened environment and -c overrides git runs with are now
+// internal/gitrun's; see TestEnvDropsInheritedGitSettings and
+// TestConfigArgsMatchTheHardenedSet there. TestArmedFixtureTripsNaiveClone,
+// TestFetchRunsNothing, and TestFetchRejectsTransports below exercise this
+// package's own use of gitrun end to end, with a real git invocation.
