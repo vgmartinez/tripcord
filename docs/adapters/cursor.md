@@ -45,6 +45,11 @@ Team hooks distributed from the dashboard are a separate mechanism; see
 
 ## Not scanned in v0
 
+- The Dockerfile named by `.cursor/environment.json` `build` (for example
+  `.cursor/Dockerfile`). `build` is reported as an `env-setup` item, but
+  the Dockerfile it names is not read, so its `RUN` instructions are not
+  scanned. Reading that Dockerfile is planned for v0.1
+  ([#32](https://github.com/vgmartinez/tripcord/issues/32)).
 - Team hooks distributed from the Cursor dashboard
   (`~/.cursor/managed/team_*/hooks/`): these are scripts, not a
   `hooks.json`, and are not read.
