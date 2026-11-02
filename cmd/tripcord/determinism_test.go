@@ -124,6 +124,10 @@ var deterministicFixtureTrees = []string{
 	"TC-CFG-011.test/positivos/agents-nested-tags",
 	"TC-CFG-011.test/negativos/agents-leading-bom",
 	"TC-CFG-012.test/positivos/agents-read-dotenv",
+	"TC-CFG-015.test/positivos/huggingface-bare",
+	"TC-CFG-015.test/negativos/narrow-safe-domain",
+	"TC-CFG-016.test/positivos/claude-disable-all-hooks",
+	"TC-CFG-016.test/negativos/claude-disable-false",
 }
 
 // deterministicFixtureRoots copies the fixed raw fixture subset into
