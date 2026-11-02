@@ -205,6 +205,12 @@ one fixture. A fixture is either of:
   scope on and an empty environment, so a host `COPILOT_HOME` or
   `XDG_CONFIG_HOME` cannot redirect it. Use it for user-scope files such
   as `~/.copilot/mcp-config.json`.
+  Do not commit a symlink. GitHub's action download fails on any
+  tracked symlink, so `TestNoTrackedSymlinks` rejects them. Add the link
+  to `fixtureSymlinks` in `internal/rules/fixture_symlinks_test.go`
+  instead; the fixture tests copy the pack to a temp directory and
+  create it there. A link whose target is outside the repository goes
+  in a test of its own, such as `TestTCFG006OutsideSymlinks`.
 - A `.json` engine fixture: a config item, or an array of them, with
   `sha256` optionally left empty. Use it for payloads an adapter would
   not produce from a real file, such as a field of the wrong type:

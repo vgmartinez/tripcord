@@ -15,9 +15,12 @@ import (
 // `make test-rule ID=...` sets TRIPCORD_RULE_ID, and optionally
 // TRIPCORD_RULES_DIR, to run one rule.
 func TestRuleFixtures(t *testing.T) {
-	dirs := []string{"../../rules", fixturePackDir}
-	if d := os.Getenv("TRIPCORD_RULES_DIR"); d != "" {
+	core := corePackWithSymlinks(t)
+	dirs := []string{core, fixturePackDir}
+	if d := os.Getenv("TRIPCORD_RULES_DIR"); d != "" && !samePath(t, d, coreRulesDir) {
 		dirs = []string{d}
+	} else if d != "" {
+		dirs = []string{core}
 	}
 	only := os.Getenv("TRIPCORD_RULE_ID")
 	env := testEnv(t)
@@ -42,6 +45,19 @@ func TestRuleFixtures(t *testing.T) {
 	if only != "" && !found {
 		t.Fatalf("rule %s not found in %s", only, strings.Join(dirs, ", "))
 	}
+}
+
+func samePath(t *testing.T, a, b string) bool {
+	t.Helper()
+	absA, err := filepath.Abs(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	absB, err := filepath.Abs(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return absA == absB
 }
 
 func writeFile(t *testing.T, path, body string) {
