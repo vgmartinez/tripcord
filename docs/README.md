@@ -15,6 +15,8 @@ formats, flags, policy interaction, examples, and exit codes.
 [preopen.md](preopen.md) documents `tripcord preopen`, which fetches a
 repository without running its hooks, filters, LFS, or submodules and then
 scans it.
+[github-action.md](github-action.md) documents the local composite action,
+its GitHub annotations, SARIF upload, and optional pull-request comment.
 
 ## Adapters
 
