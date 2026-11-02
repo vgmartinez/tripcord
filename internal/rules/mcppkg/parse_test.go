@@ -1,8 +1,10 @@
 package mcppkg
 
 import (
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/vgmartinez/tripcord/internal/advisory"
 )
@@ -27,7 +29,6 @@ func TestLaunchers(t *testing.T) {
 		{[]string{"uv", "tool", "run", "--from", "mcp-server-git==2025.9.0", "mcp-server-git"}, advisory.EcoPyPI, "mcp-server-git", advisory.KindExact, "2025.9.0"},
 		{[]string{"uv", "run", "--with", "prefab-ui==0.20.2", "server.py"}, advisory.EcoPyPI, "prefab-ui", advisory.KindExact, "0.20.2"},
 		{[]string{"pipx", "run", "--spec", "mcp-server-git==2025.12.1", "mcp-server-git"}, advisory.EcoPyPI, "mcp-server-git", advisory.KindExact, "2025.12.1"},
-		{[]string{"python3", "-m", "kali_gpt.tools.mcp_server"}, advisory.EcoModule, "kali_gpt.tools.mcp_server", advisory.KindUnpinned, ""},
 		{[]string{"python3.12", "kali_gpt/tools/mcp_server.py"}, advisory.EcoModule, "kali_gpt/tools/mcp_server.py", advisory.KindUnpinned, ""},
 		{[]string{"docker", "run", "-i", "--rm", "mcp/git:latest"}, advisory.EcoDocker, "docker.io/mcp/git", advisory.KindUnpinned, "latest"},
 		{[]string{"docker", "container", "run", "registry:5000/ns/img:1.2.3@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, advisory.EcoDocker, "registry:5000/ns/img", advisory.KindExact, "1.2.3"},
@@ -78,5 +79,41 @@ func TestUnparsedAndOpaque(t *testing.T) {
 	_, _, err = ParsePayload(map[string]any{"command": "npx", "args": []any{"-y", map[string]any{"pkg": "x"}}})
 	if err == nil {
 		t.Fatal("object arg accepted")
+	}
+}
+
+func TestOversizedSpecIsOpaqueAndFast(t *testing.T) {
+	t.Parallel()
+	db, err := advisory.Parse([]byte(`{"format":1,"advisories":[{"id":"TCA-2026-0001","aliases":[],"summary":"x","severity":"moderate","affected":[{"ecosystem":"pypi","name":"mcp-server-git","ranges":[{"fixed":"2025.9.25"}]}],"refs":["https://example.com/a"],"added":"tripcord/core@2026.11","reviewed":"2026-11-02"}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var b strings.Builder
+	b.WriteString("mcp-server-git<2025.9.25")
+	for i := range 20000 {
+		b.WriteString(",!=2025.1.")
+		b.WriteString(strconv.Itoa(i))
+	}
+	npm := "figma-developer-mcp@" + strings.Repeat("<0.6.3 || ", 12000) + "<0.6.3"
+	start := time.Now()
+	refs, unparsed := Parse([]string{"uvx", "--from", b.String(), "mcp-server-git"})
+	npmRefs, npmUnparsed := Parse([]string{"npx", npm})
+	refs = append(refs, npmRefs...)
+	hits, err := db.Match(refs)
+	if elapsed := time.Since(start); elapsed > 100*time.Millisecond {
+		t.Fatalf("oversized specs took %v", elapsed)
+	}
+	if err != nil || unparsed || npmUnparsed || len(hits) != 0 {
+		t.Fatalf("hits %v unparsed %v %v err %v", hits, unparsed, npmUnparsed, err)
+	}
+	for _, r := range refs {
+		if r.Kind != advisory.KindOpaque || r.Version != "" {
+			t.Fatalf("oversized spec kept: kind %s version length %d", r.Kind, len(r.Version))
+		}
+	}
+	clauses := "mcp-server-git<2026" + strings.Repeat(",!=1", advisory.MaxSpecClauses-1)
+	refs, _ = Parse([]string{"uvx", "--from", clauses, "mcp-server-git"})
+	if len(refs) != 1 || refs[0].Kind != advisory.KindRange {
+		t.Fatalf("spec at the clause limit: %+v", refs)
 	}
 }

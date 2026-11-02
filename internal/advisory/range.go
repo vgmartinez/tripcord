@@ -7,6 +7,32 @@ import (
 	"strings"
 )
 
+// MaxSpecBytes and MaxSpecClauses bound one version specifier. != splits
+// intervals, so work grows with the square of the clause count; a spec
+// over either bound is opaque rather than evaluated.
+const (
+	MaxSpecBytes   = 256
+	MaxSpecClauses = 32
+)
+
+// SpecWithinLimits reports whether a version specifier is small enough
+// to evaluate. Clauses are PEP 440 comma parts and npm comparators
+// across || alternatives.
+func SpecWithinLimits(s string) bool {
+	if len(s) > MaxSpecBytes {
+		return false
+	}
+	return strings.Count(s, ",")+1 <= MaxSpecClauses && npmClauses(s) <= MaxSpecClauses
+}
+
+func npmClauses(s string) int {
+	n := 0
+	for _, part := range strings.Split(s, "||") {
+		n += max(1, len(strings.Fields(part)))
+	}
+	return n
+}
+
 // parseNPMRanges parses an npm version constraint into the union of
 // intervals it admits. Wildcards, ^, ~, hyphen ranges, and || are
 // included. A constraint that does not parse is an error, which the
@@ -15,6 +41,9 @@ func parseNPMRanges(s string) ([]iv[semver], error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return nil, fmt.Errorf("empty npm range")
+	}
+	if !SpecWithinLimits(s) {
+		return nil, fmt.Errorf("npm range exceeds %d bytes or %d clauses", MaxSpecBytes, MaxSpecClauses)
 	}
 	var out []iv[semver]
 	for _, part := range strings.Split(s, "||") {
@@ -288,6 +317,9 @@ func parsePyRanges(s string) ([]iv[pepver], error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return nil, fmt.Errorf("empty version specifier")
+	}
+	if !SpecWithinLimits(s) {
+		return nil, fmt.Errorf("version specifier exceeds %d bytes or %d clauses", MaxSpecBytes, MaxSpecClauses)
 	}
 	parts := strings.Split(s, ",")
 	cur := []iv[pepver]{{}}

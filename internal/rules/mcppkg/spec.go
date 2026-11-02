@@ -105,6 +105,10 @@ func splitPy(spec string) (name, ver, mode string) {
 }
 
 func pyConstraint(ref advisory.PackageRef, constraint string) advisory.PackageRef {
+	if !advisory.SpecWithinLimits(constraint) {
+		ref.Kind = advisory.KindOpaque
+		return ref
+	}
 	op, ver, ok := splitPyOpLocal(constraint)
 	if !ok {
 		ref.Kind = advisory.KindOpaque
@@ -142,6 +146,10 @@ func versioned(ref advisory.PackageRef, ver string, npm bool) advisory.PackageRe
 	ver = strings.TrimSpace(ver)
 	if ver == "" || ver == "latest" || ver == "*" {
 		ref.Kind = advisory.KindUnpinned
+		return ref
+	}
+	if !advisory.SpecWithinLimits(ver) {
+		ref.Kind = advisory.KindOpaque
 		return ref
 	}
 	if strings.Contains(ver, "$") || strings.Contains(ver, advisory.Redacted) {
@@ -308,8 +316,3 @@ func splitDockerTag(nameTag string) (name, tag string) {
 	}
 	return nameTag, ""
 }
-
-// parseNPMRangesExported lets the spec classifier reject a constraint
-// the interval parser cannot cover. The parser lives in advisory; this
-// wrapper only checks that a range is well formed by asking Match's
-// own grammar through a throwaway comparison.

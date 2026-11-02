@@ -1,6 +1,11 @@
 package advisory
 
-import "testing"
+import (
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+)
 
 func TestSemverOrder(t *testing.T) {
 	t.Parallel()
@@ -80,5 +85,34 @@ func TestRangeCoverage(t *testing.T) {
 	}
 	if _, err := affected(Range{Fixed: "1.0.0", LastAffected: "0.9.0"}, parseSemver, cmpSemver); err == nil {
 		t.Fatal("fixed and last_affected accepted")
+	}
+}
+
+func TestRangeLimits(t *testing.T) {
+	t.Parallel()
+	var py, npm strings.Builder
+	py.WriteString("<2025.9.25")
+	npm.WriteString("<0.6.3")
+	for i := range 20000 {
+		py.WriteString(",!=2025.1." + strconv.Itoa(i))
+		npm.WriteString(" || 0.0." + strconv.Itoa(i))
+	}
+	start := time.Now()
+	_, pyErr := parsePyRanges(py.String())
+	_, npmErr := parseNPMRanges(npm.String())
+	if elapsed := time.Since(start); elapsed > 100*time.Millisecond {
+		t.Fatalf("oversized ranges took %v", elapsed)
+	}
+	if pyErr == nil || npmErr == nil {
+		t.Fatalf("oversized ranges accepted: %v %v", pyErr, npmErr)
+	}
+	if !PyRangeOK("<2026" + strings.Repeat(",!=1", MaxSpecClauses-1)) {
+		t.Fatal("pep specifier at the clause limit rejected")
+	}
+	if PyRangeOK("<2026" + strings.Repeat(",!=1", MaxSpecClauses)) {
+		t.Fatal("pep specifier over the clause limit accepted")
+	}
+	if NPMRangeOK(strings.Repeat("1.0.0 || ", MaxSpecClauses) + "1.0.0") {
+		t.Fatal("npm range over the clause limit accepted")
 	}
 }
