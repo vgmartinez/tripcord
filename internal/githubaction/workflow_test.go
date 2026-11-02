@@ -231,6 +231,19 @@ func checkOneJobWorkflow(t *testing.T, wf workflowFile, wantPerms map[string]str
 	if len(steps) != 4 {
 		t.Fatalf("scan has %d steps, want checkout, reviews, scan directory setup, and the action", len(steps))
 	}
+	checkoutIndex, actionIndex := -1, -1
+	for i, step := range steps {
+		current := mapping(t, step)
+		if scalar(current["uses"]) == workflowCheckout {
+			checkoutIndex = i
+		}
+		if scalar(current["id"]) == "tripcord" {
+			actionIndex = i
+		}
+	}
+	if checkoutIndex < 0 || actionIndex < 0 || checkoutIndex >= actionIndex {
+		t.Fatal("the pinned checkout must run before the Tripcord action")
+	}
 	checkoutStep := mapping(t, steps[0])
 	if scalar(checkoutStep["uses"]) != workflowCheckout {
 		t.Fatalf("checkout uses %q", scalar(checkoutStep["uses"]))

@@ -25,7 +25,9 @@ The action runs three scans with that binary:
 - a SARIF report, uploaded to GitHub code scanning by default; and
 - a Markdown report, which can optionally be posted to a pull request.
 
-It then runs `tripcord pr-context` with the same binary. Set
+It then runs `tripcord pr-context` against the checked-out workspace,
+not the scan `path`, so it can read the pull request's git history.
+Set
 `reviews-file` to a JSON array of pull request reviews to pass
 `--reviews-file`. An empty value skips the flag. The array stays on
 disk and is not printed. The action outputs `is_agent`, `agents`, and
