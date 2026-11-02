@@ -4,7 +4,8 @@
 It reads configuration only: it never executes repository content, starts
 hooks, or contacts a network service. `PATH` defaults to the current directory.
 A directory that is not a Git repository can still be scanned. `--since` is
-the only mode that requires Git.
+the only mode that requires Git. To scan a repository before cloning it
+yourself, use [`tripcord preopen`](preopen.md).
 
 ## Flags
 

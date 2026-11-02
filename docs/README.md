@@ -12,6 +12,9 @@ depends on the surface: scans fail on high, and the hook warns.
 
 [scan.md](scan.md) documents `tripcord scan`, its static-only behavior,
 formats, flags, policy interaction, examples, and exit codes.
+[preopen.md](preopen.md) documents `tripcord preopen`, which fetches a
+repository without running its hooks, filters, LFS, or submodules and then
+scans it.
 
 ## Adapters
 
