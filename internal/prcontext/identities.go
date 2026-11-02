@@ -19,7 +19,8 @@ type agentID struct {
 // botLogins are GitHub accounts treated as coding-agent authors. The
 // match is the whole login, case-insensitive, including the [bot]
 // suffix. A display name such as "Claude" is not a login and is not in
-// this table.
+// this table. Review bots such as gemini-code-assist[bot] are not
+// listed: they comment on pull requests but do not author the changes.
 //
 // TODO(#34): Verify the unverified agent identity tables (botLogins, trailerEmails, branchPrefixes) and replace 0 with the tracking issue.
 var botLogins = []agentID{

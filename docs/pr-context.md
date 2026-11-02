@@ -42,6 +42,9 @@ noreply address matches a bot login only when it is
 | `devin-ai-integration[bot]` | devin |
 | `google-labs-jules[bot]` | jules |
 
+Review bots such as `gemini-code-assist[bot]` are not listed. They comment
+on pull requests but do not author the changes.
+
 ### Trailer addresses
 
 | Address | Agent |
