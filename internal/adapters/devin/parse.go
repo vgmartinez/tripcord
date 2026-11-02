@@ -22,8 +22,8 @@ type file struct {
 	// repository root, must fail closed instead of being credited
 	// against the wrong directory. See command.
 	elsewhere bool
-	// cdSeen is set once a command has run a bare cd or pushd outside a
-	// subshell: see hasBareCD. Devin runs initialize then maintenance
+	// cdSeen is set once a command has an ambiguous shell-state word
+	// outside a subshell: see hasShellState. Devin runs initialize then maintenance
 	// as build steps, and a plain blueprint.yaml gives no reason to
 	// think either resets the working directory the other left behind,
 	// so a bare cd also carries from initialize into maintenance, and
@@ -206,21 +206,32 @@ func (f *file) workingDirectory(command string) (string, bool) {
 // change there is confined to a subshell. A function definition is also
 // stateful: its body might later run cd, and static scanning cannot prove
 // when that happens.
+//
+// "." counts only as the source builtin, the command word of a simple
+// command. "./build.sh" and "file.txt" keep the dot inside the token, and
+// an argument such as "git -C ." does not count. A slash continues a
+// token that already starts with a dot, so the dot is not flushed as its
+// own word.
 func hasShellState(command string) bool {
 	depth := 0
 	var quote byte
 	var word []byte
+	atCommand := true
 	flush := func() bool {
 		if len(word) == 0 {
 			return false
 		}
-		defer func() { word = word[:0] }()
-		switch string(word) {
-		case "cd", "pushd", "popd", "eval", "source", ".", "exec", "function":
-			return true
-		default:
-			return false
+		text := string(word)
+		word = word[:0]
+		if text == "." {
+			return atCommand
 		}
+		switch text {
+		case "cd", "pushd", "popd", "eval", "source", "exec", "function":
+			return true
+		}
+		atCommand = false
+		return false
 	}
 	for i := 0; i < len(command); i++ {
 		c := command[i]
@@ -257,11 +268,16 @@ func hasShellState(command string) bool {
 			if depth > 0 {
 				depth--
 			}
+		case depth == 0 && c == '/' && len(word) > 0 && word[0] == '.':
+			word = append(word, '/')
 		case depth == 0 && isShellWord(c):
 			word = append(word, c)
 		case depth == 0:
 			if flush() {
 				return true
+			}
+			if c == ';' || c == '&' || c == '|' || c == '\n' || c == '{' || c == '}' {
+				atCommand = true
 			}
 		}
 	}
