@@ -29,6 +29,10 @@ inputs:
     description: Token used for a ref checkout, SARIF upload, and an optional pull-request comment.
     required: false
     default: ${{ github.token }}
+  reviews-file:
+    description: JSON array of GitHub pull request reviews for pr-context. Empty skips --reviews-file.
+    required: false
+    default: ""
 outputs:
   scan-exit-code:
     description: Exit code from the scans. The job fails with this code after publishing.
@@ -170,9 +174,14 @@ runs:
       env:
         TRIPCORD: ${{ steps.tool.outputs.path }}
         TRIPCORD_PATH: ${{ inputs.path }}
+        TRIPCORD_REVIEWS_FILE: ${{ inputs.reviews-file }}
       run: |
         set +e
-        "$TRIPCORD" pr-context --format gha --repo "$TRIPCORD_PATH"
+        if [ -n "$TRIPCORD_REVIEWS_FILE" ]; then
+          "$TRIPCORD" pr-context --format gha --repo "$TRIPCORD_PATH" --reviews-file "$TRIPCORD_REVIEWS_FILE"
+        else
+          "$TRIPCORD" pr-context --format gha --repo "$TRIPCORD_PATH"
+        fi
         status=$?
         echo "exit-code=$status" >> "$GITHUB_OUTPUT"
         if [ "$status" -ne 0 ]; then
