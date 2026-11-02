@@ -71,7 +71,9 @@ Not reported:
   reported. v0 has no `tripcord init` subcommand
   ([fingerprint.md](../fingerprint.md) records that), so there is no
   `init --embed` output that names the wiring files such a check would
-  compare against. A missing file emits no config item.
+  compare against. A missing file emits no config item. The
+  embed-present-but-wiring-missing case is deferred to the week-4
+  `init --embed` work in [issue #39](https://github.com/vgmartinez/tripcord/issues/39).
 - Tripcord does not yet register its own hook in any harness (hook mode
   is implemented later; see [docs/README.md](../README.md),
   "Decisions"). This rule's finding stands on its own merits

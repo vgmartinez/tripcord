@@ -2,8 +2,8 @@
 
 | | |
 | --- | --- |
-| Status | Delegated to an external tool; no `rules/TC-CFG-013.yaml` in this pack |
-| Detector | [`zizmor`](https://docs.zizmor.sh/)'s `agentic-actions` audit |
+| Status | No v0 coverage; no `rules/TC-CFG-013.yaml` in this pack |
+| Proposed detector | [`zizmor`](https://docs.zizmor.sh/)'s unreleased `agentic-actions` audit |
 
 ## What this is
 
@@ -46,24 +46,21 @@ syntax, anchors and aliases, reusable and matrix workflows,
 `author_association` gating, a registry of known agent actions and
 their permissive-user settings) — is a feature-sized addition in its
 own right, not a small, reviewable rule change, and it substantially
-overlaps a tool that already exists and is purpose-built for this
-exact job.
+overlaps a proposed tool that is not released yet.
 
 [`zizmor`](https://docs.zizmor.sh/) is a static analyzer for GitHub
-Actions security. Its `agentic-actions` audit
-([zizmorcore/zizmor#1605](https://github.com/zizmorcore/zizmor/issues/1605))
-covers precisely this risk: it maintains a registry of known AI agent
-actions, flags attacker-controllable triggers, permissive user
-settings (`allowed_non_write_users: "*"`, `allow-users: "*"`), attacker
-expressions flowing into prompt inputs, and excessive sandbox or
-permission settings on the same actions, with a severity scale that
-accounts for whether the workflow also gates on an actor check. Rather
-than duplicate a narrower version of that analysis here, this pack
-delegates to it.
+Actions security. Its proposed `agentic-actions` audit
+([zizmorcore/zizmor#1605](https://github.com/zizmorcore/zizmor/issues/1605),
+[zizmorcore/zizmor#1655](https://github.com/zizmorcore/zizmor/pull/1655))
+is still open and unreleased as of 2026-11-02; it is absent through
+zizmor v1.31.1. Today zizmor only partly covers this risk through
+`dangerous-triggers` and `template-injection`. TC-CFG-013 therefore has
+no coverage in v0 rather than claiming a delegation that users cannot run.
 
 ## How to use it
 
-Run `zizmor` over the repository's workflows, for example:
+Run `zizmor` over the repository's workflows for its currently released
+checks, for example:
 
 ```sh
 zizmor .github/workflows/
@@ -77,9 +74,9 @@ docs](https://docs.zizmor.sh/integrations/) for a workflow to add):
 - uses: zizmorcore/zizmor-action@f9597c869b2e67095f9b527070297a13a6efe928 # v0.7.0
 ```
 
-`zizmor`'s `agentic-actions` audit reports findings in its own output
-formats (plain text, SARIF, GitHub annotations); it is not normalized
-into Tripcord's finding format or fingerprint scheme.
+If `agentic-actions` is released, it will report findings in zizmor's
+own output formats (plain text, SARIF, GitHub annotations); it is not
+normalized into Tripcord's finding format or fingerprint scheme.
 
 ## If this changes
 
