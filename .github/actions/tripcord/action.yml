@@ -1,18 +1,22 @@
 name: Tripcord scan
-description: Scan coding-agent configuration and publish GitHub-native findings.
+description: Build Tripcord, scan coding-agent configuration, and publish GitHub-native findings.
 inputs:
-  command:
-    description: Installed Tripcord command to run.
+  ref:
+    description: Git ref of this action's repository to build. Empty builds the checkout that contains the action.
     required: false
-    default: tripcord
+    default: ""
+  binary:
+    description: Existing tripcord binary. When set, the source build is skipped and nothing is downloaded.
+    required: false
+    default: ""
   path:
     description: Repository path to scan.
     required: false
     default: .
   fail-on:
-    description: Inclusive severity that fails the action.
+    description: Inclusive severity passed to tripcord. Empty lets the CLI and policy decide.
     required: false
-    default: high
+    default: ""
   upload-sarif:
     description: Upload the SARIF report to GitHub code scanning.
     required: false
@@ -22,12 +26,12 @@ inputs:
     required: false
     default: "false"
   github-token:
-    description: Token used for SARIF upload and an optional pull-request comment.
+    description: Token used for a ref checkout, SARIF upload, and an optional pull-request comment.
     required: false
     default: ${{ github.token }}
 outputs:
   scan-exit-code:
-    description: Exit code from the GitHub-annotation scan.
+    description: Exit code from the scans. The job fails with this code after publishing.
     value: ${{ steps.scan.outputs.exit-code }}
   sarif:
     description: Path to the SARIF report.
@@ -35,6 +39,15 @@ outputs:
   markdown:
     description: Path to the Markdown report.
     value: ${{ steps.paths.outputs.markdown }}
+  is_agent:
+    description: pr-context is_agent output.
+    value: ${{ steps.pr-context.outputs.is_agent }}
+  agents:
+    description: pr-context agents output, comma-separated.
+    value: ${{ steps.pr-context.outputs.agents }}
+  pr-context-exit-code:
+    description: Exit code from pr-context. A non-zero read does not fail the job.
+    value: ${{ steps.pr-context.outputs.exit-code }}
 runs:
   using: composite
   steps:
@@ -43,51 +56,184 @@ runs:
       run: |
         echo "sarif=${RUNNER_TEMP}/tripcord.sarif" >> "$GITHUB_OUTPUT"
         echo "markdown=${RUNNER_TEMP}/tripcord.md" >> "$GITHUB_OUTPUT"
+    - id: repo
+      shell: bash
+      env:
+        TRIPCORD_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        TRIPCORD_BASE_REPO: ${{ github.event.pull_request.base.repo.full_name }}
+      run: |
+        if [ -n "$TRIPCORD_HEAD_REPO" ] && [ -n "$TRIPCORD_BASE_REPO" ] && [ "$TRIPCORD_HEAD_REPO" != "$TRIPCORD_BASE_REPO" ]; then
+          echo "same=false" >> "$GITHUB_OUTPUT"
+        else
+          echo "same=true" >> "$GITHUB_OUTPUT"
+        fi
+    - name: Checkout Tripcord ref
+      if: inputs.binary == '' && inputs.ref != ''
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        repository: ${{ github.action_repository }}
+        ref: ${{ inputs.ref }}
+        token: ${{ inputs.github-token }}
+        path: tripcord-src
+        persist-credentials: false
+    - id: source
+      if: inputs.binary == ''
+      shell: bash
+      env:
+        TRIPCORD_REF: ${{ inputs.ref }}
+        TRIPCORD_ACTION_PATH: ${{ github.action_path }}
+      run: |
+        set -euo pipefail
+        if [ -n "$TRIPCORD_REF" ]; then
+          echo "root=${GITHUB_WORKSPACE}/tripcord-src" >> "$GITHUB_OUTPUT"
+        else
+          root=$(cd "$TRIPCORD_ACTION_PATH/../../.." && pwd)
+          echo "root=${root}" >> "$GITHUB_OUTPUT"
+        fi
+    - name: Setup Go
+      if: inputs.binary == ''
+      uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      with:
+        go-version-file: ${{ steps.source.outputs.root }}/go.mod
+        cache: true
+        cache-dependency-path: ${{ steps.source.outputs.root }}/go.sum
+    - id: build
+      if: inputs.binary == ''
+      shell: bash
+      env:
+        TRIPCORD_ROOT: ${{ steps.source.outputs.root }}
+      run: |
+        set -euo pipefail
+        cd "$TRIPCORD_ROOT"
+        CGO_ENABLED=0 go build -trimpath -o "${RUNNER_TEMP}/tripcord" ./cmd/tripcord
+        echo "path=${RUNNER_TEMP}/tripcord" >> "$GITHUB_OUTPUT"
+    - id: tool
+      shell: bash
+      env:
+        TRIPCORD_BINARY: ${{ inputs.binary }}
+        TRIPCORD_BUILT: ${{ steps.build.outputs.path }}
+      run: |
+        if [ -n "$TRIPCORD_BINARY" ]; then
+          echo "path=${TRIPCORD_BINARY}" >> "$GITHUB_OUTPUT"
+        else
+          echo "path=${TRIPCORD_BUILT}" >> "$GITHUB_OUTPUT"
+        fi
     - id: scan
       shell: bash
       env:
-        TRIPCORD: ${{ inputs.command }}
+        TRIPCORD: ${{ steps.tool.outputs.path }}
         TRIPCORD_PATH: ${{ inputs.path }}
         TRIPCORD_FAIL_ON: ${{ inputs.fail-on }}
         TRIPCORD_SARIF: ${{ steps.paths.outputs.sarif }}
         TRIPCORD_MARKDOWN: ${{ steps.paths.outputs.markdown }}
       run: |
         set +e
-        "$TRIPCORD" scan "$TRIPCORD_PATH" --format gha --fail-on "$TRIPCORD_FAIL_ON"
-        status=$?
-        "$TRIPCORD" scan "$TRIPCORD_PATH" --format sarif --output "$TRIPCORD_SARIF" --fail-on "$TRIPCORD_FAIL_ON"
-        sarif_status=$?
-        "$TRIPCORD" scan "$TRIPCORD_PATH" --format md --output "$TRIPCORD_MARKDOWN" --fail-on "$TRIPCORD_FAIL_ON"
-        markdown_status=$?
+        if [ -n "$TRIPCORD_FAIL_ON" ]; then
+          "$TRIPCORD" scan "$TRIPCORD_PATH" --format gha --fail-on "$TRIPCORD_FAIL_ON"
+          status=$?
+          "$TRIPCORD" scan "$TRIPCORD_PATH" --format sarif --output "$TRIPCORD_SARIF" --fail-on "$TRIPCORD_FAIL_ON"
+          sarif_status=$?
+          "$TRIPCORD" scan "$TRIPCORD_PATH" --format md --output "$TRIPCORD_MARKDOWN" --fail-on "$TRIPCORD_FAIL_ON"
+          markdown_status=$?
+        else
+          "$TRIPCORD" scan "$TRIPCORD_PATH" --format gha
+          status=$?
+          "$TRIPCORD" scan "$TRIPCORD_PATH" --format sarif --output "$TRIPCORD_SARIF"
+          sarif_status=$?
+          "$TRIPCORD" scan "$TRIPCORD_PATH" --format md --output "$TRIPCORD_MARKDOWN"
+          markdown_status=$?
+        fi
         if [ "$sarif_status" -gt "$status" ]; then status=$sarif_status; fi
         if [ "$markdown_status" -gt "$status" ]; then status=$markdown_status; fi
         echo "exit-code=$status" >> "$GITHUB_OUTPUT"
-        exit "$status"
+        exit 0
+    - id: pr-context
+      shell: bash
+      env:
+        TRIPCORD: ${{ steps.tool.outputs.path }}
+        TRIPCORD_PATH: ${{ inputs.path }}
+      run: |
+        set +e
+        "$TRIPCORD" pr-context --format gha --repo "$TRIPCORD_PATH"
+        status=$?
+        echo "exit-code=$status" >> "$GITHUB_OUTPUT"
+        if [ "$status" -ne 0 ]; then
+          echo "::warning::tripcord pr-context exited ${status}; is_agent and agents may be incomplete"
+        fi
+        exit 0
     - name: Upload SARIF
-      if: ${{ always() && inputs.upload-sarif == 'true' && hashFiles(steps.paths.outputs.sarif) != '' }}
-      uses: github/codeql-action/upload-sarif@4bfa242aa49c5f7c6770b98670d354a7dfac05f8
+      id: upload-sarif
+      if: inputs.upload-sarif == 'true' && steps.scan.outputs.exit-code != '' && steps.repo.outputs.same == 'true'
+      continue-on-error: true
+      uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
       with:
         sarif_file: ${{ steps.paths.outputs.sarif }}
+        token: ${{ inputs.github-token }}
+    - name: Warn when SARIF upload is skipped
+      if: inputs.upload-sarif == 'true' && steps.scan.outputs.exit-code != '' && (steps.repo.outputs.same != 'true' || steps.upload-sarif.outcome == 'failure')
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+      env:
+        TRIPCORD_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        TRIPCORD_BASE_REPO: ${{ github.event.pull_request.base.repo.full_name }}
+        TRIPCORD_SARIF_OUTCOME: ${{ steps.upload-sarif.outcome }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          try {
+            const head = process.env.TRIPCORD_HEAD_REPO || "";
+            const base = process.env.TRIPCORD_BASE_REPO || "";
+            if (head !== "" && base !== "" && head !== base) {
+              core.warning("Tripcord SARIF upload skipped: pull request head repository differs from the base repository.");
+              return;
+            }
+            if (process.env.TRIPCORD_SARIF_OUTCOME === "failure") {
+              core.warning("Tripcord SARIF upload skipped: the token cannot upload code scanning results.");
+            }
+          } catch (error) {
+            core.warning(`Tripcord SARIF upload skipped: ${error.message}`);
+          }
     - name: Comment on pull request
-      if: ${{ always() && inputs.comment == 'true' && github.event.pull_request.number && hashFiles(steps.paths.outputs.markdown) != '' }}
-      uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
+      if: inputs.comment == 'true' && steps.scan.outputs.exit-code != ''
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
       env:
         TRIPCORD_MARKDOWN: ${{ steps.paths.outputs.markdown }}
+        TRIPCORD_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        TRIPCORD_BASE_REPO: ${{ github.event.pull_request.base.repo.full_name }}
       with:
         github-token: ${{ inputs.github-token }}
         script: |
           const fs = require("fs");
-          const body = fs.readFileSync(process.env.TRIPCORD_MARKDOWN, "utf8");
-          const marker = "<!-- tripcord-report -->";
-          const report = `${marker}\n${body}`;
-          const { owner, repo } = context.repo;
-          const issue_number = context.payload.pull_request.number;
-          const comments = await github.paginate(github.rest.issues.listComments, {
-            owner, repo, issue_number, per_page: 100,
-          });
-          const previous = comments.find(comment => comment.user.type === "Bot" && comment.body.startsWith(marker));
-          if (previous) {
-            await github.rest.issues.updateComment({ owner, repo, comment_id: previous.id, body: report });
-          } else {
-            await github.rest.issues.createComment({ owner, repo, issue_number, body: report });
+          try {
+            const head = process.env.TRIPCORD_HEAD_REPO || "";
+            const base = process.env.TRIPCORD_BASE_REPO || "";
+            if (head !== "" && base !== "" && head !== base) {
+              core.warning("Tripcord comment skipped: pull request head repository differs from the base repository.");
+              return;
+            }
+            const issueNumber = context.payload.pull_request && context.payload.pull_request.number;
+            if (!issueNumber) {
+              core.warning("Tripcord comment skipped: this event has no pull request.");
+              return;
+            }
+            const body = fs.readFileSync(process.env.TRIPCORD_MARKDOWN, "utf8");
+            const marker = "<!-- tripcord-report -->";
+            const report = `${marker}\n${body}`;
+            const { owner, repo } = context.repo;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number: issueNumber, per_page: 100,
+            });
+            const previous = comments.find(comment => comment.user.type === "Bot" && comment.body.startsWith(marker));
+            if (previous) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: previous.id, body: report });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number: issueNumber, body: report });
+            }
+          } catch (error) {
+            core.warning(`Tripcord comment skipped: ${error.message}`);
           }
+    - name: Apply scan exit code
+      if: steps.scan.outputs.exit-code != '' && steps.scan.outputs.exit-code != '0'
+      shell: bash
+      env:
+        TRIPCORD_STATUS: ${{ steps.scan.outputs.exit-code }}
+      run: exit "$TRIPCORD_STATUS"
