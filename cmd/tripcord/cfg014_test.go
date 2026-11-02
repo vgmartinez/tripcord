@@ -489,6 +489,55 @@ func assertBotMatch(t *testing.T, repo, base, head, login, authorType, branch st
 	}
 }
 
+func TestCfg014MissingBaseIsIncompleteOnlyInScope(t *testing.T) {
+	clearPrContextEnv(t)
+	git := lookGit(t)
+	repo := initRepo(t)
+	head := strings.TrimSpace(gitOut(t, git, repo, "rev-parse", "HEAD"))
+	missing := "0123456789abcdef0123456789abcdef01234567"
+
+	t.Run("agent author", func(t *testing.T) {
+		code, stdout, stderr, output := runMissingBase(t, repo, missing, head, "claude[bot]", "Bot")
+		if code != int(exitcode.Config) {
+			t.Fatalf("exit %d, want 3\nstderr: %s\nstdout: %s", code, stderr, stdout)
+		}
+		if !strings.Contains(stderr, "TC-CFG-014 incomplete:") || !strings.Contains(stderr, "changed paths could not be read") {
+			t.Fatalf("stderr = %s", stderr)
+		}
+		if !strings.Contains(output, "is_agent=true\n") || !strings.Contains(output, "tc_cfg_014=incomplete\n") {
+			t.Fatalf("GITHUB_OUTPUT = %q", output)
+		}
+	})
+	t.Run("dependabot author", func(t *testing.T) {
+		code, stdout, stderr, output := runMissingBase(t, repo, missing, head, "dependabot[bot]", "Bot")
+		if code != int(exitcode.Config) || !strings.Contains(stderr, "changed paths could not be read") {
+			t.Fatalf("exit %d\nstderr: %s\nstdout: %s", code, stderr, stdout)
+		}
+		if strings.Contains(output, "is_agent=true") || !strings.Contains(output, "is_agent=false\n") || !strings.Contains(output, "tc_cfg_014=incomplete\n") {
+			t.Fatalf("GITHUB_OUTPUT = %q", output)
+		}
+	})
+	t.Run("human author", func(t *testing.T) {
+		code, stdout, stderr, output := runMissingBase(t, repo, missing, head, "octocat", "User")
+		if code != int(exitcode.OK) {
+			t.Fatalf("exit %d, want 0\nstderr: %s\nstdout: %s", code, stderr, stdout)
+		}
+		if strings.Contains(stdout, "tc-cfg-014:") || strings.Contains(output, "tc_cfg_014=") {
+			t.Fatalf("human missing base was incomplete\nstdout: %s\noutput: %s", stdout, output)
+		}
+		if !strings.Contains(stdout, "not in this clone") {
+			t.Fatalf("stdout = %s", stdout)
+		}
+	})
+}
+
+func runMissingBase(t *testing.T, repo, base, head, login, authorType string) (int, string, string, string) {
+	t.Helper()
+	body := `{"pull_request":{"user":{"login":"` + login + `","type":"` + authorType + `"},"head":{"ref":"feature/docs","sha":"` + head + `"},"base":{"sha":"` + base + `"}}}`
+	event := writeTemp(t, "event.json", body)
+	return runCfg014Args(t, repo, event, "text")
+}
+
 func TestCfg014IgnoresOrdinaryFilesAndHumanAuthors(t *testing.T) {
 	clearPrContextEnv(t)
 	git := lookGit(t)

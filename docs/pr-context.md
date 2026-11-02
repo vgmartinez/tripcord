@@ -134,8 +134,13 @@ streamed one at a time with `git cat-file --batch`, rather than formatted by
 only the validated tool ids, never the note text. Nothing is fetched. A
 missing note is skipped.
 A base or head the clone does not contain (a shallow checkout) is a
-warning: author and branch signals are still reported, and the command
-still exits 0. At most 5000 commits are read (the newest). Each
+warning: author and branch signals are still reported. The command
+exits 0 when TC-CFG-014 is not in scope, which is today's result for a
+human pull request. When an agent signal or any bot identity is already
+known, the missing diff is incomplete (exit 3): the changed paths
+cannot be read, so the rule must not pass. A bot that appears only as
+a commit author, committer, or `Co-authored-by` trailer is not visible
+in a clone that lacks those commits, and the rule does not run. At most 5000 commits are read (the newest). Each
 commit message keeps its first 64KiB and its last 64KiB, which is enough
 for `Co-authored-by` trailers; a longer message drops the middle, and
 that trim is silent. Across every field of every commit record, at most
@@ -147,9 +152,12 @@ with their count. Neither cap fails the command.
 
 A checkout action that defaults to a shallow clone (one commit) will
 usually miss `base` entirely, turning every commit and note signal into a
-warning and leaving only the pull request's login and branch to go on. Use
+warning and leaving only the pull request's login and branch to go on.
+TC-CFG-014 then cannot see a trailer-only bot, and an agent or bot it
+can already see becomes incomplete instead of a pass. Use
 `fetch-depth: 0` (or a depth large enough to reach `base`) when checking
-out the pull request so commit and note signals are not silently skipped:
+out the pull request so commit and note signals are not silently skipped
+and the diff can be read:
 
 ```yaml
 - uses: actions/checkout@v4
@@ -270,8 +278,9 @@ can clear the rule when that one review is a qualifying approval, and
 otherwise the rule is incomplete rather than a pass. A pull request
 event that omits reviews is incomplete when a classified path changed,
 unless `--reviews-file` was passed.
-An agent-authored pull request that does not change a classified path
-is clear, and so is a pull request whose author is not an agent.
+An in-scope pull request that does not change a classified path is
+clear, and so is a pull request that is neither agent-authored nor from
+a bot. A missing base is incomplete only for an in-scope pull request.
 
 Text output gains a `tc-cfg-014:` section only when the result is
 `match` or `incomplete`. JSON keeps the pr-context document and adds
@@ -284,7 +293,7 @@ result does not add those fields.
 | --- | --- |
 | `0` | The inputs were read. An agent may or may not have been detected. TC-CFG-014 is clear, or it matched and the policy does not fail the finding (`mode: audit`, `mode: warn`, or a fail-on above the finding's severity). |
 | `1` | TC-CFG-014 matched and the policy fails it: an agent-authored pull request changed classified config, the reviews show no human approval, the mode is `enforce`, and the severity is at or above fail-on. The default fail-on is `high`. |
-| `3` | Invalid flags, event, revision, or repository, or `GITHUB_OUTPUT` is missing for `--format gha` or is a symlink. Also an invalid, missing, or oversized `--reviews-file`, or one that is not a regular file. Also TC-CFG-014 incomplete: the reviews were not a `reviews` array, or the diff could not be read, for an agent-authored pull request that changed classified config. |
+| `3` | Invalid flags, event, revision, or repository, or `GITHUB_OUTPUT` is missing for `--format gha` or is a symlink. Also an invalid, missing, or oversized `--reviews-file`, or one that is not a regular file. Also TC-CFG-014 incomplete: reviews were not a complete set, a covered symlink could not be resolved, or the diff could not be read, for an in-scope pull request. A human pull request with a missing base still exits 0. |
 | `4` | Git is not installed, or reading or writing failed. |
 
 ## Example

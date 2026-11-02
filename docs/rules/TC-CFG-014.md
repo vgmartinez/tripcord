@@ -48,6 +48,23 @@ already a symlink in the base or the head, paths the pull request
 changes under the link target are classified as if they were under the
 directory. If that target cannot be resolved, the rule is incomplete.
 
+## Shallow clones
+
+`pr-context` does not fetch. `actions/checkout` defaults to a single
+commit, so `base` is often missing. When an agent signal or a bot
+identity is already known from the event (the author, or the branch),
+the missing diff is incomplete and the command exits 3. A human pull
+request with the same missing base still exits 0. A bot that appears
+only as a commit author, committer, or `Co-authored-by` trailer is not
+detected in that shallow clone, so the rule does not run. Check the
+pull request out with `fetch-depth: 0`:
+
+```yaml
+- uses: actions/checkout@v4
+  with:
+    fetch-depth: 0
+```
+
 Human approval is one user's latest review that is not `COMMENTED`,
 and that review has all of:
 
