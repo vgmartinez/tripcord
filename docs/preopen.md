@@ -52,8 +52,11 @@ refused.
 The tree is checked as it is written: a path with an empty, `.`, or `..`
 component, a `.git` component under any spelling a case-insensitive or
 Windows filesystem treats as `.git`, or a parent that is not a directory is
-refused, and no file is written through a symlink. A tree with more than
-200,000 entries or more than 1 GiB of content is refused.
+refused, and no file is written through a symlink. A path with more than
+64 components, matching the scan's nesting depth, or a tree-relative path
+longer than 4096 bytes, is refused. Every directory created counts toward
+the entry limit. A tree with more than 200,000 entries, counting those
+directories, or more than 1 GiB of content is refused.
 
 ## Flags, policy, and exit codes
 

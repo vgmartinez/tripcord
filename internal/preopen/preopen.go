@@ -37,11 +37,18 @@ import (
 const (
 	MaxEntries    = 200_000
 	MaxTotalBytes = 1 << 30
+	// maxPathComponents matches the scan's nesting depth (kit.MaxNesting).
+	maxPathComponents = 64
+	// maxPathBytes is the longest tree-relative path, in bytes.
+	maxPathBytes = 4096
 )
 
-// maxTotalBytes is the byte budget materialize enforces. Tests lower it
-// so an over-budget blob can be small.
-var maxTotalBytes int64 = MaxTotalBytes
+// maxEntries and maxTotalBytes are the budgets materialize enforces.
+// Tests lower them so a hostile tree can be small.
+var (
+	maxEntries    = MaxEntries
+	maxTotalBytes = int64(MaxTotalBytes)
+)
 
 // ErrGitMissing reports that git could not be found or started.
 var ErrGitMissing = errors.New("git is not installed")
@@ -353,8 +360,8 @@ func materialize(ctx context.Context, git, gitDir, tree string) error {
 	if err != nil {
 		return err
 	}
-	if len(entries) > MaxEntries {
-		return fmt.Errorf("tree has %d entries, more than the %d preopen writes", len(entries), MaxEntries)
+	if len(entries) > maxEntries {
+		return fmt.Errorf("tree has %d entries, more than the %d preopen writes", len(entries), maxEntries)
 	}
 	// catCtx is cancelled when writing the tree fails. cat-file --batch
 	// writes the whole object before it reads the next request, so leaving
@@ -412,6 +419,10 @@ func parseLsTree(raw []byte) ([]treeEntry, error) {
 
 func writeEntries(ctx context.Context, entries []treeEntry, tree string, req io.Writer, resp *bufio.Reader) error {
 	var total int64
+	// used counts file entries and every directory ensureParents creates.
+	// ls-tree -r does not list intermediate trees, so a few entries can
+	// otherwise expand into hundreds of thousands of directories.
+	var used int
 	for _, e := range entries {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -420,7 +431,10 @@ func writeEntries(ctx context.Context, entries []treeEntry, tree string, req io.
 		if err != nil {
 			return err
 		}
-		if err := ensureParents(tree, dest); err != nil {
+		if err := ensureParents(tree, dest, &used); err != nil {
+			return err
+		}
+		if err := chargeEntry(&used); err != nil {
 			return err
 		}
 		if e.kind == "commit" {
@@ -481,7 +495,8 @@ func entryPath(tree, p string) (string, error) {
 	if p == "" || strings.HasPrefix(p, "/") {
 		return "", fmt.Errorf("tree entry %q: unsafe path", p)
 	}
-	for _, part := range strings.Split(p, "/") {
+	parts := strings.Split(p, "/")
+	for _, part := range parts {
 		trimmed := strings.TrimRight(part, ". ")
 		switch {
 		case part == "", part == ".", part == "..":
@@ -492,7 +507,21 @@ func entryPath(tree, p string) (string, error) {
 			return "", fmt.Errorf("tree entry %q: unsafe path", p)
 		}
 	}
+	if len(parts) > maxPathComponents {
+		return "", fmt.Errorf("tree entry %q: path has %d components, more than %d", p, len(parts), maxPathComponents)
+	}
+	if len(p) > maxPathBytes {
+		return "", fmt.Errorf("tree entry %q: path is %d bytes, more than %d", p, len(p), maxPathBytes)
+	}
 	return filepath.Join(tree, filepath.FromSlash(p)), nil
+}
+
+func chargeEntry(used *int) error {
+	if *used+1 > maxEntries {
+		return fmt.Errorf("tree has more than the %d entries preopen writes", maxEntries)
+	}
+	*used++
+	return nil
 }
 
 // ensureParents creates dest's parent directories under tree. A parent
@@ -500,7 +529,7 @@ func entryPath(tree, p string) (string, error) {
 // symlink or file there means the tree aliases one path onto another
 // (a malformed tree, or a case-insensitive filesystem), and writing
 // through it could land outside tree.
-func ensureParents(tree, dest string) error {
+func ensureParents(tree, dest string, used *int) error {
 	rel, err := filepath.Rel(tree, filepath.Dir(dest))
 	if err != nil {
 		return err
@@ -514,6 +543,9 @@ func ensureParents(tree, dest string) error {
 		info, err := os.Lstat(cur)
 		switch {
 		case errors.Is(err, fs.ErrNotExist):
+			if err := chargeEntry(used); err != nil {
+				return err
+			}
 			if err := os.Mkdir(cur, 0o755); err != nil {
 				return err
 			}

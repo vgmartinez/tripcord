@@ -241,6 +241,81 @@ func TestEntryPathRejectsUnsafePaths(t *testing.T) {
 	}
 }
 
+func TestEntryPathRejectsDeepAndLongPaths(t *testing.T) {
+	t.Parallel()
+	tree := t.TempDir()
+	deep := strings.Repeat("d/", maxPathComponents-1) + "f"
+	if _, err := entryPath(tree, deep); err != nil {
+		t.Fatalf("entryPath(%d components) = %v", maxPathComponents, err)
+	}
+	deeper := deep + "/g"
+	if _, err := entryPath(tree, deeper); err == nil {
+		t.Fatalf("entryPath(%d components) accepted", maxPathComponents+1)
+	}
+	long := strings.Repeat("a", maxPathBytes)
+	if _, err := entryPath(tree, long); err != nil {
+		t.Fatalf("entryPath(%d bytes) = %v", maxPathBytes, err)
+	}
+	if _, err := entryPath(tree, long+"b"); err == nil {
+		t.Fatalf("entryPath(%d bytes) accepted", maxPathBytes+1)
+	}
+}
+
+func TestEnsureParentsCountsDirectories(t *testing.T) {
+	tree := t.TempDir()
+	prev := maxEntries
+	maxEntries = 2
+	t.Cleanup(func() { maxEntries = prev })
+	dest, err := entryPath(tree, "a/b/c/f")
+	if err != nil {
+		t.Fatal(err)
+	}
+	used := 0
+	if err := ensureParents(tree, dest, &used); err == nil {
+		t.Fatal("created a/b/c under a limit of 2")
+	}
+	if _, err := os.Lstat(filepath.Join(tree, "a", "b", "c")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("directory past the limit was created: %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(tree, "a", "b")); err != nil {
+		t.Fatalf("directories within the limit: %v", err)
+	}
+}
+
+func TestFetchRejectsInodeBomb(t *testing.T) {
+	prev := maxEntries
+	maxEntries = 4
+	t.Cleanup(func() { maxEntries = prev })
+	git := preopentest.RequireTools(t)
+	repo := filepath.Join(t.TempDir(), "repo")
+	preopentest.Git(t, git, filepath.Dir(repo), "init", "-q", "repo")
+	// Three files, each with its own three-directory chain. The chains
+	// share no directory, so writing them creates nine directories from
+	// three blobs. The same shape as a root of many links to one deep
+	// tree, at a size that stays cheap.
+	for i := 0; i < 3; i++ {
+		preopentest.WriteFile(t, filepath.Join(repo, "w"+string(rune('0'+i)), "x", "y", "z"), "x\n", 0o644)
+	}
+	preopentest.Git(t, git, repo, "add", "-A")
+	preopentest.Git(t, git, repo, "commit", "-q", "-m", "wide")
+	_, err := Fetch(context.Background(), repo)
+	var targetErr *TargetError
+	if !errors.As(err, &targetErr) || !strings.Contains(err.Error(), "more than") {
+		t.Fatalf("Fetch = %v, want a TargetError for the directory limit", err)
+	}
+
+	deep := strings.Repeat("d/", maxPathComponents) + "f"
+	repo = filepath.Join(t.TempDir(), "deep")
+	preopentest.Git(t, git, filepath.Dir(repo), "init", "-q", "deep")
+	preopentest.WriteFile(t, filepath.Join(repo, filepath.FromSlash(deep)), "x\n", 0o644)
+	preopentest.Git(t, git, repo, "add", "-A")
+	preopentest.Git(t, git, repo, "commit", "-q", "-m", "deep")
+	_, err = Fetch(context.Background(), repo)
+	if !errors.As(err, &targetErr) || !strings.Contains(err.Error(), "components") {
+		t.Fatalf("Fetch(deep) = %v, want a TargetError for the component cap", err)
+	}
+}
+
 func TestEnsureParentsRefusesSymlinkedParent(t *testing.T) {
 	t.Parallel()
 	if runtime.GOOS == "windows" {
@@ -255,7 +330,7 @@ func TestEnsureParentsRefusesSymlinkedParent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := ensureParents(tree, dest); err == nil {
+	if err := ensureParents(tree, dest, new(int)); err == nil {
 		t.Fatal("wrote through a symlinked parent")
 	}
 	assertEmpty(t, outside)
