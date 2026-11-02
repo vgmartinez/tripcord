@@ -112,7 +112,7 @@ func Fetch(ctx context.Context, target string) (ws *Workspace, err error) {
 		return nil, err
 	}
 	if err := materialize(ctx, git, gitDir, created.tree); err != nil {
-		return nil, wrapGitError(target, err)
+		return nil, wrapTreeError(target, err)
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -126,6 +126,19 @@ func wrapGitError(target string, err error) error {
 		return &TargetError{Target: target, Err: err}
 	}
 	return err
+}
+
+// wrapTreeError reports a tree preopen refuses to write (an unsafe path,
+// an unexpected entry, or one over the limits) as a TargetError. A
+// filesystem, cancellation, or missing-git error stays as it is.
+func wrapTreeError(target string, err error) error {
+	var pathErr *fs.PathError
+	switch {
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded),
+		errors.Is(err, ErrGitMissing), errors.As(err, &pathErr):
+		return err
+	}
+	return &TargetError{Target: target, Err: err}
 }
 
 // resolveTarget returns the URL to clone. Every transport other than
