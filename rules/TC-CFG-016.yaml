@@ -1,0 +1,43 @@
+# A hook-based guard, including one Tripcord itself registers once its
+# own hook mode ships (see docs/README.md), only runs when the harness
+# actually invokes hooks at all. A shared setting that turns every hook
+# off defeats that regardless of which hook is the guard, so it is a
+# precondition worth flagging on its own, before Tripcord has any hook
+# installed to be deleted.
+#
+# Claude Code and Copilot both normalize a shared disableAllHooks: true
+# as a permissions setting. Gemini CLI's equivalent is
+# hooksConfig.enabled: false (hooksConfig.disabled only names specific
+# hooks by id and is not read here, the same way this pack does not try
+# to tell which hook a partial disable targets).
+#
+# What this rule does not do: tell whether a hook that used to be
+# present (Tripcord's own, once it registers one, or any other) was
+# removed. That needs a base tree to diff against, which a single scan
+# of one tree does not have; see docs/rules/TC-CFG-016.md.
+#
+# settings.local.json is personal and is not part of this rule's files,
+# the same exclusion TC-CFG-004 and TC-CFG-005 make for Claude Code.
+id: TC-CFG-016
+pack: tripcord/core
+title: "Shared config turns off every hook"
+severity: high
+harness: [claude, copilot, gemini]
+files:
+  - "**/.claude/settings.json"
+  - "**/.github/copilot/settings.json"
+  - "**/.github/hooks/*.json"
+  - "**/.gemini/settings.json"
+when: |
+  config.kind == "permissions" && config.scope == "repo" && has(payload.setting) && (
+    (config.harness in ["claude", "copilot"] && payload.setting == "disableAllHooks" &&
+      has(payload.value) && payload.value == true) ||
+    (config.harness == "gemini" && payload.setting == "hooksConfig" &&
+      has(payload.value) && type(payload.value) == map &&
+      has(payload.value.enabled) && payload.value.enabled == false))
+fix: "Remove disableAllHooks (Claude Code, Copilot) or hooksConfig.enabled: false (Gemini CLI) from the shared file. Disabling every hook also disables any hook-based guard the harness would otherwise run, including Tripcord's own once it registers one; to pause a single hook, remove that hook's own entry or use the harness's managed-hooks allow list instead of a blanket switch."
+refs:
+  - https://code.claude.com/docs/en/hooks
+  - https://docs.github.com/en/copilot/reference/hooks-reference
+  - https://geminicli.com/docs/
+  - https://novee.security/blog/breaking-ai-agent-sandboxes/
