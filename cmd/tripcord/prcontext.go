@@ -9,8 +9,12 @@ import (
 	"os"
 	"strings"
 
+	"encoding/json"
+
+	"github.com/vgmartinez/tripcord/internal/cfg014"
 	"github.com/vgmartinez/tripcord/internal/exitcode"
 	"github.com/vgmartinez/tripcord/internal/gitrun"
+	"github.com/vgmartinez/tripcord/internal/model"
 	"github.com/vgmartinez/tripcord/internal/prcontext"
 )
 
@@ -18,7 +22,10 @@ const prContextUsage = `tripcord pr-context [flags]
 
 pr-context reads a GitHub pull_request event and the commits in base..head
 and reports whether the pull request looks agent-authored. It exits 0
-whether or not an agent is detected.
+whether or not an agent is detected. When that author is an agent and
+the diff changes a file an adapter classifies, TC-CFG-014 exits 1 if no
+human approved the pull request, and exits 3 when the reviews or the
+diff cannot be read.
 
 Flags:
 `
@@ -47,8 +54,9 @@ func runPrContext(args []string, stdout, stderr io.Writer) int {
 		eventPath = os.Getenv("GITHUB_EVENT_PATH")
 	}
 	var ev prcontext.Event
+	var reviews prcontext.ReviewSet
 	if eventPath != "" {
-		ev, err = readPullRequestEvent(eventPath)
+		ev, reviews, err = readPullRequestEvent(eventPath)
 		if err != nil {
 			return prContextFail(stderr, err, false)
 		}
@@ -101,7 +109,28 @@ func runPrContext(args []string, stdout, stderr io.Writer) int {
 		Commits:      commits,
 		Warnings:     warnings,
 	})
-	rendered, err := renderPrContext(opts.format, result)
+	// TC-CFG-014 runs only after the agent verdict is known, and only
+	// when the commit read itself succeeded. A fatal read still reports
+	// that verdict and keeps its own exit code.
+	var outcome cfg014.Outcome
+	var diffErr error
+	if readErr == nil && result.Agent {
+		diff, err := prcontext.ChangedPaths(context.Background(), repo, ev.Base, ev.Head)
+		if err != nil {
+			diffErr = err
+		} else {
+			outcome = cfg014.Evaluate(cfg014.Input{
+				Agent:       true,
+				Author:      ev.Login,
+				Paths:       diff.Paths,
+				PathsKnown:  !diff.Missing,
+				Truncated:   diff.Truncated,
+				Reviews:     reviews,
+				Classifiers: cfg014.DefaultClassifiers(),
+			})
+		}
+	}
+	rendered, err := renderPrContext(opts.format, result, outcome)
 	if err != nil {
 		return prContextFail(stderr, err, false)
 	}
@@ -116,10 +145,28 @@ func runPrContext(args []string, stdout, stderr io.Writer) int {
 			return prContextFail(stderr, err, false)
 		}
 	}
+	if outputPath != "" && outcome.Status != "" && outcome.Status != cfg014.StatusClear {
+		if err := appendGitHubOutputText(outputPath, "tc_cfg_014="+string(outcome.Status)+"\n"); err != nil {
+			return prContextFail(stderr, err, false)
+		}
+	}
 	if readErr != nil {
 		return prContextFail(stderr, readErr, false)
 	}
-	return int(exitcode.OK)
+	if diffErr != nil {
+		return prContextFail(stderr, diffErr, false)
+	}
+	switch outcome.Status {
+	case "", cfg014.StatusClear:
+		return int(exitcode.OK)
+	case cfg014.StatusMatch:
+		return int(exitcode.Findings)
+	case cfg014.StatusIncomplete:
+		writeString(stderr, "tripcord pr-context: TC-CFG-014 incomplete: "+outcome.Reason+"\n")
+		return int(exitcode.Config)
+	default:
+		panic("pr-context: unhandled TC-CFG-014 status " + string(outcome.Status))
+	}
 }
 
 // oneLineError collapses a (possibly multi-line) error message onto one
@@ -173,50 +220,103 @@ func parsePrContextFlags(args []string, stdout io.Writer) (prContextOptions, err
 	return opts, nil
 }
 
-func renderPrContext(format string, result prcontext.Result) (string, error) {
+func renderPrContext(format string, result prcontext.Result, outcome cfg014.Outcome) (string, error) {
 	switch format {
 	case "text", "gha":
-		return prcontext.FormatText(result), nil
+		return prcontext.FormatText(result) + formatCfg014Text(outcome), nil
 	case "json":
-		raw, err := prcontext.FormatJSON(result)
-		if err != nil {
-			return "", err
+		if outcome.Status == "" || outcome.Status == cfg014.StatusClear {
+			raw, err := prcontext.FormatJSON(result)
+			if err != nil {
+				return "", err
+			}
+			return string(raw), nil
 		}
-		return string(raw), nil
+		return formatCfg014JSON(result, outcome)
 	default:
 		panic("prcontext: unhandled format " + format)
 	}
 }
 
-func readPullRequestEvent(path string) (prcontext.Event, error) {
+func formatCfg014Text(outcome cfg014.Outcome) string {
+	switch outcome.Status {
+	case "", cfg014.StatusClear:
+		return ""
+	case cfg014.StatusMatch:
+		var b strings.Builder
+		b.WriteString("tc-cfg-014: match\n")
+		for _, path := range outcome.Paths {
+			b.WriteString("- " + path + "\n")
+		}
+		return b.String()
+	case cfg014.StatusIncomplete:
+		return "tc-cfg-014: incomplete\n- " + outcome.Reason + "\n"
+	default:
+		panic("pr-context: unhandled TC-CFG-014 status " + string(outcome.Status))
+	}
+}
+
+type prContextEnvelope struct {
+	prcontext.Result
+	TCCFG014 string         `json:"tc_cfg_014,omitempty"`
+	Finding  *model.Finding `json:"finding,omitempty"`
+}
+
+func formatCfg014JSON(result prcontext.Result, outcome cfg014.Outcome) (string, error) {
+	if result.Agents == nil {
+		result.Agents = []string{}
+	}
+	if result.Signals == nil {
+		result.Signals = []prcontext.Signal{}
+	}
+	raw, err := json.MarshalIndent(prContextEnvelope{
+		Result:   result,
+		TCCFG014: string(outcome.Status),
+		Finding:  outcome.Finding,
+	}, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(raw) + "\n", nil
+}
+
+func readPullRequestEvent(path string) (prcontext.Event, prcontext.ReviewSet, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return prcontext.Event{}, &prcontext.InputError{Msg: fmt.Sprintf("event file: %v", err)}
+		return prcontext.Event{}, prcontext.ReviewSet{}, &prcontext.InputError{Msg: fmt.Sprintf("event file: %v", err)}
 	}
 	info, err := f.Stat()
 	if err != nil {
 		_ = f.Close()
-		return prcontext.Event{}, err
+		return prcontext.Event{}, prcontext.ReviewSet{}, err
 	}
 	if info.IsDir() {
 		_ = f.Close()
-		return prcontext.Event{}, &prcontext.InputError{Msg: "event file is a directory"}
+		return prcontext.Event{}, prcontext.ReviewSet{}, &prcontext.InputError{Msg: "event file is a directory"}
 	}
 	if info.Size() > maxEventBytes {
 		_ = f.Close()
-		return prcontext.Event{}, &prcontext.InputError{Msg: "event file is too large"}
+		return prcontext.Event{}, prcontext.ReviewSet{}, &prcontext.InputError{Msg: "event file is too large"}
 	}
 	data, err := io.ReadAll(io.LimitReader(f, maxEventBytes+1))
 	if cerr := f.Close(); err == nil {
 		err = cerr
 	}
 	if err != nil {
-		return prcontext.Event{}, err
+		return prcontext.Event{}, prcontext.ReviewSet{}, err
 	}
 	if len(data) > maxEventBytes {
-		return prcontext.Event{}, &prcontext.InputError{Msg: "event file is too large"}
+		return prcontext.Event{}, prcontext.ReviewSet{}, &prcontext.InputError{Msg: "event file is too large"}
 	}
-	return prcontext.ParseEvent(data)
+	ev, err := prcontext.ParseEvent(data)
+	if err != nil {
+		return prcontext.Event{}, prcontext.ReviewSet{}, err
+	}
+	reviews, err := prcontext.ParseReviews(data)
+	if err != nil {
+		return prcontext.Event{}, prcontext.ReviewSet{}, err
+	}
+	return ev, reviews, nil
 }
 
 // appendGitHubOutput appends result to the GITHUB_OUTPUT file. The open
@@ -240,14 +340,32 @@ func appendGitHubOutput(path string, result prcontext.Result) error {
 	if err != nil {
 		return classifyOutputOpenError(err)
 	}
-	err = writeGitHubOutput(f, result)
+	err = writeGitHubOutput(f, prcontext.FormatOutput(result))
 	if cerr := f.Close(); err == nil {
 		err = cerr
 	}
 	return err
 }
 
-func writeGitHubOutput(f *os.File, result prcontext.Result) error {
+// appendGitHubOutputText appends one extra GITHUB_OUTPUT line, such as
+// tc_cfg_014=match. The agent block is written separately and is left
+// unchanged when the rule is clear.
+func appendGitHubOutputText(path, text string) error {
+	if err := refuseGitHubOutputSymlink(path); err != nil {
+		return err
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_RDWR|outputOpenFlags, 0o600)
+	if err != nil {
+		return classifyOutputOpenError(err)
+	}
+	err = writeGitHubOutput(f, text)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	return err
+}
+
+func writeGitHubOutput(f *os.File, text string) error {
 	info, err := f.Stat()
 	if err != nil {
 		return err
@@ -266,7 +384,7 @@ func writeGitHubOutput(f *os.File, result prcontext.Result) error {
 			}
 		}
 	}
-	_, err = io.WriteString(f, prcontext.FormatOutput(result))
+	_, err = io.WriteString(f, text)
 	return err
 }
 
