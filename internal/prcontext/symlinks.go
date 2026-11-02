@@ -22,12 +22,13 @@ type Symlink struct {
 	Unresolved bool
 }
 
-// TreeSymlinks lists covered-directory symlinks in rev. covered is the
-// directory names adapters classify under, such as ".claude". truncated
-// is true when the listing exceeded maxTreeListBytes. A missing
-// revision is returned as an error from git; the caller decides whether
-// that is fatal.
-func TreeSymlinks(ctx context.Context, repo, rev string, covered []string) ([]Symlink, bool, error) {
+// TreeSymlinks lists symlinks in rev. A symlink is included when its
+// path is a covered directory (covered names such as ".claude") or
+// classifies reports that the path itself is agent config, such as
+// CLAUDE.md. classifies may be nil. truncated is true when the listing
+// exceeded maxTreeListBytes. A missing revision is returned as an error
+// from git; the caller decides whether that is fatal.
+func TreeSymlinks(ctx context.Context, repo, rev string, covered []string, classifies func(rel string) bool) ([]Symlink, bool, error) {
 	if err := ValidateRev("rev", rev); err != nil {
 		return nil, false, err
 	}
@@ -55,13 +56,17 @@ func TreeSymlinks(ctx context.Context, repo, rev string, covered []string) ([]Sy
 		if len(fields) < 3 {
 			return nil, false, &InputError{Msg: "git ls-tree: malformed record"}
 		}
-		if fields[0] != ModeSymlink || !coversDir(rel, covered) {
+		if fields[0] != ModeSymlink || (!coversDir(rel, covered) && !classifiesRel(classifies, rel)) {
 			continue
 		}
 		target, unresolved := symlinkTarget(ctx, repo, fields[2], rel)
 		links = append(links, Symlink{Path: rel, Target: target, Unresolved: unresolved})
 	}
 	return links, false, nil
+}
+
+func classifiesRel(classifies func(string) bool, rel string) bool {
+	return classifies != nil && classifies(rel)
 }
 
 func coversDir(rel string, covered []string) bool {

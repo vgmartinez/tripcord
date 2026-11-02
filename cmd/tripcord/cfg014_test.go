@@ -416,6 +416,32 @@ func TestCfg014CoveredSymlinks(t *testing.T) {
 			t.Fatalf("exit %d\nstderr: %s\nstdout: %s", code, stderr, stdout)
 		}
 	})
+	t.Run("instruction file symlink target matches", func(t *testing.T) {
+		repo := initRepo(t)
+		if err := os.MkdirAll(filepath.Join(repo, "docs"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(repo, "docs", "guide.md"), []byte("guide\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink("docs/guide.md", filepath.Join(repo, "CLAUDE.md")); err != nil {
+			t.Fatal(err)
+		}
+		runGitCmd(t, git, repo, "add", "--", "docs/guide.md", "CLAUDE.md")
+		runGitCmd(t, git, repo, "-c", "user.email=ada@example.com", "-c", "user.name=Ada Lovelace", "commit", "-q", "-m", "link claude.md")
+		base := strings.TrimSpace(gitOut(t, git, repo, "rev-parse", "HEAD"))
+		runGitCmd(t, git, repo, "checkout", "-q", "-b", "feature/hooks")
+		if err := os.WriteFile(filepath.Join(repo, "docs", "guide.md"), []byte("edited\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		runGitCmd(t, git, repo, "add", "--", "docs/guide.md")
+		runGitCmd(t, git, repo, "-c", "user.email=ada@example.com", "-c", "user.name=Ada Lovelace", "commit", "-q", "-m", "edit guide")
+		head := strings.TrimSpace(gitOut(t, git, repo, "rev-parse", "HEAD"))
+		code, stdout, stderr, _ := runCfg014(t, repo, "empty-reviews.json", base, head, "text")
+		if code != int(exitcode.Findings) || !strings.Contains(stdout, "CLAUDE.md") {
+			t.Fatalf("exit %d\nstderr: %s\nstdout: %s", code, stderr, stdout)
+		}
+	})
 	t.Run("edits under an existing symlink target match", func(t *testing.T) {
 		repo := initRepo(t)
 		if err := os.MkdirAll(filepath.Join(repo, "payload"), 0o755); err != nil {

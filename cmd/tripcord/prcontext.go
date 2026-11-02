@@ -526,20 +526,21 @@ func fullSHA(s string) bool {
 
 // prContextFail maps err onto exit 3 or 4. config is true when err is
 // already known to be bad input rather than an I/O failure.
-// cfg014Links resolves covered-directory symlinks in base and head and
-// records symlink or gitlink diff entries at those directories. A
-// listing that is too large, or a target that cannot be mapped into
-// the repository, becomes an incomplete reason rather than a pass.
+// cfg014Links resolves symlinks in base and head and records symlink or
+// gitlink diff entries at covered directories. A symlink is resolved
+// when its path is a covered directory or an adapter classifies that
+// path. A listing that is too large, or a target that cannot be mapped
+// into the repository, becomes an incomplete reason rather than a pass.
 func cfg014Links(repo, base, head string, diff prcontext.Diff) ([]cfg014.ExtraHit, []cfg014.Remap, string, error) {
 	if diff.Missing {
 		return nil, nil, "", nil
 	}
 	covered := cfg014.CoveredDirs()
-	baseLinks, baseTrunc, err := prcontext.TreeSymlinks(context.Background(), repo, base, covered)
+	baseLinks, baseTrunc, err := prcontext.TreeSymlinks(context.Background(), repo, base, covered, cfg014Classifies)
 	if err != nil {
 		return nil, nil, "", err
 	}
-	headLinks, headTrunc, err := prcontext.TreeSymlinks(context.Background(), repo, head, covered)
+	headLinks, headTrunc, err := prcontext.TreeSymlinks(context.Background(), repo, head, covered, cfg014Classifies)
 	if err != nil {
 		return nil, nil, "", err
 	}
@@ -553,6 +554,18 @@ func cfg014Links(repo, base, head string, diff prcontext.Diff) ([]cfg014.ExtraHi
 		reason = linkReason
 	}
 	return extra, remaps, reason, nil
+}
+
+// cfg014Classifies reports whether any installed adapter classifies rel
+// from the path alone. It is the predicate TreeSymlinks uses next to
+// the covered-directory names.
+func cfg014Classifies(rel string) bool {
+	for _, classifier := range cfg014.DefaultClassifiers() {
+		if classifier.Classifies(rel) {
+			return true
+		}
+	}
+	return false
 }
 
 func loadPrContextPolicy(repo, base string) (*policy.Effective, error) {

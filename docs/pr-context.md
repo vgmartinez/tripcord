@@ -260,8 +260,11 @@ adapter covers (`.claude`, `.github`, `.cursor`, `.devin`, `.gemini`,
 `.windsurf`, and the other adapter directories), or at a path inside
 one, counts as a hit. If one of those directories is already a symlink
 in `base` or `head`, changed paths under its target are classified as
-paths under the directory. A target that is absolute, escapes the
-repository, or cannot be read makes the rule incomplete.
+paths under the directory. The same remap applies to a symlink whose
+own path an adapter classifies, such as `CLAUDE.md` or `AGENTS.md`
+pointing at `docs/guide.md`: an edit of the target is a change to the
+symlink path. A target that is absolute, escapes the repository, or
+cannot be read makes the rule incomplete.
 
 Repository policy for this rule is read from `base`, not from the
 checkout. The checkout is the pull request's own merge, so an agent
