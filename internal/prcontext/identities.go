@@ -37,7 +37,8 @@ var botLogins = []agentID{
 // attribution. The match is the whole address, case-insensitive.
 // Display names are not matched: "Claude Shannon <shannon@example.com>"
 // is a human, and "Claude Opus <noreply@anthropic.com>" matches because
-// of the address.
+// of the address. Codex CLI has no address here. Codex is recognized
+// only as chatgpt-codex-connector[bot] and the codex/ branch prefix.
 //
 // TODO(#34): Verify the unverified agent identity tables (botLogins, trailerEmails, branchPrefixes) and replace 0 with the tracking issue.
 var trailerEmails = []agentID{

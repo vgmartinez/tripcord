@@ -55,6 +55,9 @@ on pull requests but do not author the changes.
 | `noreply@opencode.ai` | opencode |
 | `windsurf@codeium.com` | windsurf |
 
+Codex has no trailer address. It is recognized only as
+`chatgpt-codex-connector[bot]` and the `codex/` branch prefix.
+
 ### Branch prefixes
 
 | Prefix | Agent |
