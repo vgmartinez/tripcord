@@ -276,11 +276,11 @@ func isShellWord(c byte) bool {
 }
 
 func isFunctionName(word []byte) bool {
-	if len(word) == 0 || !(word[0] == '_' || word[0] >= 'a' && word[0] <= 'z' || word[0] >= 'A' && word[0] <= 'Z') {
+	if len(word) == 0 || word[0] != '_' && (word[0] < 'a' || word[0] > 'z') && (word[0] < 'A' || word[0] > 'Z') {
 		return false
 	}
 	for _, c := range word[1:] {
-		if !(c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9') {
+		if c != '_' && (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && (c < '0' || c > '9') {
 			return false
 		}
 	}
