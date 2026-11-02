@@ -1,0 +1,45 @@
+# An allow rule that is narrowly scoped to one domain looks reviewed
+# and safe, so it draws less scrutiny than a wildcard. But some domains
+# are themselves a two-way channel: anyone can publish content there
+# (the prompt-injection delivery vector) and the publisher can observe
+# that the content was fetched, through a public counter or an
+# explicit paste/webhook service built for exactly that (the
+# exfiltration vector). CVE-2026-54316 is this exact shape: Claude
+# Code pre-approved the bare host huggingface.co for WebFetch, so a
+# model card an attacker controls could steer a fetch of an
+# attacker-chosen repository file, and Hugging Face's own per-file
+# download counter became the covert channel back out.
+#
+# This rule flags the repository committing that same shape itself, as
+# a `permissions.allow` entry naming one of a short, conservative list
+# of hosts with that write-then-observe design: Hugging Face (model,
+# dataset, and Space repos, counted as downloads server-side), PyPI and
+# npm (public per-release download counts), and Pastebin and
+# webhook.site (an anonymous paste or request catcher is the product).
+# A much larger set of sites host attacker-reachable content; this list
+# is deliberately narrow, to the ones with a documented or
+# purpose-built read-back channel, not every third-party host an agent
+# might fetch.
+#
+# WebFetch(domain:X) is matched case-insensitively, with or without a
+# leading `*.` wildcard segment, the same shape TC-CFG-004 reads for a
+# domain of `*`. settings.local.json is personal and is not part of
+# this rule's files, the same exclusion TC-CFG-004 and TC-CFG-005 make.
+id: TC-CFG-015
+pack: tripcord/core
+title: "WebFetch allowlist includes a host with a public read-back channel"
+severity: high
+harness: [claude]
+files: ["**/.claude/settings.json"]
+when: |
+  config.kind == "permissions" && config.scope == "repo" &&
+    has(payload.setting) && payload.setting == "permissions" &&
+    has(payload.value) && type(payload.value) == map &&
+    has(payload.value.allow) && type(payload.value.allow) == list &&
+    payload.value.allow.exists(e, type(e) == string &&
+      e.matches(r'''(?i)^\s*webfetch\(\s*domain:\s*(\*\.)?(huggingface\.co|hf\.co|pypi\.org|files\.pythonhosted\.org|npmjs\.com|registry\.npmjs\.org|pastebin\.com|webhook\.site)\s*\)\s*$'''))
+fix: "Remove the host from permissions.allow, or scope the fetch further than WebFetch can express (a wrapper script that only reads one fixed, pinned file). If the project genuinely needs to fetch Hugging Face card text or a package index page, treat the result as untrusted input, the way a browsed web page is treated, rather than pre-approving the fetch."
+refs:
+  - https://nvd.nist.gov/vuln/detail/CVE-2026-54316
+  - https://novee.security/vulnerabilities/permissive-list-of-allowed-inputs-leading-to-out-of-band-data-exfiltration-in-claude-code/
+  - https://code.claude.com/docs/en/settings
