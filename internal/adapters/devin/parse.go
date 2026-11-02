@@ -207,21 +207,20 @@ func (f *file) workingDirectory(command string) (string, bool) {
 // stateful: its body might later run cd, and static scanning cannot prove
 // when that happens.
 //
-// "." counts only as the source builtin, the command word of a simple
-// command. "./build.sh" and "file.txt" keep the dot inside the token, and
-// an argument such as "git -C ." does not count. A slash continues a
-// token that already starts with a dot, so the dot is not flushed as its
-// own word.
-//
-// The command word stays open after a keyword or prefix that introduces
-// it (then, do, else, elif, time, if, while, until, builtin, command,
-// nohup, env, and "!"), and after a leading NAME=value assignment.
-// eval and exec are prefixes too; they also flag on their own.
+// A standalone "." fails closed anywhere in a simple command, because it
+// is the source builtin unless the context proves it is a directory
+// argument. "./build.sh" and "FOO=./x" are not standalone dots. A dot is
+// safe only immediately after a non-prefix option, or when the effective
+// command (after its prefixes, options, and leading assignments) is in
+// directoryArgumentCommands. The list is intentionally explicit: these
+// common tools accept a directory operand and do not change this shell's
+// directory. All other commands, including shell syntax we do not model,
+// keep the fail-closed result.
 func hasShellState(command string) bool {
 	depth := 0
 	var quote byte
 	var word []byte
-	atCommand := true
+	var words []string
 	flush := func() bool {
 		if len(word) == 0 {
 			return false
@@ -229,17 +228,13 @@ func hasShellState(command string) bool {
 		text := string(word)
 		word = word[:0]
 		if text == "." {
-			return atCommand
+			return !safeDotArgument(words)
 		}
 		switch text {
 		case "cd", "pushd", "popd", "source", "function", "eval", "exec":
 			return true
 		}
-		if isCommandPrefix(text) || (atCommand && isShellAssignment(text)) {
-			atCommand = true
-			return false
-		}
-		atCommand = false
+		words = append(words, text)
 		return false
 	}
 	for i := 0; i < len(command); i++ {
@@ -288,23 +283,97 @@ func hasShellState(command string) bool {
 				return true
 			}
 			if c == ';' || c == '&' || c == '|' || c == '\n' || c == '{' || c == '}' || c == '!' {
-				atCommand = true
+				words = words[:0]
 			}
 		}
 	}
 	return flush()
 }
 
-// isCommandPrefix reports whether word introduces the following command
-// word instead of being that command. eval and exec are not listed: they
-// flag on their own before this is consulted.
-func isCommandPrefix(word string) bool {
+// safeDotArgument reports whether "." is provably a directory argument
+// instead of source. Prefix options (for time, command, env, and so on)
+// do not count as an option immediately before dot: their effective
+// command would be ".", which must fail closed.
+func safeDotArgument(words []string) bool {
+	if len(words) > 0 && strings.HasPrefix(words[len(words)-1], "-") && !prefixOption(words) {
+		return true
+	}
+	return directoryArgumentCommands[effectiveCommand(words)]
+}
+
+// effectiveCommand skips leading assignments, prefixes, and their options
+// to identify the command a simple command ultimately runs.
+func effectiveCommand(words []string) string {
+	for len(words) > 0 && isShellAssignment(words[0]) {
+		words = words[1:]
+	}
+	for len(words) > 0 && isShellPrefix(words[0]) {
+		words = words[1:]
+		for len(words) > 0 && strings.HasPrefix(words[0], "-") {
+			words = words[1:]
+		}
+	}
+	if len(words) == 0 {
+		return ""
+	}
+	return words[0]
+}
+
+// prefixOption reports whether the final word is an option belonging to a
+// prefix rather than an option to the effective command.
+func prefixOption(words []string) bool {
+	if len(words) == 0 || !strings.HasPrefix(words[len(words)-1], "-") {
+		return false
+	}
+	words = words[:len(words)-1]
+	for len(words) > 0 && isShellAssignment(words[0]) {
+		words = words[1:]
+	}
+	for len(words) > 0 && isShellPrefix(words[0]) {
+		words = words[1:]
+		for len(words) > 0 && strings.HasPrefix(words[0], "-") {
+			words = words[1:]
+		}
+		if len(words) == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func isShellPrefix(word string) bool {
 	switch word {
-	case "then", "do", "else", "elif", "time", "if", "while", "until", "builtin", "command", "nohup", "env":
+	case "time", "command", "env", "nohup", "builtin", "sudo":
 		return true
 	default:
 		return false
 	}
+}
+
+var directoryArgumentCommands = map[string]bool{
+	"ls":     true,
+	"cp":     true,
+	"mv":     true,
+	"find":   true,
+	"make":   true,
+	"git":    true,
+	"rsync":  true,
+	"tar":    true,
+	"docker": true,
+	"podman": true,
+	"npm":    true,
+	"pnpm":   true,
+	"yarn":   true,
+	"go":     true,
+	"cargo":  true,
+	"pip":    true,
+	"uv":     true,
+	"chmod":  true,
+	"chown":  true,
+	"mkdir":  true,
+	"du":     true,
+	"grep":   true,
+	"rg":     true,
 }
 
 // isShellAssignment reports whether word is a leading NAME=value shell

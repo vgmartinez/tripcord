@@ -108,3 +108,11 @@ positivos:
   devin-shell-state-source: high
   devin-shell-state-time-cd: high
   devin-shell-state-time-dot: high
+  devin-shell-state-case-multiline-dot: high
+  devin-shell-state-case-one-line-dot: high
+  devin-shell-state-case-paren-dot: high
+  devin-shell-state-command-option-dot: high
+  devin-shell-state-env-option-dot: high
+  devin-shell-state-redirection-dot: high
+  devin-shell-state-sudo-dot: high
+  devin-shell-state-time-option-dot: high
