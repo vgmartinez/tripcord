@@ -1,0 +1,178 @@
+name: Tripcord
+
+# workflow_call only. A caller chooses inputs; exactly one job below runs.
+# GitHub Actions cannot change a job's permissions with an expression, so
+# security-events: write is present only when upload-sarif is true, and
+# pull-requests: write is present only when comment is true.
+#
+# Reviews are not fetched here. After #44 merges, a later change will
+# paginate the pull-request reviews API and pass --reviews-file.
+# The composite action pin is 276967b41056547c363b4d52378dbffaa7d33d95,
+# .github/actions/tripcord on main. That commit has no release tag.
+
+permissions: {} # each job sets its own token; do not inherit the repository default
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Git ref of this action's repository to build. Empty builds the checkout that contains the action.
+        type: string
+        required: false
+        default: ""
+      binary:
+        description: Existing tripcord binary. When set, the source build is skipped and nothing is downloaded.
+        type: string
+        required: false
+        default: ""
+      path:
+        description: Repository path to scan.
+        type: string
+        required: false
+        default: "."
+      fail-on:
+        description: Inclusive severity passed to tripcord. Empty lets the CLI and policy decide.
+        type: string
+        required: false
+        default: ""
+      upload-sarif:
+        description: Upload the SARIF report to GitHub code scanning.
+        type: string
+        required: false
+        default: "true"
+      comment:
+        description: Post the Markdown report to a pull request.
+        type: string
+        required: false
+        default: "false"
+      github-token:
+        description: Token used for a ref checkout, SARIF upload, and an optional pull-request comment. Empty uses github.token.
+        type: string
+        required: false
+        default: ""
+    outputs:
+      is_agent:
+        description: pr-context is_agent output.
+        value: ${{ jobs.scan_sarif.outputs.is_agent || jobs.scan.outputs.is_agent || jobs.scan_comment.outputs.is_agent || jobs.scan_sarif_comment.outputs.is_agent }}
+      agents:
+        description: pr-context agents output, comma-separated.
+        value: ${{ jobs.scan_sarif.outputs.agents || jobs.scan.outputs.agents || jobs.scan_comment.outputs.agents || jobs.scan_sarif_comment.outputs.agents }}
+
+jobs:
+  scan:
+    name: Tripcord
+    if: inputs.upload-sarif != 'true' && inputs.comment != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read # checkout the repository being scanned
+      pull-requests: read # reviews fetch follows #44; this job does not comment
+    outputs:
+      is_agent: ${{ steps.tripcord.outputs.is_agent }}
+      agents: ${{ steps.tripcord.outputs.agents }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Tripcord
+        id: tripcord
+        uses: vgmartinez/tripcord/.github/actions/tripcord@276967b41056547c363b4d52378dbffaa7d33d95
+        with:
+          ref: ${{ inputs.ref }}
+          binary: ${{ inputs.binary }}
+          path: ${{ inputs.path }}
+          fail-on: ${{ inputs.fail-on }}
+          upload-sarif: ${{ inputs.upload-sarif }}
+          comment: ${{ inputs.comment }}
+          github-token: ${{ inputs.github-token != '' && inputs.github-token || github.token }}
+
+  scan_comment:
+    name: Tripcord
+    if: inputs.upload-sarif != 'true' && inputs.comment == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read # checkout the repository being scanned
+      pull-requests: write # create or update the Markdown comment
+    outputs:
+      is_agent: ${{ steps.tripcord.outputs.is_agent }}
+      agents: ${{ steps.tripcord.outputs.agents }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Tripcord
+        id: tripcord
+        uses: vgmartinez/tripcord/.github/actions/tripcord@276967b41056547c363b4d52378dbffaa7d33d95
+        with:
+          ref: ${{ inputs.ref }}
+          binary: ${{ inputs.binary }}
+          path: ${{ inputs.path }}
+          fail-on: ${{ inputs.fail-on }}
+          upload-sarif: ${{ inputs.upload-sarif }}
+          comment: ${{ inputs.comment }}
+          github-token: ${{ inputs.github-token != '' && inputs.github-token || github.token }}
+
+  scan_sarif:
+    name: Tripcord
+    if: inputs.upload-sarif == 'true' && inputs.comment != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read # checkout the repository being scanned
+      pull-requests: read # reviews fetch follows #44; this job does not comment
+      security-events: write # upload the SARIF report
+    outputs:
+      is_agent: ${{ steps.tripcord.outputs.is_agent }}
+      agents: ${{ steps.tripcord.outputs.agents }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Tripcord
+        id: tripcord
+        uses: vgmartinez/tripcord/.github/actions/tripcord@276967b41056547c363b4d52378dbffaa7d33d95
+        with:
+          ref: ${{ inputs.ref }}
+          binary: ${{ inputs.binary }}
+          path: ${{ inputs.path }}
+          fail-on: ${{ inputs.fail-on }}
+          upload-sarif: ${{ inputs.upload-sarif }}
+          comment: ${{ inputs.comment }}
+          github-token: ${{ inputs.github-token != '' && inputs.github-token || github.token }}
+
+  scan_sarif_comment:
+    name: Tripcord
+    if: inputs.upload-sarif == 'true' && inputs.comment == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read # checkout the repository being scanned
+      pull-requests: write # create or update the Markdown comment
+      security-events: write # upload the SARIF report
+    outputs:
+      is_agent: ${{ steps.tripcord.outputs.is_agent }}
+      agents: ${{ steps.tripcord.outputs.agents }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Tripcord
+        id: tripcord
+        uses: vgmartinez/tripcord/.github/actions/tripcord@276967b41056547c363b4d52378dbffaa7d33d95
+        with:
+          ref: ${{ inputs.ref }}
+          binary: ${{ inputs.binary }}
+          path: ${{ inputs.path }}
+          fail-on: ${{ inputs.fail-on }}
+          upload-sarif: ${{ inputs.upload-sarif }}
+          comment: ${{ inputs.comment }}
+          github-token: ${{ inputs.github-token != '' && inputs.github-token || github.token }}

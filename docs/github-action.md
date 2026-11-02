@@ -63,5 +63,46 @@ selected features.
 
 ## Reusable workflow
 
-`.github/workflows/tripcord-pr.yml` is not in this change. Add it, as
-`workflow_call` only, once this action is on `main`.
+[`.github/workflows/tripcord-pr.yml`](../.github/workflows/tripcord-pr.yml)
+is `workflow_call` only. It checks out the calling repository with
+`fetch-depth: 0` and runs the composite action at a full commit SHA, so
+the scanner is not taken from the tree being scanned. The workflow's
+inputs match the action (`ref`, `binary`, `path`, `fail-on`,
+`upload-sarif`, `comment`, `github-token`) and use the same defaults.
+An empty `github-token` uses `github.token`, because a `workflow_call`
+default cannot be an expression. There is no `policy` input: an empty
+`fail-on` still leaves the threshold to the CLI and the repository
+policy. The workflow outputs are `is_agent` and `agents`.
+
+A caller that leaves the defaults needs `contents: read`,
+`pull-requests: read`, and `security-events: write`. Set `comment: true`
+only from a job that also has `pull-requests: write`. Set
+`upload-sarif: false` to drop `security-events: write`. The workflow
+splits those combinations into separate jobs, and exactly one job runs.
+It does not use `pull_request_target`. A fork pull request still skips
+the SARIF upload and the comment and emits the action's warning.
+
+The workflow does not fetch pull-request reviews. `pr-context` in the
+pinned action has no review set yet. Wiring
+`GET /repos/{owner}/{repo}/pulls/{n}/reviews` and `--reviews-file`
+follows #44.
+
+```yaml
+name: tripcord
+on:
+  pull_request:
+
+jobs:
+  tripcord:
+    permissions:
+      contents: read
+      pull-requests: read
+      security-events: write
+    uses: ./.github/workflows/tripcord-pr.yml
+```
+
+Another repository pins the same file by full commit SHA:
+
+```yaml
+uses: vgmartinez/tripcord/.github/workflows/tripcord-pr.yml@<commit>
+```
