@@ -56,21 +56,16 @@ func run(args []string, stderr io.Writer) int {
 // `registrycheck OLD NEW` where NEW is rules/REGISTRY, so the advisory
 // file is NEW's sibling. The workflow is not changed: the base SHA is
 // read from the same environment variables that job already sets, and
-// a missing file in the base commit is an empty list.
+// a missing file in the base commit is an empty list. A file missing at
+// head fails when the base still has entries.
 func checkAdvisories(oldReg, newReg string) error {
 	if filepath.Base(newReg) != rules.RegistryFile {
 		return nil
 	}
 	newPath := filepath.Join(filepath.Dir(newReg), advisory.AdvisoryFile)
 	data, err := os.ReadFile(newPath)
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	next, err := advisory.Parse(data)
-	if err != nil {
+	missing := errors.Is(err, fs.ErrNotExist)
+	if err != nil && !missing {
 		return err
 	}
 	oldData, err := baseAdvisories(oldReg)
@@ -80,6 +75,16 @@ func checkAdvisories(oldReg, newReg string) error {
 	old, err := advisory.Parse(oldData)
 	if err != nil {
 		return fmt.Errorf("base %s: %w", advisory.AdvisoryFile, err)
+	}
+	if missing {
+		if old.Len() > 0 {
+			return fmt.Errorf("%s removed: the base has %d advisories; set withdrawn instead of deleting the file", advisory.AdvisoryFile, old.Len())
+		}
+		return nil
+	}
+	next, err := advisory.Parse(data)
+	if err != nil {
+		return err
 	}
 	if err := advisory.CheckEvolution(old, next); err != nil {
 		return err

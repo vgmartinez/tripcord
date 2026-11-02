@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -76,5 +77,19 @@ func TestAdvisoryEvolution(t *testing.T) {
 	stderr.Reset()
 	if got := run([]string{oldReg, newReg}, &stderr); got != 1 {
 		t.Fatalf("schema exit %d (%s)", got, stderr.String())
+	}
+	if err := os.Remove(filepath.Join(newDir, "ADVISORIES.json")); err != nil {
+		t.Fatal(err)
+	}
+	stderr.Reset()
+	if got := run([]string{oldReg, newReg}, &stderr); got != 1 || !strings.Contains(stderr.String(), "ADVISORIES.json removed") {
+		t.Fatalf("removed exit %d (%s)", got, stderr.String())
+	}
+	if err := os.Remove(filepath.Join(oldDir, "ADVISORIES.json")); err != nil {
+		t.Fatal(err)
+	}
+	stderr.Reset()
+	if got := run([]string{oldReg, newReg}, &stderr); got != 0 {
+		t.Fatalf("absent in base and head exit %d (%s)", got, stderr.String())
 	}
 }

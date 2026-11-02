@@ -175,6 +175,14 @@ func (db *DB) index(idx int, a Advisory) {
 	}
 }
 
+// Len is the number of advisories, withdrawn ones included.
+func (db *DB) Len() int {
+	if db == nil {
+		return 0
+	}
+	return len(db.advisories)
+}
+
 // Count is the number of advisories that have not been withdrawn.
 func (db *DB) Count() int {
 	if db == nil {
