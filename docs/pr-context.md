@@ -1,9 +1,12 @@
 # `tripcord pr-context`
 
 `tripcord pr-context` runs in CI and reports whether a pull request looks
-agent-authored. It does not fail the job when it detects an agent: the
-result is evidence for a later diff scan. Exit 0 means the command could
-read its inputs, whether or not `agent` is true.
+agent-authored. Detecting an agent does not by itself fail the command.
+When that author is an agent and the pull request diff changes a file an
+adapter classifies, [TC-CFG-014](rules/TC-CFG-014.md) does: exit 1 when
+no human approved, and exit 3 when the reviews or the diff cannot be
+read. Otherwise exit 0 means the inputs were read, whether or not
+`agent` is true.
 
 ## Signals
 
@@ -206,19 +209,53 @@ agents=claude,cursor
 `agents` has no spaces. The login and branch lines are written before
 commits are read. When commits add an agent those lines did not already
 name, the same two lines are appended again and the second value wins;
-when they do not, the file is left as the single block. `GITHUB_OUTPUT`
-is opened refusing to follow a symlink and is required to be a regular
-file (so a FIFO cannot hang the command); either case is refused with
-exit 3, before commits are read. If the file already has content that
-does not end in a newline, a newline is written first, so appending
-never runs into a previous line (`agents=...is_agent=false` without one).
+when they do not, the file is left as the single block. TC-CFG-014
+appends one more line only when it is not clear:
+
+```
+tc_cfg_014=match
+```
+
+`incomplete` is the other value. A clear result does not write the
+name, so a caller that only reads `is_agent` and `agents` is unchanged.
+`GITHUB_OUTPUT` is opened refusing to follow a symlink and is required
+to be a regular file (so a FIFO cannot hang the command); either case
+is refused with exit 3, before commits are read. If the file already
+has content that does not end in a newline, a newline is written first,
+so appending never runs into a previous line
+(`agents=...is_agent=false` without one).
+
+## TC-CFG-014
+
+After the agent verdict is written, an agent-authored pull request is
+checked for changed paths. The diff is `git diff --name-status -z`
+of `base...head` (the merge-base, which is the pull request's own
+files, not changes that landed on the base branch later). A path counts
+when one of the installed adapters classifies it. That is the same
+path check the adapter uses during a scan. It does not read the file.
+
+Human approval is an `APPROVED` review whose `user.type` is `User`,
+whose login does not end in `[bot]`, and whose login is not the pull
+request author's (compared case-insensitively). A `reviews` array,
+including `[]`, is the whole set. A single `review` object is not: it
+can clear the rule when that one review is a qualifying approval, and
+otherwise the rule is incomplete rather than a pass. A pull request
+event that omits reviews is incomplete when a classified path changed.
+An agent-authored pull request that does not change a classified path
+is clear, and so is a pull request whose author is not an agent.
+
+Text output gains a `tc-cfg-014:` section only when the result is
+`match` or `incomplete`. JSON keeps the pr-context document and adds
+`tc_cfg_014` plus, for a match, a `tripcord.finding/v1` object. A clear
+result does not add those fields.
 
 ## Exit codes
 
 | Exit | Meaning |
 | --- | --- |
-| `0` | The inputs were read. An agent may or may not have been detected. |
-| `3` | Invalid flags, event, revision, or repository, or `GITHUB_OUTPUT` is missing for `--format gha` or is a symlink. |
+| `0` | The inputs were read. An agent may or may not have been detected. TC-CFG-014 is clear when it applies. |
+| `1` | TC-CFG-014 matched: an agent-authored pull request changed classified config and the reviews array shows no human approval. |
+| `3` | Invalid flags, event, revision, or repository, or `GITHUB_OUTPUT` is missing for `--format gha` or is a symlink. Also TC-CFG-014 incomplete: the reviews were not a `reviews` array, or the diff could not be read, for an agent-authored pull request that changed classified config. |
 | `4` | Git is not installed, or reading or writing failed. |
 
 ## Example

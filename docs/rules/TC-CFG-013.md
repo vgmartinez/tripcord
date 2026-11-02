@@ -83,9 +83,8 @@ normalized into Tripcord's finding format or fingerprint scheme.
 If a future Tripcord release adds a GitHub Actions workflow adapter for
 other reasons (for example to cover plain, non-agentic
 `pull_request_target` risks that are out of `zizmor`'s scope, or
-because `rules/TC-CFG-014` — out of scope for this change, since it
-needs `pr-context` to tell an added trigger apart from an existing one
-— ends up needing one too), `TC-CFG-013` could move to a real
+because a later rule needs `pr-context` to tell an added trigger apart
+from an existing one), `TC-CFG-013` could move to a real
 `rules/TC-CFG-013.yaml` built on it. Until then, `TC-CFG-013` is
 reserved as an id with no rule file and no `rules/REGISTRY` line, per
 that file's own convention ("Add a line when you add
