@@ -203,23 +203,54 @@ func readPullRequestEvent(path string) (prcontext.Event, error) {
 	return prcontext.ParseEvent(data)
 }
 
+// appendGitHubOutput appends result to the GITHUB_OUTPUT file. The open
+// refuses a symlink target (atomically via O_NOFOLLOW on unix, via an
+// Lstat check first elsewhere) and, once opened, refuses anything that
+// is not a regular file (a FIFO could otherwise hang a write or stream
+// to an unexpected reader). If the file already has content that does
+// not end in a newline, a newline is written before appending, so this
+// line is never run together with the last one already in the file.
 func appendGitHubOutput(path string, result prcontext.Result) error {
-	info, err := os.Lstat(path)
-	switch {
-	case errors.Is(err, os.ErrNotExist):
-	case err != nil:
+	if err := refuseGitHubOutputSymlink(path); err != nil {
 		return err
-	case info.Mode()&os.ModeSymlink != 0:
-		return &prcontext.InputError{Msg: "GITHUB_OUTPUT must not be a symlink"}
 	}
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	// O_RDWR, not O_WRONLY: writeGitHubOutput reads the file's last byte
+	// to decide whether a leading newline is needed before it appends.
+	// O_APPEND still forces every write to the end regardless of that
+	// read's position, and a FIFO opened O_RDWR never blocks waiting for
+	// a reader, so this does not reintroduce the hang outputOpenFlags'
+	// O_NONBLOCK guards against for O_WRONLY.
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_RDWR|outputOpenFlags, 0o600)
 	if err != nil {
-		return err
+		return classifyOutputOpenError(err)
 	}
-	_, err = io.WriteString(f, prcontext.FormatOutput(result))
+	err = writeGitHubOutput(f, result)
 	if cerr := f.Close(); err == nil {
 		err = cerr
 	}
+	return err
+}
+
+func writeGitHubOutput(f *os.File, result prcontext.Result) error {
+	info, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return &prcontext.InputError{Msg: "GITHUB_OUTPUT must be a regular file"}
+	}
+	if info.Size() > 0 {
+		var last [1]byte
+		if _, err := f.ReadAt(last[:], info.Size()-1); err != nil {
+			return err
+		}
+		if last[0] != '\n' {
+			if _, err := io.WriteString(f, "\n"); err != nil {
+				return err
+			}
+		}
+	}
+	_, err = io.WriteString(f, prcontext.FormatOutput(result))
 	return err
 }
 
