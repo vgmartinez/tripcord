@@ -70,9 +70,15 @@ func runPrContext(args []string, stdout, stderr io.Writer) int {
 	if repo == "" {
 		repo = "."
 	}
-	commits, warnings, err := prcontext.ReadCommits(context.Background(), repo, ev.Base, ev.Head)
-	if err != nil {
-		return prContextFail(stderr, err, false)
+	// A commit or notes read failure does not abort: the event already
+	// carries the PR author's login and branch, which Detect can judge on
+	// their own. commits and notes signals are simply missing, same as a
+	// shallow checkout that misses the range. readErr is kept and only
+	// decides the exit code, after stdout and GITHUB_OUTPUT are written.
+	commits, warnings, readErr := prcontext.ReadCommits(context.Background(), repo, ev.Base, ev.Head)
+	if readErr != nil {
+		commits = nil
+		warnings = append(warnings, "commits and notes were not read: "+oneLineError(redactHomeFromError(readErr)))
 	}
 	result := prcontext.Detect(prcontext.Input{
 		PRLogin:      ev.Login,
@@ -94,7 +100,17 @@ func runPrContext(args []string, stdout, stderr io.Writer) int {
 			return prContextFail(stderr, err, false)
 		}
 	}
+	if readErr != nil {
+		return prContextFail(stderr, readErr, false)
+	}
 	return int(exitcode.OK)
+}
+
+// oneLineError collapses a (possibly multi-line) error message onto one
+// line, so it fits the single "- <warning>" line format used by
+// FormatText and does not break a GITHUB_OUTPUT heredoc.
+func oneLineError(msg string) string {
+	return strings.Join(strings.Fields(msg), " ")
 }
 
 type prContextOptions struct {

@@ -143,6 +143,89 @@ func TestPrContextCleanHumanPullRequest(t *testing.T) {
 	}
 }
 
+// TestPrContextOversizedCommitFieldStillDetectsBot is a regression test
+// for a commit-log read failure masking a bot author. A commit whose
+// author name is built directly as a git object, larger than the
+// (now field-scoped) identity cap, must not stop pr-context from
+// reporting the bot login the event already carries.
+func TestPrContextOversizedCommitFieldStillDetectsBot(t *testing.T) {
+	clearPrContextEnv(t)
+	git := lookGit(t)
+	repo := initRepo(t)
+	base := strings.TrimSpace(gitOut(t, git, repo, "rev-parse", "HEAD"))
+	tree := strings.TrimSpace(gitOut(t, git, repo, "rev-parse", "HEAD^{tree}"))
+	raw := "tree " + tree + "\n" +
+		"parent " + base + "\n" +
+		"author " + strings.Repeat("A", 5<<20) + " <attacker@example.invalid> 1700000000 +0000\n" +
+		"committer t <t@example.invalid> 1700000000 +0000\n" +
+		"\n" +
+		"malicious commit\n"
+	cmd := exec.Command(git, "hash-object", "-t", "commit", "-w", "--stdin")
+	cmd.Dir = repo
+	cmd.Stdin = strings.NewReader(raw)
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("git hash-object: %v", err)
+	}
+	head := strings.TrimSpace(string(out))
+
+	event := filepath.Join(t.TempDir(), "event.json")
+	body := `{"pull_request":{"user":{"login":"claude[bot]","type":"Bot"},"head":{"ref":"cursor/x","sha":"` + head + `"},"base":{"sha":"` + base + `"}}}`
+	if err := os.WriteFile(event, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	outputFile := filepath.Join(t.TempDir(), "github_output")
+	t.Setenv("GITHUB_OUTPUT", outputFile)
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"pr-context", "--format", "json", "--repo", repo, "--event", event}, &stdout, &stderr)
+	if code != int(exitcode.OK) {
+		t.Fatalf("exit %d\nstderr: %s\nstdout: %s", code, stderr.String(), stdout.String())
+	}
+	if !strings.Contains(stdout.String(), `"agent": true`) {
+		t.Fatalf("stdout = %s, want agent: true", stdout.String())
+	}
+	written, err := os.ReadFile(outputFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(string(written), "is_agent=true\n") {
+		t.Fatalf("GITHUB_OUTPUT = %q, want is_agent=true", written)
+	}
+}
+
+// TestPrContextNonRepoStillDetectsBot is a regression test for the
+// second repro of the same bug: a --repo that is not a repository fails
+// ReadCommits with an InputError, which must not stop pr-context from
+// reporting the bot login the event already carries. The exit code stays
+// 3 (the repository is still unusable config), but stdout and
+// GITHUB_OUTPUT must reflect the event's bot author.
+func TestPrContextNonRepoStillDetectsBot(t *testing.T) {
+	clearPrContextEnv(t)
+	notARepo := t.TempDir()
+	event := filepath.Join(t.TempDir(), "event.json")
+	body := `{"pull_request":{"user":{"login":"claude[bot]","type":"Bot"},"head":{"ref":"cursor/x","sha":"0000000000000000000000000000000000000000"},"base":{"sha":"1111111111111111111111111111111111111111"}}}`
+	if err := os.WriteFile(event, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	outputFile := filepath.Join(t.TempDir(), "github_output")
+	t.Setenv("GITHUB_OUTPUT", outputFile)
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"pr-context", "--format", "json", "--repo", notARepo, "--event", event}, &stdout, &stderr)
+	if code != int(exitcode.Config) {
+		t.Fatalf("exit %d, want 3\nstderr: %s\nstdout: %s", code, stderr.String(), stdout.String())
+	}
+	if !strings.Contains(stdout.String(), `"agent": true`) {
+		t.Fatalf("stdout = %s, want agent: true even though the repo could not be read", stdout.String())
+	}
+	written, err := os.ReadFile(outputFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(string(written), "is_agent=true\n") {
+		t.Fatalf("GITHUB_OUTPUT = %q, want is_agent=true", written)
+	}
+}
+
 func TestPrContextUsage(t *testing.T) {
 	clearPrContextEnv(t)
 	repo := initRepo(t)
