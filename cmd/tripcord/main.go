@@ -51,11 +51,15 @@ Usage:
   tripcord help
   tripcord version
   tripcord scan [PATH] [flags]
+  tripcord pr-context [flags]
   tripcord preopen <git-url|path> [flags]
 
 scan performs static configuration scanning only. --scope selects repository
 (the default), user, managed, or all. The default does not read the home
 directory or system settings.
+pr-context reports whether a pull request looks agent-authored. It reads a
+GitHub pull_request event and the commits in base..head, and exits 0
+whether or not an agent is detected.
 preopen clones a repository into a temporary directory without running its
 hooks, filters, LFS, or submodules, scans it like scan, and removes it. It
 takes the scan flags except --since and --scope other than repo, and ignores
@@ -78,6 +82,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return writeString(stdout, version+"\n")
 	case "scan":
 		return runScan(args[1:], stdout, stderr)
+	case "pr-context":
+		return runPrContext(args[1:], stdout, stderr)
 	case "preopen":
 		return runPreopen(args[1:], stdout, stderr)
 	default:

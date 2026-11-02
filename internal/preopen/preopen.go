@@ -8,10 +8,10 @@
 // smudge, or process filter driver (including Git LFS) can run, never
 // checks out a submodule, and never reaches a hook: a bare clone has no
 // checkout to trigger post-checkout, and hooks are disabled besides.
-// Every Git invocation also gets a sanitized environment and -c
-// overrides (see gitEnv and gitConfig) that ignore the user's global and
-// system configuration, deny every transport other than https, ssh, and
-// file, and disable credential helpers, prompts, templates, and fsmonitor.
+// Every Git invocation also gets the sanitized environment and -c
+// overrides in internal/gitrun that ignore the user's global and system
+// configuration, deny every transport other than https, ssh, and file,
+// and disable credential helpers, prompts, templates, and fsmonitor.
 package preopen
 
 import (
@@ -28,7 +28,8 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"time"
+
+	"github.com/vgmartinez/tripcord/internal/gitrun"
 )
 
 // Limits bound what a fetched tree may write to disk. A shallow clone is
@@ -50,8 +51,10 @@ var (
 	maxTotalBytes = int64(MaxTotalBytes)
 )
 
-// ErrGitMissing reports that git could not be found or started.
-var ErrGitMissing = errors.New("git is not installed")
+// ErrGitMissing reports that git could not be found or started. It is
+// internal/gitrun's ErrNotInstalled under this package's own name, kept
+// so existing callers of this exported var are unaffected.
+var ErrGitMissing = gitrun.ErrNotInstalled
 
 // TargetError reports a target preopen refuses or cannot fetch: an
 // unsupported transport, a path that does not exist, or a failed clone.
@@ -101,8 +104,9 @@ func Fetch(ctx context.Context, target string) (ws *Workspace, err error) {
 	if err != nil {
 		return nil, &TargetError{Target: target, Err: err}
 	}
-	git, err := exec.LookPath("git")
-	if err != nil {
+	// Checked up front, rather than left to the first gitrun call, so a
+	// missing git fails before anything is created under os.TempDir.
+	if _, err := exec.LookPath("git"); err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrGitMissing, err)
 	}
 	dir, err := os.MkdirTemp("", "tripcord-preopen-")
@@ -116,13 +120,13 @@ func Fetch(ctx context.Context, target string) (ws *Workspace, err error) {
 		}
 	}()
 	gitDir := filepath.Join(dir, "git")
-	if err := clone(ctx, git, url, gitDir); err != nil {
+	if err := clone(ctx, url, gitDir); err != nil {
 		return nil, wrapGitError(target, err)
 	}
 	if err := os.Mkdir(created.tree, 0o700); err != nil {
 		return nil, err
 	}
-	if err := materialize(ctx, git, gitDir, created.tree); err != nil {
+	if err := materialize(ctx, gitDir, created.tree); err != nil {
 		// An interrupt kills cat-file, and the write then fails with a
 		// broken pipe. Report the interrupt instead of that write error.
 		return nil, preferCancel(ctx, wrapTreeError(target, err))
@@ -143,7 +147,7 @@ func preferCancel(ctx context.Context, err error) error {
 }
 
 func wrapGitError(target string, err error) error {
-	var exitErr *gitExitError
+	var exitErr *gitrun.ExitError
 	if errors.As(err, &exitErr) {
 		return &TargetError{Target: target, Err: err}
 	}
@@ -165,7 +169,7 @@ func wrapTreeError(target string, err error) error {
 
 // resolveTarget returns the URL to clone. Every transport other than
 // https, ssh, and file is refused here, before git runs, and again by
-// gitConfig's protocol.allow settings when it does.
+// gitrun.ConfigArgs' protocol.allow settings when it does.
 func resolveTarget(target string) (string, error) {
 	switch {
 	case target == "":
@@ -210,132 +214,19 @@ func isDriveLetter(s string) bool {
 	return runtime.GOOS == "windows" && len(s) == 1 && (s[0] >= 'a' && s[0] <= 'z' || s[0] >= 'A' && s[0] <= 'Z')
 }
 
-// gitConfig is passed with -c to every git invocation. Command-line
-// configuration outranks every config file, and gitEnv already keeps
-// the global and system files from being read at all.
-func gitConfig() []string {
-	null := os.DevNull
-	pairs := []string{
-		"core.hooksPath=" + null,
-		"core.fsmonitor=false",
-		"core.attributesFile=" + null,
-		"core.askPass=",
-		"core.sshCommand=ssh -o BatchMode=yes",
-		"credential.helper=",
-		"init.templateDir=",
-		"protocol.allow=never",
-		"protocol.https.allow=always",
-		"protocol.ssh.allow=always",
-		"protocol.file.allow=always",
-		"protocol.ext.allow=never",
-		"protocol.git.allow=never",
-		"submodule.recurse=false",
-		"fetch.recurseSubmodules=false",
-		"filter.lfs.smudge=",
-		"filter.lfs.clean=",
-		"filter.lfs.process=",
-		"filter.lfs.required=false",
-		"transfer.fsckObjects=true",
-	}
-	args := make([]string, 0, 2*len(pairs))
-	for _, p := range pairs {
-		args = append(args, "-c", p)
-	}
-	return args
-}
-
-// gitEnv is the environment for git. Every inherited GIT_* variable is
-// dropped (GIT_CONFIG_PARAMETERS, GIT_CONFIG_COUNT, GIT_SSH_COMMAND,
-// GIT_ASKPASS, GIT_TEMPLATE_DIR, GIT_EXEC_PATH, ...), as is SSH_ASKPASS,
-// so neither the caller's environment nor its config files can add a
-// hook, helper, or filter. GIT_ALLOW_PROTOCOL repeats the transport
-// allowlist in the form older git releases read.
-func gitEnv() []string {
-	env := make([]string, 0, len(os.Environ())+8)
-	for _, entry := range os.Environ() {
-		key, _, _ := strings.Cut(entry, "=")
-		upper := strings.ToUpper(key)
-		if strings.HasPrefix(upper, "GIT_") || upper == "SSH_ASKPASS" || upper == "SSH_ASKPASS_REQUIRE" {
-			continue
-		}
-		env = append(env, entry)
-	}
-	return append(env,
-		"GIT_CONFIG_NOSYSTEM=1",
-		"GIT_CONFIG_GLOBAL="+os.DevNull,
-		"GIT_TERMINAL_PROMPT=0",
-		"GIT_LFS_SKIP_SMUDGE=1",
-		"GIT_NO_LAZY_FETCH=1",
-		"GIT_ALLOW_PROTOCOL=https:ssh:file",
-		"GIT_PROTOCOL_FROM_USER=0",
-	)
-}
-
-// gitExitError is a git command that ran and failed.
-type gitExitError struct {
-	op     string
-	detail string
-	err    error
-}
-
-func (e *gitExitError) Error() string {
-	if e.detail != "" {
-		return fmt.Sprintf("git %s failed: %s", e.op, e.detail)
-	}
-	return fmt.Sprintf("git %s failed: %v", e.op, e.err)
-}
-
-func (e *gitExitError) Unwrap() error { return e.err }
-
-func command(ctx context.Context, git string, args ...string) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, git, append(gitConfig(), args...)...)
-	cmd.Env = gitEnv()
-	cmd.Stdin = nil
-	cmd.WaitDelay = 5 * time.Second
-	return cmd
-}
-
-func runGit(cmd *exec.Cmd, op string) ([]byte, error) {
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			return nil, &gitExitError{op: op, detail: sanitize(stderr.String()), err: err}
-		}
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return nil, err
-		}
-		return nil, fmt.Errorf("%w: %w", ErrGitMissing, err)
-	}
-	return out, nil
-}
-
-// sanitize keeps git's diagnostic to one bounded line.
-func sanitize(s string) string {
-	s = strings.TrimSpace(strings.ReplaceAll(s, "\r", ""))
-	s = strings.ReplaceAll(s, "\n", "; ")
-	const limit = 1024
-	if len(s) > limit {
-		s = s[:limit] + "..."
-	}
-	return s
-}
-
 // clone makes a shallow, bare, single-branch clone of url in gitDir. A
 // bare clone has no work tree, so nothing is checked out: no smudge
-// filter, no post-checkout hook, and no submodule.
-func clone(ctx context.Context, git, url, gitDir string) error {
-	cmd := command(ctx, git, "clone",
+// filter, no post-checkout hook, and no submodule. gitrun.Run applies
+// the hardened environment and -c overrides shared with pr-context.
+func clone(ctx context.Context, url, gitDir string) error {
+	if _, err := gitrun.Run(ctx, "", "clone",
 		"--bare",
 		"--depth", "1",
 		"--single-branch",
 		"--no-tags",
 		"--template=",
 		"--quiet",
-		"--", url, gitDir)
-	if _, err := runGit(cmd, "clone"); err != nil {
+		"--", url, gitDir); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -355,15 +246,15 @@ type treeEntry struct {
 // cat-file --batch, which returns raw object content and never applies
 // a filter or textconv. Submodules become empty directories, as an
 // uninitialized submodule is in a normal checkout.
-func materialize(ctx context.Context, git, gitDir, tree string) error {
-	if _, err := runGit(command(ctx, git, "--git-dir", gitDir, "rev-parse", "--verify", "--quiet", "HEAD^{tree}"), "rev-parse"); err != nil {
-		var exitErr *gitExitError
+func materialize(ctx context.Context, gitDir, tree string) error {
+	if _, err := gitrun.Run(ctx, "", "--git-dir", gitDir, "rev-parse", "--verify", "--quiet", "HEAD^{tree}"); err != nil {
+		var exitErr *gitrun.ExitError
 		if errors.As(err, &exitErr) {
 			return nil // empty repository: an empty tree
 		}
 		return err
 	}
-	raw, err := runGit(command(ctx, git, "--git-dir", gitDir, "ls-tree", "-r", "-z", "--full-tree", "HEAD"), "ls-tree")
+	raw, err := gitrun.Run(ctx, "", "--git-dir", gitDir, "ls-tree", "-r", "-z", "--full-tree", "HEAD")
 	if err != nil {
 		return err
 	}
@@ -380,7 +271,10 @@ func materialize(ctx context.Context, git, gitDir, tree string) error {
 	// never returns. Cancelling kills the process before Wait.
 	catCtx, cancelCat := context.WithCancel(ctx)
 	defer cancelCat()
-	cat := command(catCtx, git, "--git-dir", gitDir, "cat-file", "--batch")
+	cat, err := gitrun.Command(catCtx, "", "--git-dir", gitDir, "cat-file", "--batch")
+	if err != nil {
+		return err
+	}
 	stdin, err := cat.StdinPipe()
 	if err != nil {
 		return err
@@ -404,7 +298,7 @@ func materialize(ctx context.Context, git, gitDir, tree string) error {
 		return preferCancel(ctx, writeErr)
 	}
 	if waitErr != nil {
-		return &gitExitError{op: "cat-file", detail: sanitize(stderr.String()), err: waitErr}
+		return &gitrun.ExitError{Args: []string{"cat-file"}, Stderr: gitrun.Sanitize(stderr.String()), Err: waitErr}
 	}
 	return nil
 }
