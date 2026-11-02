@@ -286,6 +286,43 @@ func TestEnvironmentDetectView(t *testing.T) {
 	}
 }
 
+func TestEnvironmentStart(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	const command = "sudo service docker start"
+	kittest.WriteFile(t, filepath.Join(root, ".cursor", "environment.json"), `{"start":"`+command+`"}`)
+	got := kittest.Discover(t, New(Options{}), root)
+	if len(got.Diagnostics) != 0 {
+		t.Fatalf("diagnostics = %v", got.Diagnostics)
+	}
+	items := got.Find(".cursor/environment.json", model.ConfigKindEnvSetup)
+	if len(items) != 1 {
+		t.Fatalf("items = %+v", items)
+	}
+	payload := kittest.Payload(t, items[0])
+	if payload["setting"] != "start" || payload["value"] != command {
+		t.Fatalf("payload = %#v", payload)
+	}
+	key, _ := payload["key"].(string)
+	if !strings.Contains(key, `"setting"`) || !strings.Contains(key, `"start"`) {
+		t.Fatalf("key = %s", key)
+	}
+	if !strings.Contains(string(items[0].Detect), command) {
+		t.Fatalf("detect view = %s", items[0].Detect)
+	}
+
+	root = t.TempDir()
+	kittest.WriteFile(t, filepath.Join(root, ".cursor", "environment.json"), `{"start":["sudo","service","docker","start"]}`)
+	got = kittest.Discover(t, New(Options{}), root)
+	if !got.HasDiag("start must be a string") {
+		t.Fatalf("diagnostics = %v", got.Diagnostics)
+	}
+	items = got.Find(".cursor/environment.json", model.ConfigKindEnvSetup)
+	if len(items) != 1 || kittest.Payload(t, items[0])["setting"] != "start" {
+		t.Fatalf("non-string start = %+v", items)
+	}
+}
+
 func TestEnvironmentCommandTypes(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

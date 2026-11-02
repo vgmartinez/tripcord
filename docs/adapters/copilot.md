@@ -27,6 +27,12 @@ is scanned. Matching is case-insensitive.
 | `.github/instructions/**/*.instructions.md` | `instructions` (role `instructions`) |
 | `.github/workflows/copilot-setup-steps.yml` | `env-setup` |
 
+`.github/workflows/copilot-setup-steps.yaml` is not read. GitHub documents
+only the `.yml` path: "You can customize Copilot's environment by creating
+a special GitHub Actions workflow file, located at
+`.github/workflows/copilot-setup-steps.yml` within your repository."
+([Customize the agent environment](https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/customize-cloud-agent/customize-the-agent-environment)).
+
 ### User (`--scope user`)
 
 `$COPILOT_HOME`, default `~/.copilot`:
@@ -119,5 +125,5 @@ Reads, symlink handling, limits, and diagnostics are those of the
 ## Sources
 
 - [Copilot hooks reference](https://docs.github.com/en/copilot/reference/hooks-reference)
-- [Customize the Copilot cloud agent environment](https://docs.github.com/copilot/how-tos/use-copilot-agents/coding-agent/customize-the-agent-environment)
+- [Customize the agent environment](https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/customize-cloud-agent/customize-the-agent-environment)
 - [Copilot cloud agent firewall](https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/customize-the-firewall)

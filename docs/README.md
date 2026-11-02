@@ -14,6 +14,9 @@ depends on the surface: scans fail on high, and the hook warns.
 formats, flags, policy interaction, examples, and exit codes.
 [pr-context.md](pr-context.md) documents `tripcord pr-context`, which
 reports whether a pull request looks agent-authored.
+[preopen.md](preopen.md) documents `tripcord preopen`, which fetches a
+repository without running its hooks, filters, LFS, or submodules and then
+scans it.
 
 ## Adapters
 
