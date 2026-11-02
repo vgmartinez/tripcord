@@ -45,6 +45,9 @@ func New(options Options) *Adapter {
 // Harness implements adapters.Adapter.
 func (*Adapter) Harness() model.Harness { return model.HarnessDevin }
 
+// Classifies reports whether rel is a blueprint this adapter reads.
+func (*Adapter) Classifies(rel string) bool { return isBlueprint(rel) }
+
 // Detect reports whether the repository holds a blueprint, or a blueprint
 // path that cannot be read safely.
 func (a *Adapter) Detect(repoRoot string) bool {

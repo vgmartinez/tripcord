@@ -78,6 +78,11 @@ func New(options Options) *Adapter {
 // Harness implements adapters.Adapter.
 func (*Adapter) Harness() model.Harness { return model.HarnessClaude }
 
+// Classifies reports whether rel is a file this adapter reads from the
+// path alone. Plugin files that match only after a plugin root is
+// discovered are not included; discovery still reads those.
+func (*Adapter) Classifies(rel string) bool { return classify(rel, nil) != roleNone }
+
 // Detect reports whether the repository holds any file Claude Code reads,
 // or a config-relevant path Tripcord cannot safely read.
 func (a *Adapter) Detect(repoRoot string) bool {

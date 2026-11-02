@@ -67,6 +67,10 @@ func New(options Options) *Adapter {
 // Harness implements adapters.Adapter.
 func (*Adapter) Harness() model.Harness { return model.HarnessCodex }
 
+// Classifies reports whether rel is a file this adapter reads. It uses
+// the same path rules as discovery and does not open the file.
+func (*Adapter) Classifies(rel string) bool { return classify(rel) != roleNone }
+
 // SharedOwners implements adapters.SharedReader: Codex also loads
 // AGENTS.md and .agents/skills, both in the repository and, at user
 // scope, ~/.agents/skills; the generic adapter reports all of them.

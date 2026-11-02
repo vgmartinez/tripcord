@@ -65,6 +65,10 @@ func New(options Options) *Adapter {
 // Harness implements adapters.Adapter.
 func (*Adapter) Harness() model.Harness { return model.HarnessCopilot }
 
+// Classifies reports whether rel is a file this adapter reads. It uses
+// the same path rules as discovery and does not open the file.
+func (*Adapter) Classifies(rel string) bool { return classify(rel) != roleNone }
+
 // SharedOwners implements adapters.SharedReader: Copilot also loads
 // AGENTS.md, shared skills, and .vscode files (generic), and .mcp.json and
 // .claude/settings.json hooks (claude).

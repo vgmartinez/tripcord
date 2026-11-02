@@ -62,6 +62,10 @@ func New(options Options) *Adapter {
 // Harness implements adapters.Adapter.
 func (*Adapter) Harness() model.Harness { return model.HarnessGemini }
 
+// Classifies reports whether rel is a file this adapter reads. It uses
+// the same path rules as discovery and does not open the file.
+func (*Adapter) Classifies(rel string) bool { return classify(rel) != roleNone }
+
 // SharedOwners implements adapters.SharedReader: Gemini CLI can be
 // pointed at AGENTS.md (context.fileName) and reads shared skills, both
 // reported by the generic adapter.
