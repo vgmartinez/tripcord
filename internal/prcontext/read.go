@@ -173,7 +173,9 @@ func classifyRev(err error, rangeSpec string) error {
 			strings.Contains(msg, "bad revision"),
 			strings.Contains(msg, "ambiguous argument"),
 			strings.Contains(msg, "invalid revision"),
-			strings.Contains(msg, "needed a single revision"):
+			strings.Contains(msg, "needed a single revision"),
+			strings.Contains(msg, "invalid symmetric difference"),
+			strings.Contains(msg, "no merge base"):
 			return &historyError{rangeSpec: rangeSpec}
 		}
 	}
