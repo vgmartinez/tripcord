@@ -217,6 +217,37 @@ func TestRefCheckoutIsRemovedBeforeDefaultPathScan(t *testing.T) {
 	}
 }
 
+func TestMissingSARIFFileWarnsWithoutBlamingTheToken(t *testing.T) {
+	action := parseAction(t)
+	var present, uploadIf, warning string
+	for _, step := range action.Runs.Steps {
+		switch step.ID {
+		case "sarif-file":
+			present = step.Run
+		case "upload-sarif":
+			uploadIf = step.If
+		}
+		script := step.With["script"]
+		if strings.Contains(script, "the SARIF file is missing") {
+			warning = script
+		}
+	}
+	if !strings.Contains(present, `[ -f "$TRIPCORD_SARIF" ]`) || !strings.Contains(present, "present=false") {
+		t.Fatalf("action does not record a missing SARIF file:\n%s", present)
+	}
+	if !strings.Contains(uploadIf, "steps.sarif-file.outputs.present == 'true'") {
+		t.Fatalf("upload runs without a SARIF file: %s", uploadIf)
+	}
+	missing := strings.Index(warning, "the SARIF file is missing")
+	token := strings.Index(warning, "the token cannot upload code scanning results")
+	if missing < 0 || token < 0 || missing > token {
+		t.Fatalf("missing-file warning does not precede the token warning:\n%s", warning)
+	}
+	if !strings.Contains(warning, `TRIPCORD_SARIF_PRESENT !== "true"`) {
+		t.Fatal("warning does not check that the SARIF file is present")
+	}
+}
+
 type actionFile struct {
 	Inputs map[string]struct {
 		Default string `yaml:"default"`

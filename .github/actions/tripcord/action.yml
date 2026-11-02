@@ -154,6 +154,17 @@ runs:
         if [ "$markdown_status" -gt "$status" ]; then status=$markdown_status; fi
         echo "exit-code=$status" >> "$GITHUB_OUTPUT"
         exit 0
+    - id: sarif-file
+      if: inputs.upload-sarif == 'true' && steps.scan.outputs.exit-code != ''
+      shell: bash
+      env:
+        TRIPCORD_SARIF: ${{ steps.paths.outputs.sarif }}
+      run: |
+        if [ -f "$TRIPCORD_SARIF" ]; then
+          echo "present=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "present=false" >> "$GITHUB_OUTPUT"
+        fi
     - id: pr-context
       shell: bash
       env:
@@ -170,18 +181,19 @@ runs:
         exit 0
     - name: Upload SARIF
       id: upload-sarif
-      if: inputs.upload-sarif == 'true' && steps.scan.outputs.exit-code != '' && steps.repo.outputs.same == 'true'
+      if: inputs.upload-sarif == 'true' && steps.scan.outputs.exit-code != '' && steps.repo.outputs.same == 'true' && steps.sarif-file.outputs.present == 'true'
       continue-on-error: true
       uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
       with:
         sarif_file: ${{ steps.paths.outputs.sarif }}
         token: ${{ inputs.github-token }}
     - name: Warn when SARIF upload is skipped
-      if: inputs.upload-sarif == 'true' && steps.scan.outputs.exit-code != '' && (steps.repo.outputs.same != 'true' || steps.upload-sarif.outcome == 'failure')
+      if: inputs.upload-sarif == 'true' && steps.scan.outputs.exit-code != '' && (steps.repo.outputs.same != 'true' || steps.sarif-file.outputs.present != 'true' || steps.upload-sarif.outcome == 'failure')
       uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
       env:
         TRIPCORD_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
         TRIPCORD_BASE_REPO: ${{ github.event.pull_request.base.repo.full_name }}
+        TRIPCORD_SARIF_PRESENT: ${{ steps.sarif-file.outputs.present }}
         TRIPCORD_SARIF_OUTCOME: ${{ steps.upload-sarif.outcome }}
       with:
         github-token: ${{ inputs.github-token }}
@@ -191,6 +203,10 @@ runs:
             const base = process.env.TRIPCORD_BASE_REPO || "";
             if (head !== "" && base !== "" && head !== base) {
               core.warning("Tripcord SARIF upload skipped: pull request head repository differs from the base repository.");
+              return;
+            }
+            if (process.env.TRIPCORD_SARIF_PRESENT !== "true") {
+              core.warning("Tripcord SARIF upload skipped: the SARIF file is missing. The scan exited before writing it.");
               return;
             }
             if (process.env.TRIPCORD_SARIF_OUTCOME === "failure") {

@@ -32,8 +32,10 @@ the scan exit code does, after the reports are published.
 
 Publishing runs when the scan recorded an exit code. A pull request
 whose head repository differs from its base repository skips both the
-SARIF upload and the comment and emits a warning. A read-only token
-does the same instead of failing the job.
+SARIF upload and the comment and emits a warning. A missing SARIF file,
+for example when the scan exits 3 before writing the report, warns that
+the file is missing. A read-only token warns that the token cannot
+upload code scanning results. None of these cases fails the job.
 
 ```yaml
 - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
