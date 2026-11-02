@@ -1,0 +1,131 @@
+name: Tripcord comment
+
+# workflow_call only. One job, so a caller that posts a comment grants
+# pull-requests: write up front. Scanning without a comment uses
+# tripcord-pr.yml, which requests pull-requests: read instead.
+# security-events: write stays on this job even when upload-sarif is
+# false: called-workflow permissions are checked before inputs.
+#
+# The composite action is pinned to 84ac78e17a274768fc57d269c6071ced9b4c2d73.
+# That commit contains #44 (2e2989bb8b8ec33d5ca06698e85c9caf8c4d95d2,
+# pr-context --reviews-file) and the reviews-file action input. Pinning
+# #44 alone rejects the input. The commit has no release tag.
+
+permissions:
+  contents: read # checkout the repository being scanned
+  pull-requests: write # create or update the Markdown comment
+  security-events: write # upload the SARIF report
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Git ref of this action's repository to build. Empty builds the checkout that contains the action.
+        type: string
+        required: false
+        default: ""
+      binary:
+        description: Existing tripcord binary. When set, the source build is skipped and nothing is downloaded.
+        type: string
+        required: false
+        default: ""
+      path:
+        description: Repository path to scan.
+        type: string
+        required: false
+        default: "."
+      fail-on:
+        description: Inclusive severity passed to tripcord. Empty lets the CLI and policy decide.
+        type: string
+        required: false
+        default: ""
+      upload-sarif:
+        description: Upload the SARIF report to GitHub code scanning.
+        type: string
+        required: false
+        default: "true"
+      comment:
+        description: Post the Markdown report to a pull request.
+        type: string
+        required: false
+        default: "false"
+      github-token:
+        description: Token used for a ref checkout, SARIF upload, and an optional pull-request comment. Empty uses github.token.
+        type: string
+        required: false
+        default: ""
+    outputs:
+      is_agent:
+        description: pr-context is_agent output.
+        value: ${{ jobs.scan.outputs.is_agent }}
+      agents:
+        description: pr-context agents output, comma-separated.
+        value: ${{ jobs.scan.outputs.agents }}
+
+jobs:
+  scan:
+    name: Tripcord
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read # checkout the repository being scanned
+      pull-requests: write # create or update the Markdown comment
+      security-events: write # upload the SARIF report
+    outputs:
+      is_agent: ${{ steps.tripcord.outputs.is_agent }}
+      agents: ${{ steps.tripcord.outputs.agents }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Read pull request reviews
+        id: reviews
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const fs = require("fs");
+            const path = require("path");
+            try {
+              const pullRequest = context.payload.pull_request;
+              if (!pullRequest || !pullRequest.number) {
+                core.warning("Tripcord reviews skipped: this event has no pull request.");
+                return;
+              }
+              const { owner, repo } = context.repo;
+              const reviews = await github.paginate(github.rest.pulls.listReviews, {
+                owner,
+                repo,
+                pull_number: pullRequest.number,
+                per_page: 100,
+              });
+              const file = path.join(process.env.RUNNER_TEMP, "tripcord-reviews.json");
+              fs.writeFileSync(file, JSON.stringify(reviews));
+              core.setOutput("reviews-file", file);
+            } catch {
+              core.warning("Tripcord reviews skipped: unable to read pull request reviews.");
+            }
+      - name: Prepare scan directory
+        shell: bash
+        env:
+          TRIPCORD_PATH: ${{ inputs.path }}
+        run: |
+          set -euo pipefail
+          case "$TRIPCORD_PATH" in
+            "$RUNNER_TEMP"/*)
+              mkdir -p -- "$TRIPCORD_PATH"
+              ;;
+          esac
+      - name: Tripcord
+        id: tripcord
+        uses: vgmartinez/tripcord/.github/actions/tripcord@84ac78e17a274768fc57d269c6071ced9b4c2d73
+        with:
+          ref: ${{ inputs.ref }}
+          binary: ${{ inputs.binary }}
+          path: ${{ inputs.path }}
+          fail-on: ${{ inputs.fail-on }}
+          upload-sarif: ${{ inputs.upload-sarif }}
+          comment: ${{ inputs.comment }}
+          github-token: ${{ inputs.github-token != '' && inputs.github-token || github.token }}
+          reviews-file: ${{ steps.reviews.outputs.reviews-file }}

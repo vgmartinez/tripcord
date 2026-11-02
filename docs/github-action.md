@@ -25,10 +25,13 @@ The action runs three scans with that binary:
 - a SARIF report, uploaded to GitHub code scanning by default; and
 - a Markdown report, which can optionally be posted to a pull request.
 
-It then runs `tripcord pr-context` with the same binary. The action
-outputs `is_agent` and `agents` are that command's `GITHUB_OUTPUT`
-values. A pr-context read error is a warning and does not fail the job;
-the scan exit code does, after the reports are published.
+It then runs `tripcord pr-context` with the same binary. Set
+`reviews-file` to a JSON array of pull request reviews to pass
+`--reviews-file`. An empty value skips the flag. The array stays on
+disk and is not printed. The action outputs `is_agent` and `agents` are
+that command's `GITHUB_OUTPUT` values. A pr-context read error is a
+warning and does not fail the job; the scan exit code does, after the
+reports are published.
 
 `pr-context` reads commits between the pull request base and head. The
 checkout of the repository being scanned needs `fetch-depth: 0`. A
@@ -56,36 +59,44 @@ upload code scanning results. None of these cases fails the job.
 `comment: true` to create or update a marked Markdown comment on
 pull-request events.
 
-The calling job needs `security-events: write` when SARIF upload is
-enabled and `pull-requests: write` when `comment: true`. A checkout of
-`ref` uses `github-token`. Give only the permissions needed by the
-selected features.
+A job that calls the composite action directly needs
+`security-events: write` when SARIF upload is enabled and
+`pull-requests: write` when `comment: true`. A checkout of `ref` uses
+`github-token`.
 
-## Reusable workflow
+## Reusable workflows
+
+GitHub checks the permissions of every job in a called workflow when
+the caller starts, before any `if:` condition and before inputs are
+read. Each file below is `workflow_call` only and contains one job.
+The caller picks the file. Both jobs request `security-events: write`,
+including when `upload-sarif` is false. Neither file uses
+`pull_request_target`. A fork pull request still skips the SARIF upload
+and the comment and emits the action's warning.
+
+Each workflow checks out the calling repository with `fetch-depth: 0`
+and runs the composite action at a full commit SHA, so the scanner is
+not taken from the tree being scanned. The inputs match the action's
+scan inputs (`ref`, `binary`, `path`, `fail-on`, `upload-sarif`,
+`comment`, `github-token`) and use the same defaults. Reviews are not
+an input. An empty `github-token` uses `github.token`, because a
+`workflow_call` default cannot be an expression. There is no `policy`
+input: an empty `fail-on` still leaves the threshold to the CLI and the
+repository policy. The outputs are `is_agent` and `agents`.
+
+The reviews step calls `github.paginate` on
+`GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews`. Owner,
+repository, and pull number come from the Actions `context`. The JSON
+array is written under `RUNNER_TEMP` and passed as `reviews-file`. The
+step does not print the array. If the event has no pull request, or the
+read fails, the step warns and the scan still runs. `pr-context` then
+runs without `--reviews-file` and reports an incomplete review set.
+
+### Scan
 
 [`.github/workflows/tripcord-pr.yml`](../.github/workflows/tripcord-pr.yml)
-is `workflow_call` only. It checks out the calling repository with
-`fetch-depth: 0` and runs the composite action at a full commit SHA, so
-the scanner is not taken from the tree being scanned. The workflow's
-inputs match the action (`ref`, `binary`, `path`, `fail-on`,
-`upload-sarif`, `comment`, `github-token`) and use the same defaults.
-An empty `github-token` uses `github.token`, because a `workflow_call`
-default cannot be an expression. There is no `policy` input: an empty
-`fail-on` still leaves the threshold to the CLI and the repository
-policy. The workflow outputs are `is_agent` and `agents`.
-
-A caller that leaves the defaults needs `contents: read`,
-`pull-requests: read`, and `security-events: write`. Set `comment: true`
-only from a job that also has `pull-requests: write`. Set
-`upload-sarif: false` to drop `security-events: write`. The workflow
-splits those combinations into separate jobs, and exactly one job runs.
-It does not use `pull_request_target`. A fork pull request still skips
-the SARIF upload and the comment and emits the action's warning.
-
-The workflow does not fetch pull-request reviews. `pr-context` in the
-pinned action has no review set yet. Wiring
-`GET /repos/{owner}/{repo}/pulls/{n}/reviews` and `--reviews-file`
-follows #44.
+needs `contents: read`, `pull-requests: read`, and
+`security-events: write`.
 
 ```yaml
 name: tripcord
@@ -95,14 +106,51 @@ on:
 jobs:
   tripcord:
     permissions:
-      contents: read
-      pull-requests: read
-      security-events: write
+      contents: read # checkout the repository being scanned
+      pull-requests: read # read pull request reviews
+      security-events: write # upload the SARIF report
     uses: ./.github/workflows/tripcord-pr.yml
 ```
 
 Another repository pins the same file by full commit SHA:
 
 ```yaml
+permissions:
+  contents: read # checkout the repository being scanned
+  pull-requests: read # read pull request reviews
+  security-events: write # upload the SARIF report
 uses: vgmartinez/tripcord/.github/workflows/tripcord-pr.yml@<commit>
+```
+
+### Comment
+
+[`.github/workflows/tripcord-pr-comment.yml`](../.github/workflows/tripcord-pr-comment.yml)
+needs the same permissions, with `pull-requests: write` in place of
+`pull-requests: read`, because posting the Markdown comment requires
+write. `write` includes read, so the reviews fetch uses the same token.
+
+```yaml
+name: tripcord
+on:
+  pull_request:
+
+jobs:
+  tripcord:
+    permissions:
+      contents: read # checkout the repository being scanned
+      pull-requests: write # create or update the Markdown comment
+      security-events: write # upload the SARIF report
+    uses: ./.github/workflows/tripcord-pr-comment.yml
+    with:
+      comment: "true"
+```
+
+Another repository pins the same file by full commit SHA:
+
+```yaml
+permissions:
+  contents: read # checkout the repository being scanned
+  pull-requests: write # create or update the Markdown comment
+  security-events: write # upload the SARIF report
+uses: vgmartinez/tripcord/.github/workflows/tripcord-pr-comment.yml@<commit>
 ```

@@ -1,16 +1,20 @@
 name: Tripcord
 
-# workflow_call only. A caller chooses inputs; exactly one job below runs.
-# GitHub Actions cannot change a job's permissions with an expression, so
-# security-events: write is present only when upload-sarif is true, and
-# pull-requests: write is present only when comment is true.
+# workflow_call only. One job, so a caller grants this job's permissions
+# and GitHub can accept the call at startup. A comment uses
+# tripcord-pr-comment.yml, which requests pull-requests: write instead.
+# security-events: write stays on this job even when upload-sarif is
+# false: called-workflow permissions are checked before inputs.
 #
-# Reviews are not fetched here. After #44 merges, a later change will
-# paginate the pull-request reviews API and pass --reviews-file.
-# The composite action pin is 276967b41056547c363b4d52378dbffaa7d33d95,
-# .github/actions/tripcord on main. That commit has no release tag.
+# The composite action is pinned to 84ac78e17a274768fc57d269c6071ced9b4c2d73.
+# That commit contains #44 (2e2989bb8b8ec33d5ca06698e85c9caf8c4d95d2,
+# pr-context --reviews-file) and the reviews-file action input. Pinning
+# #44 alone rejects the input. The commit has no release tag.
 
-permissions: {} # each job sets its own token; do not inherit the repository default
+permissions:
+  contents: read # checkout the repository being scanned
+  pull-requests: read # read pull request reviews
+  security-events: write # upload the SARIF report
 
 on:
   workflow_call:
@@ -53,78 +57,19 @@ on:
     outputs:
       is_agent:
         description: pr-context is_agent output.
-        value: ${{ jobs.scan_sarif.outputs.is_agent || jobs.scan.outputs.is_agent || jobs.scan_comment.outputs.is_agent || jobs.scan_sarif_comment.outputs.is_agent }}
+        value: ${{ jobs.scan.outputs.is_agent }}
       agents:
         description: pr-context agents output, comma-separated.
-        value: ${{ jobs.scan_sarif.outputs.agents || jobs.scan.outputs.agents || jobs.scan_comment.outputs.agents || jobs.scan_sarif_comment.outputs.agents }}
+        value: ${{ jobs.scan.outputs.agents }}
 
 jobs:
   scan:
     name: Tripcord
-    if: inputs.upload-sarif != 'true' && inputs.comment != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read # checkout the repository being scanned
-      pull-requests: read # reviews fetch follows #44; this job does not comment
-    outputs:
-      is_agent: ${{ steps.tripcord.outputs.is_agent }}
-      agents: ${{ steps.tripcord.outputs.agents }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Tripcord
-        id: tripcord
-        uses: vgmartinez/tripcord/.github/actions/tripcord@276967b41056547c363b4d52378dbffaa7d33d95
-        with:
-          ref: ${{ inputs.ref }}
-          binary: ${{ inputs.binary }}
-          path: ${{ inputs.path }}
-          fail-on: ${{ inputs.fail-on }}
-          upload-sarif: ${{ inputs.upload-sarif }}
-          comment: ${{ inputs.comment }}
-          github-token: ${{ inputs.github-token != '' && inputs.github-token || github.token }}
-
-  scan_comment:
-    name: Tripcord
-    if: inputs.upload-sarif != 'true' && inputs.comment == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read # checkout the repository being scanned
-      pull-requests: write # create or update the Markdown comment
-    outputs:
-      is_agent: ${{ steps.tripcord.outputs.is_agent }}
-      agents: ${{ steps.tripcord.outputs.agents }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Tripcord
-        id: tripcord
-        uses: vgmartinez/tripcord/.github/actions/tripcord@276967b41056547c363b4d52378dbffaa7d33d95
-        with:
-          ref: ${{ inputs.ref }}
-          binary: ${{ inputs.binary }}
-          path: ${{ inputs.path }}
-          fail-on: ${{ inputs.fail-on }}
-          upload-sarif: ${{ inputs.upload-sarif }}
-          comment: ${{ inputs.comment }}
-          github-token: ${{ inputs.github-token != '' && inputs.github-token || github.token }}
-
-  scan_sarif:
-    name: Tripcord
-    if: inputs.upload-sarif == 'true' && inputs.comment != 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read # checkout the repository being scanned
-      pull-requests: read # reviews fetch follows #44; this job does not comment
+      pull-requests: read # read pull request reviews
       security-events: write # upload the SARIF report
     outputs:
       is_agent: ${{ steps.tripcord.outputs.is_agent }}
@@ -135,9 +80,46 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Read pull request reviews
+        id: reviews
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const fs = require("fs");
+            const path = require("path");
+            try {
+              const pullRequest = context.payload.pull_request;
+              if (!pullRequest || !pullRequest.number) {
+                core.warning("Tripcord reviews skipped: this event has no pull request.");
+                return;
+              }
+              const { owner, repo } = context.repo;
+              const reviews = await github.paginate(github.rest.pulls.listReviews, {
+                owner,
+                repo,
+                pull_number: pullRequest.number,
+                per_page: 100,
+              });
+              const file = path.join(process.env.RUNNER_TEMP, "tripcord-reviews.json");
+              fs.writeFileSync(file, JSON.stringify(reviews));
+              core.setOutput("reviews-file", file);
+            } catch {
+              core.warning("Tripcord reviews skipped: unable to read pull request reviews.");
+            }
+      - name: Prepare scan directory
+        shell: bash
+        env:
+          TRIPCORD_PATH: ${{ inputs.path }}
+        run: |
+          set -euo pipefail
+          case "$TRIPCORD_PATH" in
+            "$RUNNER_TEMP"/*)
+              mkdir -p -- "$TRIPCORD_PATH"
+              ;;
+          esac
       - name: Tripcord
         id: tripcord
-        uses: vgmartinez/tripcord/.github/actions/tripcord@276967b41056547c363b4d52378dbffaa7d33d95
+        uses: vgmartinez/tripcord/.github/actions/tripcord@84ac78e17a274768fc57d269c6071ced9b4c2d73
         with:
           ref: ${{ inputs.ref }}
           binary: ${{ inputs.binary }}
@@ -146,33 +128,4 @@ jobs:
           upload-sarif: ${{ inputs.upload-sarif }}
           comment: ${{ inputs.comment }}
           github-token: ${{ inputs.github-token != '' && inputs.github-token || github.token }}
-
-  scan_sarif_comment:
-    name: Tripcord
-    if: inputs.upload-sarif == 'true' && inputs.comment == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read # checkout the repository being scanned
-      pull-requests: write # create or update the Markdown comment
-      security-events: write # upload the SARIF report
-    outputs:
-      is_agent: ${{ steps.tripcord.outputs.is_agent }}
-      agents: ${{ steps.tripcord.outputs.agents }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Tripcord
-        id: tripcord
-        uses: vgmartinez/tripcord/.github/actions/tripcord@276967b41056547c363b4d52378dbffaa7d33d95
-        with:
-          ref: ${{ inputs.ref }}
-          binary: ${{ inputs.binary }}
-          path: ${{ inputs.path }}
-          fail-on: ${{ inputs.fail-on }}
-          upload-sarif: ${{ inputs.upload-sarif }}
-          comment: ${{ inputs.comment }}
-          github-token: ${{ inputs.github-token != '' && inputs.github-token || github.token }}
+          reviews-file: ${{ steps.reviews.outputs.reviews-file }}

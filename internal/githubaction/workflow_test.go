@@ -1,6 +1,7 @@
 package githubaction_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -11,26 +12,159 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
+const (
+	workflowCheckout = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
+	workflowScript   = "actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3"
+	workflowAction   = "vgmartinez/tripcord/.github/actions/tripcord@84ac78e17a274768fc57d269c6071ced9b4c2d73"
+)
+
 func TestTripcordWorkflowContract(t *testing.T) {
-	data, err := os.ReadFile(filepath.Join("..", "..", ".github", "workflows", "tripcord-pr.yml"))
+	scan := readWorkflow(t, "tripcord-pr.yml")
+	comment := readWorkflow(t, "tripcord-pr-comment.yml")
+	scanScript, scanPrepare, scanWith := checkOneJobWorkflow(t, scan, map[string]string{
+		"contents":        "read",
+		"pull-requests":   "read",
+		"security-events": "write",
+	})
+	commentScript, commentPrepare, commentWith := checkOneJobWorkflow(t, comment, map[string]string{
+		"contents":        "read",
+		"pull-requests":   "write",
+		"security-events": "write",
+	})
+	if scanScript != commentScript {
+		t.Fatal("review scripts differ between the scan and comment workflows")
+	}
+	if scanPrepare != commentPrepare {
+		t.Fatal("scan directory setup differs between the scan and comment workflows")
+	}
+	checkReviewsScript(t, scanScript)
+	if scanWith != commentWith {
+		t.Fatal("the workflows pass different inputs to the action")
+	}
+}
+
+func TestDocumentedCallerPermissionsCoverJobs(t *testing.T) {
+	root := filepath.Join("..", "..")
+	docs, err := os.ReadFile(filepath.Join(root, "docs", "github-action.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	text := string(data)
+	docCallers := callersOf(t, string(docs))
+	for _, name := range []string{"tripcord-pr.yml", "tripcord-pr-comment.yml"} {
+		jobs := nestedJobPermissions(t, root, name, map[string]bool{})
+		if len(jobs) == 0 {
+			t.Fatalf("%s has no jobs", name)
+		}
+		examples := docCallers[name]
+		if len(examples) == 0 {
+			t.Fatalf("docs have no caller for %s", name)
+		}
+		want := maxPermissions(jobs)
+		for _, example := range examples {
+			for id, perms := range jobs {
+				if gaps := permissionGaps(example, perms); len(gaps) != 0 {
+					t.Errorf("documented caller of %s does not cover job %s: %s", name, id, strings.Join(gaps, "; "))
+				}
+			}
+			if !samePerms(example, want) {
+				t.Errorf("documented caller of %s = %v, want the exact permissions %v", name, example, want)
+			}
+		}
+	}
+
+	ci := readWorkflow(t, "ci.yml")
+	var callers []map[string]string
+	for _, job := range ci.jobs {
+		for _, site := range job.uses {
+			if calledWorkflow(site.uses) != "tripcord-pr.yml" {
+				continue
+			}
+			if site.uses != "./.github/workflows/tripcord-pr.yml" {
+				t.Fatalf("ci.yml uses %q, want ./.github/workflows/tripcord-pr.yml", site.uses)
+			}
+			if site.perms == nil {
+				t.Fatal("ci.yml tripcord caller has no permissions")
+			}
+			callers = append(callers, permMap(t, site.perms))
+			if scalar(job.ifNode) != "github.event_name == 'pull_request'" {
+				t.Fatalf("ci.yml caller if = %q, want pull_request", scalar(job.ifNode))
+			}
+			with := mapping(t, job.with)
+			if scalar(with["path"]) != "/home/runner/work/_temp/tripcord-ci" {
+				t.Fatalf("ci.yml path = %q, want the runner temp directory outside the checkout", scalar(with["path"]))
+			}
+		}
+	}
+	if len(callers) != 1 {
+		t.Fatalf("ci.yml has %d tripcord-pr.yml callers, want 1", len(callers))
+	}
+	jobs := nestedJobPermissions(t, root, "tripcord-pr.yml", map[string]bool{})
+	for id, perms := range jobs {
+		if gaps := permissionGaps(callers[0], perms); len(gaps) != 0 {
+			t.Errorf("ci.yml does not cover job %s: %s", id, strings.Join(gaps, "; "))
+		}
+	}
+	if !samePerms(callers[0], maxPermissions(jobs)) {
+		t.Errorf("ci.yml permissions = %v, want the exact permissions %v", callers[0], maxPermissions(jobs))
+	}
+}
+
+type workflowFile struct {
+	text string
+	jobs []workflowJob
+}
+
+type workflowJob struct {
+	id     string
+	perms  *yaml.Node
+	ifNode *yaml.Node
+	with   *yaml.Node
+	uses   []useSite
+}
+
+type useSite struct {
+	uses  string
+	perms *yaml.Node
+}
+
+func readWorkflow(t *testing.T, name string) workflowFile {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("..", "..", ".github", "workflows", name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var root yaml.Node
+	if err := yaml.Unmarshal(data, &root); err != nil {
+		t.Fatalf("parse %s: %v", name, err)
+	}
+	return workflowFile{text: string(data), jobs: jobsOf(t, &root)}
+}
+
+func checkOneJobWorkflow(t *testing.T, wf workflowFile, wantPerms map[string]string) (string, string, string) {
+	t.Helper()
+	text := wf.text
 	if strings.Contains(text, "pull_request_target") {
 		t.Fatal("workflow uses pull_request_target")
 	}
 	if strings.Contains(text, "secrets: inherit") {
 		t.Fatal("workflow inherits secrets")
 	}
+	if strings.Contains(text, workflowAction+" #") {
+		t.Fatal("action pin has a version comment; the commit is untagged")
+	}
+	for _, version := range []string{"# v7.0.1", "# v9.0.0"} {
+		if !strings.Contains(text, version) {
+			t.Errorf("workflow is missing pin comment %s", version)
+		}
+	}
 
 	var root yaml.Node
-	if err := yaml.Unmarshal(data, &root); err != nil {
-		t.Fatalf("parse workflow: %v", err)
+	if err := yaml.Unmarshal([]byte(text), &root); err != nil {
+		t.Fatal(err)
 	}
 	doc := mapping(t, &root)
-	if got := mapping(t, doc["permissions"]); len(got) != 0 {
-		t.Fatalf("workflow-level permissions = %v, want none so jobs do not inherit a broader token", keys(got))
+	if got := permMap(t, doc["permissions"]); !samePerms(got, wantPerms) {
+		t.Fatalf("workflow permissions = %v, want %v", got, wantPerms)
 	}
 	triggers := mapping(t, doc["on"])
 	if len(triggers) != 1 || triggers["workflow_call"] == nil {
@@ -68,133 +202,343 @@ func TestTripcordWorkflowContract(t *testing.T) {
 	}
 
 	outputs := mapping(t, call["outputs"])
-	outputValue := map[string]string{}
 	for _, name := range []string{"is_agent", "agents"} {
 		out := mapping(t, outputs[name])
-		if out["value"] == nil || out["value"].Value == "" {
-			t.Errorf("workflow does not expose output %s", name)
+		got := scalar(out["value"])
+		if got != "${{ jobs.scan.outputs."+name+" }}" {
+			t.Errorf("output %s = %q", name, got)
 		}
-		outputValue[name] = scalar(out["value"])
 	}
 	if len(outputs) != 2 {
 		t.Fatalf("outputs = %v, want is_agent and agents", keys(outputs))
 	}
 
-	const (
-		checkout = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
-		action   = "vgmartinez/tripcord/.github/actions/tripcord@276967b41056547c363b4d52378dbffaa7d33d95"
-	)
-	pin := regexp.MustCompile(`^[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)+@[0-9a-f]{40}$`)
 	jobs := mapping(t, doc["jobs"])
-	if len(jobs) != 4 {
-		t.Fatalf("jobs = %v, want the four permission combinations", keys(jobs))
+	if len(jobs) != 1 || jobs["scan"] == nil {
+		t.Fatalf("jobs = %v, want one job named scan", keys(jobs))
 	}
-	seenIf := map[string]bool{}
-	var withText string
-	for id, node := range jobs {
-		job := mapping(t, node)
-		ifExpr := ""
-		if job["if"] != nil {
-			ifExpr = job["if"].Value
-		}
-		seenIf[ifExpr] = true
-		if !strings.Contains(outputValue["is_agent"], "jobs."+id+".outputs.is_agent") {
-			t.Errorf("is_agent output omits job %s", id)
-		}
-		if !strings.Contains(outputValue["agents"], "jobs."+id+".outputs.agents") {
-			t.Errorf("agents output omits job %s", id)
-		}
-		checkWorkflowPerms(t, id, ifExpr, mapping(t, job["permissions"]))
-		steps := seq(t, job["steps"])
-		if len(steps) != 2 {
-			t.Fatalf("job %s has %d steps, want checkout and the action", id, len(steps))
-		}
-		checkoutStep := mapping(t, steps[0])
-		if checkoutStep["uses"] == nil || checkoutStep["uses"].Value != checkout {
-			t.Fatalf("job %s checkout uses %v, want %s", id, scalar(checkoutStep["uses"]), checkout)
-		}
-		checkoutWith := mapping(t, checkoutStep["with"])
-		if scalar(checkoutWith["fetch-depth"]) != "0" {
-			t.Fatalf("job %s fetch-depth = %q, want 0", id, scalar(checkoutWith["fetch-depth"]))
-		}
-		if scalar(checkoutWith["persist-credentials"]) != "false" {
-			t.Fatalf("job %s persists checkout credentials", id)
-		}
-		actionStep := mapping(t, steps[1])
-		if actionStep["uses"] == nil || actionStep["uses"].Value != action {
-			t.Fatalf("job %s action uses %v, want %s", id, scalar(actionStep["uses"]), action)
-		}
-		if scalar(actionStep["id"]) != "tripcord" {
-			t.Fatalf("job %s action id = %q, want tripcord", id, scalar(actionStep["id"]))
-		}
-		actionWith := mapping(t, actionStep["with"])
-		for name := range wantDefaults {
-			got := scalar(actionWith[name])
-			if !strings.Contains(got, "inputs."+name) {
-				t.Errorf("job %s does not pass input %s through to the action: %q", id, name, got)
-			}
-		}
-		if scalar(actionWith["github-token"]) != "${{ inputs.github-token != '' && inputs.github-token || github.token }}" {
-			t.Fatalf("job %s github-token = %q", id, scalar(actionWith["github-token"]))
-		}
-		encoded := encodeScalars(actionWith)
-		if withText == "" {
-			withText = encoded
-		} else if encoded != withText {
-			t.Fatalf("job %s passes different inputs than the other jobs", id)
-		}
-		for _, step := range []map[string]*yaml.Node{checkoutStep, actionStep} {
-			run := scalar(step["run"])
-			if strings.Contains(run, "${{") {
-				t.Fatalf("job %s interpolates an expression into run", id)
-			}
-			uses := scalar(step["uses"])
-			if uses != "" && !pin.MatchString(uses) {
-				t.Errorf("job %s uses unpinned action %q", id, uses)
-			}
+	job := mapping(t, jobs["scan"])
+	if job["if"] != nil {
+		t.Fatal("scan job has an if condition; permissions would still be required when it is skipped")
+	}
+	if got := permMap(t, job["permissions"]); !samePerms(got, wantPerms) {
+		t.Fatalf("job permissions = %v, want %v", got, wantPerms)
+	}
+
+	pin := regexp.MustCompile(`^[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)+@[0-9a-f]{40}$`)
+	steps := seq(t, job["steps"])
+	if len(steps) != 4 {
+		t.Fatalf("scan has %d steps, want checkout, reviews, scan directory setup, and the action", len(steps))
+	}
+	checkoutStep := mapping(t, steps[0])
+	if scalar(checkoutStep["uses"]) != workflowCheckout {
+		t.Fatalf("checkout uses %q", scalar(checkoutStep["uses"]))
+	}
+	checkoutWith := mapping(t, checkoutStep["with"])
+	if scalar(checkoutWith["fetch-depth"]) != "0" {
+		t.Fatalf("fetch-depth = %q, want 0", scalar(checkoutWith["fetch-depth"]))
+	}
+	if scalar(checkoutWith["persist-credentials"]) != "false" {
+		t.Fatal("checkout persists credentials")
+	}
+
+	reviewsStep := mapping(t, steps[1])
+	if scalar(reviewsStep["id"]) != "reviews" {
+		t.Fatalf("reviews step id = %q", scalar(reviewsStep["id"]))
+	}
+	if scalar(reviewsStep["uses"]) != workflowScript {
+		t.Fatalf("reviews uses %q", scalar(reviewsStep["uses"]))
+	}
+	script := scalar(mapping(t, reviewsStep["with"])["script"])
+	if script == "" {
+		t.Fatal("reviews step has no script")
+	}
+
+	prepareStep := mapping(t, steps[2])
+	prepare := scalar(prepareStep["run"])
+	if !strings.Contains(prepare, `case "$TRIPCORD_PATH" in`) || !strings.Contains(prepare, `"$RUNNER_TEMP"/*)`) || !strings.Contains(prepare, "mkdir -p --") {
+		t.Fatal("scan directory setup does not create only a path inside RUNNER_TEMP")
+	}
+	if strings.Contains(prepare, "${{") {
+		t.Fatal("scan directory setup interpolates an expression into run")
+	}
+
+	actionStep := mapping(t, steps[3])
+	if scalar(actionStep["uses"]) != workflowAction {
+		t.Fatalf("action uses %q", scalar(actionStep["uses"]))
+	}
+	if scalar(actionStep["id"]) != "tripcord" {
+		t.Fatalf("action id = %q", scalar(actionStep["id"]))
+	}
+	actionWith := mapping(t, actionStep["with"])
+	for name := range wantDefaults {
+		got := scalar(actionWith[name])
+		if !strings.Contains(got, "inputs."+name) {
+			t.Errorf("action input %s = %q, want the workflow input", name, got)
 		}
 	}
+	if scalar(actionWith["github-token"]) != "${{ inputs.github-token != '' && inputs.github-token || github.token }}" {
+		t.Fatalf("github-token = %q", scalar(actionWith["github-token"]))
+	}
+	if scalar(actionWith["reviews-file"]) != "${{ steps.reviews.outputs.reviews-file }}" {
+		t.Fatalf("reviews-file = %q", scalar(actionWith["reviews-file"]))
+	}
+
+	for _, step := range []map[string]*yaml.Node{checkoutStep, reviewsStep, actionStep} {
+		if strings.Contains(scalar(step["run"]), "${{") {
+			t.Fatal("step interpolates an expression into run")
+		}
+		uses := scalar(step["uses"])
+		if uses != "" && !pin.MatchString(uses) {
+			t.Errorf("uses unpinned action %q", uses)
+		}
+	}
+	return script, prepare, encodeScalars(actionWith)
+}
+
+func checkReviewsScript(t *testing.T, script string) {
+	t.Helper()
 	for _, want := range []string{
-		"inputs.upload-sarif != 'true' && inputs.comment != 'true'",
-		"inputs.upload-sarif != 'true' && inputs.comment == 'true'",
-		"inputs.upload-sarif == 'true' && inputs.comment != 'true'",
-		"inputs.upload-sarif == 'true' && inputs.comment == 'true'",
+		"github.paginate",
+		"github.rest.pulls.listReviews",
+		"context.repo",
+		"context.payload.pull_request",
+		"pull_number: pullRequest.number",
+		"process.env.RUNNER_TEMP",
+		"JSON.stringify(reviews)",
+		"core.setOutput",
+		"try {",
+		"catch {",
+		`core.warning("Tripcord reviews skipped: this event has no pull request.")`,
+		`core.warning("Tripcord reviews skipped: unable to read pull request reviews.")`,
 	} {
-		if !seenIf[want] {
-			t.Errorf("missing job condition %s", want)
+		if !strings.Contains(script, want) {
+			t.Errorf("reviews script missing %s", want)
 		}
 	}
-	for _, version := range []string{"# v7.0.1"} {
-		if !strings.Contains(text, version) {
-			t.Errorf("workflow is missing pin comment %s", version)
+	for _, forbidden := range []string{
+		"${{",
+		"console.",
+		"core.info",
+		"core.debug",
+		"core.notice",
+		".body",
+		"error.message",
+	} {
+		if strings.Contains(script, forbidden) {
+			t.Errorf("reviews script contains %s", forbidden)
 		}
 	}
 }
 
-func checkWorkflowPerms(t *testing.T, id, ifExpr string, perms map[string]*yaml.Node) {
+func nestedJobPermissions(t *testing.T, root, name string, seen map[string]bool) map[string]map[string]string {
 	t.Helper()
-	sarif := strings.Contains(ifExpr, "inputs.upload-sarif == 'true'")
-	comment := strings.Contains(ifExpr, "inputs.comment == 'true'")
-	allowed := map[string]bool{"contents": true, "pull-requests": true, "security-events": true}
-	for name := range perms {
-		if !allowed[name] {
-			t.Errorf("job %s grants %s, which is outside contents, pull-requests, and security-events", id, name)
+	if seen[name] {
+		t.Fatalf("workflow cycle at %s", name)
+	}
+	seen[name] = true
+	data, err := os.ReadFile(filepath.Join(root, ".github", "workflows", name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var docNode yaml.Node
+	if err := yaml.Unmarshal(data, &docNode); err != nil {
+		t.Fatalf("parse %s: %v", name, err)
+	}
+	doc := mapping(t, &docNode)
+	workflowPerms := doc["permissions"]
+	out := map[string]map[string]string{}
+	for id, node := range mapping(t, doc["jobs"]) {
+		job := mapping(t, node)
+		perms := job["permissions"]
+		if perms == nil {
+			perms = workflowPerms
+		}
+		if perms == nil {
+			t.Fatalf("%s job %s has no permissions", name, id)
+		}
+		out[name+":"+id] = permMap(t, perms)
+		for _, site := range collectUses(t, node) {
+			next := calledWorkflow(site.uses)
+			if next == "" || !strings.HasPrefix(site.uses, "./.github/workflows/") {
+				continue
+			}
+			for childID, child := range nestedJobPermissions(t, root, next, seen) {
+				out[childID] = child
+			}
 		}
 	}
-	if scalar(perms["contents"]) != "read" {
-		t.Errorf("job %s contents = %q, want read", id, scalar(perms["contents"]))
+	return out
+}
+
+func callersOf(t *testing.T, text string) map[string][]map[string]string {
+	t.Helper()
+	out := map[string][]map[string]string{}
+	for _, fence := range yamlFences(text) {
+		var node yaml.Node
+		if err := yaml.Unmarshal([]byte(fence), &node); err != nil {
+			t.Fatalf("parse documented yaml: %v\n%s", err, fence)
+		}
+		for _, site := range collectUses(t, &node) {
+			name := calledWorkflow(site.uses)
+			if name != "tripcord-pr.yml" && name != "tripcord-pr-comment.yml" {
+				continue
+			}
+			if site.perms == nil {
+				t.Fatalf("documented caller of %s has no permissions:\n%s", name, fence)
+			}
+			out[name] = append(out[name], permMap(t, site.perms))
+		}
 	}
-	switch {
-	case sarif && scalar(perms["security-events"]) != "write":
-		t.Errorf("job %s enables SARIF without security-events: write", id)
-	case !sarif && perms["security-events"] != nil:
-		t.Errorf("job %s grants security-events while SARIF upload is off", id)
+	return out
+}
+
+func collectUses(t *testing.T, n *yaml.Node) []useSite {
+	t.Helper()
+	if n == nil {
+		return nil
 	}
-	switch {
-	case comment && scalar(perms["pull-requests"]) != "write":
-		t.Errorf("job %s comments without pull-requests: write", id)
-	case !comment && scalar(perms["pull-requests"]) != "read":
-		t.Errorf("job %s pull-requests = %q, want read when comment is off", id, scalar(perms["pull-requests"]))
+	var out []useSite
+	switch n.Kind {
+	case yaml.DocumentNode, yaml.SequenceNode:
+		for _, child := range n.Content {
+			out = append(out, collectUses(t, child)...)
+		}
+	case yaml.MappingNode:
+		var uses string
+		var perms *yaml.Node
+		for i := 0; i < len(n.Content); i += 2 {
+			key := n.Content[i].Value
+			val := n.Content[i+1]
+			switch key {
+			case "uses":
+				uses = scalar(val)
+			case "permissions":
+				perms = val
+			}
+			out = append(out, collectUses(t, val)...)
+		}
+		if uses != "" {
+			out = append(out, useSite{uses: uses, perms: perms})
+		}
+	case yaml.ScalarNode, yaml.AliasNode:
+		return out
+	default:
+		t.Fatalf("yaml kind %d", n.Kind)
+		return nil
+	}
+	return out
+}
+
+func jobsOf(t *testing.T, root *yaml.Node) []workflowJob {
+	t.Helper()
+	doc := mapping(t, root)
+	var jobs []workflowJob
+	for id, node := range mapping(t, doc["jobs"]) {
+		job := mapping(t, node)
+		jobs = append(jobs, workflowJob{
+			id:     id,
+			perms:  job["permissions"],
+			ifNode: job["if"],
+			with:   job["with"],
+			uses:   collectUses(t, node),
+		})
+	}
+	return jobs
+}
+
+func calledWorkflow(uses string) string {
+	const marker = ".github/workflows/"
+	i := strings.LastIndex(uses, marker)
+	if i < 0 {
+		return ""
+	}
+	name := uses[i+len(marker):]
+	if at := strings.IndexByte(name, '@'); at >= 0 {
+		name = name[:at]
+	}
+	if name != "tripcord-pr.yml" && name != "tripcord-pr-comment.yml" {
+		return ""
+	}
+	return name
+}
+
+func permMap(t *testing.T, n *yaml.Node) map[string]string {
+	t.Helper()
+	raw := mapping(t, n)
+	out := make(map[string]string, len(raw))
+	for name, node := range raw {
+		out[name] = scalar(node)
+		if permRank(out[name]) < 0 {
+			t.Fatalf("permission %s = %q", name, out[name])
+		}
+	}
+	return out
+}
+
+func permRank(v string) int {
+	switch v {
+	case "", "none":
+		return 0
+	case "read":
+		return 1
+	case "write":
+		return 2
+	default:
+		return -1
+	}
+}
+
+func maxPermissions(jobs map[string]map[string]string) map[string]string {
+	out := map[string]string{}
+	for _, perms := range jobs {
+		for scope, value := range perms {
+			if permRank(value) > permRank(out[scope]) {
+				out[scope] = value
+			}
+		}
+	}
+	return out
+}
+
+func permissionGaps(caller, job map[string]string) []string {
+	var gaps []string
+	for scope, want := range job {
+		if permRank(caller[scope]) < permRank(want) {
+			gaps = append(gaps, fmt.Sprintf("%s caller %q job %q", scope, caller[scope], want))
+		}
+	}
+	sort.Strings(gaps)
+	return gaps
+}
+
+func samePerms(got, want map[string]string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for name, value := range want {
+		if got[name] != value {
+			return false
+		}
+	}
+	return true
+}
+
+func yamlFences(text string) []string {
+	var out []string
+	rest := text
+	for {
+		i := strings.Index(rest, "```yaml\n")
+		if i < 0 {
+			return out
+		}
+		rest = rest[i+len("```yaml\n"):]
+		j := strings.Index(rest, "```")
+		if j < 0 {
+			return out
+		}
+		out = append(out, rest[:j])
+		rest = rest[j+3:]
 	}
 }
 

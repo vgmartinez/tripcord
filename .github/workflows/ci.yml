@@ -316,3 +316,15 @@ jobs:
             exit 1
           fi
           echo "DCO sign-off present on ${#commits[@]} commit(s)."
+
+  tripcord:
+    name: Tripcord
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read # checkout the repository being scanned
+      pull-requests: read # read pull request reviews
+      security-events: write # upload the SARIF report
+    uses: ./.github/workflows/tripcord-pr.yml # zizmor: ignore[self-repository] local reusable workflow
+    with:
+      # GitHub-hosted RUNNER_TEMP, outside the checkout. The called workflow creates it.
+      path: /home/runner/work/_temp/tripcord-ci
