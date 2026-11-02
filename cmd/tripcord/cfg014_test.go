@@ -170,6 +170,80 @@ func TestCfg014ReviewsFile(t *testing.T) {
 	})
 }
 
+func TestCfg014PolicyDoesNotFailBelowItsThreshold(t *testing.T) {
+	clearPrContextEnv(t)
+	git := lookGit(t)
+	repo := initRepo(t)
+	base := strings.TrimSpace(gitOut(t, git, repo, "rev-parse", "HEAD"))
+	runGitCmd(t, git, repo, "checkout", "-q", "-b", "feature/hooks")
+	if err := os.MkdirAll(filepath.Join(repo, ".cursor"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, ".cursor", "hooks.json"), []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitCmd(t, git, repo, "add", ".cursor/hooks.json")
+	runGitCmd(t, git, repo, "-c", "user.email=ada@example.com", "-c", "user.name=Ada Lovelace", "commit", "-q", "-m", "add hooks")
+	head := strings.TrimSpace(gitOut(t, git, repo, "rev-parse", "HEAD"))
+	event := writeCfg014Event(t, "empty-reviews.json", base, head)
+	if err := os.MkdirAll(filepath.Join(repo, ".tripcord"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("audit mode", func(t *testing.T) {
+		body := "version: 1\nmode: audit\n"
+		if err := os.WriteFile(filepath.Join(repo, ".tripcord", "policy.yaml"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		code, stdout, stderr, output := runCfg014Args(t, repo, event, "json")
+		if code != int(exitcode.OK) {
+			t.Fatalf("exit %d, want 0\nstderr: %s\nstdout: %s", code, stderr, stdout)
+		}
+		var got struct {
+			TCCFG014 string `json:"tc_cfg_014"`
+			Finding  struct {
+				Severity string `json:"severity"`
+				Decision string `json:"decision"`
+			} `json:"finding"`
+		}
+		if err := json.Unmarshal([]byte(stdout), &got); err != nil {
+			t.Fatalf("json: %v\n%s", err, stdout)
+		}
+		if got.TCCFG014 != "match" || got.Finding.Severity != "high" || got.Finding.Decision != "audit" {
+			t.Fatalf("decoded = %+v", got)
+		}
+		if !strings.Contains(output, "tc_cfg_014=match\n") {
+			t.Fatalf("GITHUB_OUTPUT = %q", output)
+		}
+	})
+	t.Run("fail-on critical", func(t *testing.T) {
+		body := "version: 1\nmode: enforce\nfail-on: critical\n"
+		if err := os.WriteFile(filepath.Join(repo, ".tripcord", "policy.yaml"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		code, stdout, stderr, output := runCfg014Args(t, repo, event, "json")
+		if code != int(exitcode.OK) {
+			t.Fatalf("exit %d, want 0\nstderr: %s\nstdout: %s", code, stderr, stdout)
+		}
+		var got struct {
+			TCCFG014 string `json:"tc_cfg_014"`
+			Finding  struct {
+				Severity string `json:"severity"`
+				Decision string `json:"decision"`
+			} `json:"finding"`
+		}
+		if err := json.Unmarshal([]byte(stdout), &got); err != nil {
+			t.Fatalf("json: %v\n%s", err, stdout)
+		}
+		if got.TCCFG014 != "match" || got.Finding.Severity != "high" || got.Finding.Decision != "deny" {
+			t.Fatalf("decoded = %+v", got)
+		}
+		if !strings.Contains(output, "tc_cfg_014=match\n") {
+			t.Fatalf("GITHUB_OUTPUT = %q", output)
+		}
+	})
+}
+
 func TestCfg014IgnoresOrdinaryFilesAndHumanAuthors(t *testing.T) {
 	clearPrContextEnv(t)
 	git := lookGit(t)

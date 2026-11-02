@@ -15,6 +15,7 @@ import (
 	"github.com/vgmartinez/tripcord/internal/exitcode"
 	"github.com/vgmartinez/tripcord/internal/gitrun"
 	"github.com/vgmartinez/tripcord/internal/model"
+	"github.com/vgmartinez/tripcord/internal/policy"
 	"github.com/vgmartinez/tripcord/internal/prcontext"
 )
 
@@ -24,8 +25,11 @@ pr-context reads a GitHub pull_request event and the commits in base..head
 and reports whether the pull request looks agent-authored. It exits 0
 whether or not an agent is detected. When that author is an agent and
 the diff changes a file an adapter classifies, TC-CFG-014 exits 1 if no
-human approved the pull request, and exits 3 when the reviews or the
-diff cannot be read.
+human approved the pull request and the repository policy fails the
+finding. The default is enforce, fail-on high. mode: audit, mode: warn,
+or a fail-on above the finding still reports the match and exits 0.
+The command exits 3 when the reviews, the diff, or the policy cannot
+be read.
 
 --reviews-file is a JSON array of review objects, the shape of
 GET /pulls/{n}/reviews concatenated across pages. It is the complete
@@ -104,6 +108,14 @@ func runPrContext(args []string, stdout, stderr io.Writer) int {
 			return prContextFail(stderr, err, false)
 		}
 	}
+	// Policy is loaded the same way scan loads it, after the login and
+	// branch verdict is written, so a bad policy file does not drop that
+	// verdict. The surface default is enforce and fail-on high. An
+	// explicit mode or fail-on replaces those defaults.
+	effective, err := loadPrContextPolicy(repo)
+	if err != nil {
+		return prContextFail(stderr, err, false)
+	}
 	// A commit or notes read failure does not abort: commits and notes
 	// signals are simply missing, same as a shallow checkout that misses
 	// the range. readErr is kept and only decides the exit code, after
@@ -142,6 +154,22 @@ func runPrContext(args []string, stdout, stderr io.Writer) int {
 			})
 		}
 	}
+	failMatch := false
+	if outcome.Status == cfg014.StatusMatch {
+		if outcome.Finding == nil {
+			return prContextFail(stderr, errors.New("TC-CFG-014 match has no finding"), false)
+		}
+		outcome.Finding.Severity = effective.Severity(cfg014.RuleID, outcome.Finding.Severity)
+		outcome.Finding.Decision = decision(effective.Mode)
+		if err := outcome.Finding.Validate(); err != nil {
+			return prContextFail(stderr, err, false)
+		}
+		var ferr error
+		failMatch, ferr = effective.Fails(outcome.Finding.Severity)
+		if ferr != nil {
+			return prContextFail(stderr, ferr, false)
+		}
+	}
 	rendered, err := renderPrContext(opts.format, result, outcome)
 	if err != nil {
 		return prContextFail(stderr, err, false)
@@ -172,7 +200,10 @@ func runPrContext(args []string, stdout, stderr io.Writer) int {
 	case "", cfg014.StatusClear:
 		return int(exitcode.OK)
 	case cfg014.StatusMatch:
-		return int(exitcode.Findings)
+		if failMatch {
+			return int(exitcode.Findings)
+		}
+		return int(exitcode.OK)
 	case cfg014.StatusIncomplete:
 		writeString(stderr, "tripcord pr-context: TC-CFG-014 incomplete: "+outcome.Reason+"\n")
 		return int(exitcode.Config)
@@ -464,11 +495,28 @@ func fullSHA(s string) bool {
 
 // prContextFail maps err onto exit 3 or 4. config is true when err is
 // already known to be bad input rather than an I/O failure.
+func loadPrContextPolicy(repo string) (*policy.Effective, error) {
+	env, catalog, err := loadRules(scanLimits())
+	if err != nil {
+		return nil, err
+	}
+	return policy.Load(policy.Options{
+		RepoRoot: repo,
+		Surface:  policy.SurfacePRContext,
+		Env:      env,
+		Catalog:  catalog,
+	})
+}
+
 func prContextFail(stderr io.Writer, err error, config bool) int {
 	var input *prcontext.InputError
+	var pol *policy.Error
 	code := exitcode.Internal
 	if config || errors.As(err, &input) {
 		code = exitcode.Config
+	}
+	if errors.As(err, &pol) {
+		code = pol.ExitCode()
 	}
 	if errors.Is(err, gitrun.ErrNotInstalled) {
 		code = exitcode.Internal

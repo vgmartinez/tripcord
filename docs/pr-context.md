@@ -4,9 +4,11 @@
 agent-authored. Detecting an agent does not by itself fail the command.
 When that author is an agent and the pull request diff changes a file an
 adapter classifies, [TC-CFG-014](rules/TC-CFG-014.md) does: exit 1 when
-no human approved, and exit 3 when the reviews or the diff cannot be
-read. Otherwise exit 0 means the inputs were read, whether or not
-`agent` is true.
+no human approved and the repository policy fails the finding, and exit
+3 when the reviews, the diff, or the policy cannot be read. The default
+policy enforces and fails on high. `mode: audit` or `fail-on: critical`
+still reports the match and exits 0. Otherwise exit 0 means the inputs
+were read, whether or not `agent` is true.
 
 ## Signals
 
@@ -258,8 +260,8 @@ result does not add those fields.
 
 | Exit | Meaning |
 | --- | --- |
-| `0` | The inputs were read. An agent may or may not have been detected. TC-CFG-014 is clear when it applies. |
-| `1` | TC-CFG-014 matched: an agent-authored pull request changed classified config and the reviews array shows no human approval. |
+| `0` | The inputs were read. An agent may or may not have been detected. TC-CFG-014 is clear, or it matched and the policy does not fail the finding (`mode: audit`, `mode: warn`, or a fail-on above the finding's severity). |
+| `1` | TC-CFG-014 matched and the policy fails it: an agent-authored pull request changed classified config, the reviews show no human approval, the mode is `enforce`, and the severity is at or above fail-on. The default fail-on is `high`. |
 | `3` | Invalid flags, event, revision, or repository, or `GITHUB_OUTPUT` is missing for `--format gha` or is a symlink. Also an invalid, missing, or oversized `--reviews-file`, or one that is not a regular file. Also TC-CFG-014 incomplete: the reviews were not a `reviews` array, or the diff could not be read, for an agent-authored pull request that changed classified config. |
 | `4` | Git is not installed, or reading or writing failed. |
 

@@ -61,9 +61,14 @@ not change a classified path is clear, even when reviews are missing.
 
 Text and `gha` keep the pr-context report. A match or an incomplete
 result adds a `tc-cfg-014:` section. JSON adds `tc_cfg_014` and, for a
-match, one `tripcord.finding/v1` document. The finding's decision is
-`deny`. `pr-context` does not load repository policy, so a policy
-ceiling is not applied. `GITHUB_OUTPUT` gains `tc_cfg_014=match` or
+match, one `tripcord.finding/v1` document. The finding's severity
+defaults to high and its decision follows the repository policy, the
+same way `scan` applies it: `pr-context` loads `.tripcord/policy.yaml`
+for the `pr-context` surface. With no policy file the mode is `enforce`
+and fail-on is `high`, so the decision is `deny` and a match exits 1.
+An explicit `mode` or `fail-on` replaces those defaults. `mode: audit`,
+`mode: warn`, and `fail-on: critical` still report the match and
+`tc_cfg_014=match`, and exit 0. `GITHUB_OUTPUT` gains `tc_cfg_014=match` or
 `tc_cfg_014=incomplete` only when the result is not clear.
 
 ## What this does not do
