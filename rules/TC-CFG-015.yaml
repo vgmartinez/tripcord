@@ -31,18 +31,23 @@
 # this rule's files, the same exclusion TC-CFG-004 and TC-CFG-005 make.
 id: TC-CFG-015
 pack: tripcord/core
-title: "WebFetch allowlist includes a host with a public read-back channel"
+title: "Network or WebFetch allowlist includes a host with a public read-back channel"
 severity: high
 harness: [claude]
 files: ["**/.claude/settings.json"]
 when: |
-  config.kind == "permissions" && config.scope == "repo" &&
-    has(payload.setting) && payload.setting == "permissions" &&
-    has(payload.value) && type(payload.value) == map &&
-    has(payload.value.allow) && type(payload.value.allow) == list &&
-    payload.value.allow.exists(e, type(e) == string &&
-      e.matches(r'''(?i)^\s*webfetch\(\s*domain:\s*(\*\.)?(huggingface\.co|hf\.co|pypi\.org|files\.pythonhosted\.org|npmjs\.com|registry\.npmjs\.org|pastebin\.com|webhook\.site|gist\.githubusercontent\.com)\s*\)\s*$'''))
-fix: "Remove the host from permissions.allow, or scope the fetch further than WebFetch can express (a wrapper script that only reads one fixed, pinned file). If the project genuinely needs to fetch Hugging Face card text or a package index page, treat the result as untrusted input, the way a browsed web page is treated, rather than pre-approving the fetch."
+  config.kind == "permissions" && config.scope == "repo" && has(payload.setting) &&
+    has(payload.value) && type(payload.value) == map && (
+      (payload.setting == "permissions" &&
+        has(payload.value.allow) && type(payload.value.allow) == list &&
+        payload.value.allow.exists(e, type(e) == string &&
+          e.matches(r'''(?i)^\s*webfetch\(\s*domain:\s*(\*\.)?(huggingface\.co|hf\.co|pypi\.org|files\.pythonhosted\.org|npmjs\.com|registry\.npmjs\.org|pastebin\.com|webhook\.site|gist\.githubusercontent\.com)\s*\)\s*$'''))) ||
+      (payload.setting == "sandbox" &&
+        has(payload.value.network) && type(payload.value.network) == map &&
+        has(payload.value.network.allowedDomains) && type(payload.value.network.allowedDomains) == list &&
+        payload.value.network.allowedDomains.exists(e, type(e) == string &&
+          e.matches(r'''(?i)^\s*(\*\.)?(huggingface\.co|hf\.co|pastebin\.com|webhook\.site|gist\.githubusercontent\.com)\.?(:[0-9]+)?\s*$'''))))
+fix: "Remove the host from permissions.allow or sandbox.network.allowedDomains, or scope the fetch further than those allowlists can express (a wrapper script that only reads one fixed, pinned file). If the project genuinely needs to fetch Hugging Face card text or a package index page, treat the result as untrusted input, the way a browsed web page is treated, rather than pre-approving the fetch."
 refs:
   - https://nvd.nist.gov/vuln/detail/CVE-2026-54316
   - https://novee.security/vulnerabilities/permissive-list-of-allowed-inputs-leading-to-out-of-band-data-exfiltration-in-claude-code/
