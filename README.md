@@ -52,6 +52,7 @@ The default fail-on is `high`, and both findings are high, so the process exits 
 | `gemini` | Gemini CLI | [docs/adapters/gemini.md](docs/adapters/gemini.md) |
 | `opencode` | OpenCode | [docs/adapters/opencode.md](docs/adapters/opencode.md) |
 | `windsurf` | Windsurf | [docs/adapters/windsurf.md](docs/adapters/windsurf.md) |
+| `devin` | Devin blueprint | [docs/adapters/devin.md](docs/adapters/devin.md) |
 | `devcontainer` | Dev Container configuration | [docs/adapters/devcontainer.md](docs/adapters/devcontainer.md) |
 | `generic` | Shared skills, `AGENTS.md`, and `.vscode/` | [docs/adapters/generic.md](docs/adapters/generic.md) |
 
@@ -89,8 +90,6 @@ tripcord scan [PATH] [flags]
 ```
 
 `version` prints the link-time version, or `dev` when it was not set. `scan --help` prints the flags below.
-
-`preopen`, `pr-context`, `hook`, and a GitHub Action are planned; today the CLI implements `scan`.
 
 ### `tripcord scan`
 
