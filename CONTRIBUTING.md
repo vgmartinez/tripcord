@@ -160,8 +160,8 @@ one file then get different fingerprints. Other kinds have no key.
 has a cost limit (20M units in scans, 2M on the hook path, where the
 input is capped at 64 KiB). Cost is counted, not timed, so a rule gives
 the same result on a loaded machine. Every core rule on a 1 MiB config
-file stays under 10M. The timeouts (10 s in scans, 1 s on the hook
-path, and a 5 s budget for one hook event's rules) are only a safety
+file stays under 10M. The timeouts (15 s in scans, 1 s on the planned hook
+path, and a 5 s budget for one hook event's rules on the planned hook path) are only a safety
 net for a cost model that underestimates a rule. They are cooperative:
 CEL checks them between steps, so one `matches()` over a large string
 finishes before it notices. The input caps bound that case. A rule that fails to evaluate on a file, for
