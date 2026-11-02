@@ -84,7 +84,9 @@ scan inputs (`ref`, `binary`, `path`, `fail-on`, `upload-sarif`,
 an input. An empty `github-token` uses `github.token`, because a
 `workflow_call` default cannot be an expression. There is no `policy`
 input: an empty `fail-on` still leaves the threshold to the CLI and the
-repository policy. The outputs are `is_agent` and `agents`.
+repository policy. The outputs are `is_agent` and `agents`. The
+action step does not continue on error, so a TC-CFG-014 denial
+(exit 1) fails the scan job after publishing.
 
 The reviews step calls `github.paginate` on
 `GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews`. Owner,

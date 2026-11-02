@@ -138,6 +138,9 @@ func TestTripcordActionContract(t *testing.T) {
 	if !strings.Contains(prContext, `if [ -n "$TRIPCORD_REVIEWS_FILE" ]`) || !strings.Contains(prContext, `--reviews-file "$TRIPCORD_REVIEWS_FILE"`) {
 		t.Fatal("pr-context does not pass --reviews-file only when the caller sets it")
 	}
+	if !strings.Contains(prContext, `echo "exit-code=$status"`) {
+		t.Fatal("pr-context does not record exit-code=$status")
+	}
 	if strings.Contains(prContext, "${{") {
 		t.Fatal("pr-context interpolates an expression into run")
 	}

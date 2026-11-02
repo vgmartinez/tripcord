@@ -388,3 +388,4 @@ jobs:
         run: |
           test "$TRIPCORD_OUTCOME" = "failure"
           test "$TRIPCORD_TC_CFG_014" = "match"
+          grep -F '::error::tripcord pr-context denied the pull request under TC-CFG-014' .github/actions/tripcord/action.yml

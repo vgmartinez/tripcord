@@ -13,9 +13,10 @@ import (
 )
 
 const (
-	workflowCheckout = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
-	workflowScript   = "actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3"
-	workflowAction   = "vgmartinez/tripcord/.github/actions/tripcord@84ac78e17a274768fc57d269c6071ced9b4c2d73"
+	workflowCheckout  = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
+	workflowScript    = "actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3"
+	workflowAction    = "vgmartinez/tripcord/.github/actions/tripcord@466932e43168f49592f52c89f72cccbec311fc24"
+	workflowActionPin = workflowAction + " # main@466932e"
 )
 
 func TestTripcordWorkflowContract(t *testing.T) {
@@ -149,8 +150,8 @@ func checkOneJobWorkflow(t *testing.T, wf workflowFile, wantPerms map[string]str
 	if strings.Contains(text, "secrets: inherit") {
 		t.Fatal("workflow inherits secrets")
 	}
-	if strings.Contains(text, workflowAction+" #") {
-		t.Fatal("action pin has a version comment; the commit is untagged")
+	if !strings.Contains(text, workflowActionPin) {
+		t.Fatal("action pin is missing # main@466932e")
 	}
 	for _, version := range []string{"# v7.0.1", "# v9.0.0"} {
 		if !strings.Contains(text, version) {
@@ -269,6 +270,9 @@ func checkOneJobWorkflow(t *testing.T, wf workflowFile, wantPerms map[string]str
 	}
 	if scalar(actionStep["id"]) != "tripcord" {
 		t.Fatalf("action id = %q", scalar(actionStep["id"]))
+	}
+	if actionStep["continue-on-error"] != nil {
+		t.Fatal("action step continues on error, so a TC-CFG-014 denial would not fail the job")
 	}
 	actionWith := mapping(t, actionStep["with"])
 	for name := range wantDefaults {
