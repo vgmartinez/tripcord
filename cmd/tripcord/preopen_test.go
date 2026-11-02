@@ -2,7 +2,10 @@ package main
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -143,6 +146,58 @@ func TestPreopenRejectsUsage(t *testing.T) {
 		t.Fatal("ext:: command ran")
 	}
 	assertNoEntries(t, tmp)
+}
+
+func TestPreopenLongNameExitsConfig(t *testing.T) {
+	git := preopentest.RequireTools(t)
+	repo := filepath.Join(t.TempDir(), "repo.git")
+	preopentest.Git(t, git, filepath.Dir(repo), "init", "-q", "--bare", "repo.git")
+	blob := preopenGitOutput(t, git, repo, "x\n", "hash-object", "-w", "--stdin")
+	name := strings.Repeat("n", 300)
+	tree := preopenGitOutput(t, git, repo, fmt.Sprintf("100644 blob %s\t%s\x00", blob, name), "mktree", "-z")
+	commit := preopenGitOutput(t, git, repo, "", "commit-tree", tree, "-m", "long")
+	preopentest.Git(t, git, repo, "update-ref", "HEAD", commit)
+
+	tmp := preopenTemp(t)
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"preopen", repo}, &stdout, &stderr)
+	if code != int(exitcode.Config) {
+		t.Fatalf("preopen = %d, want %d\nstderr: %s", code, exitcode.Config, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "file name too long") {
+		t.Fatalf("stderr = %q, want the ENAMETOOLONG refusal", stderr.String())
+	}
+	assertNoEntries(t, tmp)
+}
+
+func preopenGitOutput(t *testing.T, git, dir, stdin string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command(git, args...)
+	cmd.Dir = dir
+	if stdin != "" {
+		cmd.Stdin = strings.NewReader(stdin)
+	}
+	env := make([]string, 0, len(os.Environ()))
+	for _, entry := range os.Environ() {
+		if !strings.HasPrefix(strings.ToUpper(entry), "GIT_") {
+			env = append(env, entry)
+		}
+	}
+	cmd.Env = append(env,
+		"GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL="+os.DevNull,
+		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.invalid",
+		"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.invalid",
+	)
+	out, err := cmd.Output()
+	if err != nil {
+		detail := ""
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			detail = string(exitErr.Stderr)
+		}
+		t.Fatalf("git %v: %v\n%s", args, err, detail)
+	}
+	return strings.TrimSpace(string(out))
 }
 
 func TestPreopenHelp(t *testing.T) {

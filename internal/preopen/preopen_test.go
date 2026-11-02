@@ -3,12 +3,14 @@ package preopen
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -174,6 +176,57 @@ func TestFetchOversizeBlobDoesNotHang(t *testing.T) {
 	var targetErr *TargetError
 	if !errors.As(err, &targetErr) || !strings.Contains(err.Error(), "larger than") {
 		t.Fatalf("Fetch = %v, want a TargetError refusing the blob", err)
+	}
+}
+
+// gitOutput runs git and returns its stdout. stdin may be empty.
+func gitOutput(t *testing.T, git, dir, stdin string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command(git, args...)
+	cmd.Dir = dir
+	if stdin != "" {
+		cmd.Stdin = strings.NewReader(stdin)
+	}
+	env := make([]string, 0, len(os.Environ()))
+	for _, entry := range os.Environ() {
+		if !strings.HasPrefix(strings.ToUpper(entry), "GIT_") {
+			env = append(env, entry)
+		}
+	}
+	cmd.Env = append(env,
+		"GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL="+os.DevNull,
+		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.invalid",
+		"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.invalid",
+	)
+	out, err := cmd.Output()
+	if err != nil {
+		var exitErr *exec.ExitError
+		detail := ""
+		if errors.As(err, &exitErr) {
+			detail = string(exitErr.Stderr)
+		}
+		t.Fatalf("git %v: %v\n%s", args, err, detail)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// TestFetchLongNameIsTargetError builds a tree whose one name is past
+// NAME_MAX without putting that name on disk in the source repository.
+// Writing it out returns ENAMETOOLONG, which is a refused tree.
+func TestFetchLongNameIsTargetError(t *testing.T) {
+	git := preopentest.RequireTools(t)
+	repo := filepath.Join(t.TempDir(), "repo.git")
+	preopentest.Git(t, git, filepath.Dir(repo), "init", "-q", "--bare", "repo.git")
+	blob := gitOutput(t, git, repo, "x\n", "hash-object", "-w", "--stdin")
+	name := strings.Repeat("n", 300)
+	tree := gitOutput(t, git, repo, fmt.Sprintf("100644 blob %s\t%s\x00", blob, name), "mktree", "-z")
+	commit := gitOutput(t, git, repo, "", "commit-tree", tree, "-m", "long")
+	preopentest.Git(t, git, repo, "update-ref", "HEAD", commit)
+
+	_, err := Fetch(context.Background(), repo)
+	var targetErr *TargetError
+	if !errors.As(err, &targetErr) || !errors.Is(err, syscall.ENAMETOOLONG) {
+		t.Fatalf("Fetch = %v, want a TargetError wrapping ENAMETOOLONG", err)
 	}
 }
 

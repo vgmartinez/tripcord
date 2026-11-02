@@ -139,14 +139,14 @@ func wrapGitError(target string, err error) error {
 	return err
 }
 
-// wrapTreeError reports a tree preopen refuses to write (an unsafe path,
-// an unexpected entry, or one over the limits) as a TargetError. A
-// filesystem, cancellation, or missing-git error stays as it is.
+// wrapTreeError reports a tree preopen refuses to write as a TargetError.
+// That includes an unsafe path, a tree over the limits, and a path the
+// operating system rejects (ENAMETOOLONG). Cancellation and a missing
+// git stay as they are.
 func wrapTreeError(target string, err error) error {
-	var pathErr *fs.PathError
 	switch {
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded),
-		errors.Is(err, ErrGitMissing), errors.As(err, &pathErr):
+		errors.Is(err, ErrGitMissing):
 		return err
 	}
 	return &TargetError{Target: target, Err: err}
