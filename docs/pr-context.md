@@ -45,6 +45,19 @@ noreply address matches a bot login only when it is
 Review bots such as `gemini-code-assist[bot]` are not listed. They comment
 on pull requests but do not author the changes.
 
+GitHub's Copilot coding agent is an exception to the `[bot]` suffix rule: it
+opens pull requests as the literal login `Copilot`, with no suffix (see
+[gh-aw project issue #1972](https://github.com/githubnext/gh-aw/issues/1972)).
+Because a human account can also be named "Copilot", this login matches
+**only** the pull request author, and only when the event's `user.type` is
+exactly `Bot`; a missing or `User` type does not match. It is matched
+separately from the table above and is not checked against commit authors
+or committers, which have no `user.type`.
+
+| Login | Requires `user.type` | Agent |
+| --- | --- | --- |
+| `Copilot` (pull request author only) | `Bot` | copilot |
+
 ### Trailer addresses
 
 | Address | Agent |
@@ -117,6 +130,28 @@ still exits 0. At most 5000 commits are read (the newest), and a commit
 message or authorship note past its size cap is skipped with a warning
 rather than failing the command.
 
+A checkout action that defaults to a shallow clone (one commit) will
+usually miss `base` entirely, turning every commit and note signal into a
+warning and leaving only the pull request's login and branch to go on. Use
+`fetch-depth: 0` (or a depth large enough to reach `base`) when checking
+out the pull request so commit and note signals are not silently skipped:
+
+```yaml
+- uses: actions/checkout@v4
+  with:
+    fetch-depth: 0
+```
+
+Once `base` and `head` are known (from the event or from `--base`/`--head`),
+a failure to read commits or notes — git is missing, the repository is
+unusable, or a log record cannot be read — no longer aborts the command.
+It is reported as a warning, commit and note signals are simply absent,
+and the pull request's login and branch signals are still detected,
+rendered to stdout, and written to `GITHUB_OUTPUT`. The command still
+exits non-zero in that case (see Exit codes below); the output is written
+before the process exits so a caller gets the login/branch verdict even
+when it goes on to treat the nonzero exit as a failure.
+
 A revision that starts with `-` or contains git revision syntax (`..`,
 `^`, `:`, `~`, `@`, and globs) is rejected before git runs.
 
@@ -157,7 +192,12 @@ is_agent=true
 agents=claude,cursor
 ```
 
-`agents` has no spaces. A symlink `GITHUB_OUTPUT` is refused.
+`agents` has no spaces. `GITHUB_OUTPUT` is opened refusing to follow a
+symlink and is required to be a regular file (so a FIFO cannot hang the
+command); either case is refused with exit 3. If the file already has
+content that does not end in a newline, a newline is written first, so
+appending never runs into a previous line (`agents=...is_agent=false`
+without one).
 
 ## Exit codes
 

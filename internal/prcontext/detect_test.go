@@ -204,6 +204,47 @@ func TestPRAuthorType(t *testing.T) {
 	}
 }
 
+// TestCopilotPRLogin covers GitHub's Copilot coding agent, whose pull
+// request login is the literal "Copilot" with no [bot] suffix (gh-aw
+// project issue #1972). It must match only alongside user.type "Bot":
+// an absent or "User" type could just as well be a human so named.
+func TestCopilotPRLogin(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name  string
+		login string
+		typ   string
+		want  bool
+	}{
+		{name: "Copilot with type Bot", login: "Copilot", typ: "Bot", want: true},
+		{name: "copilot lowercase with type Bot", login: "copilot", typ: "Bot", want: true},
+		{name: "Copilot with no type", login: "Copilot", typ: "", want: false},
+		{name: "Copilot with type User", login: "Copilot", typ: "User", want: false},
+		{name: "login merely contains copilot", login: "copilot-fan", typ: "Bot", want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := Detect(Input{PRLogin: tc.login, PRAuthorType: tc.typ})
+			if got.Agent != tc.want {
+				t.Fatalf("Detect(login %q, type %q) = %+v, want agent %v", tc.login, tc.typ, got, tc.want)
+			}
+			if tc.want && (len(got.Signals) != 1 || got.Signals[0].Agent != "copilot" || got.Signals[0].Source != "pull_request.user.login") {
+				t.Fatalf("signals = %+v", got.Signals)
+			}
+			if !tc.want && len(got.Signals) != 0 {
+				t.Fatalf("login %q type %q matched: %+v", tc.login, tc.typ, got.Signals)
+			}
+		})
+	}
+	// Copilot's login has no [bot] suffix, so a commit author (which has
+	// no user.type) must never match it.
+	sha := "0123456789abcdef0123456789abcdef01234567"
+	got := Detect(Input{Commits: []Commit{{SHA: sha, AuthorName: "Copilot"}}})
+	if got.Agent {
+		t.Fatalf("commit author %q matched copilot: %+v", "Copilot", got)
+	}
+}
+
 func TestParseEvent(t *testing.T) {
 	t.Parallel()
 	ev, err := ParseEvent([]byte(`{"action":"opened","pull_request":{"user":{"login":"octocat"},"head":{"ref":"cursor/x","sha":"abc"},"base":{"sha":"def"}}}`))

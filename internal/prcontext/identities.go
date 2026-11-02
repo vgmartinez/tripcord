@@ -98,6 +98,13 @@ func agentForLogin(login string) (agent string, ok bool) {
 	return "", false
 }
 
+// copilotPRLogin is the exact login GitHub's Copilot coding agent uses
+// to open a pull request. Unlike the accounts in botLogins, it carries
+// no [bot] suffix, so a bare "Copilot" cannot be told apart from a human
+// by login alone; it is matched only alongside user.type "Bot" (see
+// gh-aw project issue #1972).
+const copilotPRLogin = "copilot"
+
 // agentForPRLogin matches the pull request author. When authorType is
 // set, it is GitHub's user.type and must be "Bot". A [bot] login whose
 // type is present and not "Bot" does not match. An empty authorType
@@ -107,7 +114,16 @@ func agentForPRLogin(login, authorType string) (agent string, ok bool) {
 	if authorType != "" && authorType != "Bot" {
 		return "", false
 	}
-	return agentForLogin(login)
+	if agent, ok := agentForLogin(login); ok {
+		return agent, true
+	}
+	// copilotPRLogin requires authorType == "Bot" exactly: an empty
+	// authorType (the event omitted user.type) must not match, since a
+	// human account can also be named "Copilot".
+	if authorType == "Bot" && strings.EqualFold(strings.TrimSpace(login), copilotPRLogin) {
+		return "copilot", true
+	}
+	return "", false
 }
 
 func agentForEmail(email string) (agent string, ok bool) {
