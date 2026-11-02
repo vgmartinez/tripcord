@@ -82,9 +82,25 @@ func parseNameStatus(raw []byte, limit int) ([]string, bool, error) {
 				truncated = true
 				return paths, truncated, nil
 			}
-			paths = append(paths, string(parts[i]))
+			path := string(parts[i])
+			if pathHasControl(path) {
+				return nil, false, &InputError{Msg: "changed path contains a control character"}
+			}
+			paths = append(paths, path)
 			i++
 		}
 	}
 	return paths, truncated, nil
+}
+
+// pathHasControl reports whether path contains a byte that must not be
+// copied into text or GitHub Actions output. Newline, CR, and ESC would
+// otherwise let a filename emit a workflow command.
+func pathHasControl(path string) bool {
+	for i := 0; i < len(path); i++ {
+		if path[i] < 0x20 || path[i] == 0x7f {
+			return true
+		}
+	}
+	return false
 }

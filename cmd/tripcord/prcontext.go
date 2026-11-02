@@ -292,7 +292,7 @@ func formatCfg014Text(outcome cfg014.Outcome) string {
 		var b strings.Builder
 		b.WriteString("tc-cfg-014: match\n")
 		for _, path := range outcome.Paths {
-			b.WriteString("- " + path + "\n")
+			b.WriteString("- " + redactControlPath(path) + "\n")
 		}
 		return b.String()
 	case cfg014.StatusIncomplete:
@@ -306,6 +306,18 @@ type prContextEnvelope struct {
 	prcontext.Result
 	TCCFG014 string         `json:"tc_cfg_014,omitempty"`
 	Finding  *model.Finding `json:"finding,omitempty"`
+}
+
+// redactControlPath keeps a filename from injecting a workflow command
+// into text or gha output. The diff reader already rejects these paths;
+// this is the backstop for a path that reached formatting anyway.
+func redactControlPath(path string) string {
+	for i := 0; i < len(path); i++ {
+		if path[i] < 0x20 || path[i] == 0x7f {
+			return "[path omitted]"
+		}
+	}
+	return path
 }
 
 func formatCfg014JSON(result prcontext.Result, outcome cfg014.Outcome) (string, error) {

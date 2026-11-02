@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/vgmartinez/tripcord/internal/cfg014"
 	"github.com/vgmartinez/tripcord/internal/exitcode"
 )
 
@@ -263,6 +265,62 @@ func TestCfg014PolicyDoesNotFailBelowItsThreshold(t *testing.T) {
 			t.Fatalf("GITHUB_OUTPUT = %q", output)
 		}
 	})
+}
+
+func TestCfg014ControlCharacterPaths(t *testing.T) {
+	clearPrContextEnv(t)
+	git := lookGit(t)
+	paths := []string{
+		".cursor/hooks.json\n::error::injected",
+		".cursor/hooks.json\r::error::injected",
+		".cursor/hooks.json\x1b::error::injected",
+	}
+	for _, rel := range paths {
+		t.Run(rel, func(t *testing.T) {
+			repo := initRepo(t)
+			base := strings.TrimSpace(gitOut(t, git, repo, "rev-parse", "HEAD"))
+			runGitCmd(t, git, repo, "checkout", "-q", "-b", "feature/hooks")
+			blobFile := filepath.Join(t.TempDir(), "blob")
+			if err := os.WriteFile(blobFile, []byte("{}\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			blob := strings.TrimSpace(gitOut(t, git, repo, "hash-object", "-w", blobFile))
+			info := "100644 " + blob + " 0\t" + rel + "\x00"
+			cmd := exec.Command(git, "update-index", "-z", "--index-info")
+			cmd.Dir = repo
+			cmd.Stdin = strings.NewReader(info)
+			if out, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("update-index: %v\n%s", err, out)
+			}
+			runGitCmd(t, git, repo, "-c", "user.email=ada@example.com", "-c", "user.name=Ada Lovelace", "commit", "-q", "-m", "odd path")
+			head := strings.TrimSpace(gitOut(t, git, repo, "rev-parse", "HEAD"))
+			event := writeCfg014Event(t, "empty-reviews.json", base, head)
+			for _, format := range []string{"text", "gha"} {
+				code, stdout, stderr, _ := runCfg014Args(t, repo, event, format)
+				if code != int(exitcode.Config) {
+					t.Fatalf("%s exit %d, want 3\nstderr: %s\nstdout: %s", format, code, stderr, stdout)
+				}
+				if strings.Contains(stdout, "::error::") || strings.Contains(stderr, "::error::") || strings.ContainsRune(stdout, 0x1b) || strings.ContainsRune(stderr, 0x1b) {
+					t.Fatalf("%s leaked a workflow command\nstdout: %q\nstderr: %q", format, stdout, stderr)
+				}
+				if strings.Contains(stdout, "\r") || strings.Contains(stderr, rel) {
+					t.Fatalf("%s echoed the path\nstdout: %q\nstderr: %q", format, stdout, stderr)
+				}
+			}
+		})
+	}
+}
+
+func TestCfg014TextRedactsControlPaths(t *testing.T) {
+	for _, path := range []string{"a\n::error::x", "a\r::error::x", "a\x1b::error::x"} {
+		out := formatCfg014Text(cfg014.Outcome{Status: cfg014.StatusMatch, Paths: []string{path}})
+		if strings.Contains(out, "::error::") || strings.Contains(out, "\r") || strings.ContainsRune(out, 0x1b) || strings.Contains(out, path) {
+			t.Fatalf("leaked %q in %q", path, out)
+		}
+		if !strings.Contains(out, "[path omitted]") {
+			t.Fatalf("out = %q", out)
+		}
+	}
 }
 
 func TestCfg014IgnoresOrdinaryFilesAndHumanAuthors(t *testing.T) {

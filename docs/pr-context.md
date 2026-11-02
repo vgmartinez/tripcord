@@ -233,7 +233,10 @@ so appending never runs into a previous line
 After the agent verdict is written, an agent-authored pull request is
 checked for changed paths. The diff is `git diff --name-status -z`
 of `base...head` (the merge-base, which is the pull request's own
-files, not changes that landed on the base branch later). A path counts
+files, not changes that landed on the base branch later). A path that
+contains a control character (a newline, CR, or ESC, or any other
+byte below 0x20) is rejected and the command exits 3, so text and
+`gha` output cannot emit a workflow command from a filename. A path counts
 when one of the installed adapters classifies it. That is the same
 path check the adapter uses during a scan. It does not read the file.
 

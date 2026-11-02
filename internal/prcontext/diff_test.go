@@ -2,6 +2,7 @@ package prcontext
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -58,5 +59,24 @@ func TestChangedPathsListsThePullRequestDiff(t *testing.T) {
 	}
 	if !missing.Missing || len(missing.Paths) != 0 {
 		t.Fatalf("missing revision = %+v", missing)
+	}
+}
+
+func TestParseNameStatusRejectsControlCharacters(t *testing.T) {
+	for _, path := range []string{
+		".cursor/hooks.json\n::error::injected",
+		".cursor/hooks.json\r::error::injected",
+		".cursor/hooks.json\x1b::error::injected",
+	} {
+		raw := append([]byte("A\x00"), path...)
+		raw = append(raw, 0)
+		_, _, err := parseNameStatus(raw, 10)
+		var input *InputError
+		if !errors.As(err, &input) {
+			t.Fatalf("path %q: err = %v", path, err)
+		}
+		if strings.Contains(err.Error(), "::error::") || strings.Contains(err.Error(), path) {
+			t.Fatalf("error echoed the path: %v", err)
+		}
 	}
 }

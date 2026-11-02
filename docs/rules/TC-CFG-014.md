@@ -32,7 +32,8 @@ plugin root has been discovered are not included.
 
 The diff is `git diff --name-status -z base...head`: files the pull
 request changed relative to the merge base. Both sides of a rename or
-copy are included. A deletion counts.
+copy are included. A deletion counts. A changed path that contains a
+control character is rejected (exit 3) and is not printed.
 
 Human approval is one user's latest review that is not `COMMENTED`,
 and that review has all of:
