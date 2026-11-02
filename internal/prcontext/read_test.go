@@ -109,6 +109,61 @@ func TestReadCommitsTrailersNotesAndMissingHistory(t *testing.T) {
 	}
 }
 
+// TestReadCommitsOversizedIdentityField is a regression test for a commit
+// whose author name is built directly as a git object (via
+// `git hash-object -t commit -w --stdin`, bypassing argv/env length
+// limits) and is larger than the old whole-record cap. Previously this
+// made the record unsplittable into its six \x1e fields and ReadCommits
+// failed with "git log record has an unexpected shape", hiding the
+// commit (and, upstream, the bot-author signal on the event) entirely.
+func TestReadCommitsOversizedIdentityField(t *testing.T) {
+	git := requireGit(t)
+	repo := t.TempDir()
+	gitCmd(t, repo, "init", "-q", "-b", "main")
+	gitCmd(t, repo, "config", "user.email", "t@example.invalid")
+	gitCmd(t, repo, "config", "user.name", "t")
+	if err := os.WriteFile(filepath.Join(repo, "a.txt"), []byte("a\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitCmd(t, repo, "add", "a.txt")
+	gitCmd(t, repo, "commit", "-q", "-m", "init")
+	base := strings.TrimSpace(gitOutput(t, git, repo, "rev-parse", "HEAD"))
+	tree := strings.TrimSpace(gitOutput(t, git, repo, "rev-parse", "HEAD^{tree}"))
+
+	hugeName := strings.Repeat("A", 5<<20)
+	raw := "tree " + tree + "\n" +
+		"parent " + base + "\n" +
+		"author " + hugeName + " <attacker@example.invalid> 1700000000 +0000\n" +
+		"committer t <t@example.invalid> 1700000000 +0000\n" +
+		"\n" +
+		"malicious commit\n"
+	cmd := exec.Command(git, "hash-object", "-t", "commit", "-w", "--stdin")
+	cmd.Dir = repo
+	cmd.Stdin = strings.NewReader(raw)
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("git hash-object: %v", err)
+	}
+	head := strings.TrimSpace(string(out))
+
+	commits, warnings, err := ReadCommits(context.Background(), repo, base, head)
+	if err != nil {
+		t.Fatalf("ReadCommits = %v, warnings %v, err %v, want no error", commits, warnings, err)
+	}
+	if len(commits) != 1 || commits[0].SHA != head {
+		t.Fatalf("commits = %+v, want only %s", commits, head)
+	}
+	if got := len(commits[0].AuthorName); got != maxIdentityField {
+		t.Fatalf("AuthorName len = %d, want %d (truncated)", got, maxIdentityField)
+	}
+	if commits[0].CommitterName != "t" {
+		t.Fatalf("CommitterName = %q, fields after the oversized one were lost", commits[0].CommitterName)
+	}
+	if commits[0].Message != "malicious commit\n" {
+		t.Fatalf("Message = %q, fields after the oversized one were lost", commits[0].Message)
+	}
+}
+
 func gitOutput(t *testing.T, git, dir string, args ...string) string {
 	t.Helper()
 	cmd := exec.Command(git, args...)

@@ -19,10 +19,19 @@ import (
 // checkout that does not contain the range) warns and returns no commits.
 const maxCommits = 5000
 
-// maxCommitRecord bounds one git-log record. The identity fields sit at
-// the start, and Co-authored-by trailers sit at the end, so a record past
-// this cap keeps both ends and drops the middle.
+// maxCommitRecord bounds the message field of one git-log record.
+// Co-authored-by trailers sit at the end, so a message past this cap
+// keeps its head and its last 64KiB and drops the middle.
 const maxCommitRecord = 4 << 20
+
+// maxIdentityField bounds the SHA and each name/email field. They are
+// structured, normally short values. Reading and truncating each one
+// independently, instead of one cap over the whole record, means a
+// single oversized name (an attacker-controlled git-hash-object commit)
+// can never consume the record budget before the parser has seen every
+// \x1e separator: the record is still six fields wide, just with a
+// truncated one, instead of failing to split at all.
+const maxIdentityField = 4 << 10
 
 // maxNoteBytes bounds one refs/notes/ai note. A larger note is skipped.
 const maxNoteBytes = 2 << 20
@@ -200,17 +209,17 @@ func parseLog(r io.Reader) ([]Commit, error) {
 	in := bufio.NewReader(r)
 	var commits []Commit
 	for {
-		rec, err := readRecord(in)
+		fields, err := readRecord(in)
 		if errors.Is(err, io.EOF) {
 			return commits, nil
 		}
 		if err != nil {
 			return nil, err
 		}
-		if len(rec) == 0 {
+		if len(fields[0]) == 0 {
 			continue
 		}
-		commit, err := parseRecord(rec)
+		commit, err := parseRecordFields(fields)
 		if err != nil {
 			return nil, err
 		}
@@ -218,10 +227,70 @@ func parseLog(r io.Reader) ([]Commit, error) {
 	}
 }
 
-// readRecord reads one NUL-terminated git log record. A record longer
-// than maxCommitRecord keeps its head (the identity fields) and a tail
-// (the trailers) and drops the middle of the message.
-func readRecord(r *bufio.Reader) ([]byte, error) {
+// recordFields holds one git-log record's six \x1e-separated fields:
+// SHA, author name, author email, committer name, committer email, and
+// message.
+type recordFields [6][]byte
+
+// readRecord reads one NUL-terminated git log record, field by field.
+// The SHA and the four identity fields are each read until their
+// separator, truncating at maxIdentityField; the message is read until
+// the record's NUL, keeping its head and a maxCommitRecord-bounded tail
+// (see readMessage). Reading field by field, instead of one cap over the
+// whole record, means an attacker-controlled identity field far larger
+// than any legitimate name cannot prevent every separator from being
+// found: the record is always six fields, one of which may be truncated,
+// rather than a record the parser cannot split at all.
+func readRecord(r *bufio.Reader) (recordFields, error) {
+	var fields recordFields
+	if _, err := r.Peek(1); err != nil {
+		if errors.Is(err, io.EOF) {
+			return fields, io.EOF
+		}
+		return fields, err
+	}
+	for i := 0; i < 5; i++ {
+		field, err := readIdentityField(r)
+		if err != nil {
+			return fields, err
+		}
+		fields[i] = field
+	}
+	message, err := readMessage(r)
+	if err != nil {
+		return fields, err
+	}
+	fields[5] = message
+	return fields, nil
+}
+
+// readIdentityField reads up to the next \x1e, truncating at
+// maxIdentityField. Reaching the end of input before a separator means
+// git's output was cut off mid-record.
+func readIdentityField(r *bufio.Reader) ([]byte, error) {
+	var buf bytes.Buffer
+	for {
+		b, err := r.ReadByte()
+		if errors.Is(err, io.EOF) {
+			return nil, errors.New("git log record was not terminated")
+		}
+		if err != nil {
+			return nil, err
+		}
+		if b == 0x1e {
+			return buf.Bytes(), nil
+		}
+		if buf.Len() < maxIdentityField {
+			buf.WriteByte(b)
+		}
+	}
+}
+
+// readMessage reads the record's message field up to its terminating
+// NUL. A message longer than maxCommitRecord keeps its head and its last
+// 64KiB, since Co-authored-by trailers sit at the end, and drops the
+// middle.
+func readMessage(r *bufio.Reader) ([]byte, error) {
 	var head bytes.Buffer
 	const tailCap = 64 << 10
 	tail := make([]byte, tailCap)
@@ -230,9 +299,6 @@ func readRecord(r *bufio.Reader) ([]byte, error) {
 	for {
 		b, err := r.ReadByte()
 		if errors.Is(err, io.EOF) {
-			if head.Len() == 0 && tailLen == 0 {
-				return nil, io.EOF
-			}
 			return nil, errors.New("git log record was not terminated")
 		}
 		if err != nil {
@@ -252,7 +318,7 @@ func readRecord(r *bufio.Reader) ([]byte, error) {
 			if !truncated || tailLen == 0 {
 				return head.Bytes(), nil
 			}
-			return joinRecord(head.Bytes(), ringBytes(tail, tailStart, tailLen))
+			return append(head.Bytes(), ringBytes(tail, tailStart, tailLen)...), nil
 		}
 		if !truncated {
 			head.WriteByte(b)
@@ -278,38 +344,18 @@ func ringBytes(buf []byte, start, n int) []byte {
 	return out
 }
 
-// joinRecord replaces the commit message in head with tail. head is the
-// start of the record, so its identity fields are intact.
-func joinRecord(head, tail []byte) ([]byte, error) {
-	parts := bytes.SplitN(head, []byte{0x1e}, 6)
-	if len(parts) != 6 {
-		return nil, errors.New("git log record has an unexpected shape")
-	}
-	rec := make([]byte, 0, len(head)+len(tail))
-	for i := 0; i < 5; i++ {
-		rec = append(rec, parts[i]...)
-		rec = append(rec, 0x1e)
-	}
-	rec = append(rec, tail...)
-	return rec, nil
-}
-
-func parseRecord(rec []byte) (Commit, error) {
-	parts := bytes.SplitN(rec, []byte{0x1e}, 6)
-	if len(parts) != 6 {
-		return Commit{}, errors.New("git log record has an unexpected shape")
-	}
-	sha := string(parts[0])
+func parseRecordFields(fields recordFields) (Commit, error) {
+	sha := string(fields[0])
 	if !hexSHA(sha) {
 		return Commit{}, fmt.Errorf("git log record has an unexpected commit %q", sha)
 	}
 	return Commit{
 		SHA:            sha,
-		AuthorName:     string(parts[1]),
-		AuthorEmail:    string(parts[2]),
-		CommitterName:  string(parts[3]),
-		CommitterEmail: string(parts[4]),
-		Message:        string(parts[5]),
+		AuthorName:     string(fields[1]),
+		AuthorEmail:    string(fields[2]),
+		CommitterName:  string(fields[3]),
+		CommitterEmail: string(fields[4]),
+		Message:        string(fields[5]),
 	}, nil
 }
 
