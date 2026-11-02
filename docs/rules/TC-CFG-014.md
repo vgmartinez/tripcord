@@ -41,11 +41,17 @@ Human approval is one review the event exposes with all of:
 - `user.login` not ending in `[bot]`
 - `user.login` different from the pull request author, ignoring case
 
-A `reviews` array, including an empty array, is the complete set. A
-single `review` object is not the complete set. It clears the rule only
+A `reviews` array, including an empty array, is the complete set.
+`--reviews-file` is that array when the event does not carry one: a
+JSON array of review objects, the same shape as
+`GET /pulls/{n}/reviews` concatenated across pages. `pr-context` does
+not call the GitHub API. A missing file, a file that is not a regular
+file, a file over 8MiB, and JSON that is not an array exit 3. A single
+`review` object is not the complete set. It clears the rule only
 when that object itself is a qualifying approval. Otherwise, and when
-the event has no reviews array, the rule is incomplete. Incomplete is a
-diagnostic on stderr and exit 3. It is not a pass.
+the event has no reviews array and `--reviews-file` was not passed, the
+rule is incomplete. Incomplete is a diagnostic on stderr and exit 3. It
+is not a pass.
 
 An author `pr-context` does not classify as an agent is clear, including
 when they change agent config. An agent-authored pull request that does
@@ -64,9 +70,10 @@ ceiling is not applied. `GITHUB_OUTPUT` gains `tc_cfg_014=match` or
 
 - It does not scan the contents of the changed file. The other rules do
   that.
-- It does not call the GitHub API. If the workflow event has no
-  `reviews` array, the result is incomplete whenever a classified path
-  changed.
+- It does not call the GitHub API. Pass `--reviews-file` with the
+  review array, or include a `reviews` array on the event. If neither
+  is present, the result is incomplete whenever a classified path
+  changed. Fetching the reviews is left to the workflow.
 - It does not change the composite action. Callers of `tripcord
   pr-context` see the exit code directly.
 

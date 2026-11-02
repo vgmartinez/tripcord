@@ -27,6 +27,12 @@ the diff changes a file an adapter classifies, TC-CFG-014 exits 1 if no
 human approved the pull request, and exits 3 when the reviews or the
 diff cannot be read.
 
+--reviews-file is a JSON array of review objects, the shape of
+GET /pulls/{n}/reviews concatenated across pages. It is the complete
+review set and replaces any reviews in the event. pr-context does not
+call the GitHub API. Without the flag, a reviews array on the event is
+the complete set, and a missing array is incomplete.
+
 Flags:
 `
 
@@ -57,6 +63,12 @@ func runPrContext(args []string, stdout, stderr io.Writer) int {
 	var reviews prcontext.ReviewSet
 	if eventPath != "" {
 		ev, reviews, err = readPullRequestEvent(eventPath)
+		if err != nil {
+			return prContextFail(stderr, err, false)
+		}
+	}
+	if opts.reviewsFile != "" {
+		reviews, err = readReviewsFile(opts.reviewsFile)
 		if err != nil {
 			return prContextFail(stderr, err, false)
 		}
@@ -177,11 +189,12 @@ func oneLineError(msg string) string {
 }
 
 type prContextOptions struct {
-	event  string
-	base   string
-	head   string
-	repo   string
-	format string
+	event       string
+	reviewsFile string
+	base        string
+	head        string
+	repo        string
+	format      string
 }
 
 func parsePrContextFlags(args []string, stdout io.Writer) (prContextOptions, error) {
@@ -190,6 +203,7 @@ func parsePrContextFlags(args []string, stdout io.Writer) (prContextOptions, err
 	flags.SetOutput(io.Discard)
 	flags.Usage = func() {}
 	flags.StringVar(&opts.event, "event", "", "GitHub pull_request event JSON (default: $GITHUB_EVENT_PATH)")
+	flags.StringVar(&opts.reviewsFile, "reviews-file", "", "JSON array of GitHub reviews; the complete review set")
 	flags.StringVar(&opts.base, "base", "", "base revision, overriding the event")
 	flags.StringVar(&opts.head, "head", "", "head revision, overriding the event")
 	flags.StringVar(&opts.repo, "repo", "", "repository to read (default: .)")
@@ -317,6 +331,52 @@ func readPullRequestEvent(path string) (prcontext.Event, prcontext.ReviewSet, er
 		return prcontext.Event{}, prcontext.ReviewSet{}, err
 	}
 	return ev, reviews, nil
+}
+
+// readReviewsFile reads a JSON array of GitHub review objects. The file
+// must be a regular file no larger than maxEventBytes. A directory,
+// symlink, or other non-regular file is refused before it is opened, so
+// a FIFO cannot hang the read. Invalid JSON, a non-array payload, and an
+// oversized file are input errors (exit 3).
+func readReviewsFile(path string) (prcontext.ReviewSet, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return prcontext.ReviewSet{}, &prcontext.InputError{Msg: fmt.Sprintf("reviews file: %v", err)}
+	}
+	if !info.Mode().IsRegular() {
+		return prcontext.ReviewSet{}, &prcontext.InputError{Msg: "reviews file must be a regular file"}
+	}
+	if info.Size() > maxEventBytes {
+		return prcontext.ReviewSet{}, &prcontext.InputError{Msg: "reviews file is too large"}
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return prcontext.ReviewSet{}, &prcontext.InputError{Msg: fmt.Sprintf("reviews file: %v", err)}
+	}
+	info, err = f.Stat()
+	if err != nil {
+		_ = f.Close()
+		return prcontext.ReviewSet{}, err
+	}
+	if !info.Mode().IsRegular() {
+		_ = f.Close()
+		return prcontext.ReviewSet{}, &prcontext.InputError{Msg: "reviews file must be a regular file"}
+	}
+	if info.Size() > maxEventBytes {
+		_ = f.Close()
+		return prcontext.ReviewSet{}, &prcontext.InputError{Msg: "reviews file is too large"}
+	}
+	data, err := io.ReadAll(io.LimitReader(f, maxEventBytes+1))
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return prcontext.ReviewSet{}, err
+	}
+	if len(data) > maxEventBytes {
+		return prcontext.ReviewSet{}, &prcontext.InputError{Msg: "reviews file is too large"}
+	}
+	return prcontext.ParseReviewArray(data)
 }
 
 // appendGitHubOutput appends result to the GITHUB_OUTPUT file. The open

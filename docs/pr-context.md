@@ -115,6 +115,7 @@ The file may be the whole workflow event or the pull request object.
 | Flag | Description |
 | --- | --- |
 | `--event <file>` | Event JSON file, instead of `GITHUB_EVENT_PATH`. |
+| `--reviews-file <file>` | JSON array of GitHub review objects (the shape of `GET /pulls/{n}/reviews`, concatenated across pages). This is the complete review set and replaces any reviews in the event. `pr-context` does not call the GitHub API. Without the flag, a `reviews` array on the event is the complete set, and a missing array leaves TC-CFG-014 incomplete. The file must be a regular file of at most 8MiB. A missing, invalid, non-array, or oversized file exits 3. |
 | `--base <rev>` | Base revision. Overrides `pull_request.base.sha`. |
 | `--head <rev>` | Head revision. Overrides `pull_request.head.sha`. When no branch name was in the event and this is not a full commit id, it is also the branch name. |
 | `--repo <path>` | Repository to read. Default: the current directory. |
@@ -237,10 +238,14 @@ path check the adapter uses during a scan. It does not read the file.
 Human approval is an `APPROVED` review whose `user.type` is `User`,
 whose login does not end in `[bot]`, and whose login is not the pull
 request author's (compared case-insensitively). A `reviews` array,
-including `[]`, is the whole set. A single `review` object is not: it
+including `[]`, is the whole set. `--reviews-file` supplies that array
+when the event does not: it is the complete set, and `pr-context` still
+makes no API call. Fetching the pages belongs in a later workflow.
+A single `review` object is not the whole set: it
 can clear the rule when that one review is a qualifying approval, and
 otherwise the rule is incomplete rather than a pass. A pull request
-event that omits reviews is incomplete when a classified path changed.
+event that omits reviews is incomplete when a classified path changed,
+unless `--reviews-file` was passed.
 An agent-authored pull request that does not change a classified path
 is clear, and so is a pull request whose author is not an agent.
 
@@ -255,7 +260,7 @@ result does not add those fields.
 | --- | --- |
 | `0` | The inputs were read. An agent may or may not have been detected. TC-CFG-014 is clear when it applies. |
 | `1` | TC-CFG-014 matched: an agent-authored pull request changed classified config and the reviews array shows no human approval. |
-| `3` | Invalid flags, event, revision, or repository, or `GITHUB_OUTPUT` is missing for `--format gha` or is a symlink. Also TC-CFG-014 incomplete: the reviews were not a `reviews` array, or the diff could not be read, for an agent-authored pull request that changed classified config. |
+| `3` | Invalid flags, event, revision, or repository, or `GITHUB_OUTPUT` is missing for `--format gha` or is a symlink. Also an invalid, missing, or oversized `--reviews-file`, or one that is not a regular file. Also TC-CFG-014 incomplete: the reviews were not a `reviews` array, or the diff could not be read, for an agent-authored pull request that changed classified config. |
 | `4` | Git is not installed, or reading or writing failed. |
 
 ## Example

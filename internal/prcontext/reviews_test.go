@@ -63,6 +63,25 @@ func TestParseReviews(t *testing.T) {
 	}
 }
 
+func TestParseReviewArray(t *testing.T) {
+	set, err := ParseReviewArray([]byte(`[{"state":"APPROVED","commit_id":"abc","user":{"login":"Ada","type":"User"}}]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !set.Available || len(set.Reviews) != 1 || set.Reviews[0].Login != "Ada" || set.Reviews[0].CommitID != "abc" {
+		t.Fatalf("set = %+v", set)
+	}
+	for _, body := range []string{``, `{}`, `{"reviews":[]}`, `null`, `{`} {
+		if _, err := ParseReviewArray([]byte(body)); err == nil {
+			t.Fatalf("accepted %q", body)
+		}
+	}
+	empty, err := ParseReviewArray([]byte(`[]`))
+	if err != nil || !empty.Available || len(empty.Reviews) != 0 {
+		t.Fatalf("empty array = %+v, %v", empty, err)
+	}
+}
+
 func TestParseNameStatus(t *testing.T) {
 	paths, truncated, err := parseNameStatus([]byte("M\x00README\x00A\x00.cursor/hooks.json\x00D\x00old.md\x00"), 10)
 	if err != nil {

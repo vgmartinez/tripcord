@@ -9,12 +9,20 @@ import (
 
 // Review is one GitHub pull request review the event exposed.
 type Review struct {
-	// State is the review's state field, such as APPROVED.
+	// State is the review's state field, such as APPROVED. The casing
+	// is kept as it appeared; callers normalize it.
 	State string
 	// Login is user.login. Empty when the review has no user.
 	Login string
 	// UserType is user.type. Empty when the event omitted it.
 	UserType string
+	// CommitID is the commit the review was submitted against. Empty
+	// when the payload omitted it. An approval of an older commit does
+	// not approve the pull request head.
+	CommitID string
+	// SubmittedAt is the review's submitted_at timestamp, unchanged.
+	// Empty when the payload omitted it; callers then keep array order.
+	SubmittedAt string
 }
 
 // ReviewSet is the review data a pull request event exposed.
@@ -24,6 +32,29 @@ type Review struct {
 type ReviewSet struct {
 	Available bool
 	Reviews   []Review
+}
+
+// ParseReviewArray reads a JSON array of GitHub review objects, the
+// shape of GET /pulls/{n}/reviews concatenated across pages. The array
+// is the complete set, including when it is empty. Any other JSON value,
+// including an object or an empty file, is an InputError.
+func ParseReviewArray(data []byte) (ReviewSet, error) {
+	if len(bytes.TrimSpace(data)) == 0 {
+		return ReviewSet{}, &InputError{Msg: "reviews file must be a JSON array"}
+	}
+	var root any
+	if err := json.Unmarshal(data, &root); err != nil {
+		return ReviewSet{}, &InputError{Msg: fmt.Sprintf("reviews file: %v", err)}
+	}
+	arr, ok := root.([]any)
+	if !ok {
+		return ReviewSet{}, &InputError{Msg: "reviews file must be a JSON array"}
+	}
+	reviews, err := reviewsFromArray(arr)
+	if err != nil {
+		return ReviewSet{}, err
+	}
+	return ReviewSet{Available: true, Reviews: reviews}, nil
 }
 
 // ParseReviews reads review data from a GitHub event. The payload may be
@@ -122,10 +153,18 @@ func reviewFrom(raw any) (Review, bool, error) {
 			review.UserType = kind
 		}
 	}
+	if commitID, ok := obj["commit_id"].(string); ok {
+		review.CommitID = commitID
+	}
+	if submitted, ok := obj["submitted_at"].(string); ok {
+		review.SubmittedAt = submitted
+	}
 	for _, field := range []struct{ name, value string }{
 		{"review.state", review.State},
 		{"review.user.login", review.Login},
 		{"review.user.type", review.UserType},
+		{"review.commit_id", review.CommitID},
+		{"review.submitted_at", review.SubmittedAt},
 	} {
 		if strings.ContainsAny(field.value, "\x00\r\n") {
 			return Review{}, false, &InputError{Msg: field.name + " contains a control character"}
