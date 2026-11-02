@@ -12,6 +12,8 @@ depends on the surface: scans fail on high, and the hook warns.
 
 [scan.md](scan.md) documents `tripcord scan`, its static-only behavior,
 formats, flags, policy interaction, examples, and exit codes.
+[pr-context.md](pr-context.md) documents `tripcord pr-context`, which
+reports whether a pull request looks agent-authored.
 
 ## Adapters
 
