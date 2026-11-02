@@ -12,7 +12,24 @@ import (
 	"github.com/vgmartinez/tripcord/internal/exitcode"
 )
 
+// clearPrContextEnv drops the Actions variables pr-context reads.
+// The runner sets them, and a test that inherited GITHUB_EVENT_PATH or
+// GITHUB_OUTPUT would read the job's event and append to the job's
+// output file. A test that needs one sets it afterwards, with
+// GITHUB_OUTPUT pointed at a file under t.TempDir.
+func clearPrContextEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv("CI", "")
+	for _, entry := range os.Environ() {
+		name, _, ok := strings.Cut(entry, "=")
+		if ok && strings.HasPrefix(name, "GITHUB_") {
+			t.Setenv(name, "")
+		}
+	}
+}
+
 func TestPrContextHumanFixture(t *testing.T) {
+	clearPrContextEnv(t)
 	repo := initRepo(t)
 	var stdout, stderr bytes.Buffer
 	code := run([]string{"pr-context", "--format", "json", "--repo", repo, "--event", filepath.Join("testdata", "prcontext", "human.json")}, &stdout, &stderr)
@@ -37,6 +54,7 @@ func TestPrContextHumanFixture(t *testing.T) {
 }
 
 func TestPrContextAgentFixture(t *testing.T) {
+	clearPrContextEnv(t)
 	git, repo, base, head := agentRepo(t)
 	_ = git
 	raw, err := os.ReadFile(filepath.Join("testdata", "prcontext", "agent.json"))
@@ -98,6 +116,7 @@ func TestPrContextAgentFixture(t *testing.T) {
 }
 
 func TestPrContextCleanHumanPullRequest(t *testing.T) {
+	clearPrContextEnv(t)
 	git := lookGit(t)
 	repo := initRepo(t)
 	base := strings.TrimSpace(gitOut(t, git, repo, "rev-parse", "HEAD"))
@@ -125,6 +144,7 @@ func TestPrContextCleanHumanPullRequest(t *testing.T) {
 }
 
 func TestPrContextUsage(t *testing.T) {
+	clearPrContextEnv(t)
 	repo := initRepo(t)
 	for name, args := range map[string][]string{
 		"no input":           {"pr-context", "--repo", repo},
