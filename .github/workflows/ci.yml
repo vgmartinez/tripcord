@@ -259,7 +259,7 @@ jobs:
         with:
           advanced-security: false
           annotations: true
-          inputs: .github/workflows
+          inputs: .github/workflows .github/actions
 
   dco:
     name: DCO
