@@ -175,17 +175,17 @@ func (f *file) command(section, name, command string, line int, form string) {
 // checksum and symlink credit for command (see
 // internal/scriptcheck.annotateChecksums's working-directory check),
 // and whether command needs one at all. ok is true when the blueprint
-// itself is elsewhere, or when this command or an earlier one already
-// ran a bare cd or pushd (hasBareCD): either way, a sums file or
-// symlink this adapter can see at the blueprint's own directory, or at
-// the repository root, is not necessarily the one Devin's shell reads.
-// A cd inside this command is recorded before returning, so a command
-// that both changes directory and reads a sums file in the new one (cd
-// sub && sha256sum -c t.sh.sha256) fails closed on itself too, and
-// every later command inherits cdSeen.
+// itself is elsewhere, or when this command or an earlier one has an
+// ambiguous shell-state word (hasShellState): either way, a sums file
+// or symlink this adapter can see at the blueprint's own directory, or
+// at the repository root, is not necessarily the one Devin's shell
+// reads. A stateful word inside this command is recorded before
+// returning, so a command that both changes directory and reads a sums
+// file in the new one (cd sub && sha256sum -c t.sh.sha256) fails closed
+// on itself too, and every later command inherits cdSeen.
 func (f *file) workingDirectory(command string) (string, bool) {
 	unknown := f.cdSeen
-	if hasBareCD(command) {
+	if hasShellState(command) {
 		f.cdSeen = true
 		unknown = true
 	}
@@ -195,73 +195,92 @@ func (f *file) workingDirectory(command string) (string, bool) {
 	return "", false
 }
 
-// hasBareCD reports whether command runs cd or pushd as a top-level
-// command: not the text of a quoted argument, and not inside (...) or
-// $(...), which keeps the directory change local to that subshell. A
-// leading run of NAME=value assignments before cd or pushd, as a shell
-// allows, is skipped.
-func hasBareCD(command string) bool {
+// hasShellState reports whether command contains a word that may change
+// the calling shell's directory or execution context. The detection is
+// deliberately conservative: shell builtins can be invoked through
+// wrappers and constructs such as "builtin cd", "if ...; then cd", and
+// "{ cd; }", which a first-word check misses. Quotes and backslashes are
+// stripped, so "'cd'", "\"cd\"", and "\\cd" are all treated as cd.
+//
+// Words inside (...) (including $(...)) are ignored because a directory
+// change there is confined to a subshell. A function definition is also
+// stateful: its body might later run cd, and static scanning cannot prove
+// when that happens.
+func hasShellState(command string) bool {
 	depth := 0
 	var quote byte
-	start := 0
+	var word []byte
+	flush := func() bool {
+		if len(word) == 0 {
+			return false
+		}
+		defer func() { word = word[:0] }()
+		switch string(word) {
+		case "cd", "pushd", "popd", "eval", "source", ".", "exec", "function":
+			return true
+		default:
+			return false
+		}
+	}
 	for i := 0; i < len(command); i++ {
 		c := command[i]
 		switch {
 		case quote != 0:
 			if c == '\\' && quote == '"' && i+1 < len(command) {
 				i++
+				if depth == 0 {
+					word = append(word, command[i])
+				}
 				continue
 			}
 			if c == quote {
 				quote = 0
+			} else if depth == 0 {
+				word = append(word, c)
 			}
 		case c == '\'' || c == '"':
 			quote = c
 		case c == '\\' && i+1 < len(command):
 			i++
+			if depth == 0 {
+				word = append(word, command[i])
+			}
 		case c == '(':
+			if depth == 0 && isFunctionName(word) && i+1 < len(command) && command[i+1] == ')' {
+				return true
+			}
+			if depth == 0 && flush() {
+				return true
+			}
 			depth++
 		case c == ')':
 			if depth > 0 {
 				depth--
 			}
-		case depth == 0 && (c == ';' || c == '&' || c == '|' || c == '\n'):
-			if cdCommand(command[start:i]) {
+		case depth == 0 && isShellWord(c):
+			word = append(word, c)
+		case depth == 0:
+			if flush() {
 				return true
 			}
-			start = i + 1
 		}
 	}
-	return cdCommand(command[start:])
+	return flush()
 }
 
-// cdCommand reports whether segment, a shell command between separators
-// at subshell depth 0, is a cd or pushd invocation once any leading
-// NAME=value assignment words are skipped.
-func cdCommand(segment string) bool {
-	for _, word := range strings.Fields(segment) {
-		if isShellAssignment(word) {
-			continue
-		}
-		return word == "cd" || word == "pushd"
-	}
-	return false
+func isShellWord(c byte) bool {
+	return c == '_' || c == '-' || c == '.' ||
+		c >= 'a' && c <= 'z' ||
+		c >= 'A' && c <= 'Z' ||
+		c >= '0' && c <= '9'
 }
 
-// isShellAssignment reports whether word is NAME=value: a shell runs
-// any number of these before the command name, setting them only for
-// that command.
-func isShellAssignment(word string) bool {
-	name, _, ok := strings.Cut(word, "=")
-	if !ok || name == "" {
+func isFunctionName(word []byte) bool {
+	if len(word) == 0 || !(word[0] == '_' || word[0] >= 'a' && word[0] <= 'z' || word[0] >= 'A' && word[0] <= 'Z') {
 		return false
 	}
-	for i := 0; i < len(name); i++ {
-		c := name[i]
-		switch {
-		case c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z':
-		case c >= '0' && c <= '9' && i > 0:
-		default:
+	for _, c := range word[1:] {
+		if !(c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9') {
 			return false
 		}
 	}

@@ -467,6 +467,35 @@ func TestWorkingDirectoryCDInSubshellDoesNotCarry(t *testing.T) {
 	}
 }
 
+func TestHasShellState(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		command string
+		want    bool
+	}{
+		{"builtin cd sub", true},
+		{"command cd sub", true},
+		{"{ cd sub; }", true},
+		{"if true; then cd sub; fi", true},
+		{"for d in sub; do cd $d; done", true},
+		{`\cd sub`, true},
+		{`'cd' sub`, true},
+		{`"cd" sub`, true},
+		{"eval cd sub", true},
+		{"time cd sub", true},
+		{". ./setup.sh", true},
+		{"move() { cd sub; }", true},
+		{"function move { cd sub; }", true},
+		{"(cd sub && npm ci)", false},
+		{"echo $(cd sub && pwd)", false},
+		{"curl -fsSLo t.sh https://example.invalid/t.sh && sha256sum -c t.sh.sha256 && sh t.sh", false},
+	} {
+		if got := hasShellState(tc.command); got != tc.want {
+			t.Errorf("hasShellState(%q) = %v, want %v", tc.command, got, tc.want)
+		}
+	}
+}
+
 func FuzzParseBlueprint(f *testing.F) {
 	if data, err := os.ReadFile(filepath.Join("testdata", "repo", ".devin", "blueprint.yaml")); err == nil {
 		f.Add(data)

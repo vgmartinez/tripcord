@@ -91,3 +91,15 @@ positivos:
   devin-nested-blueprint-case-alias-symlink: high
   devin-nested-blueprint-root-sums: high
   devin-null-document-curl: high
+  devin-shell-state-brace-cd: high
+  devin-shell-state-builtin-cd: high
+  devin-shell-state-command-cd: high
+  devin-shell-state-double-quoted-cd: high
+  devin-shell-state-escaped-cd: high
+  devin-shell-state-eval-cd: high
+  devin-shell-state-for-cd: high
+  devin-shell-state-function-cd: high
+  devin-shell-state-if-cd: high
+  devin-shell-state-single-quoted-cd: high
+  devin-shell-state-source: high
+  devin-shell-state-time-cd: high
