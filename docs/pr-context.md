@@ -231,14 +231,23 @@ so appending never runs into a previous line
 ## TC-CFG-014
 
 After the agent verdict is written, an agent-authored pull request is
-checked for changed paths. The diff is `git diff --name-status -z`
-of `base...head` (the merge-base, which is the pull request's own
-files, not changes that landed on the base branch later). A path that
-contains a control character (a newline, CR, or ESC, or any other
-byte below 0x20) is rejected and the command exits 3, so text and
-`gha` output cannot emit a workflow command from a filename. A path counts
-when one of the installed adapters classifies it. That is the same
-path check the adapter uses during a scan. It does not read the file.
+checked for changed paths. The diff is `git diff -z --raw` of `base...head` (the merge-base,
+which is the pull request's own files, not changes that landed on the
+base branch later). The raw modes are how a symlink (`120000`) or
+gitlink (`160000`) is recognized. A path that contains a control
+character (a newline, CR, or ESC, or any other byte below 0x20) is
+rejected and the command exits 3, so text and `gha` output cannot emit
+a workflow command from a filename. A path counts when one of the
+installed adapters classifies it. That is the same path check the
+adapter uses during a scan. It does not read the file.
+
+A symlink or gitlink that is added or modified at a directory an
+adapter covers (`.claude`, `.github`, `.cursor`, `.devin`, `.gemini`,
+`.windsurf`, and the other adapter directories), or at a path inside
+one, counts as a hit. If one of those directories is already a symlink
+in `base` or `head`, changed paths under its target are classified as
+paths under the directory. A target that is absolute, escapes the
+repository, or cannot be read makes the rule incomplete.
 
 Human approval is each user's latest non-`COMMENTED` review, and that
 review has to be `APPROVED` (any casing) with `commit_id` equal to the

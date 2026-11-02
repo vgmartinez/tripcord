@@ -323,6 +323,110 @@ func TestCfg014TextRedactsControlPaths(t *testing.T) {
 	}
 }
 
+func TestCfg014CoveredSymlinks(t *testing.T) {
+	clearPrContextEnv(t)
+	git := lookGit(t)
+
+	t.Run("added symlink at a covered directory matches", func(t *testing.T) {
+		repo, base, head := commitAgentChange(t, git, func(repo string) {
+			if err := os.Symlink("payload", filepath.Join(repo, ".claude")); err != nil {
+				t.Fatal(err)
+			}
+			runGitCmd(t, git, repo, "add", "--", ".claude")
+		})
+		code, stdout, stderr, _ := runCfg014(t, repo, "empty-reviews.json", base, head, "text")
+		if code != int(exitcode.Findings) || !strings.Contains(stdout, ".claude") {
+			t.Fatalf("exit %d\nstderr: %s\nstdout: %s", code, stderr, stdout)
+		}
+	})
+	t.Run("symlink outside a covered directory is clear", func(t *testing.T) {
+		repo, base, head := commitAgentChange(t, git, func(repo string) {
+			if err := os.Symlink("payload", filepath.Join(repo, "notes")); err != nil {
+				t.Fatal(err)
+			}
+			runGitCmd(t, git, repo, "add", "--", "notes")
+		})
+		code, stdout, stderr, _ := runCfg014(t, repo, "empty-reviews.json", base, head, "text")
+		if code != int(exitcode.OK) || strings.Contains(stdout, "tc-cfg-014:") {
+			t.Fatalf("exit %d\nstderr: %s\nstdout: %s", code, stderr, stdout)
+		}
+	})
+	t.Run("edits under an existing symlink target match", func(t *testing.T) {
+		repo := initRepo(t)
+		if err := os.MkdirAll(filepath.Join(repo, "payload"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(repo, "payload", "keep.txt"), []byte("keep\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink("payload", filepath.Join(repo, ".claude")); err != nil {
+			t.Fatal(err)
+		}
+		runGitCmd(t, git, repo, "add", "--", "payload", ".claude")
+		runGitCmd(t, git, repo, "-c", "user.email=ada@example.com", "-c", "user.name=Ada Lovelace", "commit", "-q", "-m", "link claude")
+		base := strings.TrimSpace(gitOut(t, git, repo, "rev-parse", "HEAD"))
+		runGitCmd(t, git, repo, "checkout", "-q", "-b", "feature/hooks")
+		if err := os.WriteFile(filepath.Join(repo, "payload", "settings.json"), []byte("{}\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		runGitCmd(t, git, repo, "add", "--", "payload/settings.json")
+		runGitCmd(t, git, repo, "-c", "user.email=ada@example.com", "-c", "user.name=Ada Lovelace", "commit", "-q", "-m", "edit target")
+		head := strings.TrimSpace(gitOut(t, git, repo, "rev-parse", "HEAD"))
+		code, stdout, stderr, _ := runCfg014(t, repo, "empty-reviews.json", base, head, "text")
+		if code != int(exitcode.Findings) || !strings.Contains(stdout, ".claude/settings.json") {
+			t.Fatalf("exit %d\nstderr: %s\nstdout: %s", code, stderr, stdout)
+		}
+	})
+	t.Run("unresolved symlink is incomplete", func(t *testing.T) {
+		repo, base, head := commitAgentChange(t, git, func(repo string) {
+			if err := os.Symlink("../outside", filepath.Join(repo, ".claude")); err != nil {
+				t.Fatal(err)
+			}
+			runGitCmd(t, git, repo, "add", "--", ".claude")
+		})
+		// The added symlink is also a hit. Point the base tree at an
+		// unresolvable link and change an ordinary file on the branch
+		// so the incomplete result comes from resolution, and repeat
+		// with the link only to be sure an escaping target does not pass.
+		code, stdout, stderr, _ := runCfg014(t, repo, "empty-reviews.json", base, head, "text")
+		if code != int(exitcode.Config) || !strings.Contains(stderr, "could not resolve symlink") {
+			t.Fatalf("exit %d\nstderr: %s\nstdout: %s", code, stderr, stdout)
+		}
+		if strings.Contains(stdout, "../outside") {
+			t.Fatalf("target leaked: %s", stdout)
+		}
+	})
+	t.Run("gitlink at a covered directory matches", func(t *testing.T) {
+		repo := initRepo(t)
+		base := strings.TrimSpace(gitOut(t, git, repo, "rev-parse", "HEAD"))
+		runGitCmd(t, git, repo, "checkout", "-q", "-b", "feature/hooks")
+		sha := strings.TrimSpace(gitOut(t, git, repo, "rev-parse", "HEAD"))
+		cmd := exec.Command(git, "update-index", "-z", "--index-info")
+		cmd.Dir = repo
+		cmd.Stdin = strings.NewReader("160000 " + sha + " 0\t.cursor\x00")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("update-index: %v\n%s", err, out)
+		}
+		runGitCmd(t, git, repo, "-c", "user.email=ada@example.com", "-c", "user.name=Ada Lovelace", "commit", "-q", "-m", "gitlink")
+		head := strings.TrimSpace(gitOut(t, git, repo, "rev-parse", "HEAD"))
+		code, stdout, stderr, _ := runCfg014(t, repo, "empty-reviews.json", base, head, "text")
+		if code != int(exitcode.Findings) || !strings.Contains(stdout, ".cursor") {
+			t.Fatalf("exit %d\nstderr: %s\nstdout: %s", code, stderr, stdout)
+		}
+	})
+}
+
+func commitAgentChange(t *testing.T, git string, change func(repo string)) (repo, base, head string) {
+	t.Helper()
+	repo = initRepo(t)
+	base = strings.TrimSpace(gitOut(t, git, repo, "rev-parse", "HEAD"))
+	runGitCmd(t, git, repo, "checkout", "-q", "-b", "feature/hooks")
+	change(repo)
+	runGitCmd(t, git, repo, "-c", "user.email=ada@example.com", "-c", "user.name=Ada Lovelace", "commit", "-q", "-m", "change")
+	head = strings.TrimSpace(gitOut(t, git, repo, "rev-parse", "HEAD"))
+	return repo, base, head
+}
+
 func TestCfg014IgnoresOrdinaryFilesAndHumanAuthors(t *testing.T) {
 	clearPrContextEnv(t)
 	git := lookGit(t)

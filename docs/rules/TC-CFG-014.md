@@ -30,10 +30,19 @@ classifies it. Classification is the adapter's existing path check. The
 file is not opened, and Claude plugin files that match only after a
 plugin root has been discovered are not included.
 
-The diff is `git diff --name-status -z base...head`: files the pull
-request changed relative to the merge base. Both sides of a rename or
-copy are included. A deletion counts. A changed path that contains a
-control character is rejected (exit 3) and is not printed.
+The diff is `git diff -z --raw base...head`: files the pull request
+changed relative to the merge base, with the raw file modes. Both
+sides of a rename or copy are included. A deletion counts. A changed
+path that contains a control character is rejected (exit 3) and is not
+printed.
+
+A symlink (`120000`) or gitlink (`160000`) that is added or modified
+at a directory an adapter covers, or inside one, counts as agent
+config. Covered directories include `.claude`, `.github`, `.cursor`,
+`.devin`, `.gemini`, and `.windsurf`. When one of those directories is
+already a symlink in the base or the head, paths the pull request
+changes under the link target are classified as if they were under the
+directory. If that target cannot be resolved, the rule is incomplete.
 
 Human approval is one user's latest review that is not `COMMENTED`,
 and that review has all of:

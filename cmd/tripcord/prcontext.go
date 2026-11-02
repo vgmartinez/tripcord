@@ -143,16 +143,24 @@ func runPrContext(args []string, stdout, stderr io.Writer) int {
 		if err != nil {
 			diffErr = err
 		} else {
-			outcome = cfg014.Evaluate(cfg014.Input{
-				Agent:       true,
-				Author:      ev.Login,
-				Head:        ev.Head,
-				Paths:       diff.Paths,
-				PathsKnown:  !diff.Missing,
-				Truncated:   diff.Truncated,
-				Reviews:     reviews,
-				Classifiers: cfg014.DefaultClassifiers(),
-			})
+			extra, remaps, symlinkReason, linkErr := cfg014Links(repo, ev.Base, ev.Head, diff)
+			if linkErr != nil {
+				diffErr = linkErr
+			} else {
+				outcome = cfg014.Evaluate(cfg014.Input{
+					Agent:         true,
+					Author:        ev.Login,
+					Head:          ev.Head,
+					Paths:         diff.Paths,
+					PathsKnown:    !diff.Missing,
+					Truncated:     diff.Truncated,
+					Reviews:       reviews,
+					Classifiers:   cfg014.DefaultClassifiers(),
+					Extra:         extra,
+					Remaps:        remaps,
+					SymlinkReason: symlinkReason,
+				})
+			}
 		}
 	}
 	failMatch := false
@@ -508,6 +516,35 @@ func fullSHA(s string) bool {
 
 // prContextFail maps err onto exit 3 or 4. config is true when err is
 // already known to be bad input rather than an I/O failure.
+// cfg014Links resolves covered-directory symlinks in base and head and
+// records symlink or gitlink diff entries at those directories. A
+// listing that is too large, or a target that cannot be mapped into
+// the repository, becomes an incomplete reason rather than a pass.
+func cfg014Links(repo, base, head string, diff prcontext.Diff) ([]cfg014.ExtraHit, []cfg014.Remap, string, error) {
+	if diff.Missing {
+		return nil, nil, "", nil
+	}
+	covered := cfg014.CoveredDirs()
+	baseLinks, baseTrunc, err := prcontext.TreeSymlinks(context.Background(), repo, base, covered)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	headLinks, headTrunc, err := prcontext.TreeSymlinks(context.Background(), repo, head, covered)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	reason := ""
+	if baseTrunc || headTrunc {
+		reason = "could not resolve symlinks: the tree listing was too large"
+	}
+	links := append(baseLinks, headLinks...)
+	extra, remaps, linkReason := cfg014.SymlinkPlan(diff.Changes, links)
+	if reason == "" {
+		reason = linkReason
+	}
+	return extra, remaps, reason, nil
+}
+
 func loadPrContextPolicy(repo string) (*policy.Effective, error) {
 	env, catalog, err := loadRules(scanLimits())
 	if err != nil {

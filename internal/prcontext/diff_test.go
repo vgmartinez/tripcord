@@ -68,9 +68,9 @@ func TestParseNameStatusRejectsControlCharacters(t *testing.T) {
 		".cursor/hooks.json\r::error::injected",
 		".cursor/hooks.json\x1b::error::injected",
 	} {
-		raw := append([]byte("A\x00"), path...)
+		raw := append([]byte(":000000 100644 0000000 1111111 A\x00"), path...)
 		raw = append(raw, 0)
-		_, _, err := parseNameStatus(raw, 10)
+		_, _, err := parseRawDiff(raw, 10)
 		var input *InputError
 		if !errors.As(err, &input) {
 			t.Fatalf("path %q: err = %v", path, err)

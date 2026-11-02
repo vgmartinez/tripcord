@@ -59,6 +59,15 @@ type Input struct {
 	Truncated   bool
 	Reviews     prcontext.ReviewSet
 	Classifiers []Classifier
+	// Extra counts a symlink or gitlink at a covered directory even when
+	// the path is not a file an adapter classifies.
+	Extra []ExtraHit
+	// Remaps rewrites changed paths that sit under a symlink target so
+	// they are classified as paths under the covered directory.
+	Remaps []Remap
+	// SymlinkReason is set when a covered symlink could not be resolved.
+	// The result is incomplete.
+	SymlinkReason string
 }
 
 // Outcome is one evaluation. Finding is set only for StatusMatch.
@@ -79,7 +88,10 @@ type Outcome struct {
 // case-insensitively. A qualifying review counts even when
 // Reviews.Available is false, because a single exposed approval is
 // positive evidence. Anything else, when a classified path changed and
-// the reviews array is missing, is incomplete.
+// the reviews array is missing, is incomplete. A symlink or gitlink
+// added or modified at a covered directory counts as a hit. A covered
+// directory that is already a symlink is resolved in the changed paths;
+// a target that cannot be resolved is incomplete.
 func Evaluate(in Input) Outcome {
 	if !in.Agent {
 		return Outcome{Status: StatusClear}
@@ -90,7 +102,10 @@ func Evaluate(in Input) Outcome {
 	if !in.PathsKnown {
 		return Outcome{Status: StatusIncomplete, Reason: "changed paths could not be read"}
 	}
-	hits := classifiedPaths(in.Paths, in.Classifiers)
+	if in.SymlinkReason != "" {
+		return Outcome{Status: StatusIncomplete, Reason: in.SymlinkReason}
+	}
+	hits := mergeHits(classifiedPaths(remapPaths(in.Paths, in.Remaps), in.Classifiers), in.Extra)
 	approved := humanApproval(in.Author, in.Head, in.Reviews)
 	if in.Truncated && len(hits) == 0 && !approved {
 		return Outcome{Status: StatusIncomplete, Reason: "the diff was truncated before an agent-config path was found"}

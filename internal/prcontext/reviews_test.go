@@ -82,15 +82,20 @@ func TestParseReviewArray(t *testing.T) {
 	}
 }
 
-func TestParseNameStatus(t *testing.T) {
-	paths, truncated, err := parseNameStatus([]byte("M\x00README\x00A\x00.cursor/hooks.json\x00D\x00old.md\x00"), 10)
+func TestParseRawDiff(t *testing.T) {
+	raw := []byte(":100644 100644 1111111 2222222 M\x00README\x00" +
+		":000000 100644 0000000 3333333 A\x00.cursor/hooks.json\x00" +
+		":100644 000000 4444444 0000000 D\x00old.md\x00" +
+		":000000 120000 0000000 5555555 A\x00.claude\x00")
+	changes, truncated, err := parseRawDiff(raw, 10)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if truncated {
 		t.Fatal("truncated a short diff")
 	}
-	want := []string{"README", ".cursor/hooks.json", "old.md"}
+	paths := pathsOf(changes)
+	want := []string{"README", ".cursor/hooks.json", "old.md", ".claude"}
 	if len(paths) != len(want) {
 		t.Fatalf("paths = %v", paths)
 	}
@@ -99,21 +104,24 @@ func TestParseNameStatus(t *testing.T) {
 			t.Fatalf("paths = %v, want %v", paths, want)
 		}
 	}
-	renamed, _, err := parseNameStatus([]byte("R100\x00old\x00new\x00"), 10)
+	if changes[3].NewMode != ModeSymlink {
+		t.Fatalf("symlink mode = %s", changes[3].NewMode)
+	}
+	renamed, _, err := parseRawDiff([]byte(":100644 100644 1111111 2222222 R100\x00old\x00new\x00"), 10)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(renamed) != 2 || renamed[0] != "old" || renamed[1] != "new" {
-		t.Fatalf("rename paths = %v", renamed)
+	if len(renamed) != 1 || renamed[0].OldPath != "old" || renamed[0].Path != "new" {
+		t.Fatalf("rename = %+v", renamed)
 	}
-	kept, truncated, err := parseNameStatus([]byte("M\x00a\x00M\x00b\x00"), 1)
+	kept, truncated, err := parseRawDiff([]byte(":100644 100644 1111111 2222222 M\x00a\x00:100644 100644 1111111 2222222 M\x00b\x00"), 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !truncated || len(kept) != 1 || kept[0] != "a" {
-		t.Fatalf("truncated = %v, paths = %v", truncated, kept)
+	if !truncated || len(kept) != 1 || kept[0].Path != "a" {
+		t.Fatalf("truncated = %v, changes = %+v", truncated, kept)
 	}
-	if _, _, err := parseNameStatus([]byte("R100\x00only-old\x00"), 10); err == nil {
+	if _, _, err := parseRawDiff([]byte(":100644 100644 1111111 2222222 R100\x00only-old\x00"), 10); err == nil {
 		t.Fatal("rename with one path was accepted")
 	}
 }
