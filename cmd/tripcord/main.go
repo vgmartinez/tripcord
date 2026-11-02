@@ -51,10 +51,15 @@ Usage:
   tripcord help
   tripcord version
   tripcord scan [PATH] [flags]
+  tripcord preopen <git-url|path> [flags]
 
 scan performs static configuration scanning only. --scope selects repository
 (the default), user, managed, or all. The default does not read the home
 directory or system settings.
+preopen clones a repository into a temporary directory without running its
+hooks, filters, LFS, or submodules, scans it like scan, and removes it. It
+takes the scan flags except --since and --scope other than repo, and ignores
+the repository's own .tripcord policy.
 --secrets (v1) and --all (v1) are not available.
 `
 
@@ -73,6 +78,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return writeString(stdout, version+"\n")
 	case "scan":
 		return runScan(args[1:], stdout, stderr)
+	case "preopen":
+		return runPreopen(args[1:], stdout, stderr)
 	default:
 		msg := fmt.Sprintf("tripcord: unknown command %q\n\n%s", args[0], usage)
 		writeString(stderr, msg)
@@ -325,13 +332,28 @@ var (
 	errHelpWrite = errors.New("write scan help")
 )
 
+// flagCommand is a command that takes the scan flags: scan, or preopen.
+type flagCommand struct {
+	name    string
+	operand string
+}
+
+var (
+	scanCommand    = flagCommand{name: "scan", operand: "[PATH]"}
+	preopenCommand = flagCommand{name: "preopen", operand: "<git-url|path>"}
+)
+
 func parseScanFlags(args []string, stdout io.Writer) (scanOptions, error) {
+	return parseCommandFlags(scanCommand, args, stdout)
+}
+
+func parseCommandFlags(cmd flagCommand, args []string, stdout io.Writer) (scanOptions, error) {
 	normalized, err := normalizeScanArgs(args)
 	if err != nil {
 		return scanOptions{}, err
 	}
 	var opts scanOptions
-	flags := flag.NewFlagSet("scan", flag.ContinueOnError)
+	flags := flag.NewFlagSet(cmd.name, flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	flags.Usage = func() {}
 	flags.BoolVar(&opts.config, "config", false, "scan executable configuration (default)")
@@ -348,7 +370,7 @@ func parseScanFlags(args []string, stdout io.Writer) (scanOptions, error) {
 	if err := flags.Parse(normalized); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			var buf bytes.Buffer
-			if _, werr := fmt.Fprint(&buf, "tripcord scan [PATH]\n\n"); werr != nil {
+			if _, werr := fmt.Fprintf(&buf, "tripcord %s %s\n\n", cmd.name, cmd.operand); werr != nil {
 				return scanOptions{}, fmt.Errorf("%w: %w", errHelpWrite, werr)
 			}
 			flags.SetOutput(&buf)
@@ -371,12 +393,14 @@ func parseScanFlags(args []string, stdout io.Writer) (scanOptions, error) {
 			return scanOptions{}, err
 		}
 	}
-	if flags.NArg() > 1 {
+	switch {
+	case cmd == preopenCommand && flags.NArg() != 1:
+		return opts, errors.New("preopen takes exactly one git URL or local path")
+	case flags.NArg() > 1:
 		return opts, errors.New("scan accepts at most one PATH")
-	}
-	if flags.NArg() == 1 {
+	case flags.NArg() == 1:
 		opts.path = flags.Arg(0)
-	} else {
+	default:
 		opts.path = "."
 	}
 	if (opts.config && opts.secrets) || (opts.config && opts.all) || (opts.secrets && opts.all) {
