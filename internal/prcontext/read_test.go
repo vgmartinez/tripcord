@@ -248,7 +248,7 @@ func TestLargeNotesRSS(t *testing.T) {
 	)
 	note := []byte("---\n" + `{"sessions":{"s":{"agent_id":{"tool":"cursor"}}},"padding":"` + strings.Repeat("x", (2<<20)-128) + `"}` + "\n")
 	for range n {
-		tools, err := toolsFromNoteReader(bytes.NewReader(note))
+		tools, _, err := toolsFromNoteReader(bytes.NewReader(note))
 		if err != nil {
 			t.Fatal(err)
 		}

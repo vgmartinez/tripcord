@@ -14,6 +14,11 @@ const (
 	TypeGitAI        = "git-ai"
 )
 
+const (
+	maxGitAISignals = 1000
+	maxAgents       = 32
+)
+
 // Signal is one piece of evidence that an agent was involved.
 type Signal struct {
 	// Type is bot-login, co-authored-by, branch-prefix, or git-ai.
@@ -101,6 +106,11 @@ func Detect(in Input) Result {
 			}
 		}
 		for _, tool := range tools {
+			if b.gitAISignals == maxGitAISignals {
+				b.gitAISignalsLimited = true
+				break
+			}
+			b.gitAISignals++
 			b.add(TypeGitAI, canonicalAgent(tool), tool, from+" refs/notes/ai")
 		}
 	}
@@ -112,6 +122,12 @@ func Detect(in Input) Result {
 	if b.signals == nil {
 		b.signals = []Signal{}
 	}
+	if b.gitAISignalsLimited {
+		warnings = append(warnings, fmt.Sprintf("git-ai signals kept at most %d; later signals were skipped", maxGitAISignals))
+	}
+	if b.agentsLimited {
+		warnings = append(warnings, fmt.Sprintf("agent output kept at most %d distinct agents; later agents were skipped", maxAgents))
+	}
 	return Result{
 		Agent:    len(b.signals) > 0,
 		Agents:   agents,
@@ -121,9 +137,12 @@ func Detect(in Input) Result {
 }
 
 type builder struct {
-	signals []Signal
-	seen    map[string]bool
-	agents  map[string]bool
+	signals             []Signal
+	seen                map[string]bool
+	agents              map[string]bool
+	gitAISignals        int
+	gitAISignalsLimited bool
+	agentsLimited       bool
 }
 
 func (b *builder) add(kind, agent, value, source string) {
@@ -140,8 +159,12 @@ func (b *builder) add(kind, agent, value, source string) {
 	if b.seen[key] {
 		return
 	}
+	if !b.agents[agent] && len(b.agents) == maxAgents {
+		b.agentsLimited = true
+	} else {
+		b.agents[agent] = true
+	}
 	b.seen[key] = true
-	b.agents[agent] = true
 	b.signals = append(b.signals, Signal{Type: kind, Agent: agent, Value: value, Source: source})
 }
 

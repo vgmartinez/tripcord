@@ -100,15 +100,18 @@ func ReadCommits(ctx context.Context, repo, base, head string) ([]Commit, []stri
 	if limited {
 		warnings = append(warnings, fmt.Sprintf("commit records kept at most %d bytes; later messages kept only their trailer tail or were dropped", maxRecordBytes))
 	}
-	var oversizedNotes, malformedNotes int
+	var oversizedNotes, malformedNotes, limitedToolsNotes int
 	for i := range commits {
-		tools, status, err := readNote(ctx, repo, commits[i].SHA)
+		tools, limited, status, err := readNote(ctx, repo, commits[i].SHA)
 		if err != nil {
 			return nil, nil, err
 		}
 		switch status {
 		case noteOK:
 			commits[i].NoteTools = tools
+			if limited {
+				limitedToolsNotes++
+			}
 		case noteAbsent:
 		case noteTooBig:
 			oversizedNotes++
@@ -123,6 +126,9 @@ func ReadCommits(ctx context.Context, repo, base, head string) ([]Commit, []stri
 	}
 	if malformedNotes > 0 {
 		warnings = append(warnings, fmt.Sprintf("%d authorship notes were not git-ai authorship logs and were skipped", malformedNotes))
+	}
+	if limitedToolsNotes > 0 {
+		warnings = append(warnings, fmt.Sprintf("%d authorship notes kept at most %d distinct tools each; later tools were skipped", limitedToolsNotes, maxToolsPerNote))
 	}
 	return commits, warnings, nil
 }
@@ -732,46 +738,46 @@ func hexSHA(s string) bool {
 	return true
 }
 
-func readNote(ctx context.Context, repo, sha string) ([]string, noteStatus, error) {
+func readNote(ctx context.Context, repo, sha string) ([]string, bool, noteStatus, error) {
 	cmd, err := gitrun.Command(ctx, repo, "--no-pager", "--no-optional-locks", "notes", "--ref=ai", "show", "--end-of-options", sha)
 	if err != nil {
-		return nil, 0, err
+		return nil, false, 0, err
 	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return nil, 0, err
+		return nil, false, 0, err
 	}
 	var stderr capped
 	stderr.max = 4096
 	cmd.Stderr = &stderr
 	if err := cmd.Start(); err != nil {
-		return nil, 0, fmt.Errorf("%w: %w", gitrun.ErrNotInstalled, err)
+		return nil, false, 0, fmt.Errorf("%w: %w", gitrun.ErrNotInstalled, err)
 	}
 	limited := &io.LimitedReader{R: stdout, N: maxNoteBytes + 1}
-	tools, parseErr := toolsFromNoteReader(limited)
+	tools, toolLimited, parseErr := toolsFromNoteReader(limited)
 	_, copyErr := io.Copy(io.Discard, limited)
 	_, _ = io.Copy(io.Discard, stdout)
 	waitErr := cmd.Wait()
 	if copyErr != nil {
-		return nil, 0, copyErr
+		return nil, false, 0, copyErr
 	}
 	if errors.Is(waitErr, context.Canceled) || errors.Is(waitErr, context.DeadlineExceeded) {
-		return nil, 0, waitErr
+		return nil, false, 0, waitErr
 	}
 	if limited.N == 0 {
-		return nil, noteTooBig, nil
+		return nil, false, noteTooBig, nil
 	}
 	if waitErr != nil {
 		msg := strings.ToLower(stderr.String())
 		if strings.Contains(msg, "no note found") {
-			return nil, noteAbsent, nil
+			return nil, false, noteAbsent, nil
 		}
-		return nil, 0, &gitrun.ExitError{Args: []string{"notes", "show"}, Stderr: strings.TrimSpace(stderr.String()), Err: waitErr}
+		return nil, false, 0, &gitrun.ExitError{Args: []string{"notes", "show"}, Stderr: strings.TrimSpace(stderr.String()), Err: waitErr}
 	}
 	if parseErr != nil {
-		return nil, noteNotAuthorship, nil
+		return nil, false, noteNotAuthorship, nil
 	}
-	return tools, noteOK, nil
+	return tools, toolLimited, noteOK, nil
 }
 
 // capped collects at most max bytes of a git diagnostic.

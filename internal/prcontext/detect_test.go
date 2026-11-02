@@ -1,6 +1,7 @@
 package prcontext
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -171,6 +172,47 @@ func TestCanonicalGitAI(t *testing.T) {
 				t.Fatalf("signal = %+v", got.Signals)
 			}
 		})
+	}
+}
+
+func TestDetectCapsManyGitAITools(t *testing.T) {
+	var commits []Commit
+	for i := range 100 {
+		var note strings.Builder
+		note.WriteString(`{"sessions":{`)
+		for j := range maxToolsPerNote + 4 {
+			if j > 0 {
+				note.WriteByte(',')
+			}
+			fmt.Fprintf(&note, `%q:{"agent_id":{"tool":%q}}`, fmt.Sprintf("s-%d-%d", i, j), fmt.Sprintf("agent%d-%d", i, j))
+		}
+		note.WriteString(`}}`)
+		tools, limited, err := toolsFromNoteReader(strings.NewReader(note.String()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !limited || len(tools) != maxToolsPerNote {
+			t.Fatalf("note %d: limited %v tools %d", i, limited, len(tools))
+		}
+		commits = append(commits, Commit{
+			SHA:       fmt.Sprintf("%040x", i+1),
+			NoteTools: tools,
+		})
+	}
+	got := Detect(Input{Commits: commits})
+	if len(got.Signals) != maxGitAISignals {
+		t.Fatalf("signals = %d, want %d", len(got.Signals), maxGitAISignals)
+	}
+	if len(got.Agents) != maxAgents {
+		t.Fatalf("agents = %d, want %d", len(got.Agents), maxAgents)
+	}
+	if output := FormatOutput(got); len(output) > 4096 {
+		t.Fatalf("GITHUB_OUTPUT fragment is %d bytes", len(output))
+	}
+	if strings.Join(got.Warnings, "\n") !=
+		"git-ai signals kept at most 1000; later signals were skipped\n"+
+			"agent output kept at most 32 distinct agents; later agents were skipped" {
+		t.Fatalf("warnings = %v", got.Warnings)
 	}
 }
 

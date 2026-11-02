@@ -10,21 +10,26 @@ import (
 	"strings"
 )
 
+// maxToolsPerNote bounds the attacker-controlled tool ids retained from one
+// git-ai note.
+const maxToolsPerNote = 16
+
 // toolsFromNote returns the git-ai agent tool names recorded in a
 // refs/notes/ai authorship log (spec authorship/3.0.0). Sessions and
 // legacy prompt records both count. A log that names only humans returns
 // no tools and no error. An unreadable note returns an error so the
 // caller can warn and continue.
 func toolsFromNote(note string) ([]string, error) {
-	return toolsFromNoteReader(strings.NewReader(note))
+	tools, _, err := toolsFromNoteReader(strings.NewReader(note))
+	return tools, err
 }
 
 // toolsFromNoteReader parses an authorship note without retaining its text.
 // Only the small tool ids that Detection needs escape this function.
-func toolsFromNoteReader(r io.Reader) ([]string, error) {
+func toolsFromNoteReader(r io.Reader) ([]string, bool, error) {
 	meta, err := noteMetadataReader(bufio.NewReader(r))
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	var doc struct {
 		Sessions map[string]noteRecord `json:"sessions"`
@@ -32,15 +37,16 @@ func toolsFromNoteReader(r io.Reader) ([]string, error) {
 	}
 	dec := json.NewDecoder(meta)
 	if err := dec.Decode(&doc); err != nil {
-		return nil, errNotAuthorshipLog
+		return nil, false, errNotAuthorshipLog
 	}
 	// Trailing non-whitespace means this was not the metadata object.
 	var extra any
 	if err := dec.Decode(&extra); err != nil && !errors.Is(err, io.EOF) {
-		return nil, errNotAuthorshipLog
+		return nil, false, errNotAuthorshipLog
 	}
 	seen := map[string]bool{}
 	var tools []string
+	limited := false
 	add := func(records map[string]noteRecord) {
 		keys := make([]string, 0, len(records))
 		for key := range records {
@@ -53,6 +59,10 @@ func toolsFromNoteReader(r io.Reader) ([]string, error) {
 				continue
 			}
 			seen[strings.ToLower(tool)] = true
+			if len(tools) == maxToolsPerNote {
+				limited = true
+				continue
+			}
 			tools = append(tools, tool)
 		}
 	}
@@ -61,7 +71,7 @@ func toolsFromNoteReader(r io.Reader) ([]string, error) {
 	slices.SortFunc(tools, func(a, b string) int {
 		return strings.Compare(strings.ToLower(a), strings.ToLower(b))
 	})
-	return tools, nil
+	return tools, limited, nil
 }
 
 type noteRecord struct {
