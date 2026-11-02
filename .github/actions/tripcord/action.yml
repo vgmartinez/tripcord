@@ -1,0 +1,93 @@
+name: Tripcord scan
+description: Scan coding-agent configuration and publish GitHub-native findings.
+inputs:
+  command:
+    description: Installed Tripcord command to run.
+    required: false
+    default: tripcord
+  path:
+    description: Repository path to scan.
+    required: false
+    default: .
+  fail-on:
+    description: Inclusive severity that fails the action.
+    required: false
+    default: high
+  upload-sarif:
+    description: Upload the SARIF report to GitHub code scanning.
+    required: false
+    default: "true"
+  comment:
+    description: Post the Markdown report to a pull request.
+    required: false
+    default: "false"
+  github-token:
+    description: Token used for SARIF upload and an optional pull-request comment.
+    required: false
+    default: ${{ github.token }}
+outputs:
+  scan-exit-code:
+    description: Exit code from the GitHub-annotation scan.
+    value: ${{ steps.scan.outputs.exit-code }}
+  sarif:
+    description: Path to the SARIF report.
+    value: ${{ steps.paths.outputs.sarif }}
+  markdown:
+    description: Path to the Markdown report.
+    value: ${{ steps.paths.outputs.markdown }}
+runs:
+  using: composite
+  steps:
+    - id: paths
+      shell: bash
+      run: |
+        echo "sarif=${RUNNER_TEMP}/tripcord.sarif" >> "$GITHUB_OUTPUT"
+        echo "markdown=${RUNNER_TEMP}/tripcord.md" >> "$GITHUB_OUTPUT"
+    - id: scan
+      shell: bash
+      env:
+        TRIPCORD: ${{ inputs.command }}
+        TRIPCORD_PATH: ${{ inputs.path }}
+        TRIPCORD_FAIL_ON: ${{ inputs.fail-on }}
+        TRIPCORD_SARIF: ${{ steps.paths.outputs.sarif }}
+        TRIPCORD_MARKDOWN: ${{ steps.paths.outputs.markdown }}
+      run: |
+        set +e
+        "$TRIPCORD" scan "$TRIPCORD_PATH" --format gha --fail-on "$TRIPCORD_FAIL_ON"
+        status=$?
+        "$TRIPCORD" scan "$TRIPCORD_PATH" --format sarif --output "$TRIPCORD_SARIF" --fail-on "$TRIPCORD_FAIL_ON"
+        sarif_status=$?
+        "$TRIPCORD" scan "$TRIPCORD_PATH" --format md --output "$TRIPCORD_MARKDOWN" --fail-on "$TRIPCORD_FAIL_ON"
+        markdown_status=$?
+        if [ "$sarif_status" -gt "$status" ]; then status=$sarif_status; fi
+        if [ "$markdown_status" -gt "$status" ]; then status=$markdown_status; fi
+        echo "exit-code=$status" >> "$GITHUB_OUTPUT"
+        exit "$status"
+    - name: Upload SARIF
+      if: ${{ always() && inputs.upload-sarif == 'true' && hashFiles(steps.paths.outputs.sarif) != '' }}
+      uses: github/codeql-action/upload-sarif@4bfa242aa49c5f7c6770b98670d354a7dfac05f8
+      with:
+        sarif_file: ${{ steps.paths.outputs.sarif }}
+    - name: Comment on pull request
+      if: ${{ always() && inputs.comment == 'true' && github.event.pull_request.number && hashFiles(steps.paths.outputs.markdown) != '' }}
+      uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
+      env:
+        TRIPCORD_MARKDOWN: ${{ steps.paths.outputs.markdown }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const fs = require("fs");
+          const body = fs.readFileSync(process.env.TRIPCORD_MARKDOWN, "utf8");
+          const marker = "<!-- tripcord-report -->";
+          const report = `${marker}\n${body}`;
+          const { owner, repo } = context.repo;
+          const issue_number = context.payload.pull_request.number;
+          const comments = await github.paginate(github.rest.issues.listComments, {
+            owner, repo, issue_number, per_page: 100,
+          });
+          const previous = comments.find(comment => comment.user.type === "Bot" && comment.body.startsWith(marker));
+          if (previous) {
+            await github.rest.issues.updateComment({ owner, repo, comment_id: previous.id, body: report });
+          } else {
+            await github.rest.issues.createComment({ owner, repo, issue_number, body: report });
+          }
