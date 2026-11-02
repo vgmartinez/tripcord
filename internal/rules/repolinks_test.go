@@ -3,6 +3,7 @@ package rules
 import (
 	"archive/tar"
 	"bytes"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -143,9 +144,36 @@ func TestSymlinkEscapesLoop(t *testing.T) {
 	}
 }
 
+func TestSymlinkAllowsRepeatedLink(t *testing.T) {
+	root := t.TempDir()
+	links := map[string]string{
+		"entry": "one/one",
+		"one":   ".",
+	}
+	if err := symlinkEscapes(root, links, "entry"); err != nil {
+		t.Fatalf("repeated safe link was rejected: %v", err)
+	}
+}
+
+func TestSymlinkRejectsTooManyHops(t *testing.T) {
+	root := t.TempDir()
+	links := map[string]string{"entry": "link-0"}
+	for i := 0; i < maxSymlinkHops; i++ {
+		name := fmt.Sprintf("link-%d", i)
+		target := "target"
+		if i+1 < maxSymlinkHops {
+			target = fmt.Sprintf("link-%d", i+1)
+		}
+		links[name] = target
+	}
+	if err := symlinkEscapes(root, links, "entry"); err == nil {
+		t.Fatalf("more than %d symlink hops were accepted", maxSymlinkHops)
+	}
+}
+
 func TestSymlinkEscapesAbsoluteTargets(t *testing.T) {
 	root := t.TempDir()
-	for _, target := range []string{"/tmp", `C:\temp`, `C:temp`, `\\server\share`} {
+	for _, target := range []string{"/tmp", `C:\temp`, `C:temp`, `\\server\share`, `child\target`} {
 		t.Run(target, func(t *testing.T) {
 			links := map[string]string{"link": target}
 			if err := symlinkEscapes(root, links, "link"); err == nil {
@@ -170,12 +198,12 @@ func symlinkEscapes(root string, links map[string]string, linkPath string) error
 	if !ok {
 		return os.ErrNotExist
 	}
-	if absoluteTarget(target) {
+	if unsafeTarget(target) {
 		return os.ErrPermission
 	}
 	parts := cleanPathParts(filepath.Dir(link))
 	pending := splitPath(target)
-	seen := map[string]bool{}
+	hops := 1
 	for len(pending) > 0 {
 		part := pending[0]
 		pending = pending[1:]
@@ -195,14 +223,11 @@ func symlinkEscapes(root string, links map[string]string, linkPath string) error
 		if !ok {
 			continue
 		}
-		if absoluteTarget(target) {
+		if unsafeTarget(target) {
 			return os.ErrPermission
 		}
-		if seen[path] {
-			return os.ErrInvalid
-		}
-		seen[path] = true
-		if len(seen) > maxSymlinkHops {
+		hops++
+		if hops > maxSymlinkHops {
 			return os.ErrInvalid
 		}
 		parts = parts[:len(parts)-1]
@@ -251,10 +276,11 @@ func cleanPathParts(path string) []string {
 	return parts
 }
 
-func absoluteTarget(target string) bool {
+func unsafeTarget(target string) bool {
 	return filepath.IsAbs(target) ||
 		strings.HasPrefix(target, "/") ||
 		strings.HasPrefix(target, `\\`) ||
+		strings.Contains(target, `\`) ||
 		driveLetterTarget.MatchString(target)
 }
 

@@ -267,7 +267,7 @@ runs:
             core.warning(`Tripcord comment skipped: ${error.message}`);
           }
     - id: apply-exit-code
-      name: Apply scan and policy exit codes
+      name: Apply scan exit code
       if: steps.scan.outputs.exit-code != ''
       shell: bash
       env:
@@ -281,6 +281,10 @@ runs:
         case "$TRIPCORD_PR_CONTEXT_STATUS" in
           0)
             exit 0
+            ;;
+          "")
+            echo "::error::tripcord pr-context did not report an exit code"
+            exit 1
             ;;
           1)
             echo "::error::tripcord pr-context denied the pull request under TC-CFG-014"

@@ -337,3 +337,42 @@ jobs:
           path: ${{ runner.temp }}/tripcord-ci
           upload-sarif: "false"
           comment: "false"
+
+      - name: Write TC-CFG-014 deny stub
+        shell: bash
+        run: |
+          cat > "${RUNNER_TEMP}/tripcord-deny" <<'EOF'
+          #!/usr/bin/env bash
+          case "$1" in
+            scan)
+              exit 0
+              ;;
+            pr-context)
+              echo "tc_cfg_014=match" >> "$GITHUB_OUTPUT"
+              exit 1
+              ;;
+            *)
+              exit 2
+              ;;
+          esac
+          EOF
+          chmod +x "${RUNNER_TEMP}/tripcord-deny"
+
+      - id: tripcord-deny
+        name: TC-CFG-014 denial fails the action
+        continue-on-error: true
+        uses: ./.github/actions/tripcord # zizmor: ignore[self-repository] test this checkout's deny handling
+        with:
+          binary: ${{ runner.temp }}/tripcord-deny
+          path: ${{ runner.temp }}/tripcord-ci
+          upload-sarif: "false"
+          comment: "false"
+
+      - name: Assert TC-CFG-014 denial
+        shell: bash
+        env:
+          TRIPCORD_OUTCOME: ${{ steps.tripcord-deny.outcome }}
+          TRIPCORD_TC_CFG_014: ${{ steps.tripcord-deny.outputs.tc-cfg-014 }}
+        run: |
+          test "$TRIPCORD_OUTCOME" = "failure"
+          test "$TRIPCORD_TC_CFG_014" = "match"

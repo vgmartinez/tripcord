@@ -269,21 +269,46 @@ func TestMissingSARIFFileWarnsWithoutBlamingTheToken(t *testing.T) {
 
 func TestTripcordActionPropagatesPolicyExit(t *testing.T) {
 	action := parseAction(t)
-	var apply string
-	for _, step := range action.Runs.Steps {
+	var apply actionStep
+	for i, step := range action.Runs.Steps {
 		if step.ID == "apply-exit-code" {
-			apply = step.Run
+			if i != len(action.Runs.Steps)-1 {
+				t.Fatal("Apply scan exit code is not the final action step")
+			}
+			apply = step
 		}
 	}
-	if apply == "" {
+	if apply.Run == "" {
 		t.Fatal("action has no policy exit-code step")
 	}
+	if apply.Name != "Apply scan exit code" {
+		t.Fatalf("final step name = %q, want Apply scan exit code", apply.Name)
+	}
+	if apply.If != "steps.scan.outputs.exit-code != ''" {
+		t.Fatalf("final step if = %q", apply.If)
+	}
+	if apply.ContinueOnError {
+		t.Fatal("final step must not continue on error")
+	}
+	wantEnv := map[string]string{
+		"TRIPCORD_SCAN_STATUS":       "${{ steps.scan.outputs.exit-code }}",
+		"TRIPCORD_PR_CONTEXT_STATUS": "${{ steps.pr-context.outputs.exit-code }}",
+		"TRIPCORD_REVIEWS_FILE":      "${{ inputs.reviews-file }}",
+	}
+	if len(apply.Env) != len(wantEnv) {
+		t.Fatalf("final step env = %#v, want %#v", apply.Env, wantEnv)
+	}
+	for name, want := range wantEnv {
+		if got := apply.Env[name]; got != want {
+			t.Fatalf("final step env %s = %q, want %q", name, got, want)
+		}
+	}
 
-	run := func(t *testing.T, reviewsFile, prContextStatus string) (int, string) {
+	run := func(t *testing.T, scanStatus, reviewsFile, prContextStatus string) (int, string) {
 		t.Helper()
-		cmd := exec.Command("bash", "-c", apply)
+		cmd := exec.Command("bash", "-c", apply.Run)
 		cmd.Env = append(os.Environ(),
-			"TRIPCORD_SCAN_STATUS=0",
+			"TRIPCORD_SCAN_STATUS="+scanStatus,
 			"TRIPCORD_PR_CONTEXT_STATUS="+prContextStatus,
 			"TRIPCORD_REVIEWS_FILE="+reviewsFile,
 		)
@@ -296,23 +321,38 @@ func TestTripcordActionPropagatesPolicyExit(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Run("deny with reviews file fails", func(t *testing.T) {
-		if code, out := run(t, reviewsFile, "1"); code != 1 {
+		if code, out := run(t, "0", reviewsFile, "1"); code != 1 {
 			t.Fatalf("policy deny = %d, want 1\n%s", code, out)
 		}
 	})
+	t.Run("deny without reviews file fails", func(t *testing.T) {
+		if code, out := run(t, "0", "", "1"); code != 1 {
+			t.Fatalf("policy deny without reviews = %d, want 1\n%s", code, out)
+		}
+	})
 	t.Run("incomplete reviews file fails", func(t *testing.T) {
-		if code, out := run(t, reviewsFile, "3"); code != 3 {
+		if code, out := run(t, "0", reviewsFile, "3"); code != 3 {
 			t.Fatalf("incomplete review file = %d, want 3\n%s", code, out)
 		}
 	})
 	t.Run("review read error fails", func(t *testing.T) {
-		if code, out := run(t, reviewsFile, "4"); code != 4 {
+		if code, out := run(t, "0", reviewsFile, "4"); code != 4 {
 			t.Fatalf("review read error = %d, want 4\n%s", code, out)
 		}
 	})
 	t.Run("incomplete without reviews file warns", func(t *testing.T) {
-		if code, out := run(t, "", "3"); code != 0 {
+		if code, out := run(t, "0", "", "3"); code != 0 {
 			t.Fatalf("missing review file = %d, want 0\n%s", code, out)
+		}
+	})
+	t.Run("missing policy status fails", func(t *testing.T) {
+		if code, out := run(t, "0", "", ""); code == 0 {
+			t.Fatalf("missing policy status = %d, want non-zero\n%s", code, out)
+		}
+	})
+	t.Run("scan exit code wins", func(t *testing.T) {
+		if code, out := run(t, "2", reviewsFile, "1"); code != 2 {
+			t.Fatalf("scan exit = %d, want 2\n%s", code, out)
 		}
 	})
 }
@@ -330,11 +370,14 @@ type actionFile struct {
 }
 
 type actionStep struct {
-	ID   string            `yaml:"id"`
-	If   string            `yaml:"if"`
-	Uses string            `yaml:"uses"`
-	Run  string            `yaml:"run"`
-	With map[string]string `yaml:"with"`
+	ID              string            `yaml:"id"`
+	Name            string            `yaml:"name"`
+	If              string            `yaml:"if"`
+	Uses            string            `yaml:"uses"`
+	Run             string            `yaml:"run"`
+	With            map[string]string `yaml:"with"`
+	Env             map[string]string `yaml:"env"`
+	ContinueOnError bool              `yaml:"continue-on-error"`
 }
 
 func parseAction(t *testing.T) actionFile {
