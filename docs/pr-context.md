@@ -16,11 +16,11 @@ Four signals are checked. A match on any of them sets `agent` to true.
 | Branch prefix | `branch-prefix` | The head branch name starts with a known prefix, including the slash. The comparison is case-sensitive. |
 | git-ai note | `git-ai` | An authorship log on `refs/notes/ai` ([git-ai](https://github.com/git-ai-project/git-ai)) whose session or legacy prompt record names an agent tool. |
 
-The identity tables are **unverified**. They are one list each in
+The identity tables are **unverified** ([#34](https://github.com/vgmartinez/tripcord/issues/34)). They are one list each in
 `internal/prcontext/identities.go`, and each list carries:
 
 ```
-// TODO(#0): Verify the unverified agent identity tables (botLogins, trailerEmails, branchPrefixes) and replace 0 with the tracking issue.
+// TODO(#34): Verify the unverified agent identity tables (botLogins, trailerEmails, branchPrefixes) and replace 0 with the tracking issue.
 ```
 
 A value that only resembles an entry does not match. `claude-bot` is not

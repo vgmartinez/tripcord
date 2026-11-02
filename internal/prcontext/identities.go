@@ -21,7 +21,7 @@ type agentID struct {
 // suffix. A display name such as "Claude" is not a login and is not in
 // this table.
 //
-// TODO(#0): Verify the unverified agent identity tables (botLogins, trailerEmails, branchPrefixes) and replace 0 with the tracking issue.
+// TODO(#34): Verify the unverified agent identity tables (botLogins, trailerEmails, branchPrefixes) and replace 0 with the tracking issue.
 var botLogins = []agentID{
 	{match: "copilot-swe-agent[bot]", agent: "copilot"},
 	{match: "copilot[bot]", agent: "copilot"},
@@ -38,7 +38,7 @@ var botLogins = []agentID{
 // is a human, and "Claude Opus <noreply@anthropic.com>" matches because
 // of the address.
 //
-// TODO(#0): Verify the unverified agent identity tables (botLogins, trailerEmails, branchPrefixes) and replace 0 with the tracking issue.
+// TODO(#34): Verify the unverified agent identity tables (botLogins, trailerEmails, branchPrefixes) and replace 0 with the tracking issue.
 var trailerEmails = []agentID{
 	{match: "noreply@anthropic.com", agent: "claude"},
 	{match: "cursoragent@cursor.com", agent: "cursor"},
@@ -52,7 +52,7 @@ var trailerEmails = []agentID{
 // claude/. A name that merely contains the word, such as
 // feature/claude-fix or notclaude/foo, does not match.
 //
-// TODO(#0): Verify the unverified agent identity tables (botLogins, trailerEmails, branchPrefixes) and replace 0 with the tracking issue.
+// TODO(#34): Verify the unverified agent identity tables (botLogins, trailerEmails, branchPrefixes) and replace 0 with the tracking issue.
 var branchPrefixes = []agentID{
 	{match: "claude/", agent: "claude"},
 	{match: "cursor/", agent: "cursor"},
