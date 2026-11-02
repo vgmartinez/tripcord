@@ -123,12 +123,23 @@ func Fetch(ctx context.Context, target string) (ws *Workspace, err error) {
 		return nil, err
 	}
 	if err := materialize(ctx, git, gitDir, created.tree); err != nil {
-		return nil, wrapTreeError(target, err)
+		// An interrupt kills cat-file, and the write then fails with a
+		// broken pipe. Report the interrupt instead of that write error.
+		return nil, preferCancel(ctx, wrapTreeError(target, err))
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	return created, nil
+}
+
+// preferCancel reports ctx's error when the context is already done.
+// The tree error is returned only when the fetch was not interrupted.
+func preferCancel(ctx context.Context, err error) error {
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return ctxErr
+	}
+	return err
 }
 
 func wrapGitError(target string, err error) error {
@@ -390,7 +401,7 @@ func materialize(ctx context.Context, git, gitDir, tree string) error {
 	_ = stdin.Close()
 	waitErr := cat.Wait()
 	if writeErr != nil {
-		return writeErr
+		return preferCancel(ctx, writeErr)
 	}
 	if waitErr != nil {
 		return &gitExitError{op: "cat-file", detail: sanitize(stderr.String()), err: waitErr}

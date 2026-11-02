@@ -27,7 +27,9 @@ uncommitted changes are not scanned.
    Submodules become empty directories, as in a checkout that did not
    initialize them. Symlinks are recreated as symlinks and are not followed.
 3. The tree is scanned with the scan pipeline, then the temporary directory
-   is removed, also on error and on `SIGINT` or `SIGTERM`.
+   is removed, also on error and on `SIGINT`, `SIGTERM`, or `SIGHUP`.
+   An interrupt is reported as an interruption. A write error from stopping
+   `cat-file`, such as a broken pipe, is not.
 
 Every Git invocation runs with:
 
@@ -43,6 +45,11 @@ Every Git invocation runs with:
   `https`, `ssh`, and `file` allowed, `submodule.recurse=false`,
   `fetch.recurseSubmodules=false`, the `filter.lfs.*` drivers cleared, and
   `transfer.fsckObjects=true`.
+
+Credential helpers are disabled (`credential.helper` is empty and Git is
+not given a prompt), so a private `https` repository cannot authenticate.
+An `ssh` remote works when an agent already holds the key; Git does not
+ask for a passphrase.
 
 Targets using any other transport (`ext::`, `git://`, `http://`, `fd::`, or
 any other `transport::address` form) are refused before Git runs, and again

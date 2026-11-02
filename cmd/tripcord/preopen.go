@@ -13,6 +13,10 @@ import (
 	"github.com/vgmartinez/tripcord/internal/preopen"
 )
 
+// preopenStopSignals are the signals that stop a fetch and remove the
+// temporary clone. SIGHUP is included so a closed terminal cleans up too.
+var preopenStopSignals = []os.Signal{os.Interrupt, syscall.SIGTERM, syscall.SIGHUP}
+
 // runPreopen clones a repository into a temporary directory without
 // running anything it contains, scans the clone like scan does, and
 // removes the clone, also when interrupted.
@@ -36,7 +40,7 @@ func runPreopen(args []string, stdout, stderr io.Writer) int {
 		return target.configError(stderr, errors.New("--scope must be repo: preopen scans the fetched repository only"))
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(context.Background(), preopenStopSignals...)
 	defer stop()
 	ws, err := preopen.Fetch(ctx, opts.path)
 	var targetErr *preopen.TargetError

@@ -230,6 +230,20 @@ func TestFetchLongNameIsTargetError(t *testing.T) {
 	}
 }
 
+func TestPreferCancelHidesBrokenPipe(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := preferCancel(ctx, errors.New("write: broken pipe"))
+	if !errors.Is(err, context.Canceled) || strings.Contains(err.Error(), "broken pipe") {
+		t.Fatalf("preferCancel = %v, want context.Canceled", err)
+	}
+	want := errors.New("tree")
+	if got := preferCancel(context.Background(), want); got != want {
+		t.Fatalf("preferCancel = %v, want the tree error", got)
+	}
+}
+
 func TestFetchEmptyRepository(t *testing.T) {
 	git := preopentest.RequireTools(t)
 	tmp := privateTemp(t)

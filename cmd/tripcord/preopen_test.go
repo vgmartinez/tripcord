@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/vgmartinez/tripcord/internal/exitcode"
@@ -198,6 +199,19 @@ func preopenGitOutput(t *testing.T, git, dir, stdin string, args ...string) stri
 		t.Fatalf("git %v: %v\n%s", args, err, detail)
 	}
 	return strings.TrimSpace(string(out))
+}
+
+func TestPreopenStopsOnHangup(t *testing.T) {
+	t.Parallel()
+	var saw bool
+	for _, sig := range preopenStopSignals {
+		if sig == syscall.SIGHUP {
+			saw = true
+		}
+	}
+	if !saw || len(preopenStopSignals) != 3 {
+		t.Fatalf("preopenStopSignals = %v, want interrupt, SIGTERM, and SIGHUP", preopenStopSignals)
+	}
 }
 
 func TestPreopenHelp(t *testing.T) {
