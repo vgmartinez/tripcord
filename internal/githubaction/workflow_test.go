@@ -16,8 +16,9 @@ import (
 const (
 	workflowCheckout  = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
 	workflowScript    = "actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3"
-	workflowAction    = "vgmartinez/tripcord/.github/actions/tripcord@141db48dc10a3df719b20cf2f357e184d629c046"
-	workflowActionPin = workflowAction + " # main@141db48"
+	workflowActionSHA = "8b33b1b5a69c686b611b43a475da9658fe44614d"
+	workflowAction    = "vgmartinez/tripcord/.github/actions/tripcord@" + workflowActionSHA
+	workflowActionPin = workflowAction + " # main@8b33b1b"
 )
 
 func TestTripcordWorkflowContract(t *testing.T) {
@@ -114,7 +115,7 @@ func checkOneJobWorkflow(t *testing.T, wf workflowFile, wantPerms map[string]str
 		t.Fatal("workflow inherits secrets")
 	}
 	if !strings.Contains(text, workflowActionPin) {
-		t.Fatal("action pin is missing # main@141db48")
+		t.Fatalf("action pin is missing %q", workflowActionPin)
 	}
 	for _, version := range []string{"# v7.0.1", "# v9.0.0"} {
 		if !strings.Contains(text, version) {
@@ -290,7 +291,7 @@ func TestCICallerUsesPinnedRemoteAction(t *testing.T) {
 		}
 	}
 	if !strings.Contains(text, workflowActionPin) {
-		t.Fatal("caller is not pinned to main@141db48")
+		t.Fatalf("caller is not pinned to %q", workflowActionPin)
 	}
 	var root yaml.Node
 	if err := yaml.Unmarshal(data, &root); err != nil {

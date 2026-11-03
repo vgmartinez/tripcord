@@ -6,8 +6,11 @@ import (
 
 // WorkflowPin is the commit of this repository whose
 // .github/workflows/tripcord-pr.yml the generated workflow calls. It
-// must be a full SHA on main; a test checks it names that file.
-const WorkflowPin = "6e1d5db7a7d373b7fb4573f554af99471e1d7066"
+// must be a full SHA on main whose tree contains the embed check
+// (internal/embedded and rules/TC-CFG-016.yaml). TestPinsHaveEmbedCheck
+// checks that, and that every other pin of this repository's action or
+// reusable workflow does the same.
+const WorkflowPin = "8b33b1b5a69c686b611b43a475da9658fe44614d"
 
 // checkoutPin is actions/checkout v7.0.1, the version this repository's
 // own workflows pin.

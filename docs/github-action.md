@@ -59,8 +59,9 @@ policy that weakens the base's. The base commit must be in the checkout
 exits 3, which fails the job. A `path` that is not inside a Git
 repository has no history to compare, so the action logs a notice and
 scans without `--base`. Set `base: ""` to scan the head alone.
-The reusable workflows leave `base` at its default; they reach it once
-their action pin is bumped past this change.
+The reusable workflows in this repository leave `base` at its default
+and call the composite action pinned at `main@8b33b1b`, which defaults
+`base` to the pull request's base commit.
 
 Publishing runs when the scan recorded an exit code. A pull request
 whose head repository differs from its base repository skips both the
@@ -146,7 +147,7 @@ permissions:
   contents: read # checkout the repository being scanned
   pull-requests: read # read pull request reviews
   security-events: write # upload the SARIF report
-uses: vgmartinez/tripcord/.github/workflows/tripcord-pr.yml@<commit>
+uses: vgmartinez/tripcord/.github/workflows/tripcord-pr.yml@8b33b1b5a69c686b611b43a475da9658fe44614d # main@8b33b1b
 ```
 
 ### Comment
@@ -179,5 +180,5 @@ permissions:
   contents: read # checkout the repository being scanned
   pull-requests: write # create or update the Markdown comment
   security-events: write # upload the SARIF report
-uses: vgmartinez/tripcord/.github/workflows/tripcord-pr-comment.yml@<commit>
+uses: vgmartinez/tripcord/.github/workflows/tripcord-pr-comment.yml@8b33b1b5a69c686b611b43a475da9658fe44614d # main@8b33b1b
 ```
