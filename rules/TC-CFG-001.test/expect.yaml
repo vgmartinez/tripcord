@@ -1,4 +1,4 @@
-# Invalid hook arguments must make the scan incomplete rather than let a
-# SessionStart fetch escape detection.
-negativos:
-  copilot-exec-object-arg: error
+# An object argument is opaque, but the scalar curl URL remains executable
+# input and must still match.
+positivos:
+  copilot-exec-object-arg: high

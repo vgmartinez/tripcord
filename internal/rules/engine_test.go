@@ -273,8 +273,11 @@ func TestScanConfigErrorsAreNotMatches(t *testing.T) {
 		item(model.HarnessClaude, ".mcp.json", model.ConfigKindMCPServer, `{"command":"sh"}`),
 	}
 	res := engine.ScanConfig(context.Background(), items)
-	if len(res.Errors) != 2 {
+	if len(res.Errors) != 1 {
 		t.Fatalf("errors %v", res.Errors)
+	}
+	if len(res.Notices) != 1 || res.Notices[0].Pointer != "/command" {
+		t.Fatalf("notices %+v", res.Notices)
 	}
 	if len(res.Matches) == 0 || slices.ContainsFunc(res.Matches, func(m Match) bool { return string(m.Item.Payload) != string(items[2].Payload) }) {
 		t.Fatalf("an error stopped or leaked into the other matches: %v", res.Matches)
@@ -284,7 +287,7 @@ func TestScanConfigErrorsAreNotMatches(t *testing.T) {
 			t.Fatalf("errors[%d] = %+v, reason %q", i, e, e.Reason())
 		}
 	}
-	if res.Errors[0].Rule != "TEST-CFG-002" || res.Errors[1].Rule != "" {
+	if res.Errors[0].Rule != "" {
 		t.Fatalf("errors = %v", res.Errors)
 	}
 }

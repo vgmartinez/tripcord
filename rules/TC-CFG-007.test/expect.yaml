@@ -1,7 +1,11 @@
 # The severities each positive fixture must produce (see
-# internal/rules/fixtures.go, ExpectFile). A negative listed here must
-# fail to evaluate instead of matching.
+# internal/rules/fixtures.go, ExpectFile). An unlisted negative must not
+# match and must evaluate. A negative listed as error must fail to
+# evaluate instead of matching. An object argument is not that error:
+# the command string still matches, which is why skill-hook-object-arg
+# is a positive.
 positivos:
+  skill-hook-object-arg: medium
   claude-plugin-skill: medium
   claude-skill-curl-pipe: high
   claude-skill-encoded-powershell: high
@@ -13,5 +17,3 @@ positivos:
   claude-skill-two-events: [high, medium]
   shared-agents-skill: high
   shared-github-skill: medium
-negativos:
-  skill-hook-object-arg: error

@@ -1,12 +1,22 @@
-# Invalid server arguments must make the scan incomplete rather than let a
-# vulnerable pinned MCP server escape detection.
+# A map element is opaque. A package written only inside that element does not
+# match (claude-npx-object-arg), while a scalar package next to a map still
+# matches (claude-npx-vulnerable-object-arg). A list element is recursively
+# coerced with JavaScript Array#toString semantics, so ["pkg@1"] is a normal
+# package argument and matches (gemini-npx-list-arg). The mixed list
+# ["-y","pkg@1"] becomes "-y,pkg@1"; npx treats it as an unknown option, so
+# gemini-npx-mixed-list-arg is intentionally negative. A command array is argv
+# only for OpenCode (opencode-command-array). On every other harness it is
+# opaque: no match and a warning at /command, not an evaluation error. Null and
+# other unreadable arguments still fail evaluation.
 positivos:
   claude-npx-figma-exact: high
+  claude-npx-vulnerable-object-arg: high
   cursor-npx-mcp-remote: critical
   vscode-uvx-with-prefab: critical
   vscode-uvx-with-prefab-pep503: critical
   codex-uvx-from-git-server: high
   gemini-uvx-at-exact: high
+  gemini-npx-list-arg: high
   opencode-command-array: high
   copilot-pipx-spec: high
   windsurf-npx-range-excludes-fix: high
@@ -22,6 +32,3 @@ positivos:
   claude-kali-gpt-git-commit: high
   cursor-multi-advisory: high
   claude-uvx-range-upper-first: high
-negativos:
-  claude-npx-object-arg: error
-  malformed-fields.json: error

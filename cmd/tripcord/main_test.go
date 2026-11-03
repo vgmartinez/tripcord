@@ -520,7 +520,10 @@ func TestLegacyNoteDoesNotFailScan(t *testing.T) {
 	if !strings.Contains(msg, "not scanned") || strings.Contains(msg, "incomplete") || strings.Contains(msg, legacy) {
 		t.Fatalf("stderr = %q", msg)
 	}
-	if strings.Contains(stdout.String(), "tripcord.diagnostic") || strings.Contains(stdout.String(), "incomplete") {
+	if !strings.Contains(stdout.String(), `"schema":"tripcord.diagnostic/v1"`) ||
+		!strings.Contains(stdout.String(), `"incomplete":false`) ||
+		!strings.Contains(stdout.String(), `"level":"warning"`) ||
+		strings.Contains(stdout.String(), `"incomplete":true`) {
 		t.Fatalf("report = %s", stdout.String())
 	}
 }

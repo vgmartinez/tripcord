@@ -273,6 +273,88 @@ func TestCFG001Commands(t *testing.T) {
 	})
 }
 
+// TestMalformedFieldWarnings states the outcome of every entry in the
+// TC-CFG-003 and TC-CFG-023 malformed-fields fixtures. Those files are
+// unlisted negatives: no match and no evaluation error. The warnings are
+// what makes each opaque value visible.
+//
+// TC-CFG-003:
+//   - a: command ["node", "server.js"] on Claude. Opaque at /command. No match.
+//   - b: command "node" with args ["x.js", {"pipe": "| sh"}]. node x.js is
+//     not an inline interpreter, so no match. Warning at /args/1.
+//   - c: type sse. Out of scope. No match and no warning.
+//
+// TC-CFG-023:
+//   - ok: npx some-other-server@1.0.0. No advisory. No match and no warning.
+//   - bad: the vulnerable spec is only inside an object. No match. Warning at /args/1.
+//   - sse: remote server. Out of scope even though the package is vulnerable.
+//     No match and no warning.
+func TestMalformedFieldWarnings(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		rule     string
+		file     string
+		name     string
+		pointers []string
+	}{
+		{"TC-CFG-003", "../../rules/TC-CFG-003.test/negativos/malformed-fields.json", "a", []string{"/command"}},
+		{"TC-CFG-003", "../../rules/TC-CFG-003.test/negativos/malformed-fields.json", "b", []string{"/args/1"}},
+		{"TC-CFG-003", "../../rules/TC-CFG-003.test/negativos/malformed-fields.json", "c", nil},
+		{"TC-CFG-023", "../../rules/TC-CFG-023.test/negativos/malformed-fields.json", "ok", nil},
+		{"TC-CFG-023", "../../rules/TC-CFG-023.test/negativos/malformed-fields.json", "bad", []string{"/args/1"}},
+		{"TC-CFG-023", "../../rules/TC-CFG-023.test/negativos/malformed-fields.json", "sse", nil},
+	}
+	engines := map[string]*Engine{}
+	for _, id := range []string{"TC-CFG-003", "TC-CFG-023"} {
+		engines[id], _ = coreEngine(t, id)
+	}
+	loaded := map[string][]model.ConfigItem{}
+	for _, tc := range cases {
+		if _, ok := loaded[tc.file]; ok {
+			continue
+		}
+		items, err := readFixture(tc.file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		loaded[tc.file] = items
+	}
+	for _, tc := range cases {
+		t.Run(tc.rule+"/"+tc.name, func(t *testing.T) {
+			var found model.ConfigItem
+			ok := false
+			for _, it := range loaded[tc.file] {
+				var payload map[string]any
+				if err := json.Unmarshal(it.Payload, &payload); err != nil {
+					t.Fatal(err)
+				}
+				if payload["name"] == tc.name {
+					found = it
+					ok = true
+					break
+				}
+			}
+			if !ok {
+				t.Fatalf("no entry %s", tc.name)
+			}
+			res := engines[tc.rule].ScanConfig(context.Background(), []model.ConfigItem{found})
+			if len(res.Errors) != 0 || len(res.Matches) != 0 {
+				t.Fatalf("matches %d errors %v", len(res.Matches), res.Errors)
+			}
+			var got []string
+			for _, notice := range res.Notices {
+				if notice.Path != found.Path {
+					t.Fatalf("notice path %s", notice.Path)
+				}
+				got = append(got, notice.Pointer)
+			}
+			if strings.Join(got, ",") != strings.Join(tc.pointers, ",") {
+				t.Fatalf("pointers = %v, want %v", got, tc.pointers)
+			}
+		})
+	}
+}
+
 func severityOf(res Result) model.Severity {
 	if len(res.Matches) == 0 {
 		return ""
@@ -367,15 +449,35 @@ func TestCFG003Shapes(t *testing.T) {
 	}
 	for _, payload := range match {
 		t.Run("match/"+mustJSON(t, payload), func(t *testing.T) {
-			res := scanOne(t, engine, item(model.HarnessClaude, ".mcp.json", model.ConfigKindMCPServer, mustJSON(t, payload)))
+			harness := model.HarnessClaude
+			if _, ok := payload["command"].([]any); ok {
+				harness = model.HarnessOpenCode
+			}
+			res := scanOne(t, engine, item(harness, ".mcp.json", model.ConfigKindMCPServer, mustJSON(t, payload)))
 			if len(res.Matches) != 1 || res.Matches[0].Severity != model.SeverityHigh {
 				t.Fatalf("matches = %d, want one high", len(res.Matches))
 			}
 		})
 	}
+	t.Run("claude array command is opaque", func(t *testing.T) {
+		payload := map[string]any{"name": "a", "command": []any{"bash", "-c", "echo hi"}}
+		res := engine.ScanConfig(context.Background(), []model.ConfigItem{
+			item(model.HarnessClaude, ".mcp.json", model.ConfigKindMCPServer, mustJSON(t, payload)),
+		})
+		if len(res.Matches) != 0 || len(res.Errors) != 0 {
+			t.Fatalf("matches %d errors %v", len(res.Matches), res.Errors)
+		}
+		if len(res.Notices) != 1 || res.Notices[0].Pointer != "/command" {
+			t.Fatalf("notices = %+v", res.Notices)
+		}
+	})
 	for _, payload := range skip {
 		t.Run("skip/"+mustJSON(t, payload), func(t *testing.T) {
-			res := scanOne(t, engine, item(model.HarnessClaude, ".mcp.json", model.ConfigKindMCPServer, mustJSON(t, payload)))
+			harness := model.HarnessClaude
+			if _, ok := payload["command"].([]any); ok {
+				harness = model.HarnessOpenCode
+			}
+			res := scanOne(t, engine, item(harness, ".mcp.json", model.ConfigKindMCPServer, mustJSON(t, payload)))
 			if len(res.Matches) != 0 {
 				t.Fatalf("matched %s", mustJSON(t, payload))
 			}

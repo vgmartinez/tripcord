@@ -134,12 +134,18 @@ fields (`command`, `exec`, `bash`, `powershell`, `commandWindows`,
 `command_windows`, `windows`, `linux`, `osx`), skipping missing and
 non-string ones. `hook.argv(payload)` returns `[exec or command] +
 args`, with number and bool args as their text, and `[]` when there are
-no `args`. When `args` is not a list or holds an object, list, or null,
-it is an evaluation error ("hook args are not strings, numbers, or
-bools"), not an empty argv, so the scan reports that rule and file as
-incomplete and exits 3 instead of passing over the hook. Use them
-instead of restating the field list in every clause: a long expression
-is parsed again on every scan.
+no `args`. A map argument is an opaque marker that never matches a
+command value. A list argument is recursively coerced like JavaScript
+`Array#toString`: nested lists join with commas and null inside a list
+becomes empty text. This reflects the argv text JavaScript harnesses
+pass to `spawn`, so `["-e"]` is evaluated as `-e` rather than hidden.
+Both a map marker and a coerced list emit a warning with its JSON
+pointer without making the scan incomplete. When `args` is not a list,
+or holds top-level null, it is an evaluation error ("hook args are not
+strings, numbers, or bools"), not an empty argv, so the scan reports
+that rule and file as incomplete and exits 3 instead of passing over
+the hook. Use them instead of restating the field list in every clause:
+a long expression is parsed again on every scan.
 
 Reading a field that is missing makes the whole expression false, not
 an error. That fails open for negations and deny rules:

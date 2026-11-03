@@ -18,6 +18,7 @@ import (
 
 	"github.com/vgmartinez/tripcord/internal/advisory"
 	"github.com/vgmartinez/tripcord/internal/model"
+	"github.com/vgmartinez/tripcord/internal/rules/argv"
 	"github.com/vgmartinez/tripcord/internal/rules/mcppkg"
 	"github.com/vgmartinez/tripcord/internal/rules/shellcmd"
 )
@@ -381,10 +382,12 @@ var instructionFirstMatchLine = cel.Function(instructionFirstMatchLineName,
 // hook.commands(payload) returns the string values of a hook payload's
 // command fields (model.HookCommandFields); a missing or non-string field is
 // skipped. hook.args(payload) returns args, and hook.argv(payload) returns
-// [exec or command] + args. Number and bool args become their text; either is
-// an evaluation error when args is not a list or holds an object, list, or
-// null (see argvList). They let a rule read every command field without
-// restating the list in each clause.
+// [exec or command] + args. Number and bool args become their text. An object
+// map argument becomes a marker that does not match command values. A list
+// argument is recursively coerced like JavaScript Array#toString, so the
+// executable scalar parts remain visible. Any other unreadable args value,
+// including null or a non-list, is ErrHookArgs (see argvList). They let a rule
+// read every command field without restating the list in each clause.
 var hookCommands = cel.Function(hookCommandsName,
 	cel.Overload(overloadHookCommands, []*cel.Type{cel.DynType}, cel.ListType(cel.StringType),
 		cel.UnaryBinding(func(v ref.Val) ref.Val {
@@ -446,10 +449,12 @@ var hookArgs = cel.Function(hookArgsName,
 		})),
 )
 
-// argvList returns a hook's args as strings. A number or bool is passed
-// to the program as its text, so it is stringified; an object, list, or
-// null element, or args that is not a list, is an error rather than an
-// empty argv, so a rule cannot pass over a hook it could not read.
+// argvList returns a hook's args as strings. Lists are recursively coerced
+// with JavaScript Array#toString semantics because supported JavaScript
+// harnesses pass that text to spawn. Maps remain opaque. Null, or args that
+// is not a list, is ErrHookArgs. Neither becomes an empty argv, so a rule
+// cannot pass over a hook it could not read by pretending the arguments were
+// absent.
 func argvList(v ref.Val) ([]string, error) {
 	list, ok := v.(traits.Lister)
 	if !ok {
@@ -458,22 +463,52 @@ func argvList(v ref.Val) ([]string, error) {
 	var out []string
 	i := 0
 	for it := list.Iterator(); it.HasNext() == types.True; i++ {
-		switch e := it.Next().(type) {
-		case types.String:
-			out = append(out, string(e))
-		case types.Bool:
-			out = append(out, strconv.FormatBool(bool(e)))
-		case types.Int:
-			out = append(out, strconv.FormatInt(int64(e), 10))
-		case types.Uint:
-			out = append(out, strconv.FormatUint(uint64(e), 10))
-		case types.Double:
-			out = append(out, strconv.FormatFloat(float64(e), 'f', -1, 64))
-		default:
-			return nil, fmt.Errorf("%s: args element %d is %s: %w", hookArgvName, i, e.Type().TypeName(), ErrHookArgs)
+		s, kind := celArgValue(it.Next(), false)
+		if kind == argv.Invalid {
+			return nil, fmt.Errorf("%s: args element %d is unreadable: %w", hookArgvName, i, ErrHookArgs)
 		}
+		out = append(out, s)
 	}
 	return out, nil
+}
+
+const opaqueArg = argv.Opaque
+
+func celArgValue(v ref.Val, insideList bool) (string, argv.Kind) {
+	switch value := v.(type) {
+	case types.Null:
+		if insideList {
+			return "", argv.CoercedList
+		}
+		return "", argv.Invalid
+	case types.String:
+		return string(value), argv.Scalar
+	case types.Bool:
+		return strconv.FormatBool(bool(value)), argv.Scalar
+	case types.Int:
+		return strconv.FormatInt(int64(value), 10), argv.Scalar
+	case types.Uint:
+		return strconv.FormatUint(uint64(value), 10), argv.Scalar
+	case types.Double:
+		return strconv.FormatFloat(float64(value), 'f', -1, 64), argv.Scalar
+	case traits.Mapper:
+		return opaqueArg, argv.OpaqueMap
+	case traits.Lister:
+		var parts []string
+		for it := value.Iterator(); it.HasNext() == types.True; {
+			s, kind := celArgValue(it.Next(), true)
+			if kind == argv.Invalid {
+				return "", argv.Invalid
+			}
+			if kind == argv.OpaqueMap {
+				return opaqueArg, argv.OpaqueMap
+			}
+			parts = append(parts, s)
+		}
+		return strings.Join(parts, ","), argv.CoercedList
+	default:
+		return "", argv.Invalid
+	}
 }
 
 func mapString(m traits.Mapper, key string) (string, bool) {
@@ -599,6 +634,7 @@ type Expr struct {
 	src    string
 	prg    cel.Program
 	limits Limits
+	env    *Env
 }
 
 // Compile parses, type-checks, and plans src. The result type must be
@@ -639,7 +675,7 @@ func (e *Env) compile(src string, guarded bool) (*Expr, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Expr{src: src, prg: prg, limits: e.limits}, nil
+	return &Expr{src: src, prg: prg, limits: e.limits, env: e}, nil
 }
 
 // Source returns the expression text.
@@ -659,7 +695,21 @@ func (x *Expr) Eval(ctx context.Context, in *Input) (bool, error) {
 	}
 	ectx, cancel := context.WithTimeout(ctx, x.limits.EvalTimeout)
 	defer cancel()
-	out, _, err := x.prg.ContextEval(ectx, in.vars)
+	// mcp.packages and mcp.vulns are late-bound so a command array is argv
+	// only for the harness on this input. Other expressions ignore the
+	// bindings.
+	act, err := cel.FunctionVars(in.vars, map[string]cel.LateBoundFunction{
+		mcpPackagesName: func(_ string, args ...ref.Val) ref.Val {
+			return x.env.mcpCall(inputHarness(in), args, false)
+		},
+		mcpVulnsName: func(_ string, args ...ref.Val) ref.Val {
+			return x.env.mcpCall(inputHarness(in), args, true)
+		},
+	})
+	if err != nil {
+		return false, err
+	}
+	out, _, err := x.prg.ContextEval(ectx, act)
 	if err != nil {
 		var cancelled interpreter.EvalCancelledError
 		switch {
@@ -696,35 +746,35 @@ func ctxError(ctx context.Context) error {
 	}
 }
 
-// isAbsent reports a lookup of a key or index that is not in the input.
-// cel-go reports these as *types.Err without a sentinel, so the message
-// prefix is the only signal.
 // mcp.packages(payload) lists the packages a known launcher would
 // install. mcp.vulns(payload) lists the embedded advisories those
-// packages match. Both fail like hook.args when an argument is not a
-// string, number, or bool. With no advisory list, mcp.vulns is empty.
+// packages match. Map argument elements are opaque; list elements are
+// recursively coerced like JavaScript Array#toString. A command array is argv
+// only when the harness schema accepts one. Any
+// other argument that is not a string, number, or bool is ErrHookArgs.
+// With no advisory list, mcp.vulns is empty. The implementations are
+// supplied per evaluation so they see that harness.
 func (e *Env) mcpPackages() cel.EnvOption {
 	return cel.Function(mcpPackagesName,
 		cel.Overload(overloadMCPPackages, []*cel.Type{cel.DynType}, cel.ListType(cel.DynType),
-			cel.UnaryBinding(func(v ref.Val) ref.Val {
-				return e.mcpCall(v, false)
-			})))
+			cel.LateFunctionBinding()))
 }
 
 func (e *Env) mcpVulns() cel.EnvOption {
 	return cel.Function(mcpVulnsName,
 		cel.Overload(overloadMCPVulns, []*cel.Type{cel.DynType}, cel.ListType(cel.DynType),
-			cel.UnaryBinding(func(v ref.Val) ref.Val {
-				return e.mcpCall(v, true)
-			})))
+			cel.LateFunctionBinding()))
 }
 
-func (e *Env) mcpCall(v ref.Val, vulns bool) ref.Val {
-	payload, err := nativePayload(v)
+func (e *Env) mcpCall(harness model.Harness, args []ref.Val, vulns bool) ref.Val {
+	if len(args) != 1 {
+		return types.NewErr("mcp: want one argument")
+	}
+	payload, err := nativePayload(args[0])
 	if err != nil {
 		return types.WrapErr(err)
 	}
-	refs, work, err := mcppkg.ParsePayload(payload)
+	refs, work, err := mcppkg.ParsePayload(harness, payload)
 	if err != nil {
 		return types.WrapErr(fmt.Errorf("mcp: %w", ErrHookArgs))
 	}
@@ -812,6 +862,9 @@ func newMapList(items []map[string]any, work int) ref.Val {
 	return workList{Lister: list, work: uint64(work)}
 }
 
+// isAbsent reports a lookup of a key or index that is not in the input.
+// cel-go reports these as *types.Err without a sentinel, so the message
+// prefix is the only signal.
 func isAbsent(err error) bool {
 	var celErr *types.Err
 	if !errors.As(err, &celErr) {

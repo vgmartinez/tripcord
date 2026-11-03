@@ -5,26 +5,41 @@
 package mcppkg
 
 import (
-	"encoding/json"
 	"errors"
 	"path"
 	"strconv"
 	"strings"
 
 	"github.com/vgmartinez/tripcord/internal/advisory"
+	"github.com/vgmartinez/tripcord/internal/model"
+	"github.com/vgmartinez/tripcord/internal/rules/argv"
 	"github.com/vgmartinez/tripcord/internal/rules/shellcmd"
 )
 
 // ErrArgs is returned when command or args is not text a program would
-// receive: an object, a nested list, or null. Callers wrap it so a scan
-// stays incomplete instead of skipping the server.
+// receive: null, or a value that is not a list. Callers wrap it so a scan
+// stays incomplete.
 var ErrArgs = errors.New("mcp args are not strings, numbers, or bools")
 
-// ParsePayload reads payload.command and payload.args. work is the
-// number of argument bytes, charged as CEL cost. A command string with
-// no args is split as a shell command; a substitution makes that split
-// unparsed, which is an empty result and not an error.
-func ParsePayload(payload map[string]any) ([]advisory.PackageRef, int, error) {
+// AcceptsCommandArray reports whether harness executes an MCP command
+// array as argv. OpenCode's local server schema is the only one that
+// does: command is an array of strings. Claude, Cursor, VS Code,
+// Copilot, Gemini, Codex, and Windsurf all require command to be a
+// string, so an array there is not a command the agent can start.
+// Devin has no MCP command array. An unknown harness is treated the
+// same way: the array is not argv.
+func AcceptsCommandArray(h model.Harness) bool {
+	return h == model.HarnessOpenCode
+}
+
+// ParsePayload reads payload.command and payload.args for harness. work
+// is the number of argument bytes, charged as CEL cost. A command string
+// with no args is split as a shell command; a substitution makes that
+// split unparsed, which is an empty result and not an error. A command
+// array is argv only when AcceptsCommandArray(harness) is true. For every
+// other harness it yields no packages and no error; the caller reports
+// the entry as opaque.
+func ParsePayload(harness model.Harness, payload map[string]any) ([]advisory.PackageRef, int, error) {
 	if payload == nil {
 		return nil, 0, nil
 	}
@@ -32,11 +47,17 @@ func ParsePayload(payload map[string]any) ([]advisory.PackageRef, int, error) {
 	if !ok || command == nil {
 		return nil, 0, nil
 	}
+	// A command array the harness cannot execute is opaque as an entry.
+	// Unreadable args beside it must not turn that into an evaluation
+	// error; the caller warns at /command and skips the entry.
+	if _, array := command.([]any); array && !AcceptsCommandArray(harness) {
+		return nil, 0, nil
+	}
 	args, err := argStrings(payload["args"])
 	if err != nil {
 		return nil, 0, err
 	}
-	var argv []string
+	var commandArgs []string
 	switch c := command.(type) {
 	case string:
 		if len(args) == 0 && strings.ContainsAny(c, " \t") {
@@ -44,27 +65,27 @@ func ParsePayload(payload map[string]any) ([]advisory.PackageRef, int, error) {
 			if !ok {
 				return nil, len(c) + 1, nil
 			}
-			argv = words
+			commandArgs = words
 		} else {
-			argv = append([]string{c}, args...)
+			commandArgs = append([]string{c}, args...)
 		}
 	case []any:
-		for i, el := range c {
-			s, ok := scalarString(el)
-			if !ok {
-				return nil, 0, fmtArg(i)
+		for _, el := range c {
+			s, kind := argv.Value(el, false)
+			if kind == argv.Invalid {
+				return nil, 0, ErrArgs
 			}
-			argv = append(argv, s)
+			commandArgs = append(commandArgs, s)
 		}
-		argv = append(argv, args...)
+		commandArgs = append(commandArgs, args...)
 	default:
 		return nil, 0, ErrArgs
 	}
-	if len(argv) == 0 {
+	if len(commandArgs) == 0 {
 		return nil, 0, nil
 	}
-	refs, _ := Parse(argv)
-	return refs, workOf(argv), nil
+	refs, _ := Parse(commandArgs)
+	return refs, workOf(commandArgs), nil
 }
 
 func argStrings(v any) ([]string, error) {
@@ -77,8 +98,8 @@ func argStrings(v any) ([]string, error) {
 	}
 	out := make([]string, 0, len(list))
 	for i, el := range list {
-		s, ok := scalarString(el)
-		if !ok {
+		s, kind := argv.Value(el, false)
+		if kind == argv.Invalid {
 			return nil, fmtArg(i)
 		}
 		out = append(out, s)
@@ -88,25 +109,6 @@ func argStrings(v any) ([]string, error) {
 
 func fmtArg(i int) error {
 	return errors.Join(ErrArgs, errors.New("argument "+strconv.Itoa(i)))
-}
-
-func scalarString(v any) (string, bool) {
-	switch t := v.(type) {
-	case string:
-		return t, true
-	case bool:
-		return strconv.FormatBool(t), true
-	case float64:
-		return strconv.FormatFloat(t, 'f', -1, 64), true
-	case json.Number:
-		return t.String(), true
-	case int:
-		return strconv.Itoa(t), true
-	case int64:
-		return strconv.FormatInt(t, 10), true
-	default:
-		return "", false
-	}
 }
 
 func workOf(argv []string) int {

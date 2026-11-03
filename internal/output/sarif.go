@@ -216,11 +216,17 @@ func renderSARIF(writer io.Writer, findings []model.Finding, diags []Diagnostic,
 	}
 	if len(diags) > 0 {
 		notes := make([]sarifNotification, len(diags))
+		success := true
 		for i, d := range diags {
-			notes[i] = sarifNotification{Message: sarifMessage{Text: sarifText(d.Text())}, Level: "error"}
+			level := "note"
+			if !d.Informational {
+				level = "error"
+				success = false
+			}
+			notes[i] = sarifNotification{Message: sarifMessage{Text: sarifText(d.Text())}, Level: level}
 		}
 		run.Invocations = []sarifInvocation{{
-			ExecutionSuccessful:        false,
+			ExecutionSuccessful:        success,
 			ToolExecutionNotifications: notes,
 		}}
 	}

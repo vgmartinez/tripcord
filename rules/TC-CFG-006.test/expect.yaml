@@ -1,7 +1,11 @@
 # The severities each positive fixture must produce (see
-# internal/rules/fixtures.go, ExpectFile). A negative listed here must
-# fail to evaluate instead of matching.
+# internal/rules/fixtures.go, ExpectFile). An unlisted negative must not
+# match and must evaluate. A negative listed as error must fail to
+# evaluate instead of matching. An object argument is not that error:
+# its scalar siblings still match, which is why copilot-exec-object-arg
+# is a positive.
 positivos:
+  copilot-exec-object-arg: high
   claude-agent-frontmatter: high
   claude-bash-tmp-payload: high
   claude-home-script: high
@@ -36,5 +40,3 @@ positivos:
   shared-skill-tmp: high
   windsurf-home-script: high
   windsurf-powershell-userprofile: high
-negativos:
-  copilot-exec-object-arg: error

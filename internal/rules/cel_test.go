@@ -443,16 +443,24 @@ func TestHookCommands(t *testing.T) {
 	}
 }
 
-// TestHookArgvUnreadable checks that hook.argv is an evaluation error,
-// not an empty argv, when args is not a list or holds an object, list,
-// or null, and that the error does not quote the args.
+// TestHookArgsUnreadable checks that hook.argv preserves scalar arguments,
+// makes an object opaque, and recursively coerces an array. Null, or args
+// that is not a list, stays fatal.
 func TestHookArgsUnreadable(t *testing.T) {
 	env := testEnv(t)
 	for _, payload := range []string{
-		`{"exec":"bash","args":"argvsecret.sh"}`,
-		`{"exec":"bash","args":null}`,
 		`{"exec":"bash","args":["argvsecret.sh",{"a":1}]}`,
 		`{"exec":"bash","args":["argvsecret.sh",["b"]]}`,
+	} {
+		got, err := compileT(t, env, `hook.args(payload).exists(a, a == "argvsecret.sh")`).Eval(context.Background(), taskInput(t, env.Limits(), payload))
+		if err != nil || got != strings.Contains(payload, "argvsecret.sh") {
+			t.Errorf("%s: got %v, err = %v", payload, got, err)
+		}
+	}
+	for _, payload := range []string{
+		`{"exec":"bash","args":"argvsecret.sh"}`,
+		`{"exec":"bash","args":{"argvsecret":1}}`,
+		`{"exec":"bash","args":null}`,
 		`{"exec":"bash","args":["argvsecret.sh",null]}`,
 	} {
 		_, err := compileT(t, env, `hook.args(payload).size() == 0`).Eval(context.Background(), taskInput(t, env.Limits(), payload))
@@ -610,7 +618,49 @@ func TestMCPVulnsCostAndArgs(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = compileT(t, env, `mcp.vulns(payload).size() >= 0`).Eval(context.Background(), in)
-	if !errors.Is(err, ErrHookArgs) {
-		t.Fatalf("args err = %v", err)
+	if err != nil {
+		t.Fatalf("object arg err = %v", err)
+	}
+}
+
+func TestMCPCommandArrayFollowsHarnessSchema(t *testing.T) {
+	t.Parallel()
+	raw, err := json.Marshal(map[string]any{"command": []any{"npx", "-y", "figma-developer-mcp@0.6.2"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	limits := DefaultLimits()
+	env, err := NewEnv(limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expr := compileT(t, env, `mcp.packages(payload).size() > 0`)
+	for _, tc := range []struct {
+		harness model.Harness
+		want    bool
+	}{
+		{model.HarnessOpenCode, true},
+		{model.HarnessClaude, false},
+		{model.HarnessCursor, false},
+		{model.SurfaceVSCode, false},
+		{model.HarnessGemini, false},
+		{model.HarnessCodex, false},
+		{model.HarnessCopilot, false},
+		{model.HarnessWindsurf, false},
+	} {
+		in, err := ConfigInput(model.ConfigItem{
+			Harness: tc.harness,
+			Scope:   model.ScopeRepo,
+			Path:    ".mcp.json",
+			Kind:    model.ConfigKindMCPServer,
+			Payload: raw,
+		}, limits)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := expr.Eval(context.Background(), in)
+		if err != nil || got != tc.want {
+			t.Fatalf("%s: got %v err %v, want %v", tc.harness, got, err, tc.want)
+		}
 	}
 }

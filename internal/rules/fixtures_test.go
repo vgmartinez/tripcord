@@ -97,7 +97,7 @@ func TestCheckRuleFixturesFailures(t *testing.T) {
 		"empty negatives":           {map[string]string{"positivos/a.json": trigger, "negativos/.keep": ""}, "at least one fixture"},
 		"non-json file":             {map[string]string{"positivos/a.json": trigger, "negativos/tasks.yaml": "x: 1"}, "ConfigItem document or a directory"},
 		"invalid item":              {map[string]string{"positivos/a.json": `{"harness":"emacs"}`, "negativos/b.json": quiet}, "harness"},
-		"eval error":                {map[string]string{"positivos/a.json": trigger, "negativos/b.json": `{"harness":"claude","scope":"repo","path":".mcp.json","kind":"mcp-server","payload":{"command":1}}`}, "TEST-CFG-002"},
+		"eval error":                {map[string]string{"positivos/a.json": trigger, "negativos/b.json": `{"harness":"claude","scope":"repo","path":".mcp.json","kind":"mcp-server","payload":{"command":"sh","args":null}}`}, "TEST-CFG-002"},
 		"raw positive quiet":        {map[string]string{"positivos/repo/.mcp.json": `{"mcpServers":{"a":{"command":"node"}}}`, "negativos/b.json": quiet}, "did not trigger"},
 		"raw negative triggers":     {map[string]string{"positivos/a.json": trigger, "negativos/repo/.mcp.json": `{"mcpServers":{"a":{"command":"sh"}}}`}, "negative fixture triggered"},
 		"raw unreadable":            {map[string]string{"positivos/a.json": trigger, "negativos/repo/.mcp.json": `{`}, "not fully read"},
@@ -111,13 +111,27 @@ func TestCheckRuleFixturesFailures(t *testing.T) {
 		"expected error evaluates":  {map[string]string{"positivos/a.json": trigger, "negativos/b.json": quiet, ExpectFile: "negativos:\n  b.json: error\n"}, "expected TEST-CFG-002 to fail to evaluate"},
 		"unknown key":               {map[string]string{"positivos/a.json": trigger, "negativos/b.json": quiet, ExpectFile: "positives:\n  a.json: critical\n"}, "positives"},
 	}
+	// A non-string command is opaque, so command: 1 no longer fails
+	// evaluation. The negativos: error cases read hook.args, which still
+	// fails on null. The positive trigger has no args, so hook.args is
+	// empty and the shell command still matches.
+	argsRule := *rule
+	argsWhen, err := env.Compile(`config.kind == "mcp-server" && has(payload.command) && payload.command.matches("^(.*/)?(ba|z|da)?sh$") && hook.args(payload).size() >= 0`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	argsRule.When = argsWhen
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
+			use := rule
+			if name == "eval error" {
+				use = &argsRule
+			}
 			dir := t.TempDir()
 			for rel, body := range c.files {
 				writeFile(t, filepath.Join(dir, rule.ID+TestDirSuffix, rel), body)
 			}
-			err := CheckRuleFixtures(context.Background(), env, dir, rule, adapterDiscover)
+			err := CheckRuleFixtures(context.Background(), env, dir, use, adapterDiscover)
 			if err == nil || !strings.Contains(err.Error(), c.want) {
 				t.Fatalf("err = %v, want %q", err, c.want)
 			}
@@ -146,9 +160,9 @@ func TestCheckRuleFixturesFailures(t *testing.T) {
 		dir := t.TempDir()
 		writeFile(t, filepath.Join(dir, rule.ID+TestDirSuffix, "positivos/a.json"), trigger)
 		writeFile(t, filepath.Join(dir, rule.ID+TestDirSuffix, "negativos/b.json"), quiet)
-		writeFile(t, filepath.Join(dir, rule.ID+TestDirSuffix, "negativos/c.json"), `{"harness":"claude","scope":"repo","path":".mcp.json","kind":"mcp-server","payload":{"command":1}}`)
+		writeFile(t, filepath.Join(dir, rule.ID+TestDirSuffix, "negativos/c.json"), `{"harness":"claude","scope":"repo","path":".mcp.json","kind":"mcp-server","payload":{"command":"sh","args":null}}`)
 		writeFile(t, filepath.Join(dir, rule.ID+TestDirSuffix, ExpectFile), "positivos:\n  a.json: critical\nnegativos:\n  c.json: error\n")
-		if err := CheckRuleFixtures(context.Background(), env, dir, rule, adapterDiscover); err != nil {
+		if err := CheckRuleFixtures(context.Background(), env, dir, &argsRule, adapterDiscover); err != nil {
 			t.Fatal(err)
 		}
 	})

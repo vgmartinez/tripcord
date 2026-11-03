@@ -1,5 +1,14 @@
-# Invalid server arguments must make the scan incomplete rather than let an
-# inline MCP server escape detection.
-negativos:
-  claude-node-object-arg: error
-  malformed-fields.json: error
+# A map argument is opaque, but a list argument is recursively coerced with
+# JavaScript Array#toString semantics. Thus ["-e"] and [["-e"]] are "-e":
+# node still runs inline code. OpenCode command-array maps are opaque markers
+# that do not hide a leading shell, and number elements are scalar text.
+# The mixed npx list fixture is a negative: it becomes "-y,figma-developer-
+# mcp@0.6.2", which is neither an inline interpreter flag nor a recognized
+# npx option.
+positivos:
+  claude-node-object-arg: high
+  gemini-node-list-arg: high
+  gemini-node-nested-list-arg: high
+  vscode-python-list-arg: high
+  opencode-command-map: high
+  opencode-command-number: high

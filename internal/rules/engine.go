@@ -11,6 +11,7 @@ import (
 	"github.com/vgmartinez/tripcord/internal/advisory"
 	"github.com/vgmartinez/tripcord/internal/hiddenchar"
 	"github.com/vgmartinez/tripcord/internal/model"
+	"github.com/vgmartinez/tripcord/internal/rules/argv"
 	"github.com/vgmartinez/tripcord/internal/rules/mcppkg"
 )
 
@@ -186,7 +187,26 @@ func (e EvalError) Error() string {
 type Result struct {
 	Matches []Match
 	Errors  []EvalError
+	Notices []EvalNotice
 }
+
+// EvalNotice reports an opaque config value that was excluded from a rule
+// evaluation without making the scan incomplete.
+type EvalNotice struct {
+	Harness model.Harness
+	Scope   model.Scope
+	Path    string
+	Pointer string
+	Kind    NoticeKind
+}
+
+// NoticeKind describes an intentional normalization of an unreadable value.
+type NoticeKind string
+
+const (
+	NoticeOpaqueMap   NoticeKind = "opaque_map"
+	NoticeCoercedList NoticeKind = "coerced_list"
+)
 
 // ScanConfig evaluates every applicable rule against every item, in
 // item order and then rule order. A rule applies when the item's
@@ -200,6 +220,16 @@ func (e *Engine) ScanConfig(ctx context.Context, items []model.ConfigItem) Resul
 	var res Result
 	for _, item := range items {
 		var in *Input
+		commandOpaque := opaqueCommand(item)
+		if commandOpaque {
+			res.Notices = append(res.Notices, EvalNotice{
+				Harness: item.Harness,
+				Scope:   item.Scope,
+				Path:    item.Path,
+				Pointer: "/command",
+			})
+		}
+		res.Notices = append(res.Notices, argNotices(item)...)
 		for _, r := range e.rules {
 			if !r.Applies(item) || (e.filter != nil && !e.filter(r, item)) {
 				continue
@@ -215,18 +245,19 @@ func (e *Engine) ScanConfig(ctx context.Context, items []model.ConfigItem) Resul
 					res.Errors = append(res.Errors, evalError("", item, err))
 					break
 				}
+				if commandOpaque {
+					break
+				}
 			}
 			ok, err := r.When.Eval(ctx, in)
-			if err != nil {
-				res.Errors = append(res.Errors, evalError(r.ID, item, err))
+			if stopForEval(&res, r.ID, item, err) {
 				continue
 			}
 			if !ok {
 				continue
 			}
 			clause, matched, err := r.clauseFor(ctx, in)
-			if err != nil {
-				res.Errors = append(res.Errors, evalError(r.ID, item, err))
+			if stopForEval(&res, r.ID, item, err) {
 				continue
 			}
 			if !matched {
@@ -235,8 +266,7 @@ func (e *Engine) ScanConfig(ctx context.Context, items []model.ConfigItem) Resul
 			match := Match{Rule: r, Item: item, Severity: clause.Severity, Title: clause.Title}
 			if r.Evidence == EvidenceAdvisory {
 				hits, err := advisoryHits(in, e.env.Advisories())
-				if err != nil {
-					res.Errors = append(res.Errors, evalError(r.ID, item, err))
+				if stopForEval(&res, r.ID, item, err) {
 					continue
 				}
 				match.Advisories = hits
@@ -249,7 +279,7 @@ func (e *Engine) ScanConfig(ctx context.Context, items []model.ConfigItem) Resul
 
 func advisoryHits(in *Input, db *advisory.DB) ([]advisory.Hit, error) {
 	raw, _ := in.vars[VarPayload].(map[string]any)
-	refs, _, err := mcppkg.ParsePayload(raw)
+	refs, _, err := mcppkg.ParsePayload(inputHarness(in), raw)
 	if err != nil {
 		return nil, fmt.Errorf("mcp: %w", ErrHookArgs)
 	}
@@ -272,4 +302,80 @@ func serverName(item model.ConfigItem) string {
 
 func evalError(rule string, item model.ConfigItem, err error) EvalError {
 	return EvalError{Rule: rule, Harness: item.Harness, Scope: item.Scope, Path: item.Path, Err: err}
+}
+
+// stopForEval reports whether evaluation of this rule should stop for item.
+// Every evaluation error is recorded and stops the rule.
+func stopForEval(res *Result, rule string, item model.ConfigItem, err error) bool {
+	if err == nil {
+		return false
+	}
+	res.Errors = append(res.Errors, evalError(rule, item, err))
+	return true
+}
+
+// opaqueCommand reports a command value the selected agent cannot execute.
+// An array is argv only for a harness whose schema accepts one. A number,
+// bool, or object is never a command string, so it is opaque too.
+func opaqueCommand(item model.ConfigItem) bool {
+	if item.Kind != model.ConfigKindMCPServer {
+		return false
+	}
+	var payload map[string]any
+	if json.Unmarshal(item.Payload, &payload) != nil {
+		return false
+	}
+	command, found := payload["command"]
+	if !found || command == nil {
+		return false
+	}
+	switch command.(type) {
+	case string:
+		return false
+	case []any:
+		return !mcppkg.AcceptsCommandArray(item.Harness)
+	default:
+		return true
+	}
+}
+
+// argNotices reports map values excluded from matching and list values
+// recursively coerced with JavaScript Array#toString semantics. Scalar
+// siblings still participate in rule evaluation.
+func argNotices(item model.ConfigItem) []EvalNotice {
+	var payload map[string]any
+	if json.Unmarshal(item.Payload, &payload) != nil {
+		return nil
+	}
+	var notices []EvalNotice
+	add := func(pointer string, value any) {
+		_, kind := argv.Value(value, false)
+		var noticeKind NoticeKind
+		switch kind {
+		case argv.OpaqueMap:
+			noticeKind = NoticeOpaqueMap
+		case argv.CoercedList:
+			noticeKind = NoticeCoercedList
+		default:
+			return
+		}
+		notices = append(notices, EvalNotice{
+			Harness: item.Harness,
+			Scope:   item.Scope,
+			Path:    item.Path,
+			Pointer: pointer,
+			Kind:    noticeKind,
+		})
+	}
+	if args, ok := payload["args"].([]any); ok {
+		for i, value := range args {
+			add(fmt.Sprintf("/args/%d", i), value)
+		}
+	}
+	if command, ok := payload["command"].([]any); ok && mcppkg.AcceptsCommandArray(item.Harness) {
+		for i, value := range command {
+			add(fmt.Sprintf("/command/%d", i), value)
+		}
+	}
+	return notices
 }

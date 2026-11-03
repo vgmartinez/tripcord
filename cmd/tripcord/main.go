@@ -262,6 +262,7 @@ func scanTree(t scanTarget, opts scanOptions, stdout, stderr io.Writer) int {
 	engine := rules.NewEngine(env, catalog.Rules(), rules.WithFilter(effective.RuleFilter()))
 	result := engine.ScanConfig(context.Background(), items)
 	diagnostics = append(diagnostics, evalDiagnostics(result.Errors)...)
+	diagnostics = append(diagnostics, opaqueDiagnostics(result.Notices)...)
 	findings := make([]model.Finding, 0, len(result.Matches))
 	for _, match := range result.Matches {
 		if _, status := effective.Exception(match.Rule.ID, match.Item.Path, match.Item.SHA256, now()); status == policy.ExceptionActive {
@@ -291,7 +292,7 @@ func scanTree(t scanTarget, opts scanOptions, stdout, stderr io.Writer) int {
 		return t.internalError(stderr, err)
 	}
 	blocking, notes := partitionDiagnostics(diagnostics)
-	if err := handle.SetDiagnostics(outputDiagnostics(blocking)); err != nil {
+	if err := handle.SetDiagnostics(outputDiagnostics(append(append([]adapters.Diagnostic{}, blocking...), notes...))); err != nil {
 		_ = handle.Close()
 		return t.internalError(stderr, err)
 	}
@@ -701,10 +702,35 @@ func outputDiagnostics(in []adapters.Diagnostic) []output.Diagnostic {
 	out := make([]output.Diagnostic, len(in))
 	for i, d := range in {
 		out[i] = output.Diagnostic{
-			Harness: string(d.Harness),
-			Scope:   string(d.Scope),
-			Path:    d.Path,
-			Message: d.Message,
+			Harness:       string(d.Harness),
+			Scope:         string(d.Scope),
+			Path:          d.Path,
+			Message:       d.Message,
+			Informational: d.Informational,
+		}
+	}
+	return out
+}
+
+// opaqueDiagnostics makes every map command argument the scanner cannot
+// interpret, and every list argument it coerces, visible without making the
+// scan incomplete.
+func opaqueDiagnostics(notices []rules.EvalNotice) []adapters.Diagnostic {
+	out := make([]adapters.Diagnostic, 0, len(notices))
+	for _, notice := range notices {
+		message := "opaque command value ignored"
+		if notice.Kind == rules.NoticeCoercedList {
+			message = "non-string arg coerced"
+		}
+		d := adapters.Diagnostic{
+			Harness:       notice.Harness,
+			Scope:         notice.Scope,
+			Path:          notice.Path,
+			Message:       message + " at JSON pointer " + notice.Pointer,
+			Informational: true,
+		}
+		if !slices.Contains(out, d) {
+			out = append(out, d)
 		}
 	}
 	return out
