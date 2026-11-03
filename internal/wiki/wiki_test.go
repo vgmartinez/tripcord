@@ -445,6 +445,7 @@ func TestWikiSyncWorkflow(t *testing.T) {
 			Group string `yaml:"group"`
 		} `yaml:"concurrency"`
 		Jobs map[string]struct {
+			If          string            `yaml:"if"`
 			Permissions map[string]string `yaml:"permissions"`
 			Steps       []struct {
 				Uses string            `yaml:"uses"`
@@ -483,7 +484,11 @@ func TestWikiSyncWorkflow(t *testing.T) {
 		t.Fatalf("want one job, got %d", len(wf.Jobs))
 	}
 	shaPin := regexp.MustCompile(`^[a-z0-9-]+/[a-z0-9-]+@[0-9a-f]{40}$`)
+	const wantGuard = "github.repository == 'vgmartinez/tripcord' && github.ref == 'refs/heads/main'"
 	for id, job := range wf.Jobs {
+		if job.If != wantGuard {
+			t.Errorf("job %s if = %q, want %q", id, job.If, wantGuard)
+		}
 		if len(job.Permissions) != 1 || job.Permissions["contents"] != "write" {
 			t.Errorf("job %s permissions = %v, want only contents: write", id, job.Permissions)
 		}
@@ -502,9 +507,21 @@ func TestWikiSyncWorkflow(t *testing.T) {
 			}
 			run.WriteString(step.Run)
 		}
+		script := run.String()
 		for _, want := range []string{"go run ./cmd/wikigen", ".wiki.git", "HEAD:master", "diff --cached --quiet"} {
-			if !strings.Contains(run.String(), want) {
+			if !strings.Contains(script, want) {
 				t.Errorf("job %s: run scripts do not contain %q", id, want)
+			}
+		}
+		// A missing wiki is GitHub's "Repository not found" line and
+		// nothing else. A broader match would treat an auth or transport
+		// error that happens to end in "not found" as success.
+		if !strings.Contains(script, "grep -F -q 'Repository not found'") {
+			t.Errorf("job %s: missing-wiki check must be a fixed-string match of %q", id, "Repository not found")
+		}
+		for _, broad := range []string{"not found$", "grep -qi", "grep -qE", "grep -E", "does not appear to be a git repository"} {
+			if strings.Contains(script, broad) {
+				t.Errorf("job %s: missing-wiki check matches more than %q (contains %q)", id, "Repository not found", broad)
 			}
 		}
 	}
