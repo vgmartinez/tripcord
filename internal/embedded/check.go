@@ -96,6 +96,18 @@ type CheckOptions struct {
 	// git index). A settings.local.json that is not tracked is personal
 	// and is not checked. Nil tracks nothing.
 	Tracked func(rel string) bool
+	// TrackedCaseVariants, when set, lists every path the repository
+	// tracks (or, for a --staged scan, stages) whose name matches rel
+	// except for ASCII/Unicode case: the shape a case-insensitive
+	// checkout (macOS, Windows) would also resolve rel to, even though
+	// git's own tracking, and a Linux checkout, never folds case. It
+	// includes rel itself when the repository tracks it exactly, so
+	// policyLocal uses it alone, in place of Tracked, once it is set;
+	// only .tripcord/policy.local.yaml needs this, since it is the one
+	// file a case-insensitive host's own os.ReadFile can resolve to a
+	// differently-cased committed file behind git's back. Nil falls
+	// back to Tracked's exact match only.
+	TrackedCaseVariants func(rel string) []string
 	// IndexTree is true when root holds only the git index's content (a
 	// --staged scan's private tree), read with no checkout smudge or
 	// autocrlf filter: a file with CRLF line endings there did not pass
@@ -339,7 +351,7 @@ func Check(root string, opts CheckOptions) ([]model.ConfigItem, error) {
 	// mode always checks them.
 	if (active || opts.Base != nil) && opts.Tracked != nil {
 		c.localSettings(r, opts.Tracked)
-		c.policyLocal(r, opts.Tracked)
+		c.policyLocal(r, opts.Tracked, opts.TrackedCaseVariants)
 	}
 	return c.items, c.err
 }
@@ -384,20 +396,32 @@ func (c *checker) localSettings(r *adapters.SafeReader, tracked func(string) boo
 	}
 }
 
-// policyLocal reports a git-tracked, or staged, .tripcord/policy.local.yaml.
-// It is a per-checkout layer; a copy the repository tracks overrides the
-// effective policy for everyone who checks the branch out, not only the
-// person who committed it, so the scan does not load it (see cmd/tripcord's
-// SkipLocal wiring) and reports it here instead.
-func (c *checker) policyLocal(r *adapters.SafeReader, tracked func(string) bool) {
-	if !tracked(PolicyLocalPath) {
-		return
+// policyLocal reports a git-tracked, or staged, .tripcord/policy.local.yaml,
+// and any case variant of it (a differently-cased .tripcord/Policy.local.yaml
+// or .TRIPCORD/policy.local.yaml). Either is a per-checkout layer; a copy the
+// repository tracks overrides the effective policy for everyone who checks
+// the branch out, not only the person who committed it -- a case variant
+// does so on a case-insensitive checkout (macOS, Windows), where the policy
+// loader's own os.ReadFile(PolicyLocalPath) resolves to it behind git's
+// back, even though git's tracking of PolicyLocalPath itself (what tracked
+// checks) never folds case -- so the scan does not load either (see
+// cmd/tripcord's SkipLocal wiring) and reports every one of them here
+// instead, each at its own real path, whatever the host filesystem.
+func (c *checker) policyLocal(r *adapters.SafeReader, tracked func(string) bool, caseVariants func(string) []string) {
+	paths := []string{}
+	switch {
+	case caseVariants != nil:
+		paths = caseVariants(PolicyLocalPath)
+	case tracked(PolicyLocalPath):
+		paths = []string{PolicyLocalPath}
 	}
-	raw, err := r.ReadFile(PolicyLocalPath, adapters.MaxConfigFileBytes)
-	if err != nil {
-		return
+	for _, p := range paths {
+		raw, err := r.ReadFile(p, adapters.MaxConfigFileBytes)
+		if err != nil {
+			continue
+		}
+		c.add(model.SurfaceGeneric, p, subjectPolicyLocal, "", StateLocalPolicy, raw, nil)
 	}
-	c.add(model.SurfaceGeneric, PolicyLocalPath, subjectPolicyLocal, "", StateLocalPolicy, raw, nil)
 }
 
 type checker struct {

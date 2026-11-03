@@ -198,7 +198,12 @@ staged change stages, overrides the effective policy for everyone who
 checks the branch out, not only the person who committed it, the
 opposite of what a per-checkout layer is for, and the scan does not
 load it, so it cannot relax the decision on itself either, including
-on this clause:
+on this clause. A differently-cased copy (`.tripcord/Policy.local.yaml`,
+`.TRIPCORD/policy.local.yaml`) is reported the same way, at its own
+real, cased path, whatever the host filesystem: git's own tracking is
+always case-exact, but a case-insensitive checkout (macOS, Windows)
+resolves the policy loader's own file read to one of these behind
+git's back:
 
 | State | Title | Meaning |
 | --- | --- | --- |

@@ -115,6 +115,15 @@ files:
   - "**/.github/copilot/settings.local.json"
   - "**/.tripcord/policy.yaml"
   - "**/.tripcord/policy.local.yaml"
+  # Case-insensitive: internal/embedded's policyLocal reports a case
+  # variant of .tripcord/policy.local.yaml (e.g. .tripcord/Policy.local.yaml
+  # or .TRIPCORD/policy.local.yaml) at its own real, differently-cased
+  # path, the shape a case-insensitive checkout (macOS, Windows) resolves
+  # the policy loader's own file read to behind git's back. doublestar
+  # globs match case-exactly, so the plain .tripcord/policy.local.yaml
+  # glob above never matches that reported path; this glob, built from a
+  # [Xx] character class per letter, does, on every host, Linux included.
+  - "**/.[tT][rR][iI][pP][cC][oO][rR][dD]/[pP][oO][lL][iI][cC][yY].[lL][oO][cC][aA][lL].[yY][aA][mM][lL]"
   - "**/.gitattributes"
 when: |
   config.kind == "permissions" && config.scope == "repo" && has(payload.setting)

@@ -20,6 +20,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 	"unicode/utf8"
@@ -224,6 +225,7 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 				return code
 			}
 			target.root, target.policyRoot = root, root
+			target.gitRoot = root
 			target.stagedNotes = notes
 			target.stagedSources = sources
 			code := scanTree(ctx, target, opts, stdout, stderr)
@@ -245,6 +247,7 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 		}
 		defer func() { _ = ws.Close() }()
 		target.root, target.policyRoot = ws.Tree(), ws.Tree()
+		target.gitRoot, target.indexFile = root, indexFile
 		target.stagedNotes = notes
 		target.stagedSources = sources
 		target.redactRoot = ws.Tree()
@@ -267,6 +270,7 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 		return code
 	}
 	target.root, target.policyRoot = root, root
+	target.gitRoot = root
 	return scanTree(context.Background(), target, opts, stdout, stderr)
 }
 
@@ -297,6 +301,17 @@ type scanTarget struct {
 	// indexTree is true when root holds only files of the git index
 	// (the --staged tree), so every file in it is tracked.
 	indexTree bool
+	// gitRoot is the real repository root, for a git query that needs
+	// one even when root is a --staged scan's private materialized
+	// tree (ws.Tree()), which has no .git of its own. It equals root
+	// for every other scan.
+	gitRoot string
+	// indexFile is the --staged scan's proposed commit's index (see
+	// GIT_INDEX_FILE in runScan), passed to a gitRoot query so it sees
+	// that content instead of the stale on-disk .git/index. It is
+	// empty for every other scan, and gitrun.RunIndexed(ctx, gitRoot,
+	// "", ...) then reads gitRoot's ordinary index, same as Run.
+	indexFile string
 }
 
 func (t scanTarget) configError(stderr io.Writer, err error) int {
@@ -352,6 +367,7 @@ func scanTree(ctx context.Context, t scanTarget, opts scanOptions, stdout, stder
 	if t.indexTree {
 		tracked = func(string) bool { return true }
 	}
+	caseVariants := policyLocalCaseVariants(ctx, t.gitRoot, t.indexFile)
 	policyOpts := policy.Options{RepoRoot: t.policyRoot, RepoPolicy: opts.policy, Surface: policy.SurfaceScan, Env: env, Catalog: catalog}
 	if opts.orgPolicy != "" {
 		policyOpts.OrgPolicy = []string{opts.orgPolicy}
@@ -361,8 +377,14 @@ func scanTree(ctx context.Context, t scanTarget, opts scanOptions, stdout, stder
 	// than a decision-maker: committing it would otherwise let the
 	// change relax its own scan, and every scan after that merges, by
 	// weakening a per-checkout layer that is supposed to be each
-	// developer's own.
-	if opts.policy == "" && tracked(policy.LocalFile) {
+	// developer's own. caseVariants also catches a tracked or staged
+	// .tripcord/Policy.local.yaml or .TRIPCORD/policy.local.yaml: git's
+	// own tracking is always byte-exact, but a case-insensitive
+	// checkout (macOS, Windows) resolves policy.LocalFile's exact path
+	// to a differently-cased committed file behind that, so the
+	// decision must treat every case variant the same as an exact
+	// match, on every host, not only ones where it would matter.
+	if opts.policy == "" && (tracked(policy.LocalFile) || len(caseVariants(policy.LocalFile)) > 0) {
 		policyOpts.SkipLocal = true
 	}
 	// Compared with a base, the repository policy is the base's, as in
@@ -512,7 +534,7 @@ func scanTree(ctx context.Context, t scanTarget, opts scanOptions, stdout, stder
 		if err := scriptcheck.Annotate(root, items); err != nil {
 			return t.internalError(stderr, fmt.Errorf("hook scripts: %w", err))
 		}
-		check := embedded.CheckOptions{Only: requested, Tracked: tracked, IndexTree: t.indexTree}
+		check := embedded.CheckOptions{Only: requested, Tracked: tracked, TrackedCaseVariants: caseVariants, IndexTree: t.indexTree}
 		if baseSHA != "" {
 			check.Base = baseReader(ctx, root, baseSHA)
 		}
@@ -920,6 +942,55 @@ func trackedIn(ctx context.Context, root string) func(string) bool {
 		out, err := gitrun.Run(ctx, root, "--no-pager", "--no-optional-locks", "--literal-pathspecs", "ls-files", "-z", "--", rel)
 		return err == nil && len(out) > 0
 	}
+}
+
+// policyLocalCaseVariants returns a function that lists every path
+// gitRoot's git index holds (the proposed commit's index, when
+// indexFile names one; see gitrun.RunIndexed) whose repository-relative
+// path matches rel except for ASCII/Unicode case: the shape a
+// case-insensitive checkout (macOS, Windows) would also resolve rel to,
+// even though git's own tracking, and a Linux checkout, never folds
+// case. It lists the whole index once, rather than asking git about
+// rel's own exact path (as trackedIn does), because a case-insensitive
+// match is a different index entry entirely; --literal-pathspecs is not
+// needed since no pathspec is passed. A tracked rel itself is included,
+// so this alone replaces trackedIn's exact match once the caller also
+// needs case variants (see policyLocal's use in TC-CFG-016).
+func policyLocalCaseVariants(ctx context.Context, gitRoot, indexFile string) func(rel string) []string {
+	var once sync.Once
+	var paths []string
+	var runErr error
+	return func(rel string) []string {
+		once.Do(func() {
+			out, err := gitrun.RunIndexed(ctx, gitRoot, indexFile, "--no-pager", "--no-optional-locks", "ls-files", "-z")
+			runErr = err
+			if err == nil {
+				paths = splitNUL(out)
+			}
+		})
+		if runErr != nil {
+			return nil
+		}
+		var out []string
+		for _, p := range paths {
+			if strings.EqualFold(p, rel) {
+				out = append(out, p)
+			}
+		}
+		sort.Strings(out)
+		return out
+	}
+}
+
+// splitNUL splits a NUL-terminated list (git ls-files -z's output) into
+// its entries, dropping the trailing empty element a final terminator
+// leaves.
+func splitNUL(b []byte) []string {
+	s := strings.TrimSuffix(string(b), "\x00")
+	if s == "" {
+		return nil
+	}
+	return strings.Split(s, "\x00")
 }
 
 func validateSinceRef(ref string) error {

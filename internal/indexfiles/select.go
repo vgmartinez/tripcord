@@ -146,6 +146,7 @@ func Choose(entries []Entry, read func(oid string) ([]byte, error)) (Plan, error
 	}
 	addPolicy(tree, byPath, read, add)
 	addEmbed(tree, byPath, add)
+	addPolicyLocalCaseVariants(byPath, add)
 	out := make([]Write, 0, len(writes))
 	for _, w := range writes {
 		out = append(out, w)
@@ -389,6 +390,29 @@ func addEmbed(tree *fileTree, byPath map[string]*Entry, add func(string, bool, i
 	for _, p := range []string{embedded.WorkflowPath, embedded.CopilotSetupStepsPath, embedded.ClaudeLocalSettingsPath, embedded.CopilotLocalSettingsPath, embedded.GitattributesPath} {
 		if e := byPath[p]; e != nil && e.Mode != "160000" {
 			place(tree, byPath, e, add)
+		}
+	}
+}
+
+// addPolicyLocalCaseVariants places any case variant of
+// embedded.PolicyLocalPath (a differently-cased .tripcord/Policy.local.yaml
+// or .TRIPCORD/policy.local.yaml) addPolicy's exact-case ".tripcord/" prefix
+// match does not catch, so a --staged scan can still read and report it
+// (see embedded.Check's policyLocal and TC-CFG-016's case-variant guard: a
+// case-insensitive checkout, macOS or Windows, resolves the policy loader's
+// own os.ReadFile(embedded.PolicyLocalPath) to one of these behind git's
+// back, even though git's own tracking never folds case).
+func addPolicyLocalCaseVariants(byPath map[string]*Entry, add func(string, bool, int64)) {
+	wantDir, wantBase := path.Split(embedded.PolicyLocalPath)
+	wantDir = strings.TrimSuffix(wantDir, "/")
+	for p, e := range byPath {
+		if e.Mode == "160000" {
+			continue
+		}
+		dir, base := path.Split(p)
+		dir = strings.TrimSuffix(dir, "/")
+		if strings.EqualFold(dir, wantDir) && strings.EqualFold(base, wantBase) {
+			addSized(p, e, add)
 		}
 	}
 }
