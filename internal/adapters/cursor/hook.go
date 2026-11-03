@@ -46,7 +46,7 @@ func ParseHookInput(event string, data []byte, now time.Time) (model.Event, erro
 		return model.Event{}, err
 	}
 	if in.HookEventName != name {
-		return model.Event{}, hook.Inputf("cursor: hook_event_name %q: want %s", in.HookEventName, name)
+		return model.Event{}, hook.Inputf("cursor: hook_event_name is not %s", name)
 	}
 	call := hook.Call{
 		Harness:   model.HarnessCursor,

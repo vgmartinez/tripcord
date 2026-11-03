@@ -34,7 +34,7 @@ func ParseHookInput(event string, data []byte, now time.Time) (model.Event, erro
 		return model.Event{}, err
 	}
 	if in.HookEventName != claudePreToolUse {
-		return model.Event{}, hook.Inputf("claude: hook_event_name %q: want %s", in.HookEventName, claudePreToolUse)
+		return model.Event{}, hook.Inputf("claude: hook_event_name is not %s", claudePreToolUse)
 	}
 	if in.ToolName == "" {
 		return model.Event{}, hook.Inputf("claude: tool_name is missing")
