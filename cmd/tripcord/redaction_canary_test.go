@@ -516,6 +516,21 @@ func TestRedactionCanaryRedactFalse(t *testing.T) {
 	}
 }
 
+// TestRedactionCanaryUnknownCommand: an invalid top-level command whose
+// argv itself carries a canary is echoed back redacted, not raw, in the
+// "unknown command" error.
+func TestRedactionCanaryUnknownCommand(t *testing.T) {
+	t.Parallel()
+	for _, c := range redactionCanaries {
+		var stdout, stderr bytes.Buffer
+		code := run([]string{c.text}, &stdout, &stderr)
+		if code != int(exitcode.Config) {
+			t.Errorf("%s: exit %d, want %d", c.class, code, exitcode.Config)
+		}
+		assertNoCanary(t, c.class+" unknown command", stdout.String()+stderr.String())
+	}
+}
+
 // TestRedactionCanaryHome covers S5-S7: a home directory whose name is
 // a canary, with and without a trailing slash, never appears in scan
 // output for user-scope config, in a hook error for a project under

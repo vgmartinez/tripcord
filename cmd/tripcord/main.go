@@ -128,8 +128,14 @@ func run(args []string, stdout, stderr io.Writer) (code int) {
 	case "hook":
 		return runHook(args[1:], stdout, stderr)
 	default:
-		msg := fmt.Sprintf("tripcord: unknown command %q\n\n%s", args[0], usage)
-		writeString(stderr, msg)
+		// Redact the raw command before quoting it: %q escapes a
+		// control byte such as a line continuation's newline into the
+		// two literal characters "\n", which no longer matches the
+		// redactor's line-continuation pattern, letting a value after
+		// one leak. output.Message, applied first, sees the actual
+		// byte and redacts it.
+		command := output.Message(foldHome(args[0]))
+		writeString(stderr, fmt.Sprintf("tripcord: unknown command %q\n\n%s", command, usage))
 		return int(exitcode.Config)
 	}
 }
