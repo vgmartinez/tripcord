@@ -277,7 +277,7 @@ func TestCFG016FixturesMatchInit(t *testing.T) {
 	for _, name := range slices.Sorted(maps.Keys(cfg016Fixtures)) {
 		fx := cfg016Fixtures[name]
 		t.Run(name, func(t *testing.T) {
-			dir := outsideGit(t)
+			dir := embedRoot(t)
 			if fx.args != nil {
 				if code, _, stderr := runCLI(t, append(slices.Clone(fx.args), dir)...); code != 0 {
 					t.Fatalf("init: exit %d: %s", code, stderr)

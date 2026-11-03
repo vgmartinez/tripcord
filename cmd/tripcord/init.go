@@ -80,6 +80,11 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return fail(exitcode.Config, err)
 	}
+	// tripcord hook finds the policy at the Git root and fails without
+	// one, so wiring outside a repository would block every tool call.
+	if embed && !repoRoot(dir) {
+		return fail(exitcode.Config, fmt.Errorf("--embed needs a Git repository: %s has no .git, so every hook would block; run git init there first; nothing was written", dir))
+	}
 	changes, err := embedded.Plan(dir, opts)
 	if err != nil {
 		var plan *embedded.PlanError
