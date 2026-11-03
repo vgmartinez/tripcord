@@ -39,12 +39,10 @@ The hook's manifest sets `pass_filenames: true`, `always_run: true`, and
 pre-commit.ci and other CI run hooks, when nothing is staged — pass the
 files they are reviewing. With `pass_filenames: false` those commands
 invoked the hook with no paths and an empty index, and the scan reported
-nothing. `always_run` keeps the hook from being skipped when pre-commit's
-default `types: [file]` filter matches no filenames. That filter is what
-drops a symlink (identify tags it `symlink`, not `file`) and what, together
-with pre-commit requiring the path to exist, drops a deletion. A commit that
-only retargets a symlink, or only deletes a file, would otherwise print
-`(no files to check) Skipped` and never run the hook.
+nothing. `always_run` keeps the hook from being skipped when no filename is
+passed. A deletion looks like that: pre-commit requires the path to exist,
+so a deleted file is never a filename, and the hook would otherwise print
+`(no files to check) Skipped`.
 
 `tripcord scan --staged` reports findings against the **union** of the
 paths it was given and the staged change set from
@@ -60,15 +58,18 @@ in a different batch is still reported, and the same finding can be printed
 more than once. That duplication is harmless: any reported finding blocks
 the commit.
 
-`types` is left at pre-commit's default `[file]`. `types: [file, symlink]`
-would not help: `types` requires every listed tag, and a path is never both
-a regular file and a symlink. Under `--all-files`, a symlink path itself is
-therefore not passed. The finding is still reported when the symlink's
-target is a tracked regular file, because that target is in the finding's
-source set and `--all-files` does pass it. A finding whose only in-repo
-path is the symlink (its target is not a tracked regular file) is not
-passed by `--all-files`; the diff-index union still covers it on a commit
-that stages the symlink.
+`types` is `[]` and `types_or` is `[file, symlink]`. `types` is an AND
+filter, and its default `[file]` would exclude every symlink: identify tags
+a symlink `symlink`, not `file`, so a path is never both. An empty `types`
+list matches every tag, and `types_or` then keeps a regular file or a
+symlink. `types: [file, symlink]` would match nothing, because that list
+still requires every tag. Under `--all-files`, a symlink path is therefore
+passed, including one whose target is outside the repository or not a
+tracked file. When the target is outside the repository, the target is not
+read and the hook exits 3 with `symlink resolves outside the repository`,
+the same result `tripcord scan --staged` reports for that symlink. A
+deletion is still absent from the filenames; the diff-index change set, or
+the from-ref/to-ref diff, supplies it.
 
 The hook reports a finding when any file in that finding's **source set** is
 in the change set, not only when the finding's own location changed. A

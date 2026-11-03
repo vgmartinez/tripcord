@@ -421,11 +421,27 @@ func TestPreCommitHookContract(t *testing.T) {
 	}
 	// Tripcord, not a pre-commit files regex, decides what counts as
 	// configuration (a referenced or symlinked file can matter without
-	// its own path or extension looking like config). The hook must run
-	// on every commit, so it must not carry a files or types filter.
-	for _, key := range []string{"files", "types", "types_or"} {
-		if _, ok := hook[key]; ok {
-			t.Errorf("hook has %s = %v, want no file filter", key, hook[key])
+	// its own path or extension looking like config). The hook must not
+	// carry a files regex. types is explicitly empty: the default [file]
+	// is an AND filter and would drop a symlink (identify tags it
+	// symlink, not file) even with types_or set. types_or then keeps a
+	// regular file or a symlink, so --all-files passes both.
+	if _, ok := hook["files"]; ok {
+		t.Errorf("hook has files = %v, want no files regex", hook["files"])
+	}
+	types, ok := hook["types"].([]any)
+	if !ok || len(types) != 0 {
+		t.Errorf("hook types = %#v, want an empty list", hook["types"])
+	}
+	gotOr, ok := hook["types_or"].([]any)
+	wantOr := []string{"file", "symlink"}
+	if !ok || len(gotOr) != len(wantOr) {
+		t.Errorf("hook types_or = %#v, want %v", hook["types_or"], wantOr)
+	} else {
+		for i, want := range wantOr {
+			if fmt.Sprint(gotOr[i]) != want {
+				t.Errorf("hook types_or[%d] = %v, want %s", i, gotOr[i], want)
+			}
 		}
 	}
 	docs, err := os.ReadFile(filepath.Join("..", "..", "docs", "pre-commit.md"))
