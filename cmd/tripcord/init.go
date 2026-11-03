@@ -109,7 +109,7 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 	// server's token), so it is redacted like any other output.
 	if dryRun {
 		for _, c := range changes {
-			if code := writeString(stdout, output.DefaultRedactor(embedded.UnifiedDiff(c))); code != int(exitcode.OK) {
+			if code := writeString(stdout, output.RedactJSONText(embedded.UnifiedDiff(c))); code != int(exitcode.OK) {
 				return code
 			}
 		}
