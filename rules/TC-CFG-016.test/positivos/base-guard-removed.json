@@ -1,0 +1,112 @@
+[
+  {
+    "harness": "generic",
+    "scope": "repo",
+    "path": ".tripcord/embed.json",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "kind": "permissions",
+    "payload": {
+      "key": "[\"tripcordGuard\",\"manifest\"]",
+      "setting": "tripcordGuard",
+      "state": "removed",
+      "subject": "manifest"
+    }
+  },
+  {
+    "harness": "generic",
+    "scope": "repo",
+    "path": ".tripcord/bootstrap.sh",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "kind": "permissions",
+    "payload": {
+      "key": "[\"tripcordGuard\",\"bootstrap\"]",
+      "setting": "tripcordGuard",
+      "state": "removed",
+      "subject": "bootstrap"
+    }
+  },
+  {
+    "harness": "claude",
+    "scope": "repo",
+    "path": ".claude/settings.json",
+    "sha256": "78922a784ee78e9e50587e93628cd3b9d4dfbe49087adc4514e6781cea38cbb9",
+    "kind": "permissions",
+    "payload": {
+      "event": "SessionStart",
+      "key": "[\"tripcordGuard\",\"SessionStart\"]",
+      "setting": "tripcordGuard",
+      "state": "removed",
+      "subject": "SessionStart"
+    }
+  },
+  {
+    "harness": "claude",
+    "scope": "repo",
+    "path": ".claude/settings.json",
+    "sha256": "78922a784ee78e9e50587e93628cd3b9d4dfbe49087adc4514e6781cea38cbb9",
+    "kind": "permissions",
+    "payload": {
+      "event": "PreToolUse",
+      "key": "[\"tripcordGuard\",\"PreToolUse\"]",
+      "setting": "tripcordGuard",
+      "state": "removed",
+      "subject": "PreToolUse"
+    }
+  },
+  {
+    "harness": "cursor",
+    "scope": "repo",
+    "path": ".cursor/hooks.json",
+    "sha256": "887820009578e8dc55e174da5873b4025cde40c5b0c33e750b69238b3c158079",
+    "kind": "permissions",
+    "payload": {
+      "event": "sessionStart",
+      "key": "[\"tripcordGuard\",\"sessionStart\"]",
+      "setting": "tripcordGuard",
+      "state": "removed",
+      "subject": "sessionStart"
+    }
+  },
+  {
+    "harness": "cursor",
+    "scope": "repo",
+    "path": ".cursor/hooks.json",
+    "sha256": "887820009578e8dc55e174da5873b4025cde40c5b0c33e750b69238b3c158079",
+    "kind": "permissions",
+    "payload": {
+      "event": "preToolUse",
+      "key": "[\"tripcordGuard\",\"preToolUse\"]",
+      "setting": "tripcordGuard",
+      "state": "removed",
+      "subject": "preToolUse"
+    }
+  },
+  {
+    "harness": "copilot",
+    "scope": "repo",
+    "path": ".github/hooks/tripcord.json",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "kind": "permissions",
+    "payload": {
+      "event": "sessionStart",
+      "key": "[\"tripcordGuard\",\"sessionStart\"]",
+      "setting": "tripcordGuard",
+      "state": "removed",
+      "subject": "sessionStart"
+    }
+  },
+  {
+    "harness": "copilot",
+    "scope": "repo",
+    "path": ".github/hooks/tripcord.json",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "kind": "permissions",
+    "payload": {
+      "event": "preToolUse",
+      "key": "[\"tripcordGuard\",\"preToolUse\"]",
+      "setting": "tripcordGuard",
+      "state": "removed",
+      "subject": "preToolUse"
+    }
+  }
+]

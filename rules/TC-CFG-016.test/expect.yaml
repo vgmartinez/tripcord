@@ -12,3 +12,15 @@ positivos:
   embed-copilot-not-tripcord: high
   embed-claude-hook-loosened: high
   embed-claude-disable-all-hooks: high
+  embed-guard-removed-workflow-left: high
+  embed-leftover-claude-hook: high
+  embed-bootstrap-missing: high
+  embed-bootstrap-changed: high
+  embed-bootstrap-digest-forged: high
+  embed-manifest-unreadable: high
+  embed-workflow-changed: high
+  embed-copilot-step-changed: high
+  base-guard-removed.json: high
+  base-embed-removed.json: high
+  base-harness-dropped.json: high
+  base-repinned.json: high

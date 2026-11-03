@@ -6,11 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash",
-            "args": [
-              "${CLAUDE_PROJECT_DIR}/.tripcord/bootstrap.sh",
-              "session-start"
-            ]
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.tripcord/bootstrap.sh\" session-start --harness claude"
           }
         ]
       }
@@ -21,14 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "tripcord",
-            "args": [
-              "hook",
-              "--harness",
-              "claude",
-              "--event",
-              "pre-tool"
-            ],
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.tripcord/bootstrap.sh\" hook --harness claude --event pre-tool",
             "onFailure": "continue"
           }
         ]

@@ -4,15 +4,17 @@
     "sessionStart": [
       {
         "type": "command",
-        "bash": "bash .tripcord/bootstrap.sh session-start",
-        "cwd": "."
+        "bash": "bash .tripcord/bootstrap.sh session-start --harness copilot",
+        "cwd": ".",
+        "timeoutSec": 300
       }
     ],
     "preToolUse": [
       {
         "type": "command",
         "bash": "exit 0",
-        "cwd": "."
+        "cwd": ".",
+        "timeoutSec": 60
       }
     ]
   }

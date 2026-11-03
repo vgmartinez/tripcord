@@ -1,0 +1,3 @@
+{
+  "install": "bash .tripcord/bootstrap.sh install"
+}

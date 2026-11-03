@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "type": "command",
+        "bash": "bash .tripcord/bootstrap.sh session-start --harness copilot",
+        "cwd": ".",
+        "timeoutSec": 300
+      }
+    ],
+    "preToolUse": [
+      {
+        "type": "command",
+        "bash": "bash .tripcord/bootstrap.sh hook --harness copilot --event pre-tool",
+        "cwd": ".",
+        "timeoutSec": 60
+      }
+    ]
+  }
+}

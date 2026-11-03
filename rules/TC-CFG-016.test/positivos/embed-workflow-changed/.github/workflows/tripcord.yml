@@ -1,0 +1,34 @@
+# Written by tripcord init --embed.
+# Scans pull requests that touch agent configuration. pull_request only:
+# never pull_request_target, so a fork's head never runs with write
+# access or secrets.
+name: tripcord
+
+on:
+  pull_request:
+    paths:
+      - ".claude/**"
+      - ".cursor/**"
+      - ".codex/**"
+      - ".github/**"
+      - ".vscode/**"
+      - ".mcp.json"
+      - "AGENTS.md"
+      - "CLAUDE.md"
+      - "GEMINI.md"
+      - ".devin/**"
+      - ".tripcord/**"
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    permissions:
+      contents: read # checkout the repository being scanned
+      pull-requests: read # tripcord-pr.yml reads pull request reviews
+      security-events: write # upload the SARIF report
+    # Reusable workflow pinned by full commit SHA (main@6e1d5db).
+    uses: vgmartinez/tripcord/.github/workflows/tripcord-pr.yml@6e1d5db7a7d373b7fb4573f554af99471e1d7066 # main@6e1d5db # zizmor: ignore[ref-version-mismatch]
+    with:
+      fail-on: critical

@@ -17,20 +17,36 @@
 # key. See docs/rules/TC-CFG-016.md. No key is guessed here. Cursor is
 # in harness for the embed clause below only.
 #
-# The second clause is the single-tree embed case (issue #39). When the
+# The other clauses are the Tripcord embed (issue #39). When the
 # repository holds a Tripcord embed (.tripcord/bootstrap.sh or
-# .tripcord/embed.json), the scan compares each hook that
-# `tripcord init --embed` wrote for the harnesses the manifest records
-# (Claude Code, Cursor, Copilot) with the canonical entry, by SHA-256
-# (internal/embedded). A hook that is missing, edited, or in a file that
-# no longer parses becomes a permissions item with setting
-# tripcordGuard at that wiring file. Only harnesses selected at init
-# time are checked.
+# .tripcord/embed.json), or a leftover piece of one (a hook entry that
+# names tripcord, .github/workflows/tripcord.yml, or the Copilot hooks
+# file), internal/embedded checks every file and hook
+# `tripcord init --embed` writes and reports each one that is not
+# intact as a permissions item with setting tripcordGuard. Its state
+# picks the clause:
 #
-# What this rule does not do: tell whether a hook that used to be
-# present in a base tree was removed when the embed itself was removed
-# too. That needs a base tree to diff against; see
-# docs/rules/TC-CFG-016.md.
+#   missing     the file, hook, or Copilot setup step is not there.
+#   changed     it differs both from what init renders for the pin
+#               recorded in embed.json and from the SHA-256 embed.json
+#               records. bootstrap.sh and tripcord.yml are re-rendered
+#               from the pin, so an embed.json whose digests were edited
+#               to match a tampered bootstrap.sh still reports changed.
+#   stale       it matches the SHA-256 embed.json records but not what
+#               this build of init renders: an older Tripcord wrote it.
+#   unreadable  the file cannot be read or does not parse.
+#
+# With a base revision (scan --since or --base, which the reusable
+# workflow passes on pull requests) a change is also compared with the
+# base when the base had an embed:
+#
+#   removed     the base had the file or a Tripcord hook and the change
+#               removes it, including removing the whole embed.
+#   dropped     the change drops a harness from embed.json.
+#   repinned    the change changes the pinned version or a checksum. A
+#               consistent re-pin of embed.json and bootstrap.sh is the
+#               one bootstrap edit the head tree alone cannot tell from
+#               a release update, so it needs review.
 #
 # settings.local.json is personal and is not part of this rule's files,
 # the same exclusion TC-CFG-004 and TC-CFG-005 make for Claude Code.
@@ -38,13 +54,17 @@ id: TC-CFG-016
 pack: tripcord/core
 title: "Shared config turns off every hook"
 severity: high
-harness: [claude, copilot, cursor, gemini]
+harness: [claude, copilot, cursor, gemini, generic]
 files:
   - "**/.claude/settings.json"
   - "**/.github/copilot/settings.json"
   - "**/.github/hooks/*.json"
   - "**/.gemini/settings.json"
   - "**/.cursor/hooks.json"
+  - "**/.tripcord/bootstrap.sh"
+  - "**/.tripcord/embed.json"
+  - "**/.github/workflows/tripcord.yml"
+  - "**/.github/workflows/copilot-setup-steps.yml"
 when: |
   config.kind == "permissions" && config.scope == "repo" && has(payload.setting)
 severity_when:
@@ -57,10 +77,41 @@ severity_when:
           has(payload.value) && type(payload.value) == map &&
           has(payload.value.enabled) && payload.value.enabled == false))
   - severity: high
-    title: "Tripcord embed is missing its own hook"
+    title: "Tripcord embed is missing part of its guard"
     when: |
-      has(payload.setting) && config.harness in ["claude", "copilot", "cursor"] && payload.setting == "tripcordGuard"
-fix: "Remove disableAllHooks (Claude Code, Copilot) or hooksConfig.enabled: false (Gemini CLI) from the shared file. Disabling every hook also disables any hook-based guard the harness would otherwise run, including Tripcord's own; to pause a single hook, remove that hook's own entry or use the harness's managed-hooks allow list instead of a blanket switch. When the finding is a missing Tripcord hook, restore it with `tripcord init --embed` (add --force to replace an edited one), or remove the harness from .tripcord/embed.json if it is no longer used."
+      has(payload.setting) && payload.setting == "tripcordGuard" && has(payload.state) && payload.state == "missing"
+    fix: "Restore the missing file, hook, or setup step with `tripcord init --embed --force` using the version and --sha256 pins recorded in .tripcord/embed.json. To stop using a harness, remove it from the harnesses list in .tripcord/embed.json in a reviewed change instead of deleting its hook."
+  - severity: high
+    title: "Tripcord guard was edited"
+    when: |
+      has(payload.setting) && payload.setting == "tripcordGuard" && has(payload.state) && payload.state == "changed"
+    fix: "Restore the file with `tripcord init --embed --force` using the pins recorded in .tripcord/embed.json, and review who changed it. bootstrap.sh, tripcord.yml, the Copilot setup step, and the hook entries must stay exactly as init writes them; edits to embed.json's digests do not make an edited file pass."
+  - severity: high
+    title: "Tripcord guard was written by an older Tripcord"
+    when: |
+      has(payload.setting) && payload.setting == "tripcordGuard" && has(payload.state) && payload.state == "stale"
+    fix: "Rerun `tripcord init --embed --force` with the same --version and --sha256 pins to rewrite the guard in this release's form, and commit the result."
+  - severity: high
+    title: "Tripcord guard file cannot be read"
+    when: |
+      has(payload.setting) && payload.setting == "tripcordGuard" && has(payload.state) && payload.state == "unreadable"
+    fix: "Make the file a regular file inside the repository that parses again (JSON, JSONC for Cursor, or YAML), then rerun `tripcord init --embed --force` with the pins recorded in .tripcord/embed.json."
+  - severity: high
+    title: "This change removes Tripcord's guard"
+    when: |
+      has(payload.setting) && payload.setting == "tripcordGuard" && has(payload.state) && payload.state == "removed"
+    fix: "Keep the Tripcord embed: restore the removed file or hook from the base branch, or rerun `tripcord init --embed --force` with the base's pins. Removing the embed on purpose needs its own reviewed change with a code owner's approval."
+  - severity: high
+    title: "This change drops a harness from the Tripcord embed"
+    when: |
+      has(payload.setting) && payload.setting == "tripcordGuard" && has(payload.state) && payload.state == "dropped"
+    fix: "Keep the harness in .tripcord/embed.json and its hook in place unless the repository no longer uses that harness; dropping it turns off Tripcord's guard for that harness."
+  - severity: high
+    title: "This change re-pins Tripcord"
+    when: |
+      has(payload.setting) && payload.setting == "tripcordGuard" && has(payload.state) && payload.state == "repinned"
+    fix: "Check that the new version and every --sha256 match a published Tripcord release, then approve. A re-pin rewrites the binary every hook runs, so it needs the same review as a dependency update."
+fix: "Remove disableAllHooks (Claude Code, Copilot) or hooksConfig.enabled: false (Gemini CLI) from the shared file. Disabling every hook also disables any hook-based guard the harness would otherwise run, including Tripcord's own; to pause a single hook, remove that hook's own entry or use the harness's managed-hooks allow list instead of a blanket switch."
 refs:
   - https://code.claude.com/docs/en/hooks
   - https://docs.github.com/en/copilot/reference/hooks-reference

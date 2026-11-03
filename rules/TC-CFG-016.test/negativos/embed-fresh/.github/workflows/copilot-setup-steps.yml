@@ -13,8 +13,13 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: copilot-setup-steps-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   copilot-setup-steps:
+    name: Copilot setup steps
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

@@ -3,12 +3,12 @@
   "hooks": {
     "sessionStart": [
       {
-        "command": "bash .tripcord/bootstrap.sh session-start"
+        "command": "bash \"${CURSOR_PROJECT_DIR}/.tripcord/bootstrap.sh\" session-start --harness cursor"
       }
     ],
     "preToolUse": [
       {
-        "command": "tripcord hook --harness cursor --event pre-tool",
+        "command": "bash \"${CURSOR_PROJECT_DIR}/.tripcord/bootstrap.sh\" hook --harness cursor --event pre-tool",
         "failClosed": true
       }
     ]

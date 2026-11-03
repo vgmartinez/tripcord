@@ -1,0 +1,17 @@
+[
+  {
+    "harness": "generic",
+    "scope": "repo",
+    "path": ".tripcord/embed.json",
+    "sha256": "3544efbca878df732bf42791d72d2a7c8f706de61ee39cf7fdfa758bc1bdea7c",
+    "kind": "permissions",
+    "payload": {
+      "from": "0.1.0",
+      "key": "[\"tripcordGuard\",\"manifest-pin\"]",
+      "setting": "tripcordGuard",
+      "state": "repinned",
+      "subject": "manifest-pin",
+      "to": "0.1.1"
+    }
+  }
+]
