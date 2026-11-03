@@ -512,3 +512,63 @@ func TestHookEntryDigestsAreStable(t *testing.T) {
 		t.Fatalf("manifest files = %+v", m.Files)
 	}
 }
+
+func TestCheckSymlinks(t *testing.T) {
+	t.Run("bootstrap.sh", func(t *testing.T) {
+		dir := embed(t, model.HarnessClaude)
+		script := filepath.Join(dir, filepath.FromSlash(BootstrapPath))
+		if err := os.Rename(script, script+".real"); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink("bootstrap.sh.real", script); err != nil {
+			t.Fatal(err)
+		}
+		want := []guardHit{{model.SurfaceGeneric, BootstrapPath, subjectBootstrap, StateChanged}}
+		if got := check(t, dir); !slices.Equal(got, want) {
+			t.Fatalf("hits = %+v\nwant %+v", got, want)
+		}
+	})
+	t.Run(".tripcord", func(t *testing.T) {
+		dir := embed(t, model.HarnessClaude)
+		moved := filepath.Join(dir, "vendor", "tripcord")
+		if err := os.MkdirAll(filepath.Dir(moved), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Rename(filepath.Join(dir, ".tripcord"), moved); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(filepath.Join("vendor", "tripcord"), filepath.Join(dir, ".tripcord")); err != nil {
+			t.Fatal(err)
+		}
+		want := []guardHit{
+			{model.SurfaceGeneric, ManifestPath, subjectManifest, StateChanged},
+			{model.SurfaceGeneric, BootstrapPath, subjectBootstrap, StateChanged},
+		}
+		if got := check(t, dir); !slices.Equal(got, want) {
+			t.Fatalf("hits = %+v\nwant %+v", got, want)
+		}
+	})
+	t.Run(".tripcord outside the repository", func(t *testing.T) {
+		dir := embed(t, model.HarnessClaude)
+		outside := filepath.Join(t.TempDir(), ".tripcord")
+		if err := os.Rename(filepath.Join(dir, ".tripcord"), outside); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(outside, filepath.Join(dir, ".tripcord")); err != nil {
+			t.Fatal(err)
+		}
+		// The manifest cannot be read through the link, so every hook
+		// harness is checked.
+		want := []guardHit{
+			{model.SurfaceGeneric, ManifestPath, subjectManifest, StateChanged},
+			{model.SurfaceGeneric, BootstrapPath, subjectBootstrap, StateChanged},
+			{model.HarnessCursor, CursorHooksPath, "sessionStart", StateMissing},
+			{model.HarnessCursor, CursorHooksPath, "preToolUse", StateMissing},
+			{model.HarnessCopilot, CopilotHooksPath, "sessionStart", StateMissing},
+			{model.HarnessCopilot, CopilotHooksPath, "preToolUse", StateMissing},
+		}
+		if got := check(t, dir); !slices.Equal(got, want) {
+			t.Fatalf("hits = %+v\nwant %+v", got, want)
+		}
+	})
+}

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"io/fs"
 	"maps"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -20,7 +22,8 @@ const (
 	// StateMissing: the file, or the hook or step in it, is not there.
 	StateMissing = "missing"
 	// StateChanged: the file, hook, or step differs from what init
-	// writes for the recorded pin, and from what the manifest records.
+	// writes for the recorded pin, and from what the manifest records,
+	// or bootstrap.sh, embed.json, or .tripcord is a symlink.
 	StateChanged = "changed"
 	// StateStale: it is what the manifest records, but not what this
 	// build of init writes: an older Tripcord wrote it.
@@ -63,6 +66,11 @@ type CheckOptions struct {
 type file struct {
 	raw   []byte
 	state string
+	// linked is true when the file, or the .tripcord directory that
+	// holds it, is a symlink. bootstrap.sh resolves its own directory
+	// to find the repository, so a link makes it run, and scan,
+	// another tree.
+	linked bool
 }
 
 func (f file) exists() bool { return f.state != StateMissing }
@@ -92,6 +100,11 @@ func newRevision(read func(rel string) (file, error)) (*revision, error) {
 		t.manifest, t.manifestOK = parseManifest(m.raw)
 	}
 	return t, nil
+}
+
+func isSymlink(root, rel string) bool {
+	info, err := os.Lstat(filepath.Join(root, filepath.FromSlash(rel)))
+	return err == nil && info.Mode()&fs.ModeSymlink != 0
 }
 
 func parseManifest(raw []byte) (Manifest, bool) {
@@ -210,8 +223,11 @@ func Check(root string, opts CheckOptions) ([]model.ConfigItem, error) {
 	}
 	defer func() { _ = r.Close() }()
 	head, err := newRevision(func(rel string) (file, error) {
+		linked := strings.HasPrefix(rel, ".tripcord/") && (isSymlink(root, ".tripcord") || isSymlink(root, rel))
 		raw, err := r.ReadFile(rel, adapters.MaxConfigFileBytes)
 		switch {
+		case linked:
+			return file{raw: raw, linked: true}, nil
 		case errors.Is(err, fs.ErrNotExist):
 			return file{state: StateMissing}, nil
 		case err != nil:
@@ -318,6 +334,9 @@ func (c *checker) absent(baseHad bool) string {
 func (c *checker) manifest() {
 	f := c.head.files[ManifestPath]
 	switch {
+	case f.linked:
+		c.add(model.SurfaceGeneric, ManifestPath, subjectManifest, "", StateChanged, f.raw, nil)
+		return
 	case !f.exists():
 		c.add(model.SurfaceGeneric, ManifestPath, subjectManifest, "", c.absent(c.base != nil && c.base.files[ManifestPath].exists()), f.raw, nil)
 		return
@@ -349,6 +368,8 @@ func (c *checker) manifest() {
 func (c *checker) ownFile(subject, path string, render func(Manifest) []byte) {
 	f := c.head.files[path]
 	switch {
+	case f.linked:
+		c.add(model.SurfaceGeneric, path, subject, "", StateChanged, f.raw, nil)
 	case !f.exists():
 		c.add(model.SurfaceGeneric, path, subject, "", c.absent(c.base != nil && c.base.files[path].exists()), nil, nil)
 	case f.state != "":

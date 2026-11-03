@@ -331,3 +331,42 @@ func TestBootstrapRejectsTamperedNPMPackage(t *testing.T) {
 		t.Fatalf("tampered binary was cached: %v", err)
 	}
 }
+
+func TestBootstrapRefusesSymlinks(t *testing.T) {
+	for name, link := range map[string]func(*testing.T, *bootstrapEnv){
+		"symlinked .tripcord": func(t *testing.T, e *bootstrapEnv) {
+			other := t.TempDir()
+			dir := filepath.Join(e.repo, ".tripcord")
+			if err := os.Rename(dir, filepath.Join(other, ".tripcord")); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(filepath.Join(other, ".tripcord"), dir); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"symlinked bootstrap.sh": func(t *testing.T, e *bootstrapEnv) {
+			script := filepath.Join(e.repo, filepath.FromSlash(BootstrapPath))
+			if err := os.Rename(script, script+".real"); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink("bootstrap.sh.real", script); err != nil {
+				t.Fatal(err)
+			}
+		},
+	} {
+		for _, args := range [][]string{{"session-start", "--harness", "claude"}, {"hook", "--harness", "claude", "--event", HookEvent}} {
+			t.Run(name+" "+args[0], func(t *testing.T) {
+				e := newBootstrapEnv(t, map[string]string{hostPlatform(t): sum(fakeScanBinary)})
+				e.putCache(t, fakeScanBinary)
+				link(t, e)
+				code, _, stderr := e.runSplit(t, args...)
+				if code == 0 || !strings.Contains(stderr, "must not be symlinks") {
+					t.Fatalf("exit %d, stderr %q", code, stderr)
+				}
+				if got := e.ran(t); got != "" {
+					t.Fatalf("binary ran with %q", got)
+				}
+			})
+		}
+	}
+}

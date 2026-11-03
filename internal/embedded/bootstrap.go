@@ -206,6 +206,11 @@ verified() {
   [ "$got" = "$want" ]
 }
 
+# pwd -P below resolves the script's directory: through a symlinked
+# .tripcord it would name another tree and scan that instead.
+if [ -L "$0" ] || [ -L "$(dirname -- "$0")" ]; then
+  fail ".tripcord and .tripcord/bootstrap.sh must not be symlinks; rerun tripcord init --embed --force"
+fi
 script_dir="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)"
 repo_root="$(CDPATH='' cd -- "$script_dir/.." && pwd -P)"
 cache_root="${XDG_CACHE_HOME:-${HOME:?HOME is not set}/.cache}"
