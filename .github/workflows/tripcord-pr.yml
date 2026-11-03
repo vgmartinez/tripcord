@@ -6,9 +6,9 @@ name: Tripcord
 # security-events: write stays on this job even when upload-sarif is
 # false: called-workflow permissions are checked before inputs.
 #
-# The composite action is pinned to 7ffdcbea10174609eb58284c21bcb94aee4a2a82
-# (# main@7ffdcbe). That commit is on main, accepts reviews-file, and
-# tracks no symlinks.
+# The composite action is pinned to 53035dd6f05076e35a0b03329bb9e9c176fd5750
+# (# cursor/tripcord-pr-workflow-986e@53035dd). It contains the
+# workspace pr-context fix needed by this reusable workflow.
 # A TC-CFG-014 denial fails this job: the action step does not continue
 # on error.
 
@@ -120,7 +120,7 @@ jobs:
           esac
       - name: Tripcord
         id: tripcord
-        uses: vgmartinez/tripcord/.github/actions/tripcord@7ffdcbea10174609eb58284c21bcb94aee4a2a82 # main@7ffdcbe # zizmor: ignore[ref-version-mismatch]
+        uses: vgmartinez/tripcord/.github/actions/tripcord@53035dd6f05076e35a0b03329bb9e9c176fd5750 # cursor/tripcord-pr-workflow-986e@53035dd # zizmor: ignore[ref-version-mismatch]
         with:
           ref: ${{ inputs.ref }}
           binary: ${{ inputs.binary }}

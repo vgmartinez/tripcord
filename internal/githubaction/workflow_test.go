@@ -15,8 +15,8 @@ import (
 const (
 	workflowCheckout  = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
 	workflowScript    = "actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3"
-	workflowAction    = "vgmartinez/tripcord/.github/actions/tripcord@7ffdcbea10174609eb58284c21bcb94aee4a2a82"
-	workflowActionPin = workflowAction + " # main@7ffdcbe"
+	workflowAction    = "vgmartinez/tripcord/.github/actions/tripcord@53035dd6f05076e35a0b03329bb9e9c176fd5750"
+	workflowActionPin = workflowAction + " # cursor/tripcord-pr-workflow-986e@53035dd"
 )
 
 func TestTripcordWorkflowContract(t *testing.T) {
@@ -151,7 +151,7 @@ func checkOneJobWorkflow(t *testing.T, wf workflowFile, wantPerms map[string]str
 		t.Fatal("workflow inherits secrets")
 	}
 	if !strings.Contains(text, workflowActionPin) {
-		t.Fatal("action pin is missing # main@7ffdcbe")
+		t.Fatal("action pin is missing # cursor/tripcord-pr-workflow-986e@53035dd")
 	}
 	for _, version := range []string{"# v7.0.1", "# v9.0.0"} {
 		if !strings.Contains(text, version) {
