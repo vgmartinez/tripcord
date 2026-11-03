@@ -176,13 +176,14 @@ runs:
       shell: bash
       env:
         TRIPCORD: ${{ steps.tool.outputs.path }}
+        TRIPCORD_PATH: ${{ inputs.path }}
         TRIPCORD_REVIEWS_FILE: ${{ inputs.reviews-file }}
       run: |
         set +e
         if [ -n "$TRIPCORD_REVIEWS_FILE" ]; then
-          "$TRIPCORD" pr-context --format gha --repo "$GITHUB_WORKSPACE" --reviews-file "$TRIPCORD_REVIEWS_FILE"
+          "$TRIPCORD" pr-context --format gha --repo "$TRIPCORD_PATH" --reviews-file "$TRIPCORD_REVIEWS_FILE"
         else
-          "$TRIPCORD" pr-context --format gha --repo "$GITHUB_WORKSPACE"
+          "$TRIPCORD" pr-context --format gha --repo "$TRIPCORD_PATH"
         fi
         status=$?
         echo "exit-code=$status" >> "$GITHUB_OUTPUT"

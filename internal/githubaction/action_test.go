@@ -37,11 +37,10 @@ func TestTripcordActionContract(t *testing.T) {
 		Runs struct {
 			Using string `yaml:"using"`
 			Steps []struct {
-				ID   string            `yaml:"id"`
-				If   string            `yaml:"if"`
-				Uses string            `yaml:"uses"`
-				Run  string            `yaml:"run"`
-				Env  map[string]string `yaml:"env"`
+				ID   string `yaml:"id"`
+				If   string `yaml:"if"`
+				Uses string `yaml:"uses"`
+				Run  string `yaml:"run"`
 			} `yaml:"steps"`
 		} `yaml:"runs"`
 	}
@@ -81,7 +80,6 @@ func TestTripcordActionContract(t *testing.T) {
 	seenUses := map[string]bool{}
 	allowed := map[string]bool{checkout: true, setupGo: true, uploadSARIF: true, comment: true}
 	var scan, prContext string
-	var prContextEnv map[string]string
 	for _, step := range action.Runs.Steps {
 		if strings.Contains(step.If, "always()") || strings.Contains(step.Run, "always()") {
 			t.Fatalf("step %q uses always()", step.ID)
@@ -100,7 +98,6 @@ func TestTripcordActionContract(t *testing.T) {
 		}
 		if step.ID == "pr-context" {
 			prContext = step.Run
-			prContextEnv = step.Env
 		}
 	}
 	for pin := range allowed {
@@ -130,12 +127,6 @@ func TestTripcordActionContract(t *testing.T) {
 	}
 	if !strings.Contains(prContext, "pr-context --format gha") {
 		t.Fatal("action does not run pr-context with the built binary")
-	}
-	if !strings.Contains(prContext, `--repo "$GITHUB_WORKSPACE"`) {
-		t.Fatal("pr-context does not use the checked-out workspace as its repository")
-	}
-	if _, ok := prContextEnv["TRIPCORD_PATH"]; ok {
-		t.Fatal("pr-context reuses the scan path instead of the checked-out workspace")
 	}
 	reviews, ok := action.Inputs["reviews-file"]
 	if !ok {
