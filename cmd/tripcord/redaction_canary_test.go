@@ -44,6 +44,7 @@ var redactionCanaries = []redactionCanary{
 	{class: "S4 Authorization header", text: `curl -H "Authorization: Bearer CNRYS4AB7Q2W" https://h.invalid/c`, secret: "CNRYS4AB7Q2W"},
 	{class: "S4 bearer", text: "echo bearer CNRYS4BT7Q2W0123456789", secret: "CNRYS4BT7Q2W"},
 	{class: "S4 URL userinfo", text: "git clone https://u:CNRYS4UI7Q2W@h.invalid/r", secret: "CNRYS4UI7Q2W"},
+	{class: "S4 URL userinfo empty username", text: "git clone redis://:CNRYS4EU7Q2W@h.invalid/0", secret: "CNRYS4EU7Q2W"},
 	{class: "S4 URL userinfo percent-encoded", text: "git clone https://u:p%40CNRYS4PE7Q2W@h.invalid/r", secret: "CNRYS4PE7Q2W"},
 	{class: "S4 MCP split argv", text: "server --token CNRYS4MA7Q2W", secret: "CNRYS4MA7Q2W", argv: []string{"--token", "CNRYS4MA7Q2W"}},
 	{class: "env assignment", text: "SECRET_KEY=CNRYENVA7Q2W make", secret: "CNRYENVA7Q2W"},

@@ -77,7 +77,9 @@ func (p shapePattern) mayMatch(value, lower string) bool {
 // make the URL's own scheme and host unreadable).
 // The password part runs to the LAST "@" before the host, the same way
 // net/url splits userinfo, so "https://user:p@ss@host" does not leak "ss".
-var urlUserinfoPattern = regexp.MustCompile(`(://)([^/\s:@]+:[^/?#\s]*)(@)`)
+// The username may be empty ("redis://:pw@h", "postgresql://:pw@db"): a
+// scheme that carries only a password still carries a credential.
+var urlUserinfoPattern = regexp.MustCompile(`(://)([^/\s:@]*:[^/?#\s]*)(@)`)
 
 // urlUserinfoSlashPattern is urlUserinfoPattern for a password that
 // contains "/" ("https://user:pa/ss@host"), which net/url cannot parse
@@ -85,7 +87,7 @@ var urlUserinfoPattern = regexp.MustCompile(`(://)([^/\s:@]+:[^/?#\s]*)(@)`)
 // "@". RedactURLUserinfo skips a match whose text before the first "/"
 // is all digits: that is a port and a path ("https://host:8080/x@y"),
 // not a password.
-var urlUserinfoSlashPattern = regexp.MustCompile(`(://)([^/\s:@]+:([^\s@?#]*/[^\s@?#]*))(@)`)
+var urlUserinfoSlashPattern = regexp.MustCompile(`(://)([^/\s:@]*:([^\s@?#]*/[^\s@?#]*))(@)`)
 
 // quotedOrBareValue is one assignment value: a double-quoted string that
 // correctly skips an escaped quote (\"), so {"password":"a\"b"} redacts
