@@ -236,10 +236,21 @@ func budget(size int64, nfiles *int, nbytes *int64) (keep, content bool, sparse 
 
 func consumeClaude(tree *fileTree, files []hit, byPath map[string]*Entry, read func(string) ([]byte, error), add func(string, bool, int64), uf *unionFind, nfiles *int, nbytes *int64) string {
 	roots := map[string]bool{}
+	// rootManifests and rootMarkets record, for every known plugin root,
+	// its own manifest path and every marketplace file that names it.
+	// Every hooks.json, skill, agent, and command discovered under that
+	// root "by convention" (see claude.RootFor) is unioned with both: a
+	// commit that adds only the manifest or marketplace entry newly
+	// makes an already-committed convention file into Claude
+	// configuration, so a finding there can depend on the manifest's or
+	// marketplace's staged content as much as its own.
+	rootManifests := map[string]string{}
+	rootMarkets := map[string][]string{}
 	var markets, rest []hit
 	for _, h := range files {
 		if root, ok := claude.PluginRoot(h.logical); ok {
 			roots[root] = true
+			rootManifests[root] = h.logical
 		}
 		if claude.IsMarketplace(h.logical) {
 			markets = append(markets, h)
@@ -257,6 +268,7 @@ func consumeClaude(tree *fileTree, files []hit, byPath map[string]*Entry, read f
 		}
 		for _, root := range claude.MarketplaceRoots(raw, h.logical) {
 			roots[root] = true
+			rootMarkets[root] = append(rootMarkets[root], h.logical)
 		}
 	}
 	for _, h := range rest {
@@ -266,6 +278,14 @@ func consumeClaude(tree *fileTree, files []hit, byPath map[string]*Entry, read f
 		if why := consume(h, byPath, add, uf, nfiles, nbytes); why != "" {
 			return why
 		}
+		if root, ok := claude.RootFor(h.logical, roots); ok {
+			if manifest, ok := rootManifests[root]; ok {
+				uf.union(h.logical, manifest)
+			}
+			for _, market := range rootMarkets[root] {
+				uf.union(h.logical, market)
+			}
+		}
 		if !claude.IsManifest(h.logical) {
 			continue
 		}
@@ -274,14 +294,18 @@ func consumeClaude(tree *fileTree, files []hit, byPath map[string]*Entry, read f
 			continue
 		}
 		for _, ref := range claude.ManifestRefs(raw, h.logical) {
+			// The manifest and every file it names by path form one
+			// source-set group: a finding at any of them can depend on
+			// the staged content of the others. This holds even when
+			// ref does not resolve in the current index (resolved ==
+			// nil below): a staged deletion of a manifest-referenced
+			// hook or MCP file must still report a finding that
+			// depended on it.
+			uf.union(h.logical, ref)
 			resolved, links, err := tree.resolve(ref, 0)
 			if err != nil || resolved == nil || resolved.mode != "100644" {
 				continue
 			}
-			// The manifest and every file it names by path form one
-			// source-set group: a finding at any of them can depend on
-			// the staged content of the others.
-			uf.union(h.logical, ref)
 			if why := consume(hit{logical: ref, indexPath: resolved.path, links: links}, byPath, add, uf, nfiles, nbytes); why != "" {
 				return why
 			}

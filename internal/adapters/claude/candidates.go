@@ -39,6 +39,44 @@ func Reads(rel string, pluginRoots map[string]bool) bool {
 	return classify(rel, pluginRoots) != roleNone
 }
 
+// RootFor returns the plugin root that makes rel Claude configuration by
+// convention: hooks/hooks.json, a skills/*/SKILL.md, an agents/*.md, or
+// a commands/*.md directly under it (the same conditions classify's
+// plugin-root branch matches). ok is false when no root in pluginRoots
+// reads rel this way, including when some other rule (for example the
+// universal .claude/skills/*/SKILL.md path) already classifies it
+// without a plugin root at all.
+// When more than one root matches — a plugin root nested inside
+// another's skills, agents, or commands directory — the longest, most
+// specific root wins, deterministically rather than by map iteration
+// order, so a caller linking a convention file to its root's own
+// manifest and marketplace entries always picks the same one.
+func RootFor(rel string, pluginRoots map[string]bool) (root string, ok bool) {
+	base := strings.ToLower(path.Base(rel))
+	for candidate := range pluginRoots {
+		prefix := candidate
+		if prefix != "" {
+			prefix += "/"
+		}
+		rest, cut := strings.CutPrefix(rel, prefix)
+		if !cut {
+			continue
+		}
+		switch {
+		case rest == "hooks/hooks.json",
+			strings.HasPrefix(rest, "skills/") && base == "skill.md",
+			strings.HasPrefix(rest, "agents/") && strings.HasSuffix(base, ".md"),
+			strings.HasPrefix(rest, "commands/") && strings.HasSuffix(base, ".md"):
+		default:
+			continue
+		}
+		if !ok || len(candidate) > len(root) {
+			root, ok = candidate, true
+		}
+	}
+	return root, ok
+}
+
 // JoinUnder resolves ref relative to base the way a plugin manifest does.
 // Absolute, URL, and escaping references are not followed.
 func JoinUnder(base, ref string) (string, bool) {
