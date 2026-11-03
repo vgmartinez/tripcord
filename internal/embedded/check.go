@@ -107,33 +107,58 @@ func (t *revision) embedded() bool {
 	return t.files[BootstrapPath].exists() || t.files[ManifestPath].exists()
 }
 
-// leftovers reports whether t holds anything else init --embed writes:
-// the workflow, or a hook that runs .tripcord/bootstrap.sh. A hook that
-// runs tripcord some other way is the documented manual wiring, not an
-// embed, so it does not count.
-func (t *revision) leftovers() bool {
-	if t.files[WorkflowPath].exists() {
-		return true
-	}
+// leftover is what remains of an embed whose own files are gone.
+type leftover struct {
+	workflow bool
+	// harnesses have a hook that runs .tripcord/bootstrap.sh in hook
+	// mode: Tripcord's guard.
+	harnesses []model.Harness
+}
+
+func (l leftover) any() bool { return l.workflow || len(l.harnesses) > 0 }
+
+// leftovers is what t holds that only init --embed writes: the
+// workflow, or a hook that runs the guard through bootstrap.sh. A hook
+// that runs tripcord some other way is the documented manual wiring,
+// and a hook that only runs bootstrap.sh session-start installs the
+// binary without guarding anything; neither counts.
+func (t *revision) leftovers() leftover {
+	l := leftover{workflow: t.files[WorkflowPath].exists()}
 	for _, h := range HookHarnesses {
 		hooks, ok := t.hooks(h)
 		if !ok {
 			continue
 		}
 		for _, list := range hooks {
-			if runsBootstrap(anyNode(list)) {
-				return true
+			if runsGuard(anyNode(list)) {
+				l.harnesses = append(l.harnesses, h)
+				break
 			}
 		}
 	}
-	return false
+	return l
 }
 
-func runsBootstrap(n *node) bool {
+// runsGuard reports whether n holds a command that runs bootstrap.sh
+// with the hook mode argument, as one command string or as an argv
+// array.
+func runsGuard(n *node) bool {
 	if s, ok := n.str(); ok {
-		return strings.Contains(s, BootstrapPath)
+		_, rest, found := strings.Cut(s, BootstrapPath)
+		return found && slices.Contains(strings.Fields(rest), "hook")
 	}
-	return slices.ContainsFunc(n.items, runsBootstrap)
+	if n.kind == kindArray {
+		for i, item := range n.items {
+			if s, ok := item.str(); ok && strings.Contains(s, BootstrapPath) {
+				for _, next := range n.items[i+1:] {
+					if arg, ok := next.str(); ok && arg == "hook" {
+						return true
+					}
+				}
+			}
+		}
+	}
+	return slices.ContainsFunc(n.items, runsGuard)
 }
 
 // hooks is the hooks object of h's wiring file. ok is false when the
@@ -168,9 +193,11 @@ func (t *revision) hadTripcordHook(h model.Harness, event string) bool {
 // the base. The items are TC-CFG-016 permissions items (setting
 // GuardSetting).
 //
-// root is embedded when it has bootstrap.sh or embed.json, or anything
-// else only init --embed writes (the workflow, or a hook that runs
-// .tripcord/bootstrap.sh), or when the base is embedded. bootstrap.sh and
+// root is embedded when it has bootstrap.sh or embed.json, or when the
+// base is embedded. Without either, a leftover only init --embed writes
+// (the workflow, or a hook that runs the guard through bootstrap.sh)
+// reports the embed's own files, the workflow when it is the leftover,
+// and the wiring of the harnesses with such a hook. bootstrap.sh and
 // the workflow are compared with what init renders from the pin
 // embed.json records, so a manifest whose recorded digests were edited
 // to match does not pass them. Hooks are checked for the harnesses the
@@ -214,13 +241,19 @@ func Check(root string, opts CheckOptions) ([]model.ConfigItem, error) {
 			base = nil
 		}
 	}
-	if base == nil && !head.embedded() && !head.leftovers() {
-		return nil, nil
-	}
 	c := &checker{head: head, base: base, only: opts.Only}
+	if base == nil && !head.embedded() {
+		left := head.leftovers()
+		if !left.any() {
+			return nil, nil
+		}
+		c.leftover = &left
+	}
 	c.manifest()
 	c.ownFile(subjectBootstrap, BootstrapPath, func(m Manifest) []byte { return Bootstrap(m.Pin()) })
-	c.ownFile(subjectWorkflow, WorkflowPath, func(Manifest) []byte { return Workflow() })
+	if c.leftover == nil || c.leftover.workflow {
+		c.ownFile(subjectWorkflow, WorkflowPath, func(Manifest) []byte { return Workflow() })
+	}
 	wired := c.wired()
 	for _, h := range HookHarnesses {
 		if slices.Contains(wired, h) && c.selected(h) {
@@ -235,7 +268,11 @@ func Check(root string, opts CheckOptions) ([]model.ConfigItem, error) {
 
 type checker struct {
 	head, base *revision
-	only       []model.Harness
+	// leftover is set when only pieces of an embed remain: the check
+	// then reports the embed's own files and the wiring of the
+	// harnesses those pieces name, not harnesses nothing wired.
+	leftover *leftover
+	only     []model.Harness
 	items      []model.ConfigItem
 	err        error
 }
@@ -248,6 +285,8 @@ func (c *checker) selected(h model.Harness) bool {
 func (c *checker) wired() []model.Harness {
 	var names []string
 	switch {
+	case c.leftover != nil:
+		return c.leftover.harnesses
 	case c.head.manifestOK:
 		names = c.head.manifest.Harnesses
 	case c.base != nil && c.base.manifestOK:

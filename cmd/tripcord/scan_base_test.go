@@ -126,9 +126,9 @@ func TestScanWithoutBaseReportsLeftoverWorkflow(t *testing.T) {
 	repo := embeddedBase(t)
 	removeEmbedGuard(t, repo)
 	code, got := guardFindings(t, repo)
-	if code != int(exitcode.Findings) || !slices.Contains(got, guardFinding{embedded.BootstrapPath, titleMissing}) ||
-		!slices.Contains(got, guardFinding{embedded.ClaudeSettingsPath, titleMissing}) {
-		t.Fatalf("exit %d: %v", code, got)
+	want := []guardFinding{{embedded.BootstrapPath, titleMissing}, {embedded.ManifestPath, titleMissing}}
+	if code != int(exitcode.Findings) || !slices.Equal(got, want) {
+		t.Fatalf("exit %d\ngot  %v\nwant %v", code, got, want)
 	}
 }
 

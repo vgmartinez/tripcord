@@ -269,3 +269,33 @@ func sha256Hex(raw []byte) string {
 	sum := sha256.Sum256(raw)
 	return hex.EncodeToString(sum[:])
 }
+
+// TestCFG016OtherRuleFixturesHaveNoGuardItems keeps the embed check from
+// reporting on the other rules' fixtures: none of them is an embed, so
+// a guard item there means the check reads a pattern that is not one.
+func TestCFG016OtherRuleFixturesHaveNoGuardItems(t *testing.T) {
+	dirs, err := filepath.Glob("../../rules/*.test/*/*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	checked := 0
+	for _, dir := range dirs {
+		if strings.Contains(filepath.ToSlash(dir), "/TC-CFG-016.test/") {
+			continue
+		}
+		if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+			continue
+		}
+		checked++
+		items, err := embedded.Check(dir, embedded.CheckOptions{})
+		if err != nil {
+			t.Fatalf("%s: %v", dir, err)
+		}
+		for _, item := range items {
+			t.Errorf("%s: guard item %s %s", filepath.ToSlash(dir), item.Path, item.Payload)
+		}
+	}
+	if checked == 0 {
+		t.Fatal("no fixtures found")
+	}
+}

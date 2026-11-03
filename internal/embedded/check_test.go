@@ -343,12 +343,6 @@ func TestCheckLeftovers(t *testing.T) {
 		want := []guardHit{
 			{model.SurfaceGeneric, ManifestPath, subjectManifest, StateMissing},
 			{model.SurfaceGeneric, BootstrapPath, subjectBootstrap, StateMissing},
-			{model.HarnessClaude, ClaudeSettingsPath, "SessionStart", StateMissing},
-			{model.HarnessClaude, ClaudeSettingsPath, "PreToolUse", StateMissing},
-			{model.HarnessCursor, CursorHooksPath, "sessionStart", StateMissing},
-			{model.HarnessCursor, CursorHooksPath, "preToolUse", StateMissing},
-			{model.HarnessCopilot, CopilotHooksPath, "sessionStart", StateMissing},
-			{model.HarnessCopilot, CopilotHooksPath, "preToolUse", StateMissing},
 		}
 		if !slices.Equal(got, want) {
 			t.Fatalf("hits = %+v\nwant %+v", got, want)
@@ -361,14 +355,38 @@ func TestCheckLeftovers(t *testing.T) {
 		want := []guardHit{
 			{model.SurfaceGeneric, ManifestPath, subjectManifest, StateMissing},
 			{model.SurfaceGeneric, BootstrapPath, subjectBootstrap, StateMissing},
-			{model.SurfaceGeneric, WorkflowPath, subjectWorkflow, StateMissing},
-			{model.HarnessCursor, CursorHooksPath, "sessionStart", StateMissing},
-			{model.HarnessCursor, CursorHooksPath, "preToolUse", StateMissing},
-			{model.HarnessCopilot, CopilotHooksPath, "sessionStart", StateMissing},
-			{model.HarnessCopilot, CopilotHooksPath, "preToolUse", StateMissing},
 		}
 		if !slices.Equal(got, want) {
 			t.Fatalf("hits = %+v\nwant %+v", got, want)
+		}
+	})
+	t.Run("claude guard hook left without its session hook", func(t *testing.T) {
+		dir := t.TempDir()
+		write(t, dir, ClaudeSettingsPath, `{"hooks":{"PreToolUse":[{"matcher":"*","hooks":[{"type":"command","command":"bash \"${CLAUDE_PROJECT_DIR}/.tripcord/bootstrap.sh\" hook --harness claude --event pre-tool"}]}]}}`)
+		got := check(t, dir)
+		want := []guardHit{
+			{model.SurfaceGeneric, ManifestPath, subjectManifest, StateMissing},
+			{model.SurfaceGeneric, BootstrapPath, subjectBootstrap, StateMissing},
+			{model.HarnessClaude, ClaudeSettingsPath, "SessionStart", StateMissing},
+			{model.HarnessClaude, ClaudeSettingsPath, "PreToolUse", StateChanged},
+		}
+		if !slices.Equal(got, want) {
+			t.Fatalf("hits = %+v\nwant %+v", got, want)
+		}
+	})
+	t.Run("guard hook as argv", func(t *testing.T) {
+		dir := t.TempDir()
+		write(t, dir, ClaudeSettingsPath, `{"hooks":{"PreToolUse":[{"hooks":[{"type":"command","command":"bash","args":["${CLAUDE_PROJECT_DIR}/.tripcord/bootstrap.sh","hook","--harness","claude"]}]}]}}`)
+		if got := check(t, dir); len(got) == 0 {
+			t.Fatal("an argv guard hook is not a leftover")
+		}
+	})
+	t.Run("session-start only is not a leftover", func(t *testing.T) {
+		dir := t.TempDir()
+		write(t, dir, ClaudeSettingsPath, `{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"bash","args":["${CLAUDE_PROJECT_DIR}/.tripcord/bootstrap.sh","session-start"]},{"type":"command","command":"./scripts/hook"}]}]}}`)
+		write(t, dir, CursorHooksPath, `{"version":1,"hooks":{"sessionStart":[{"command":"bash .tripcord/bootstrap.sh session-start --harness cursor"}]}}`)
+		if got := check(t, dir); len(got) != 0 {
+			t.Fatalf("hits = %+v", got)
 		}
 	})
 	t.Run("manual tripcord wiring is not an embed", func(t *testing.T) {
