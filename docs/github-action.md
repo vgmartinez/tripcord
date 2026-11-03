@@ -61,7 +61,9 @@ repository has no history to compare, so the action logs a notice and
 scans without `--base`. Set `base: ""` to scan the head alone.
 The reusable workflows in this repository leave `base` at its default
 and call the composite action pinned at `main@8b33b1b`, which defaults
-`base` to the pull request's base commit.
+`base` to the pull request's base commit. Another repository pins those
+workflow files at `main@6a12795`, the commit whose copies call that
+action.
 
 Publishing runs when the scan recorded an exit code. A pull request
 whose head repository differs from its base repository skips both the
@@ -147,7 +149,7 @@ permissions:
   contents: read # checkout the repository being scanned
   pull-requests: read # read pull request reviews
   security-events: write # upload the SARIF report
-uses: vgmartinez/tripcord/.github/workflows/tripcord-pr.yml@8b33b1b5a69c686b611b43a475da9658fe44614d # main@8b33b1b
+uses: vgmartinez/tripcord/.github/workflows/tripcord-pr.yml@6a1279565e9e41e9dec163e6bedf07f2647a2c67 # main@6a12795
 ```
 
 ### Comment
@@ -180,5 +182,5 @@ permissions:
   contents: read # checkout the repository being scanned
   pull-requests: write # create or update the Markdown comment
   security-events: write # upload the SARIF report
-uses: vgmartinez/tripcord/.github/workflows/tripcord-pr-comment.yml@8b33b1b5a69c686b611b43a475da9658fe44614d # main@8b33b1b
+uses: vgmartinez/tripcord/.github/workflows/tripcord-pr-comment.yml@6a1279565e9e41e9dec163e6bedf07f2647a2c67 # main@6a12795
 ```

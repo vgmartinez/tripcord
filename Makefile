@@ -20,8 +20,9 @@ fmt:
 	gofmt -s -w .
 
 # release-gate fails while a feature a release depends on is missing.
-# Today: init --embed wires `tripcord hook`, which this build lacks, and
-# the pinned action predates the embed check and its base input.
+# Today: init --embed wires `tripcord hook`, which this build lacks.
+# The pinned-action check passes: both pins reach an action with the
+# base input and the embed check.
 release-gate:
 	TRIPCORD_RELEASE_GATE=1 go test ./cmd/tripcord -run '^TestReleaseGate' -count=1 -v
 

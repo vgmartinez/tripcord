@@ -14,7 +14,7 @@
     },
     {
       "path": ".github/workflows/tripcord.yml",
-      "sha256": "1827918d62c6892321797fa6c17a275d25a7e91071bbfd7196ab436a891a11f8"
+      "sha256": "6f6dac49ffd49928526fef319d7464d20c43b33d0fcaa02d3c9f03a5dfec869b"
     },
     {
       "path": ".github/workflows/copilot-setup-steps.yml",

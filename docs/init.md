@@ -18,15 +18,12 @@ subdirectory of a Git repository exits 3.
 > release-gate` (see "Release gate" below) fails until then.
 >
 > The generated `.github/workflows/tripcord.yml` pins the reusable
-> workflow, and this repository's own workflows pin the composite
-> action, at `main@8b33b1b`, the merge that added the embed check and
-> `scan --base`. The workflow file at that commit still calls the
-> action at `main@141db48`, which has neither, so a repository that
-> runs the generated workflow still scans the head tree alone. A later
-> pin of the reusable workflow, at a commit whose own action pin is
-> `8b33b1b` or later, is what makes that scan compare a pull request
-> with its base. `TestPinsHaveEmbedCheck` requires every pin to be a
-> full SHA on main whose tree contains `internal/embedded` and
+> workflow at `main@6a12795`. `tripcord-pr.yml` at that commit pins the
+> composite action at `main@8b33b1b`, which has the `base` input and
+> the embed check, so the generated workflow compares a pull request
+> with its base. This repository's own workflows pin that same action.
+> `TestPinsHaveEmbedCheck` requires every pin to be a full SHA on main,
+> with a `# main@` comment, whose tree contains `internal/embedded` and
 > TC-CFG-016.
 
 ## Without `--embed`
@@ -350,12 +347,11 @@ composite action: the reusable workflow commit the generated
 the action at each pin has the `base` input and builds a Tripcord with
 the embed check (`internal/embedded`). This tree's workflows pin the
 action at `main@8b33b1b`, which has both. The generated workflow calls
-`tripcord-pr.yml` at that same commit, and the file there still pins
-the action at `main@141db48`, which has neither, so the gate still
-fails on that path until a later re-pin. It reads the pinned commits
-with `git show`, so the clone must have them (`fetch-depth: 0`).
+`tripcord-pr.yml` at `main@6a12795`, and the file there pins the same
+action, so both paths pass. It reads the pinned commits with `git show`,
+so the clone must have them (`fetch-depth: 0`).
 `TestReleaseGateHookSubcommand` still fails until hook mode lands;
-that failure is the missing `hook` subcommand, not the pins.
+that failure is the missing `hook` subcommand.
 
 Without the variable both log that the gate was not requested and pass,
 so pull request CI stays green. There is no release workflow in this

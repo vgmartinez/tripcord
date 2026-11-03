@@ -7,8 +7,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
+
+	"go.yaml.in/yaml/v3"
 
 	"github.com/vgmartinez/tripcord/internal/embedded"
 	"github.com/vgmartinez/tripcord/internal/project"
@@ -20,21 +23,28 @@ import (
 // a later commit on main. It is the merge of the init --embed change.
 const embedCheckMinimum = "8b33b1b5a69c686b611b43a475da9658fe44614d"
 
-// usesPin matches a pin of this repository's composite action or of a
-// reusable workflow, plus the optional "# main@<prefix>" comment.
-var usesPin = regexp.MustCompile(regexp.QuoteMeta(project.Repository) + `/\.github/(?:actions/tripcord|workflows/tripcord-pr(?:-comment)?\.yml)@([0-9a-fA-F]+)(?:\s+#\s*main@([0-9a-fA-F]+))?`)
+// usesPin matches a uses ref of this repository's composite action or of
+// a reusable workflow, plus an optional "# main@<prefix>" comment. The
+// ref is whatever follows @, so the caller can tell a commit pin from a
+// branch or tag (@main, @v1) before applying the 40-character rule.
+var usesPin = regexp.MustCompile(regexp.QuoteMeta(project.Repository) + `/\.github/(?:actions/tripcord|workflows/tripcord-pr(?:-comment)?\.yml)@([^\s#]+)(?:\s+#\s*main@([0-9a-fA-F]+))?`)
 
 type repoPin struct {
 	where, pin, comment string
+	needsComment        bool
 }
 
 // TestPinsHaveEmbedCheck fails when the init --embed template, a
 // workflow, or a documented example pins this repository's action or
 // reusable workflow to anything other than a full 40-character sha that
-// is on main and whose tree contains the embed check. A clone that does
-// not have that history skips the git checks; the sha-length check
-// always runs. CI checks the commits out with fetch-depth 0, so a
-// missing object fails there instead of skipping.
+// is on main and whose tree contains the embed check. Every uses line
+// also needs a "# main@<short>" comment that is a prefix of that sha.
+// A branch or tag ref (@main, @v1) is not a commit pin. A clone that
+// does not have the history skips the git checks; the sha-length check
+// always runs. A shallow clone and a non-git checkout skip even when
+// CI is set. A non-shallow CI checkout that is missing the recorded
+// minimum fails, and TestVetAndTestFetchesFullHistory keeps the vet
+// and test job at fetch-depth 0 so that checkout has the objects.
 func TestPinsHaveEmbedCheck(t *testing.T) {
 	root := filepath.Join("..", "..")
 	pins := collectRepoPins(t, root)
@@ -43,12 +53,8 @@ func TestPinsHaveEmbedCheck(t *testing.T) {
 	}
 	formatOK := true
 	for _, p := range pins {
-		if !commitPinSHA(p.pin) {
-			t.Errorf("%s pins %q, want a 40-character lowercase sha", p.where, p.pin)
-			formatOK = false
-		}
-		if p.comment != "" && !strings.HasPrefix(p.pin, p.comment) {
-			t.Errorf("%s comment main@%s is not a prefix of %s", p.where, p.comment, p.pin)
+		if err := pinFormatError(p); err != nil {
+			t.Error(err)
 			formatOK = false
 		}
 	}
@@ -86,6 +92,128 @@ func TestPinsHaveEmbedCheck(t *testing.T) {
 		if err := treeHasEmbedCheck(root, p.pin); err != nil {
 			t.Errorf("%s pin %s: %v", p.where, p.pin, err)
 		}
+	}
+}
+
+// TestUsesPinIgnoresBranchAndTag checks that a docs or README ref of
+// @v1 or @main is not a commit pin, while a hexadecimal ref still has
+// to be a 40-character sha with a # main@ comment.
+func TestUsesPinIgnoresBranchAndTag(t *testing.T) {
+	repo := project.Repository
+	text := strings.Join([]string{
+		"uses: " + repo + "/.github/actions/tripcord@v1",
+		"uses: " + repo + "/.github/workflows/tripcord-pr.yml@main",
+		"uses: " + repo + "/.github/workflows/tripcord-pr-comment.yml@v1.2.3",
+		"ref: main",
+		"uses: " + repo + "/.github/actions/tripcord@8b33b1b # main@8b33b1b",
+		"uses: " + repo + "/.github/actions/tripcord@" + embedCheckMinimum,
+		"uses: " + repo + "/.github/actions/tripcord@" + embedCheckMinimum + " # main@8b33b1b",
+	}, "\n")
+	pins := pinsIn(t, "sample", text)
+	if len(pins) != 3 {
+		t.Fatalf("pins = %+v, want the short sha, the bare sha, and the commented sha", pins)
+	}
+	for _, p := range pins[:2] {
+		if err := pinFormatError(p); err == nil {
+			t.Errorf("%s pin %q with comment %q passed the format check", p.where, p.pin, p.comment)
+		}
+	}
+	if err := pinFormatError(pins[2]); err != nil {
+		t.Error(err)
+	}
+}
+
+// TestVetAndTestFetchesFullHistory keeps the job that runs
+// TestPinsHaveEmbedCheck from dropping to a shallow checkout. A shallow
+// clone skips the git half of that test, including when CI is set.
+func TestVetAndTestFetchesFullHistory(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", ".github", "workflows", "ci.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Jobs map[string]struct {
+			Name  string `yaml:"name"`
+			Steps []struct {
+				Uses string         `yaml:"uses"`
+				With map[string]any `yaml:"with"`
+			} `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal(raw, &doc); err != nil {
+		t.Fatal(err)
+	}
+	found := 0
+	for id, job := range doc.Jobs {
+		if job.Name != "vet and test" {
+			continue
+		}
+		found++
+		depth := ""
+		checkout := false
+		for _, step := range job.Steps {
+			if !strings.HasPrefix(step.Uses, "actions/checkout@") {
+				continue
+			}
+			checkout = true
+			depth = yamlScalar(step.With["fetch-depth"])
+		}
+		if !checkout {
+			t.Errorf("job %s (%s) has no actions/checkout step", id, job.Name)
+		}
+		if depth != "0" {
+			t.Errorf("job %s (%s) fetch-depth = %q, want 0", id, job.Name, depth)
+		}
+	}
+	if found != 1 {
+		t.Fatalf("jobs named %q: %d, want 1", "vet and test", found)
+	}
+}
+
+// TestPinHistorySkipsShallowAndNonGitInCI checks that a shallow clone
+// and a directory that is not a git checkout skip the git half of
+// TestPinsHaveEmbedCheck when CI and GITHUB_ACTIONS are set. A
+// non-shallow checkout that is missing the recorded minimum still fails
+// in that environment.
+func TestPinHistorySkipsShallowAndNonGitInCI(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	t.Setenv("CI", "true")
+	t.Setenv("GITHUB_ACTIONS", "true")
+
+	if reason, skip := pinHistoryProblem(t.TempDir()); !skip {
+		t.Fatalf("non-git checkout: skip=%v reason=%q", skip, reason)
+	}
+
+	src := t.TempDir()
+	gitIn(t, src, "init", "-b", "main")
+	gitIn(t, src, "config", "user.email", "tripcord@example.com")
+	gitIn(t, src, "config", "user.name", "Tripcord")
+	if err := os.WriteFile(filepath.Join(src, "README"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, src, "add", "README")
+	gitIn(t, src, "commit", "-m", "init")
+	shallow := t.TempDir()
+	// A local path is cloned with --local, which ignores --depth.
+	gitIn(t, src, "clone", "--no-local", "--depth", "1", src, shallow)
+	if reason, skip := pinHistoryProblem(shallow); !skip {
+		t.Fatalf("shallow clone: skip=%v reason=%q", skip, reason)
+	}
+
+	full := t.TempDir()
+	gitIn(t, full, "init", "-b", "main")
+	gitIn(t, full, "config", "user.email", "tripcord@example.com")
+	gitIn(t, full, "config", "user.name", "Tripcord")
+	if err := os.WriteFile(filepath.Join(full, "README"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, full, "add", "README")
+	gitIn(t, full, "commit", "-m", "init")
+	reason, skip := pinHistoryProblem(full)
+	if skip || !strings.Contains(reason, embedCheckMinimum) {
+		t.Fatalf("non-shallow CI checkout missing the minimum: skip=%v reason=%q", skip, reason)
 	}
 }
 
@@ -132,9 +260,57 @@ func pinsIn(t *testing.T, where, text string) []repoPin {
 	t.Helper()
 	var out []repoPin
 	for _, m := range usesPin.FindAllStringSubmatch(text, -1) {
-		out = append(out, repoPin{where: where, pin: m[1], comment: m[2]})
+		if !isCommitPin(m[1]) {
+			continue
+		}
+		out = append(out, repoPin{where: where, pin: m[1], comment: m[2], needsComment: true})
 	}
 	return out
+}
+
+// isCommitPin reports whether ref is a commit pin rather than a branch
+// or tag. main and master are hexadecimal, so length alone cannot tell
+// them from a short sha. A version tag starts with v.
+func isCommitPin(ref string) bool {
+	switch ref {
+	case "main", "master", "HEAD":
+		return false
+	}
+	if ref == "" || ref[0] == 'v' || ref[0] == 'V' {
+		return false
+	}
+	for _, c := range ref {
+		switch {
+		case c >= '0' && c <= '9', c >= 'a' && c <= 'f', c >= 'A' && c <= 'F':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func pinFormatError(p repoPin) error {
+	if !commitPinSHA(p.pin) {
+		return fmt.Errorf("%s pins %q, want a 40-character lowercase sha", p.where, p.pin)
+	}
+	if p.needsComment && !pinCommentOK(p.pin, p.comment) {
+		return fmt.Errorf("%s pin %s is missing a # main@ comment that is a prefix of the sha", p.where, p.pin)
+	}
+	return nil
+}
+
+func pinCommentOK(pin, comment string) bool {
+	if len(comment) < 7 || len(comment) > len(pin) || !strings.HasPrefix(pin, comment) {
+		return false
+	}
+	for _, c := range comment {
+		switch {
+		case c >= '0' && c <= '9', c >= 'a' && c <= 'f':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func commitPinSHA(s string) bool {
@@ -152,42 +328,66 @@ func commitPinSHA(s string) bool {
 }
 
 // pinHistoryAvailable reports whether this clone can prove a pin is on
-// main. It skips, after the caller has already checked sha length, when
-// git, the checkout, or the recorded minimum is missing. CI does not
-// skip a missing minimum: the vet-and-test job fetches full history.
+// main. It skips when git, the checkout, or the recorded minimum is
+// missing. A shallow clone and a non-git checkout skip even in CI. A
+// non-shallow CI checkout that is missing the minimum fails.
 func pinHistoryAvailable(t *testing.T, root string) bool {
 	t.Helper()
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git is not installed")
+	reason, skip := pinHistoryProblem(root)
+	if skip {
+		t.Skip(reason)
 	}
-	out, err := gitOutput(root, "rev-parse", "--is-inside-work-tree")
-	if err != nil || strings.TrimSpace(out) != "true" {
-		t.Skip("not a git checkout")
-	}
-	shallow, err := gitOutput(root, "rev-parse", "--is-shallow-repository")
-	if err != nil {
-		t.Skip("not a git checkout")
-	}
-	if strings.TrimSpace(shallow) == "true" {
-		t.Skip("shallow clone: the pinned commit may be missing")
-	}
-	if gitRun(root, "cat-file", "-e", embedCheckMinimum) != nil {
-		if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
-			t.Fatalf("recorded minimum %s is not in this clone; the checkout needs fetch-depth: 0", embedCheckMinimum)
-		}
-		t.Skipf("recorded minimum %s is not in this clone", embedCheckMinimum)
-	}
-	if mainRef(t, root) == "" {
-		if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
-			t.Fatal("neither origin/main nor main is in this clone, so a pin cannot be checked against main")
-		}
-		t.Skip("neither origin/main nor main is in this clone")
+	if reason != "" {
+		t.Fatal(reason)
 	}
 	return true
 }
 
+// pinHistoryProblem reports why root cannot prove a pin is on main.
+// skip is true when the caller should skip rather than fail. CI does
+// not turn a shallow clone or a non-git checkout into a failure.
+func pinHistoryProblem(root string) (reason string, skip bool) {
+	if _, err := exec.LookPath("git"); err != nil {
+		return "git is not installed", true
+	}
+	out, err := gitOutput(root, "rev-parse", "--is-inside-work-tree")
+	if err != nil || strings.TrimSpace(out) != "true" {
+		return "not a git checkout", true
+	}
+	shallow, err := gitOutput(root, "rev-parse", "--is-shallow-repository")
+	if err != nil {
+		return "not a git checkout", true
+	}
+	if strings.TrimSpace(shallow) == "true" {
+		return "shallow clone: the pinned commit may be missing", true
+	}
+	if gitRun(root, "cat-file", "-e", embedCheckMinimum) != nil {
+		msg := fmt.Sprintf("recorded minimum %s is not in this clone; the checkout needs fetch-depth: 0", embedCheckMinimum)
+		if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
+			return msg, false
+		}
+		return msg, true
+	}
+	if mainRefOf(root) == "" {
+		msg := "neither origin/main nor main is in this clone, so a pin cannot be checked against main"
+		if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
+			return msg, false
+		}
+		return msg, true
+	}
+	return "", false
+}
+
 func mainRef(t *testing.T, root string) string {
 	t.Helper()
+	ref := mainRefOf(root)
+	if ref == "" {
+		t.Fatal("neither origin/main nor main is in this clone")
+	}
+	return ref
+}
+
+func mainRefOf(root string) string {
 	for _, ref := range []string{"origin/main", "main"} {
 		if gitRun(root, "rev-parse", "--verify", "--quiet", ref) == nil {
 			return ref
@@ -212,6 +412,36 @@ func treeHasEmbedCheck(root, sha string) error {
 		return fmt.Errorf("rules/TC-CFG-016.yaml is missing the embed rule")
 	}
 	return nil
+}
+
+func yamlScalar(v any) string {
+	switch n := v.(type) {
+	case string:
+		return n
+	case int:
+		return strconv.Itoa(n)
+	case int64:
+		return strconv.FormatInt(n, 10)
+	case uint64:
+		return strconv.FormatUint(n, 10)
+	case float64:
+		if n == float64(int64(n)) {
+			return strconv.FormatInt(int64(n), 10)
+		}
+		return strconv.FormatFloat(n, 'f', -1, 64)
+	default:
+		return ""
+	}
+}
+
+func gitIn(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"--no-optional-locks"}, args...)...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
 }
 
 func gitRun(root string, args ...string) error {
