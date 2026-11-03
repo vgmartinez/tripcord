@@ -78,6 +78,26 @@ func TestScanStagedUsesIndex(t *testing.T) {
 	})
 }
 
+// TestScanTargetRedactErrorFoldsStagedRoot covers follow-up (c): an
+// internal error during a --staged scan can embed the private staged
+// tree's absolute path (for example, filepath.EvalSymlinks(root)'s
+// error when root cannot be resolved). That path means nothing to a
+// pre-commit caller, who only knows the real repository, so it must be
+// folded to a repo-relative "." the same way redactHomeFromError folds
+// the user's home directory.
+func TestScanTargetRedactErrorFoldsStagedRoot(t *testing.T) {
+	root := filepath.Join(os.TempDir(), "tripcord-staged-abc123", "tree")
+	target := scanTarget{prog: "tripcord scan", redactRoot: root}
+	err := fmt.Errorf("lstat %s: no such file or directory", filepath.Join(root, ".claude"))
+	got := target.redactError(err)
+	if strings.Contains(got, root) {
+		t.Fatalf("redactError leaked the staged root %q: %q", root, got)
+	}
+	if !strings.Contains(got, "./.claude") {
+		t.Fatalf("redactError did not fold to a repo-relative path: %q", got)
+	}
+}
+
 func TestStagedPreCommitHookBlocksGitCommit(t *testing.T) {
 	bin := buildStagedBinary(t)
 	repo := stagedRepo(t)

@@ -169,6 +169,7 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 		target.root, target.policyRoot = ws.Tree(), ws.Tree()
 		target.stagedNotes = notes
 		target.stagedSources = sources
+		target.redactRoot = ws.Tree()
 		target.stageMore = func(items []model.ConfigItem) error {
 			if ctx.Err() != nil {
 				return ctx.Err()
@@ -207,16 +208,34 @@ type scanTarget struct {
 	// finding's symlink chain or plugin manifest group, not only its
 	// own Path. It is nil for a normal, non-staged scan.
 	stagedSources map[string][]string
+	// redactRoot, for a --staged scan, is the absolute path of the
+	// private staged tree (ws.Tree()): an internal error that names it,
+	// for example one filepath.EvalSymlinks on root returns, is
+	// rewritten to a repo-relative "." so a diagnostic does not name a
+	// temporary directory the pre-commit caller never asked about. It
+	// is empty for a normal scan, where root is the repository itself.
+	redactRoot string
 }
 
 func (t scanTarget) configError(stderr io.Writer, err error) int {
-	writeString(stderr, t.prog+": "+redactHomeFromError(err)+"\n")
+	writeString(stderr, t.prog+": "+t.redactError(err)+"\n")
 	return int(exitcode.Config)
 }
 
 func (t scanTarget) internalError(stderr io.Writer, err error) int {
-	writeString(stderr, t.prog+": "+redactHomeFromError(err)+"\n")
+	writeString(stderr, t.prog+": "+t.redactError(err)+"\n")
 	return int(exitcode.Internal)
+}
+
+// redactError renders err the way configError and internalError do: the
+// user's home directory folded to "~", and, for a --staged scan, the
+// private staged tree's absolute path folded to ".".
+func (t scanTarget) redactError(err error) string {
+	msg := redactHomeFromError(err)
+	if t.redactRoot != "" {
+		msg = strings.ReplaceAll(msg, t.redactRoot, ".")
+	}
+	return msg
 }
 
 // scanTree scans t.root with opts, writes the findings, and returns the

@@ -33,7 +33,34 @@ commit applies to that commit's finding.
 tree is materialized, an interrupt closes it and exits 3 with the bypass
 line below.
 
-The hook reports only findings located in the files pre-commit passes to it.
+The hook has no `files:` regex and runs on every commit (`always_run: false`
+with `pass_filenames: true`): Tripcord, not a path pattern, decides what
+counts as configuration. A config file can be discovered only by its content
+(for example a Claude plugin manifest's `"mcpServers": "./cfg/servers.json"`
+reference) or by a symlink target, so a regex over paths would miss both the
+file that introduces a finding and the file pre-commit needs to pass for the
+hook to report it.
+
+The hook reports a finding when any file in that finding's **source set** is
+among the paths pre-commit passes to it, not only when the finding's own
+location is passed. A finding's source set is the union of:
+
+- the file the finding is located in;
+- every file in that file's symlink chain;
+- for a finding read through a manifest (such as a Claude plugin manifest),
+  the manifest itself and every file it references by path;
+- the hook or skill scripts, and TC-CFG-009 checksum files, a rule reads to
+  produce the finding.
+
+This means editing only `cfg/servers.json` reports a finding located in the
+manifest that references it, and editing only a symlink's target reports a
+finding located at the symlink path. pre-commit may split a large changeset
+into several hook invocations ("batches") of file paths; each invocation
+scans the same full proposed commit and applies this same source-set check
+against only the paths in its own batch, so a finding is reported in
+whichever batch's paths intersect its source set, and not duplicated across
+batches that don't.
+
 Any reported finding blocks the commit, including one that was already present
 in an edited config file. This deliberately fails closed; filtering for only
 new findings is a follow-up.
