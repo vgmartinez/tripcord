@@ -166,9 +166,11 @@ func TestInitEmbedScanHasNoFindings(t *testing.T) {
 }
 
 // TestInitWiringInvokesTripcordHook pins the hook command every
-// harness's wiring runs to the spec: tripcord hook --harness <h> --event
-// pre-tool, failing closed where the harness has a field for it. The
-// literals are written out so a change to embedded.HookArgs fails here.
+// harness's wiring runs: bash .tripcord/bootstrap.sh hook --harness <h>
+// --event pre-tool, through the harness's project-directory variable
+// where it has one, never a tripcord found on PATH, and failing closed
+// where the harness has a field for it. The literals are written out so
+// a change to embedded.HookArgs or the wiring fails here.
 func TestInitWiringInvokesTripcordHook(t *testing.T) {
 	dir := outsideGit(t)
 	if code, _, stderr := runCLI(t, embedArgs(dir)...); code != 0 {
@@ -192,12 +194,12 @@ func TestInitWiringInvokesTripcordHook(t *testing.T) {
 		t.Fatalf("claude PreToolUse = %+v", pre)
 	}
 	h := pre[0].Hooks[0]
-	if h.Type != "command" || h.Command != "tripcord" || !slices.Equal(h.Args, []string{"hook", "--harness", "claude", "--event", "pre-tool"}) || h.OnFailure != "block" {
+	if h.Type != "command" || h.Command != `bash "${CLAUDE_PROJECT_DIR}/.tripcord/bootstrap.sh" hook --harness claude --event pre-tool` || h.Args != nil || h.OnFailure != "block" {
 		t.Fatalf("claude pre-tool hook = %+v", h)
 	}
 	start := claude.Hooks["SessionStart"]
-	if len(start) != 1 || start[0].Matcher != "startup|resume" || start[0].Hooks[0].Command != "bash" ||
-		!slices.Equal(start[0].Hooks[0].Args, []string{"${CLAUDE_PROJECT_DIR}/.tripcord/bootstrap.sh", "session-start"}) {
+	if len(start) != 1 || start[0].Matcher != "startup|resume" || len(start[0].Hooks) != 1 ||
+		start[0].Hooks[0].Command != `bash "${CLAUDE_PROJECT_DIR}/.tripcord/bootstrap.sh" session-start --harness claude` {
 		t.Fatalf("claude SessionStart = %+v", start)
 	}
 
@@ -209,34 +211,50 @@ func TestInitWiringInvokesTripcordHook(t *testing.T) {
 		} `json:"hooks"`
 	}
 	mustJSON(t, files[embedded.CursorHooksPath], &cursor)
-	if c := cursor.Hooks["preToolUse"]; cursor.Version != 1 || len(c) != 1 || c[0].Command != "tripcord hook --harness cursor --event pre-tool" || !c[0].FailClosed {
-		t.Fatalf("cursor hooks = %+v", cursor)
+	if c := cursor.Hooks["preToolUse"]; cursor.Version != 1 || len(c) != 1 || c[0].Command != `bash "${CURSOR_PROJECT_DIR}/.tripcord/bootstrap.sh" hook --harness cursor --event pre-tool` || !c[0].FailClosed {
+		t.Fatalf("cursor preToolUse = %+v", c)
+	}
+	if c := cursor.Hooks["sessionStart"]; len(c) != 1 || c[0].Command != `bash "${CURSOR_PROJECT_DIR}/.tripcord/bootstrap.sh" session-start --harness cursor` {
+		t.Fatalf("cursor sessionStart = %+v", c)
 	}
 
 	var copilot struct {
 		Version int `json:"version"`
 		Hooks   map[string][]struct {
-			Type string `json:"type"`
-			Bash string `json:"bash"`
+			Type       string `json:"type"`
+			Bash       string `json:"bash"`
+			Cwd        string `json:"cwd"`
+			TimeoutSec int    `json:"timeoutSec"`
 		} `json:"hooks"`
 	}
 	mustJSON(t, files[embedded.CopilotHooksPath], &copilot)
-	if c := copilot.Hooks["preToolUse"]; copilot.Version != 1 || len(c) != 1 || c[0].Type != "command" || c[0].Bash != "tripcord hook --harness copilot --event pre-tool" {
-		t.Fatalf("copilot hooks = %+v", copilot)
+	if c := copilot.Hooks["preToolUse"]; copilot.Version != 1 || len(c) != 1 || c[0].Type != "command" ||
+		c[0].Bash != "bash .tripcord/bootstrap.sh hook --harness copilot --event pre-tool" || c[0].Cwd != "." || c[0].TimeoutSec != 60 {
+		t.Fatalf("copilot preToolUse = %+v", c)
+	}
+	if c := copilot.Hooks["sessionStart"]; len(c) != 1 || c[0].Bash != "bash .tripcord/bootstrap.sh session-start --harness copilot" || c[0].Cwd != "." || c[0].TimeoutSec != 300 {
+		t.Fatalf("copilot sessionStart = %+v", c)
 	}
 	for _, h := range embedded.HookHarnesses {
-		if got, want := embedded.HookCommandLine(h), "tripcord hook --harness "+string(h)+" --event pre-tool"; got != want {
-			t.Errorf("HookCommandLine(%s) = %q, want %q", h, got, want)
+		line := embedded.HookCommandLine(h)
+		if !strings.HasPrefix(line, "bash ") || !strings.Contains(line, embedded.BootstrapPath) || !strings.HasSuffix(line, " hook --harness "+string(h)+" --event pre-tool") {
+			t.Errorf("HookCommandLine(%s) = %q", h, line)
 		}
 	}
 }
 
 // TestReleaseGateHookSubcommand is the release gate for embed mode: the
-// wiring init writes calls `tripcord hook`, so a build without that
-// subcommand must not ship. It runs only with TRIPCORD_RELEASE_GATE=1
-// (make release-gate) and then fails, never skips, while hook mode is
-// missing. Hook mode lands in the next PR.
+// wiring init writes runs bootstrap.sh, which execs the verified binary
+// as `tripcord hook <HookArgs>`, so a build without that subcommand must
+// not ship. It runs only with TRIPCORD_RELEASE_GATE=1 (make
+// release-gate) and then fails, never skips, while hook mode is missing.
+// Hook mode lands in the next PR.
 func TestReleaseGateHookSubcommand(t *testing.T) {
+	for _, h := range embedded.HookHarnesses {
+		if line, args := embedded.HookCommandLine(h), strings.Join(embedded.HookArgs(h), " "); !strings.HasSuffix(line, " "+args) {
+			t.Fatalf("the %s wiring %q does not pass %q through bootstrap.sh", h, line, args)
+		}
+	}
 	if os.Getenv("TRIPCORD_RELEASE_GATE") != "1" {
 		t.Log("release gate not requested; set TRIPCORD_RELEASE_GATE=1 to run it")
 		return
@@ -244,7 +262,7 @@ func TestReleaseGateHookSubcommand(t *testing.T) {
 	for _, h := range embedded.HookHarnesses {
 		code, _, stderr := runCLI(t, embedded.HookArgs(h)...)
 		if code == int(exitcode.Config) && strings.Contains(stderr, "unknown command") {
-			t.Errorf("release gate: the %s wiring runs %q, but this build has no hook subcommand", h, embedded.HookCommandLine(h))
+			t.Errorf("release gate: the %s wiring runs tripcord %q through bootstrap.sh, but this build has no hook subcommand", h, strings.Join(embedded.HookArgs(h), " "))
 		}
 	}
 }
@@ -294,7 +312,7 @@ func TestInitMergesExistingFiles(t *testing.T) {
 		t.Errorf("policy was rewritten: %q", files[embedded.PolicyPath])
 	}
 	got := files[embedded.ClaudeSettingsPath]
-	for _, want := range []string{`"model": "opus"`, `"./scripts/lint.sh"`, `"Read(.env)"`, `"tripcord"`, `"SessionStart"`} {
+	for _, want := range []string{`"model": "opus"`, `"./scripts/lint.sh"`, `"Read(.env)"`, `.tripcord/bootstrap.sh\" hook`, `"SessionStart"`} {
 		if !strings.Contains(got, want) {
 			t.Errorf("claude settings lost %s:\n%s", want, got)
 		}
@@ -302,11 +320,11 @@ func TestInitMergesExistingFiles(t *testing.T) {
 	if strings.Index(got, `"model"`) > strings.Index(got, `"hooks"`) || strings.Index(got, `"hooks"`) > strings.Index(got, `"permissions"`) {
 		t.Errorf("claude settings key order changed:\n%s", got)
 	}
-	if strings.Index(got, `"./scripts/lint.sh"`) > strings.Index(got, `"tripcord"`) {
+	if strings.Index(got, `"./scripts/lint.sh"`) > strings.Index(got, `bootstrap.sh\" hook`) {
 		t.Errorf("existing PreToolUse entry was not kept first:\n%s", got)
 	}
 	cursor := files[embedded.CursorHooksPath]
-	if !strings.Contains(cursor, "\t\t\"stop\": [") || !strings.Contains(cursor, "tripcord hook --harness cursor") {
+	if !strings.Contains(cursor, "\t\t\"stop\": [") || !strings.Contains(cursor, "bootstrap.sh\\\" hook --harness cursor") {
 		t.Errorf("cursor hooks not merged with tab indentation:\n%s", cursor)
 	}
 	if env := files[embedded.CursorEnvironmentPath]; env != "{\n  \"snapshot\": \"snap-1\",\n  \"start\": \"make dev\",\n  \"install\": \"bash .tripcord/bootstrap.sh install\"\n}\n" {
@@ -507,7 +525,7 @@ func TestScanReportsRemovedGuard(t *testing.T) {
 	for _, line := range strings.Split(strings.TrimSpace(stdout), "\n") {
 		var f model.Finding
 		mustJSON(t, line, &f)
-		if f.Rule != "TC-CFG-016" || f.Title != "Tripcord embed is missing its own hook" {
+		if f.Rule != "TC-CFG-016" || f.Title != "Tripcord embed is missing part of its guard" || !strings.Contains(f.Fix, "tripcord init --embed --force") || strings.Contains(f.Fix, "disableAllHooks") {
 			t.Fatalf("finding = %s", line)
 		}
 		paths = append(paths, f.Location.Path)
