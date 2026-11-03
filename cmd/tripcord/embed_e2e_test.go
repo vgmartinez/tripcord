@@ -11,40 +11,21 @@ import (
 	"runtime"
 	"slices"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/vgmartinez/tripcord/internal/embedded"
 	"github.com/vgmartinez/tripcord/internal/model"
 )
 
-var (
-	e2eBinaryOnce sync.Once
-	e2eBinaryPath string
-	e2eBinaryErr  error
-)
-
-// e2eBinary builds tripcord once per test run, as `go build -trimpath`
-// of this tree, the way docs/init.md says to fill the bootstrap cache.
+// e2eBinary is the binary the end-to-end tests pin and cache: this test
+// binary, which TestMain runs as tripcord under testAsCLIEnv.
 func e2eBinary(t *testing.T) string {
 	t.Helper()
-	e2eBinaryOnce.Do(func() {
-		dir, err := os.MkdirTemp("", "tripcord-e2e-bin-")
-		if err != nil {
-			e2eBinaryErr = err
-			return
-		}
-		e2eBinaryPath = filepath.Join(dir, "tripcord")
-		build := exec.Command("go", "build", "-trimpath", "-o", e2eBinaryPath, ".")
-		build.Dir = filepath.Join(adaptersDir, "..", "..", "cmd", "tripcord")
-		if out, err := build.CombinedOutput(); err != nil {
-			e2eBinaryErr = errors.New("go build: " + err.Error() + "\n" + string(out))
-		}
-	})
-	if e2eBinaryErr != nil {
-		t.Fatal(e2eBinaryErr)
+	bin, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
 	}
-	return e2eBinaryPath
+	return bin
 }
 
 func e2ePlatform(t *testing.T) string {
@@ -56,9 +37,9 @@ func e2ePlatform(t *testing.T) string {
 	return runtime.GOOS + "-" + arch
 }
 
-// embedE2E is a repository with init --embed output pinned to a fresh
-// tripcord build, the policy of the hook tests, and a bootstrap cache
-// to fill.
+// embedE2E is a repository with init --embed output pinned to
+// e2eBinary, the policy of the hook tests, and a bootstrap cache to
+// fill.
 type embedE2E struct {
 	repo, cache, home, bin string
 	platform               string
@@ -144,6 +125,7 @@ func (e *embedE2E) runHookCommand(t *testing.T, command, dir string, env []strin
 		"HOME=" + e.home,
 		"XDG_CACHE_HOME=" + e.cache,
 		"TMPDIR=" + t.TempDir(),
+		testAsCLIEnv + "=1",
 	}, env...)
 	cmd.Stdin = bytes.NewReader(input)
 	var stdout, stderr strings.Builder
@@ -192,7 +174,7 @@ func TestEmbedClaudeHookWithoutProjectDir(t *testing.T) {
 
 // TestEmbedHookThroughBootstrap runs each harness's generated pre-tool
 // command, as that harness would, through bootstrap.sh to tripcord
-// hook: a verified binary decides, and a tampered or missing one blocks
+// hook (e2eBinary): a verified binary decides, and a tampered or missing one blocks
 // with exit 2 and the reason on stderr.
 func TestEmbedHookThroughBootstrap(t *testing.T) {
 	e := newEmbedE2E(t)

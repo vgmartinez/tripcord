@@ -16,7 +16,13 @@ import (
 // fingerprint mode to s1 (CI set, no key) unless a test opts into k1.
 // It also compiles the core pack once per set of limits instead of once
 // per scan (see cachedRules).
+//
+// With TRIPCORD_TEST_AS_CLI=1 the test binary is tripcord itself, so the
+// end-to-end tests can pin it in a bootstrap cache without building one.
 func TestMain(m *testing.M) {
+	if os.Getenv(testAsCLIEnv) == "1" {
+		main()
+	}
 	home, err := os.MkdirTemp("", "tripcord-cmd-home-")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -42,6 +48,8 @@ func TestMain(m *testing.M) {
 	_ = os.RemoveAll(home)
 	os.Exit(code)
 }
+
+const testAsCLIEnv = "TRIPCORD_TEST_AS_CLI"
 
 type compiledRules struct {
 	env     *rules.Env

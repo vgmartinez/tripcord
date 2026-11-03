@@ -380,8 +380,8 @@ repository; run the target before tagging a release.
 command each wiring file holds, `bash <project dir>/.tripcord/bootstrap.sh
 hook --harness <h> --event pre-tool --on-failure block`, and the
 fail-closed and timeout fields. `TestEmbedHookThroughBootstrap` runs
-each of those commands through `bootstrap.sh` to a fresh build of
-`tripcord`, verified, tampered, and missing.
+each of those commands through `bootstrap.sh` to a `tripcord` pinned in
+the cache by its SHA-256: verified, tampered, and missing.
 
 ## Exit codes
 
