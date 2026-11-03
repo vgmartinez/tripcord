@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "command": "bash .tripcord/bootstrap.sh session-start"
+      }
+    ],
+    "preToolUse": [
+      {
+        "command": "true",
+        "failClosed": true
+      }
+    ]
+  }
+}

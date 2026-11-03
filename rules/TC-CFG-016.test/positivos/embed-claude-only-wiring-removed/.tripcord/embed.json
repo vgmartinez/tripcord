@@ -1,0 +1,21 @@
+{
+  "schema": "tripcord.embed/v1",
+  "version": "0.1.0",
+  "harnesses": [
+    "claude"
+  ],
+  "hooks": [
+    {
+      "harness": "claude",
+      "path": ".claude/settings.json",
+      "event": "SessionStart",
+      "sha256": "558fd6ed045d2bd2f0586e223bf23e29193523fbc1ded854f698dfe1862d7f02"
+    },
+    {
+      "harness": "claude",
+      "path": ".claude/settings.json",
+      "event": "PreToolUse",
+      "sha256": "f7f1e1d1d81ad4b668c0241098fc6758c90336995a68c194124d164f603a30d5"
+    }
+  ]
+}

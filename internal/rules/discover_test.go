@@ -19,6 +19,7 @@ import (
 	"github.com/vgmartinez/tripcord/internal/adapters/generic"
 	"github.com/vgmartinez/tripcord/internal/adapters/opencode"
 	"github.com/vgmartinez/tripcord/internal/adapters/windsurf"
+	"github.com/vgmartinez/tripcord/internal/embedded"
 	"github.com/vgmartinez/tripcord/internal/model"
 	"github.com/vgmartinez/tripcord/internal/scriptcheck"
 )
@@ -85,5 +86,9 @@ func adapterDiscover(ctx context.Context, root string) ([]model.ConfigItem, erro
 	if err := scriptcheck.Annotate(root, items); err != nil {
 		return nil, err
 	}
-	return items, nil
+	guards, err := embedded.Check(root, nil)
+	if err != nil {
+		return nil, err
+	}
+	return append(items, guards...), nil
 }

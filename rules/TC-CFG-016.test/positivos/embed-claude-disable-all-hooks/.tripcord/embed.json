@@ -1,0 +1,49 @@
+{
+  "schema": "tripcord.embed/v1",
+  "version": "0.1.0",
+  "harnesses": [
+    "claude",
+    "cursor",
+    "copilot",
+    "devin",
+    "codex"
+  ],
+  "hooks": [
+    {
+      "harness": "claude",
+      "path": ".claude/settings.json",
+      "event": "SessionStart",
+      "sha256": "558fd6ed045d2bd2f0586e223bf23e29193523fbc1ded854f698dfe1862d7f02"
+    },
+    {
+      "harness": "claude",
+      "path": ".claude/settings.json",
+      "event": "PreToolUse",
+      "sha256": "f7f1e1d1d81ad4b668c0241098fc6758c90336995a68c194124d164f603a30d5"
+    },
+    {
+      "harness": "cursor",
+      "path": ".cursor/hooks.json",
+      "event": "sessionStart",
+      "sha256": "da1bdc63d99d6d24bc265064631277c93737af365416562ba8f1a9b559b6c630"
+    },
+    {
+      "harness": "cursor",
+      "path": ".cursor/hooks.json",
+      "event": "preToolUse",
+      "sha256": "04d25ba4d54a8e11233df07fb027379c65c3a373ea47bca062d1a3a565166382"
+    },
+    {
+      "harness": "copilot",
+      "path": ".github/hooks/tripcord.json",
+      "event": "sessionStart",
+      "sha256": "5a139777a7d1802fd593d27a0969444cab0ffe638a8c16a39e4e2b9c323e4d87"
+    },
+    {
+      "harness": "copilot",
+      "path": ".github/hooks/tripcord.json",
+      "event": "preToolUse",
+      "sha256": "04ea5332fff445ffd4bf98bbc127c7d5c1d730e336c569c2bffda46f5d0952d0"
+    }
+  ]
+}

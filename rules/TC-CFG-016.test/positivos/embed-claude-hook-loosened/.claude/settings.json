@@ -1,0 +1,38 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/.tripcord/bootstrap.sh",
+              "session-start"
+            ]
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "tripcord",
+            "args": [
+              "hook",
+              "--harness",
+              "claude",
+              "--event",
+              "pre-tool"
+            ],
+            "onFailure": "continue"
+          }
+        ]
+      }
+    ]
+  }
+}

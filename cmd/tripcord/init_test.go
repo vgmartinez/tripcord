@@ -14,6 +14,7 @@ import (
 
 	"github.com/vgmartinez/tripcord/internal/embedded"
 	"github.com/vgmartinez/tripcord/internal/exitcode"
+	"github.com/vgmartinez/tripcord/internal/model"
 )
 
 var testSHA256 = strings.Repeat("0", 64)
@@ -484,6 +485,38 @@ func TestInitPathInsideRepository(t *testing.T) {
 	}
 	if code, _, stderr := runCLI(t, "init", dir); code != 0 {
 		t.Fatalf("repository root: exit %d: %s", code, stderr)
+	}
+}
+
+// TestScanReportsRemovedGuard checks TC-CFG-016 end to end against what
+// init writes, including that --harness on scan and the harnesses init
+// selected both limit which wiring is required.
+func TestScanReportsRemovedGuard(t *testing.T) {
+	dir := outsideGit(t)
+	if code, _, stderr := runCLI(t, embedArgs("--harness", "claude,copilot", dir)...); code != 0 {
+		t.Fatalf("init: exit %d: %s", code, stderr)
+	}
+	if err := os.Remove(filepath.Join(dir, filepath.FromSlash(embedded.CopilotHooksPath))); err != nil {
+		t.Fatal(err)
+	}
+	code, stdout, _ := runCLI(t, "scan", "--format", "json", dir)
+	if code != int(exitcode.Findings) {
+		t.Fatalf("scan: exit %d\n%s", code, stdout)
+	}
+	var paths []string
+	for _, line := range strings.Split(strings.TrimSpace(stdout), "\n") {
+		var f model.Finding
+		mustJSON(t, line, &f)
+		if f.Rule != "TC-CFG-016" || f.Title != "Tripcord embed is missing its own hook" {
+			t.Fatalf("finding = %s", line)
+		}
+		paths = append(paths, f.Location.Path)
+	}
+	if !slices.Equal(paths, []string{embedded.CopilotHooksPath, embedded.CopilotHooksPath}) {
+		t.Fatalf("finding paths = %v", paths)
+	}
+	if code, stdout, _ := runCLI(t, "scan", "--format", "json", "--harness", "claude", dir); code != 0 || stdout != "" {
+		t.Fatalf("scan --harness claude: exit %d\n%s", code, stdout)
 	}
 }
 

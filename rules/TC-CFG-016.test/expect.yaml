@@ -1,0 +1,14 @@
+positivos:
+  claude-disable-all-hooks: high
+  copilot-hooks-file-disable-all-hooks: high
+  copilot-settings-disable-all-hooks: high
+  gemini-hooks-config-disabled: high
+  embed-claude-wiring-removed: high
+  embed-claude-only-wiring-removed: high
+  embed-cursor-wiring-removed: high
+  embed-copilot-wiring-removed: high
+  embed-claude-not-tripcord: high
+  embed-cursor-not-tripcord: high
+  embed-copilot-not-tripcord: high
+  embed-claude-hook-loosened: high
+  embed-claude-disable-all-hooks: high

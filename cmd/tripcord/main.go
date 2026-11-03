@@ -33,6 +33,7 @@ import (
 	"github.com/vgmartinez/tripcord/internal/adapters/generic"
 	"github.com/vgmartinez/tripcord/internal/adapters/opencode"
 	"github.com/vgmartinez/tripcord/internal/adapters/windsurf"
+	"github.com/vgmartinez/tripcord/internal/embedded"
 	"github.com/vgmartinez/tripcord/internal/exitcode"
 	"github.com/vgmartinez/tripcord/internal/fpkey"
 	"github.com/vgmartinez/tripcord/internal/indexfiles"
@@ -417,6 +418,11 @@ func scanTree(ctx context.Context, t scanTarget, opts scanOptions, stdout, stder
 		if err := scriptcheck.Annotate(root, items); err != nil {
 			return t.internalError(stderr, fmt.Errorf("hook scripts: %w", err))
 		}
+		guards, err := embedded.Check(root, requested)
+		if err != nil {
+			return t.internalError(stderr, fmt.Errorf("embedded guard: %w", err))
+		}
+		items = append(items, guards...)
 	}
 	if opts.stagedFiles != nil {
 		applyStagedSources(items, t.stagedSources)
@@ -626,14 +632,15 @@ func parseCommandFlags(cmd flagCommand, args []string, stdout io.Writer) (scanOp
 // from sources (indexfiles.Plan.Sources, keyed by item.Path) and from the
 // scripts or checksum files a rule reads from it (see
 // scriptcheck.ItemReferencedPaths, which names a referenced path whether
-// or not it resolved, so a staged deletion of one still matches).
+// or not it resolved, so a staged deletion of one still matches), kept
+// alongside any SourcePaths the item was built with (embedded.Check).
 func applyStagedSources(items []model.ConfigItem, sources map[string][]string) {
 	for i := range items {
 		item := &items[i]
 		if item.Scope != model.ScopeRepo {
 			continue
 		}
-		var extra []string
+		extra := append([]string(nil), item.SourcePaths...)
 		extra = append(extra, sources[item.Path]...)
 		extra = append(extra, scriptcheck.ItemReferencedPaths(*item)...)
 		if len(extra) == 0 {
