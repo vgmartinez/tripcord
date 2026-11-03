@@ -110,8 +110,14 @@ func TestTripcordActionContract(t *testing.T) {
 			t.Errorf("action is missing pin comment %s", version)
 		}
 	}
-	if !strings.Contains(scan, `if [ -n "$TRIPCORD_FAIL_ON" ]`) || !strings.Contains(scan, "else") {
+	if !strings.Contains(scan, `if [ -n "$TRIPCORD_FAIL_ON" ]`) || !strings.Contains(scan, `args+=(--fail-on "$TRIPCORD_FAIL_ON")`) {
 		t.Fatal("scan does not pass --fail-on only when the caller sets it")
+	}
+	if got := action.Inputs["base"].Default; got != "${{ github.event.pull_request.base.sha }}" {
+		t.Fatalf("base default = %q, want the pull request base sha", got)
+	}
+	if strings.Count(scan, `"${args[@]}"`) != 3 || !strings.Contains(scan, `args+=(--base "$TRIPCORD_BASE")`) {
+		t.Fatal("scan does not pass --base to every report")
 	}
 	if strings.Contains(scan, "--fail-on high") {
 		t.Fatal("scan hard-codes --fail-on high")
@@ -533,4 +539,91 @@ func exitCode(t *testing.T, err error) int {
 	}
 	t.Fatal(err)
 	return -1
+}
+
+// TestActionScanComparesWithPullRequestBase runs the action's own scan
+// step, as the reusable workflow does on a pull request, against a
+// repository whose head removes the Tripcord embed its base has.
+func TestActionScanComparesWithPullRequestBase(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	var scan actionStep
+	for _, step := range parseAction(t).Runs.Steps {
+		if step.ID == "scan" {
+			scan = step
+		}
+	}
+	if scan.Env["TRIPCORD_BASE"] != "${{ inputs.base }}" {
+		t.Fatalf("scan env TRIPCORD_BASE = %q", scan.Env["TRIPCORD_BASE"])
+	}
+	bin := buildTripcord(t)
+	repo := t.TempDir()
+	git := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", repo, "-c", "user.name=t", "-c", "user.email=t@example.com"}, args...)...)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	git("init", "-q")
+	if out, err := exec.Command(bin, "init", "--embed", "--version", "0.1.0", "--sha256", "linux-x64="+strings.Repeat("a", 64), repo).CombinedOutput(); err != nil {
+		t.Fatalf("init --embed: %v\n%s", err, out)
+	}
+	git("add", "-A")
+	git("commit", "-qm", "embed tripcord")
+	base := git("rev-parse", "HEAD")
+	for _, p := range []string{".tripcord/bootstrap.sh", ".tripcord/embed.json", ".github/hooks/tripcord.json", ".github/workflows/tripcord.yml", ".github/workflows/copilot-setup-steps.yml"} {
+		if err := os.Remove(filepath.Join(repo, p)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeFile(t, filepath.Join(repo, ".claude", "settings.json"), "{\n  \"hooks\": {}\n}\n")
+	writeFile(t, filepath.Join(repo, ".cursor", "hooks.json"), "{\n  \"version\": 1,\n  \"hooks\": {}\n}\n")
+	git("add", "-A")
+	git("commit", "-qm", "remove the guard")
+
+	run := func(t *testing.T, base string) (string, string) {
+		t.Helper()
+		tmp := t.TempDir()
+		output := filepath.Join(tmp, "output")
+		cmd := exec.Command("bash", "-c", scan.Run)
+		cmd.Env = append(os.Environ(),
+			"TRIPCORD="+bin,
+			"TRIPCORD_PATH="+repo,
+			"TRIPCORD_FAIL_ON=",
+			"TRIPCORD_BASE="+base,
+			"TRIPCORD_SARIF="+filepath.Join(tmp, "tripcord.sarif"),
+			"TRIPCORD_MARKDOWN="+filepath.Join(tmp, "tripcord.md"),
+			"GITHUB_OUTPUT="+output,
+		)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("scan step: %v\n%s", err, out)
+		}
+		raw, err := os.ReadFile(output)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return strings.TrimSpace(string(raw)), string(out)
+	}
+	t.Run("pull request base", func(t *testing.T) {
+		exit, out := run(t, base)
+		if exit != "exit-code=1" || !strings.Contains(out, "TC-CFG-016") || !strings.Contains(out, "This change removes Tripcord") {
+			t.Fatalf("%s\n%s", exit, out)
+		}
+	})
+	t.Run("no base", func(t *testing.T) {
+		if exit, out := run(t, ""); exit != "exit-code=0" {
+			t.Fatalf("%s\n%s", exit, out)
+		}
+	})
+	t.Run("base not fetched", func(t *testing.T) {
+		exit, out := run(t, strings.Repeat("b", 40))
+		if exit != "exit-code=3" || !strings.Contains(out, "fetch-depth: 0") {
+			t.Fatalf("%s\n%s", exit, out)
+		}
+	})
 }

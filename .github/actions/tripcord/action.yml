@@ -33,6 +33,10 @@ inputs:
     description: JSON array of GitHub pull request reviews for pr-context. Empty skips --reviews-file.
     required: false
     default: ""
+  base:
+    description: Base commit the scan compares a Tripcord embed with (scan --base), so a pull request that removes or weakens the guard fails TC-CFG-016. The checkout must contain it (fetch-depth 0). Empty scans the head alone.
+    required: false
+    default: ${{ github.event.pull_request.base.sha }}
 outputs:
   scan-exit-code:
     description: Exit code from the scans. The job fails with this code after publishing.
@@ -160,25 +164,27 @@ runs:
         TRIPCORD: ${{ steps.tool.outputs.path }}
         TRIPCORD_PATH: ${{ inputs.path }}
         TRIPCORD_FAIL_ON: ${{ inputs.fail-on }}
+        TRIPCORD_BASE: ${{ inputs.base }}
         TRIPCORD_SARIF: ${{ steps.paths.outputs.sarif }}
         TRIPCORD_MARKDOWN: ${{ steps.paths.outputs.markdown }}
       run: |
         set +e
+        args=()
         if [ -n "$TRIPCORD_FAIL_ON" ]; then
-          "$TRIPCORD" scan "$TRIPCORD_PATH" --format gha --fail-on "$TRIPCORD_FAIL_ON"
-          status=$?
-          "$TRIPCORD" scan "$TRIPCORD_PATH" --format sarif --output "$TRIPCORD_SARIF" --fail-on "$TRIPCORD_FAIL_ON"
-          sarif_status=$?
-          "$TRIPCORD" scan "$TRIPCORD_PATH" --format md --output "$TRIPCORD_MARKDOWN" --fail-on "$TRIPCORD_FAIL_ON"
-          markdown_status=$?
-        else
-          "$TRIPCORD" scan "$TRIPCORD_PATH" --format gha
-          status=$?
-          "$TRIPCORD" scan "$TRIPCORD_PATH" --format sarif --output "$TRIPCORD_SARIF"
-          sarif_status=$?
-          "$TRIPCORD" scan "$TRIPCORD_PATH" --format md --output "$TRIPCORD_MARKDOWN"
-          markdown_status=$?
+          args+=(--fail-on "$TRIPCORD_FAIL_ON")
         fi
+        if [ -n "$TRIPCORD_BASE" ]; then
+          if ! git -C "$TRIPCORD_PATH" cat-file -e "${TRIPCORD_BASE}^{commit}" 2>/dev/null; then
+            echo "::error::tripcord base commit ${TRIPCORD_BASE} is not in the checkout; check out with fetch-depth: 0, or set base to an empty string"
+          fi
+          args+=(--base "$TRIPCORD_BASE")
+        fi
+        "$TRIPCORD" scan "$TRIPCORD_PATH" --format gha "${args[@]}"
+        status=$?
+        "$TRIPCORD" scan "$TRIPCORD_PATH" --format sarif --output "$TRIPCORD_SARIF" "${args[@]}"
+        sarif_status=$?
+        "$TRIPCORD" scan "$TRIPCORD_PATH" --format md --output "$TRIPCORD_MARKDOWN" "${args[@]}"
+        markdown_status=$?
         if [ "$sarif_status" -gt "$status" ]; then status=$sarif_status; fi
         if [ "$markdown_status" -gt "$status" ]; then status=$markdown_status; fi
         echo "exit-code=$status" >> "$GITHUB_OUTPUT"

@@ -265,7 +265,9 @@ func actionInputDefaults(t *testing.T) map[string]string {
 	}
 	out := make(map[string]string, len(action.Inputs))
 	for name, input := range action.Inputs {
-		if name == "reviews-file" {
+		// The workflow fills reviews-file itself, and leaves base to the
+		// action's default, the pull request's base commit.
+		if name == "reviews-file" || name == "base" {
 			continue
 		}
 		out[name] = input.Default
