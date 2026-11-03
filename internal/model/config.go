@@ -96,6 +96,16 @@ type ConfigItem struct {
 	// fingerprints do not hash a finding's line. Zero means the adapter
 	// did not record one.
 	Line int `json:"-"`
+	// SourcePaths are repository-relative paths, in addition to Path,
+	// whose staged content a finding at this item depends on: every file
+	// in Path's symlink chain, a plugin manifest this item was read
+	// through and every other file that manifest names, and the hook
+	// scripts or checksum files a rule reads from this item. It is set
+	// only for a --staged scan, to let the staged-paths filter report a
+	// finding whose own Path is not among the paths pre-commit passed,
+	// when one of these is. A normal scan leaves it nil: every file is
+	// already present, so no filter reads it.
+	SourcePaths []string `json:"-"`
 }
 
 // HiddenChars is what internal/hiddenchar found in one file. Runs holds

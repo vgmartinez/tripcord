@@ -91,6 +91,10 @@ tripcord scan [PATH] [flags]
 
 `version` prints the link-time version, or `dev` when it was not set. `scan --help` prints the flags below.
 
+To scan staged coding-agent configuration before committing, install the
+[`tripcord-config` pre-commit hook](docs/pre-commit.md). It reads the Git
+index, not unstaged working-tree edits.
+
 ### `tripcord scan`
 
 `PATH` defaults to the current directory. The scan reads configuration. It does not execute repository content.

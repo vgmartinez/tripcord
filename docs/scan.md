@@ -7,6 +7,24 @@ A directory that is not a Git repository can still be scanned. `--since` is
 the only mode that requires Git. To scan a repository before cloning it
 yourself, use [`tripcord preopen`](preopen.md).
 
+`--staged` reads the Git index into a private temporary tree and uses the
+staged version of each file, except when `PRE_COMMIT_FROM_REF` and
+`PRE_COMMIT_TO_REF` are both set: then it reads the working tree, which is
+what pre-commit checked out at the `TO` revision. The tree, in the index
+case, contains the paths a normal repository scan would open — adapter
+discovery files, `.tripcord` policy and review files, scripts and checksum
+files those rules follow, and in-repo symlink targets — under the same caps
+as that scan. A gitlink is an empty directory. A path absent from the index
+is missing. A finding is reported when its location or any path in its
+source set is in the change set: the union of paths passed after `--staged`
+and the paths that differ between `HEAD` and the index, including deletions.
+With nothing staged and no paths, nothing is reported. With the two
+pre-commit ref variables set, the change set also includes the three-dot
+diff `FROM...TO` (see [pre-commit.md](pre-commit.md)). Outside a repository,
+with an empty index in the index mode, or after an incomplete or internal
+scan, it exits non-zero; a pre-commit hook therefore blocks the commit. A
+signal after the staged tree exists closes it and exits 3.
+
 ## Flags
 
 | Flag | Description |
@@ -20,6 +38,7 @@ yourself, use [`tripcord preopen`](preopen.md).
 | `--output <path\|->` | Write output to a new private (`0600`) local file or `-` for stdout (default). A symlink is rejected. The destination is replaced only after the result is complete. |
 | `--since <git-ref>` | Scan repository configuration files that differ between `<git-ref>` and `HEAD`. The ref must not start with `-`. Untracked files and uncommitted worktree edits are not included. Names with non-ASCII characters are included. Git is invoked with repository hooks, fsmonitor, textconv, external diff drivers, and rename detection disabled, with every network transport denied, and with lazy fetches from a partial clone's promisor remote disabled; it does not execute repository content or contact a network service, even when the repository's own configuration tries to allow one. |
 | `--fail-on low\|medium\|high\|critical` | Set this invocation's threshold. The threshold is inclusive. A locked policy ceiling can be tightened and cannot be loosened. |
+| `--staged <paths...>` | Scan the staged Git index. At least one path is required; paths select reported finding locations. The index supplies the discovery set, policy and review files, referenced scripts and checksums, and in-repo symlink targets, under normal scan caps. |
 | `--policy <path>` | Use this repository policy file instead of `.tripcord/policy.yaml`. The file must exist; a missing explicit `--policy` path is an error, unlike the default `.tripcord/policy.yaml`, which is optional. |
 | `--org-policy <path>` | Add one required organization policy layer before the repository policy. |
 
@@ -53,7 +72,7 @@ using `s1`. The key is never printed. See
 | --- | --- |
 | 0 | No finding meets the effective threshold. |
 | 1 | At least one finding meets the effective threshold. |
-| 3 | Invalid flags or format, configuration/policy error, a Git ref `--since` cannot use, an invalid `--output` or `--policy` path, an invalid or unreadable fingerprint key (`TRIPCORD_FINGERPRINT_KEY` or `~/.tripcord/fingerprint.key` shorter than 16 bytes, not hex, an odd number of hex characters, corrupt, a symlink, or — on Unix — wrongly owned or too permissive; see [fingerprint.md](fingerprint.md#fail-closed-vs-s1-fallback)), unavailable v0 secret scan, unknown command, or an incomplete scan (below). `--help` exits 0. |
+| 3 | Invalid flags or format, configuration/policy error, a Git ref `--since` cannot use, an invalid `--output` or `--policy` path, an invalid or unreadable fingerprint key (`TRIPCORD_FINGERPRINT_KEY` or `~/.tripcord/fingerprint.key` shorter than 16 bytes, not hex, an odd number of hex characters, corrupt, a symlink, or — on Unix — wrongly owned or too permissive; see [fingerprint.md](fingerprint.md#fail-closed-vs-s1-fallback)), unavailable v0 secret scan, unknown command, a staged scan interrupted after its tree exists, or an incomplete scan (below). `--help` exits 0. |
 | 4 | Internal error, or a failure to start Git or finish writing the output file. |
 
 When an adapter cannot fully read the configuration (malformed, oversized,

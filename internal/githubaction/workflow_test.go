@@ -393,6 +393,71 @@ func TestActionlintJobIsChecksumPinned(t *testing.T) {
 	}
 }
 
+func TestPreCommitHookContract(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", ".pre-commit-hooks.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var hooks []map[string]any
+	if err := yaml.Unmarshal(data, &hooks); err != nil {
+		t.Fatal(err)
+	}
+	if len(hooks) != 1 {
+		t.Fatalf("hooks = %d, want 1", len(hooks))
+	}
+	hook := hooks[0]
+	for name, want := range map[string]string{
+		"id":             "tripcord-config",
+		"language":       "golang",
+		"entry":          "tripcord scan --staged",
+		"pass_filenames": "true",
+		"require_serial": "true",
+		"always_run":     "true",
+	} {
+		got := fmt.Sprint(hook[name])
+		if got != want {
+			t.Errorf("hook %s = %q, want %q", name, got, want)
+		}
+	}
+	// Tripcord, not a pre-commit files regex, decides what counts as
+	// configuration (a referenced or symlinked file can matter without
+	// its own path or extension looking like config). The hook must not
+	// carry a files regex. types is explicitly empty: the default [file]
+	// is an AND filter and would drop a symlink (identify tags it
+	// symlink, not file) even with types_or set. types_or then keeps a
+	// regular file or a symlink, so --all-files passes both.
+	if _, ok := hook["files"]; ok {
+		t.Errorf("hook has files = %v, want no files regex", hook["files"])
+	}
+	types, ok := hook["types"].([]any)
+	if !ok || len(types) != 0 {
+		t.Errorf("hook types = %#v, want an empty list", hook["types"])
+	}
+	gotOr, ok := hook["types_or"].([]any)
+	wantOr := []string{"file", "symlink"}
+	if !ok || len(gotOr) != len(wantOr) {
+		t.Errorf("hook types_or = %#v, want %v", hook["types_or"], wantOr)
+	} else {
+		for i, want := range wantOr {
+			if fmt.Sprint(gotOr[i]) != want {
+				t.Errorf("hook types_or[%d] = %v, want %s", i, gotOr[i], want)
+			}
+		}
+	}
+	docs, err := os.ReadFile(filepath.Join("..", "..", "docs", "pre-commit.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pin := regexp.MustCompile(`rev: ([0-9a-f]{40}) # main@([0-9a-f]{7,40})`)
+	match := pin.FindStringSubmatch(string(docs))
+	if match == nil {
+		t.Fatal("docs pre-commit example does not pin rev to a full SHA with a main comment")
+	}
+	if !strings.HasPrefix(match[1], match[2]) {
+		t.Fatalf("docs pin %s does not match comment %s", match[1], match[2])
+	}
+}
+
 func checkReviewsScript(t *testing.T, script string) {
 	t.Helper()
 	for _, want := range []string{

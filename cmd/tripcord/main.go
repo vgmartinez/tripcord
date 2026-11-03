@@ -13,9 +13,12 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strings"
+	"syscall"
 	"time"
 	"unicode/utf8"
 
@@ -32,10 +35,12 @@ import (
 	"github.com/vgmartinez/tripcord/internal/adapters/windsurf"
 	"github.com/vgmartinez/tripcord/internal/exitcode"
 	"github.com/vgmartinez/tripcord/internal/fpkey"
+	"github.com/vgmartinez/tripcord/internal/indexfiles"
 	"github.com/vgmartinez/tripcord/internal/model"
 	"github.com/vgmartinez/tripcord/internal/output"
 	"github.com/vgmartinez/tripcord/internal/pathx"
 	"github.com/vgmartinez/tripcord/internal/policy"
+	"github.com/vgmartinez/tripcord/internal/preopen"
 	"github.com/vgmartinez/tripcord/internal/rules"
 	"github.com/vgmartinez/tripcord/internal/scriptcheck"
 )
@@ -57,6 +62,12 @@ Usage:
 scan performs static configuration scanning only. A PATH inside a Git
 repository scans that whole repository from its git root. Monorepo scoping
 is tracked in https://github.com/vgmartinez/tripcord/issues/59.
+--staged scans the Git index in a private temporary tree. The change set
+is the union of any paths given on the command line and the paths that
+differ between HEAD and the index (added, modified, deleted, type-changed,
+and mode-changed). With nothing staged and no paths, nothing is reported.
+When PRE_COMMIT_FROM_REF and PRE_COMMIT_TO_REF are set, that range is
+included too and the scan reads the working tree instead of the index.
 --scope selects repository
 (the default), user, managed, or all. The default does not read the home
 directory or system settings.
@@ -97,18 +108,20 @@ func run(args []string, stdout, stderr io.Writer) int {
 }
 
 type scanOptions struct {
-	config    bool
-	secrets   bool
-	all       bool
-	harnesses string
-	scope     string
-	format    string
-	output    string
-	since     string
-	failOn    string
-	policy    string
-	orgPolicy string
-	path      string
+	config      bool
+	secrets     bool
+	all         bool
+	harnesses   string
+	scope       string
+	format      string
+	output      string
+	since       string
+	failOn      string
+	policy      string
+	orgPolicy   string
+	path        string
+	staged      bool
+	stagedFiles map[string]bool
 }
 
 func runScan(args []string, stdout, stderr io.Writer) int {
@@ -121,17 +134,128 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 	}
 	target := scanTarget{prog: "tripcord scan"}
 	if err != nil {
-		return target.configError(stderr, err)
+		code := target.configError(stderr, err)
+		if opts.staged {
+			writeString(stderr, "tripcord scan: staged scan blocked the commit; bypass only with git commit --no-verify\n")
+		}
+		return code
 	}
 	if opts.secrets || opts.all {
 		return target.configError(stderr, errors.New("secret scanning lands in v1; v0 supports --config only"))
 	}
 	root, err := scanRoot(opts.path)
 	if err != nil {
-		return target.configError(stderr, err)
+		code := target.configError(stderr, err)
+		if opts.staged {
+			writeString(stderr, "tripcord scan: staged scan blocked the commit; bypass only with git commit --no-verify\n")
+		}
+		return code
+	}
+	if opts.staged {
+		if !repoRoot(root) {
+			code := target.configError(stderr, errors.New("--staged requires a Git repository"))
+			writeString(stderr, "tripcord scan: staged scan blocked the commit; bypass only with git commit --no-verify\n")
+			return code
+		}
+		if opts.scope != "repo" || opts.since != "" || opts.policy != "" || opts.orgPolicy != "" {
+			code := target.configError(stderr, errors.New("--staged requires repo scope and index policy, and does not support --since, --policy, or --org-policy"))
+			writeString(stderr, "tripcord scan: staged scan blocked the commit; bypass only with git commit --no-verify\n")
+			return code
+		}
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
+		defer stop()
+		// GIT_INDEX_FILE, when set, is the lock or temporary index git
+		// built for the commit currently in this hook (plain, -a, a
+		// pathspec, --only, or --include): see gitrun.IndexEnv. It is
+		// read once, here, where --staged is already known to be a git
+		// hook invocation, and passed explicitly to every call that
+		// needs the proposed commit's content, rather than carried by
+		// gitrun.Env for every git invocation tripcord makes.
+		indexFile := os.Getenv("GIT_INDEX_FILE")
+		// The change set is the union of paths the caller passed (a
+		// pre-commit batch, or an explicit manual invocation) and every
+		// path that differs between HEAD and this index. A batch that
+		// does not name a staged symlink or deletion still sees it,
+		// because diff-index does; every batch unions the same
+		// diff-index set, so the same finding can be reported from more
+		// than one batch.
+		changed, err := preopen.StagedChangeSet(ctx, root, indexFile)
+		if err != nil {
+			code := target.configError(stderr, fmt.Errorf("--staged: %w", err))
+			writeString(stderr, "tripcord scan: staged scan blocked the commit; bypass only with git commit --no-verify\n")
+			return code
+		}
+		for path := range opts.stagedFiles {
+			changed[path] = true
+		}
+		// pre-commit run --from-ref/--to-ref, including pre-commit.ci,
+		// sets both. Nothing is staged in that mode, so diff-index is
+		// empty, and pre-commit's filename filter drops deletions. The
+		// range diff puts them back. Content is the working tree at TO,
+		// which is what pre-commit checked out, not the index.
+		fromRef := os.Getenv("PRE_COMMIT_FROM_REF")
+		toRef := os.Getenv("PRE_COMMIT_TO_REF")
+		if fromRef != "" && toRef != "" {
+			ranged, err := preopen.RefRangeChangeSet(ctx, root, fromRef, toRef)
+			if err != nil {
+				code := target.configError(stderr, fmt.Errorf("--staged: %w", err))
+				writeString(stderr, "tripcord scan: staged scan blocked the commit; bypass only with git commit --no-verify\n")
+				return code
+			}
+			for path := range ranged {
+				changed[path] = true
+			}
+			opts.stagedFiles = changed
+			sources, notes, err := indexfiles.WorktreeSources(root)
+			if err != nil {
+				code := target.configError(stderr, fmt.Errorf("--staged: %w", err))
+				writeString(stderr, "tripcord scan: staged scan blocked the commit; bypass only with git commit --no-verify\n")
+				return code
+			}
+			target.root, target.policyRoot = root, root
+			target.stagedNotes = notes
+			target.stagedSources = sources
+			code := scanTree(ctx, target, opts, stdout, stderr)
+			if ctx.Err() != nil {
+				writeString(stderr, "tripcord scan: staged scan blocked the commit; bypass only with git commit --no-verify\n")
+				return int(exitcode.Config)
+			}
+			if code == int(exitcode.Config) || code == int(exitcode.Internal) {
+				writeString(stderr, "tripcord scan: staged scan blocked the commit; bypass only with git commit --no-verify\n")
+			}
+			return code
+		}
+		opts.stagedFiles = changed
+		ws, notes, sources, err := indexfiles.Materialize(ctx, root, indexFile)
+		if err != nil {
+			code := target.configError(stderr, fmt.Errorf("--staged: %w", err))
+			writeString(stderr, "tripcord scan: staged scan blocked the commit; bypass only with git commit --no-verify\n")
+			return code
+		}
+		defer func() { _ = ws.Close() }()
+		target.root, target.policyRoot = ws.Tree(), ws.Tree()
+		target.stagedNotes = notes
+		target.stagedSources = sources
+		target.redactRoot = ws.Tree()
+		target.stageMore = func(items []model.ConfigItem) error {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			return indexfiles.AddReferences(ctx, ws, scriptcheck.ReferencedPaths(items))
+		}
+		code := scanTree(ctx, target, opts, stdout, stderr)
+		if ctx.Err() != nil {
+			_ = ws.Close()
+			writeString(stderr, "tripcord scan: staged scan blocked the commit; bypass only with git commit --no-verify\n")
+			return int(exitcode.Config)
+		}
+		if code == int(exitcode.Config) || code == int(exitcode.Internal) {
+			writeString(stderr, "tripcord scan: staged scan blocked the commit; bypass only with git commit --no-verify\n")
+		}
+		return code
 	}
 	target.root, target.policyRoot = root, root
-	return scanTree(target, opts, stdout, stderr)
+	return scanTree(context.Background(), target, opts, stdout, stderr)
 }
 
 // scanTarget is the tree scanTree reads. prog prefixes every message.
@@ -140,24 +264,50 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 // policy for preopen, which must not let a cloned repository set its
 // own policy or exceptions.
 type scanTarget struct {
-	prog       string
-	root       string
-	policyRoot string
+	prog        string
+	root        string
+	policyRoot  string
+	stagedNotes []adapters.Diagnostic
+	stageMore   func([]model.ConfigItem) error
+	// stagedSources is indexfiles.Plan.Sources: it is applied to every
+	// discovered repository item's SourcePaths once discovery and hook
+	// script resolution have run, so the --staged filter can match a
+	// finding's symlink chain or plugin manifest group, not only its
+	// own Path. It is nil for a normal, non-staged scan.
+	stagedSources map[string][]string
+	// redactRoot, for a --staged scan, is the absolute path of the
+	// private staged tree (ws.Tree()): an internal error that names it,
+	// for example one filepath.EvalSymlinks on root returns, is
+	// rewritten to a repo-relative "." so a diagnostic does not name a
+	// temporary directory the pre-commit caller never asked about. It
+	// is empty for a normal scan, where root is the repository itself.
+	redactRoot string
 }
 
 func (t scanTarget) configError(stderr io.Writer, err error) int {
-	writeString(stderr, t.prog+": "+redactHomeFromError(err)+"\n")
+	writeString(stderr, t.prog+": "+t.redactError(err)+"\n")
 	return int(exitcode.Config)
 }
 
 func (t scanTarget) internalError(stderr io.Writer, err error) int {
-	writeString(stderr, t.prog+": "+redactHomeFromError(err)+"\n")
+	writeString(stderr, t.prog+": "+t.redactError(err)+"\n")
 	return int(exitcode.Internal)
+}
+
+// redactError renders err the way configError and internalError do: the
+// user's home directory folded to "~", and, for a --staged scan, the
+// private staged tree's absolute path folded to ".".
+func (t scanTarget) redactError(err error) string {
+	msg := redactHomeFromError(err)
+	if t.redactRoot != "" {
+		msg = strings.ReplaceAll(msg, t.redactRoot, ".")
+	}
+	return msg
 }
 
 // scanTree scans t.root with opts, writes the findings, and returns the
 // scan exit code.
-func scanTree(t scanTarget, opts scanOptions, stdout, stderr io.Writer) int {
+func scanTree(ctx context.Context, t scanTarget, opts scanOptions, stdout, stderr io.Writer) int {
 	root := t.root
 	env, catalog, err := loadRules(scanLimits())
 	if err != nil {
@@ -218,7 +368,7 @@ func scanTree(t scanTarget, opts scanOptions, stdout, stderr io.Writer) int {
 		selected = append(selected, generic.New(generic.Options{TasksOnly: true, FingerprintKey: key}))
 	}
 	var items []model.ConfigItem
-	var diagnostics []adapters.Diagnostic
+	diagnostics := append([]adapters.Diagnostic{}, t.stagedNotes...)
 	if keyNote != "" && writeString(stderr, t.prog+": "+keyNote+"\n") != int(exitcode.OK) {
 		return int(exitcode.Internal)
 	}
@@ -230,7 +380,13 @@ func scanTree(t scanTarget, opts scanOptions, stdout, stderr io.Writer) int {
 		})
 	}
 	for _, adapter := range selected {
-		discovered, err := adapter.Discover(context.Background(), root)
+		if ctx.Err() != nil {
+			return int(exitcode.Config)
+		}
+		discovered, err := adapter.Discover(ctx, root)
+		if ctx.Err() != nil {
+			return int(exitcode.Config)
+		}
 		var partial *adapters.DiagnosticError
 		switch {
 		case errors.As(err, &partial):
@@ -240,10 +396,24 @@ func scanTree(t scanTarget, opts scanOptions, stdout, stderr io.Writer) int {
 		}
 		items = append(items, discovered...)
 	}
+	if t.stageMore != nil {
+		if err := t.stageMore(items); err != nil {
+			if ctx.Err() != nil {
+				return int(exitcode.Config)
+			}
+			return t.internalError(stderr, fmt.Errorf("staged references: %w", err))
+		}
+	}
+	if ctx.Err() != nil {
+		return int(exitcode.Config)
+	}
 	if repoScope {
 		if err := scriptcheck.Annotate(root, items); err != nil {
 			return t.internalError(stderr, fmt.Errorf("hook scripts: %w", err))
 		}
+	}
+	if opts.stagedFiles != nil {
+		applyStagedSources(items, t.stagedSources)
 	}
 	diagnostics = adapters.DedupeEscapingSymlinkDiagnostics(diagnostics)
 	if opts.since != "" {
@@ -263,11 +433,20 @@ func scanTree(t scanTarget, opts scanOptions, stdout, stderr io.Writer) int {
 		})
 	}
 	engine := rules.NewEngine(env, catalog.Rules(), rules.WithFilter(effective.RuleFilter()))
-	result := engine.ScanConfig(context.Background(), items)
+	if ctx.Err() != nil {
+		return int(exitcode.Config)
+	}
+	result := engine.ScanConfig(ctx, items)
+	if ctx.Err() != nil {
+		return int(exitcode.Config)
+	}
 	diagnostics = append(diagnostics, evalDiagnostics(result.Errors)...)
 	diagnostics = append(diagnostics, opaqueDiagnostics(result.Notices)...)
 	findings := make([]model.Finding, 0, len(result.Matches))
 	for _, match := range result.Matches {
+		if opts.stagedFiles != nil && !stagedSourceMatches(match.Item, opts.stagedFiles) {
+			continue
+		}
 		if _, status := effective.Exception(match.Rule.ID, match.Item.Path, match.Item.SHA256, now()); status == policy.ExceptionActive {
 			continue
 		}
@@ -377,6 +556,7 @@ func parseCommandFlags(cmd flagCommand, args []string, stdout io.Writer) (scanOp
 	flags.StringVar(&opts.failOn, "fail-on", "", "low, medium, high, or critical")
 	flags.StringVar(&opts.policy, "policy", "", "policy file")
 	flags.StringVar(&opts.orgPolicy, "org-policy", "", "organization policy file")
+	flags.BoolVar(&opts.staged, "staged", false, "scan Git's staged index; paths are unioned with the staged change set")
 	if err := flags.Parse(normalized); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			var buf bytes.Buffer
@@ -386,7 +566,7 @@ func parseCommandFlags(cmd flagCommand, args []string, stdout io.Writer) (scanOp
 			flags.SetOutput(&buf)
 			flags.PrintDefaults()
 			if cmd == scanCommand {
-				if _, werr := buf.WriteString("\nA PATH inside a Git repository scans that whole repository from its git root.\nMonorepo scoping is tracked in https://github.com/vgmartinez/tripcord/issues/59.\n"); werr != nil {
+				if _, werr := buf.WriteString("\nA PATH inside a Git repository scans that whole repository from its git root.\nMonorepo scoping is tracked in https://github.com/vgmartinez/tripcord/issues/59.\n--staged scans the Git index. Paths are unioned with the staged change set\n(added, modified, deleted, type-changed, and mode-changed). With nothing\nstaged and no paths, nothing is reported.\n"); werr != nil {
 					return scanOptions{}, fmt.Errorf("%w: %w", errHelpWrite, werr)
 				}
 			}
@@ -411,6 +591,18 @@ func parseCommandFlags(cmd flagCommand, args []string, stdout io.Writer) (scanOp
 	switch {
 	case cmd == preopenCommand && flags.NArg() != 1:
 		return opts, errors.New("preopen takes exactly one git URL or local path")
+	case opts.staged:
+		opts.path = "."
+		if flags.NArg() > 0 {
+			// Paths name one pre-commit batch, or a direct manual
+			// invocation. They are unioned with the diff-index change
+			// set in runScan; they do not replace it. With none given,
+			// only that change set is used.
+			opts.stagedFiles, err = stagedPaths(flags.Args())
+			if err != nil {
+				return opts, err
+			}
+		}
 	case flags.NArg() > 1:
 		return opts, errors.New("scan accepts at most one PATH")
 	case flags.NArg() == 1:
@@ -422,6 +614,74 @@ func parseCommandFlags(cmd flagCommand, args []string, stdout io.Writer) (scanOp
 		return opts, errors.New("--config, --secrets, and --all are mutually exclusive")
 	}
 	return opts, nil
+}
+
+// applyStagedSources sets SourcePaths on every repository item in items
+// from sources (indexfiles.Plan.Sources, keyed by item.Path) and from the
+// scripts or checksum files a rule reads from it (see
+// scriptcheck.ItemReferencedPaths, which names a referenced path whether
+// or not it resolved, so a staged deletion of one still matches).
+func applyStagedSources(items []model.ConfigItem, sources map[string][]string) {
+	for i := range items {
+		item := &items[i]
+		if item.Scope != model.ScopeRepo {
+			continue
+		}
+		var extra []string
+		extra = append(extra, sources[item.Path]...)
+		extra = append(extra, scriptcheck.ItemReferencedPaths(*item)...)
+		if len(extra) == 0 {
+			continue
+		}
+		item.SourcePaths = dedupeSortedPaths(extra)
+	}
+}
+
+// dedupeSortedPaths returns paths with duplicates removed, sorted.
+func dedupeSortedPaths(paths []string) []string {
+	seen := make(map[string]bool, len(paths))
+	out := make([]string, 0, len(paths))
+	for _, p := range paths {
+		if seen[p] {
+			continue
+		}
+		seen[p] = true
+		out = append(out, p)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// stagedSourceMatches reports whether item's own Path, or any path in
+// its SourcePaths (see model.ConfigItem.SourcePaths), is among staged,
+// the paths pre-commit passed. It is the --staged filter: a finding is
+// reported when any file whose staged content it depends on changed,
+// not only when its own location path did.
+func stagedSourceMatches(item model.ConfigItem, staged map[string]bool) bool {
+	if staged[item.Path] {
+		return true
+	}
+	for _, p := range item.SourcePaths {
+		if staged[p] {
+			return true
+		}
+	}
+	return false
+}
+
+func stagedPaths(paths []string) (map[string]bool, error) {
+	out := make(map[string]bool, len(paths))
+	for _, path := range paths {
+		if filepath.IsAbs(path) {
+			return nil, fmt.Errorf("--staged path %q must be relative", path)
+		}
+		clean := filepath.ToSlash(filepath.Clean(path))
+		if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") {
+			return nil, fmt.Errorf("--staged path %q escapes the repository", path)
+		}
+		out[clean] = true
+	}
+	return out, nil
 }
 
 // scanRoot is the directory to scan. A path inside a Git repository uses
@@ -456,6 +716,11 @@ func gitRoot(dir string) string {
 		}
 		dir = parent
 	}
+}
+
+func repoRoot(dir string) bool {
+	_, err := os.Stat(filepath.Join(dir, ".git"))
+	return err == nil
 }
 
 func normalizeScanArgs(args []string) ([]string, error) {

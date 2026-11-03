@@ -68,15 +68,44 @@ func (e *TargetError) Error() string { return fmt.Sprintf("%q: %v", e.Target, e.
 func (e *TargetError) Unwrap() error { return e.Err }
 
 // Workspace is a fetched repository. Tree holds its HEAD tree; Close
-// removes everything Fetch created.
+// removes everything Fetch created. gitDir and index are set for a staged
+// workspace so later referenced paths can be added without listing again.
 type Workspace struct {
-	dir  string
-	tree string
+	dir    string
+	tree   string
+	gitDir string
+	index  map[string]IndexObject
+}
+
+// IndexObject is one git index record. Kind is "blob" or "commit"
+// (a gitlink). Target is symlink text when Mode is 120000.
+type IndexObject struct {
+	Mode   string
+	OID    string
+	Path   string
+	Kind   string
+	Target string
+	Size   int64
+	Sparse int64
 }
 
 // Tree is the directory holding the fetched HEAD tree. It contains no
 // .git directory.
-func (w *Workspace) Tree() string { return w.tree }
+func (w *Workspace) Tree() string {
+	if w == nil {
+		return ""
+	}
+	return w.tree
+}
+
+// Index is the staged index remembered for a workspace opened from the
+// index. It is nil for a preopen fetch.
+func (w *Workspace) Index() map[string]IndexObject {
+	if w == nil {
+		return nil
+	}
+	return w.index
+}
 
 // Dir is the temporary directory that holds the clone and the tree.
 func (w *Workspace) Dir() string { return w.dir }
@@ -135,6 +164,363 @@ func Fetch(ctx context.Context, target string) (ws *Workspace, err error) {
 		return nil, err
 	}
 	return created, nil
+}
+
+// ListIndex reads the staged index. Blobs are not written. A gitlink is
+// kind "commit", the same empty directory a checkout leaves for an
+// uninitialized submodule. Unmerged paths are rejected.
+// indexFile, when set, is the index git is building for a commit
+// currently in a hook (see gitrun.IndexEnv): ls-files then reads that
+// proposed commit's content instead of the stale on-disk .git/index. An
+// empty indexFile reads .git/index, as a direct, non-hook invocation
+// would.
+func ListIndex(ctx context.Context, repo, indexFile string) (objs []IndexObject, gitDir string, err error) {
+	if _, err := exec.LookPath("git"); err != nil {
+		return nil, "", fmt.Errorf("%w: %w", ErrGitMissing, err)
+	}
+	raw, err := gitrun.RunIndexed(ctx, repo, indexFile, "ls-files", "--stage", "-z")
+	if err != nil {
+		return nil, "", err
+	}
+	entries, err := parseIndex(raw)
+	if err != nil {
+		return nil, "", err
+	}
+	gitDirRaw, err := gitrun.Run(ctx, repo, "rev-parse", "--git-dir")
+	if err != nil {
+		return nil, "", err
+	}
+	gitDir = strings.TrimSpace(string(gitDirRaw))
+	if !filepath.IsAbs(gitDir) {
+		gitDir = filepath.Join(repo, gitDir)
+	}
+	objs = make([]IndexObject, len(entries))
+	for i, e := range entries {
+		objs[i] = IndexObject{Mode: e.mode, OID: e.oid, Path: e.path, Kind: e.kind}
+	}
+	return objs, gitDir, nil
+}
+
+// StagedChangeSet reports every repository-relative path that differs
+// between HEAD (or, on the first commit, the empty tree) and the index
+// at indexFile: added, modified, deleted, type-changed (for example a
+// symlink retargeted, or a file replaced by a symlink), and
+// mode-changed entries alike. `tripcord scan --staged` unions this set
+// with any paths the caller passed. pre-commit's default types: [file]
+// filter never names a symlink or a staged deletion, and a commit that
+// only touches one of those would otherwise be invisible; diff-index
+// still lists them. indexFile, when set, is the index git is building
+// for a commit currently in a hook (see gitrun.IndexEnv); an empty
+// indexFile reads .git/index, as a direct, non-hook invocation would.
+func StagedChangeSet(ctx context.Context, repo, indexFile string) (map[string]bool, error) {
+	if _, err := exec.LookPath("git"); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrGitMissing, err)
+	}
+	treeish, err := diffBase(ctx, repo, indexFile)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := gitrun.RunIndexed(ctx, repo, indexFile, "diff-index", "--cached", "--name-status", "-z", "--no-renames", treeish)
+	if err != nil {
+		return nil, err
+	}
+	return parseNameStatus(raw)
+}
+
+// RefRangeChangeSet reports every repository-relative path that differs
+// between from and to, the way pre-commit 4.7.0 chooses files for
+// `pre-commit run --from-ref FROM --to-ref TO` (see
+// pre_commit/git.py get_changed_files). That function runs
+// `git diff --name-only -z FROM...TO` — the three-dot form, changes on
+// TO since the merge base with FROM — and, only when that command
+// fails (newer git has no merge base for unrelated histories), falls
+// back to `FROM..TO`. This uses the same pair, with --name-status and
+// --no-renames so a rename is a deletion plus an addition and the
+// deleted path is still in the set. Deletions are included;
+// pre-commit's own filename filter drops them because the path no
+// longer exists. The diff is of the two trees, not of the index.
+func RefRangeChangeSet(ctx context.Context, repo, from, to string) (map[string]bool, error) {
+	if err := validRevision(from); err != nil {
+		return nil, err
+	}
+	if err := validRevision(to); err != nil {
+		return nil, err
+	}
+	if _, err := exec.LookPath("git"); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrGitMissing, err)
+	}
+	raw, err := gitrun.Run(ctx, repo, "diff", "--name-status", "-z", "--no-renames", from+"..."+to, "--")
+	if err != nil {
+		var exitErr *gitrun.ExitError
+		if !errors.As(err, &exitErr) {
+			return nil, err
+		}
+		raw, err = gitrun.Run(ctx, repo, "diff", "--name-status", "-z", "--no-renames", from+".."+to, "--")
+		if err != nil {
+			return nil, err
+		}
+	}
+	return parseNameStatus(raw)
+}
+
+// validRevision rejects a revision that could be read as a git option
+// or that carries a control character. pre-commit passes the caller's
+// --from-ref and --to-ref through unchanged; they are still one
+// argument each, not a shell string.
+func validRevision(rev string) error {
+	if rev == "" || strings.HasPrefix(rev, "-") || strings.ContainsAny(rev, "\x00\n\r") {
+		return fmt.Errorf("invalid revision %q", rev)
+	}
+	return nil
+}
+
+// diffBase is the tree-ish StagedChangeSet diffs the index against: HEAD,
+// or, when the branch has no commit yet, the empty tree. mktree with no
+// input reads the empty tree's own OID back from git itself, rather than
+// a hardcoded constant, so it works the same under either hash algorithm
+// a repository might use. gitrun.Command already leaves a command's
+// stdin unset, which os/exec connects to the null device, giving mktree
+// no entries to read.
+func diffBase(ctx context.Context, repo, indexFile string) (string, error) {
+	if _, err := gitrun.RunIndexed(ctx, repo, indexFile, "rev-parse", "--verify", "--quiet", "HEAD"); err != nil {
+		var exitErr *gitrun.ExitError
+		if errors.As(err, &exitErr) {
+			raw, err := gitrun.Run(ctx, repo, "mktree", "--missing")
+			if err != nil {
+				return "", err
+			}
+			return strings.TrimSpace(string(raw)), nil
+		}
+		return "", err
+	}
+	return "HEAD", nil
+}
+
+// parseNameStatus parses `git diff-index --name-status -z --no-renames`
+// output into the set of changed paths: NUL-terminated status/path
+// pairs, one status letter per record since renames and copies are
+// disabled. The status letter itself (A, M, D, T, or a mode-only M) is
+// not needed: every category StagedChangeSet documents is reported by
+// its path alone.
+func parseNameStatus(raw []byte) (map[string]bool, error) {
+	out := map[string]bool{}
+	fields := bytes.Split(bytes.TrimSuffix(raw, []byte{0}), []byte{0})
+	for i := 0; i < len(fields); {
+		if len(fields[i]) == 0 {
+			i++
+			continue
+		}
+		status := fields[i]
+		i++
+		if i >= len(fields) {
+			return nil, fmt.Errorf("unexpected diff-index record %q: missing path", status)
+		}
+		path := fields[i]
+		i++
+		if len(path) == 0 {
+			return nil, fmt.Errorf("unexpected diff-index record %q: empty path", status)
+		}
+		out[string(path)] = true
+	}
+	return out, nil
+}
+
+// ReadBlobs returns raw object bytes for oids. The objects are not filters.
+func ReadBlobs(ctx context.Context, gitDir string, oids []string) (map[string][]byte, error) {
+	return catBatch(ctx, gitDir, oids, false)
+}
+
+// BlobSizes returns object sizes without reading the bytes.
+func BlobSizes(ctx context.Context, gitDir string, oids []string) (map[string]int64, error) {
+	if len(oids) == 0 {
+		return map[string]int64{}, nil
+	}
+	catCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	cat, err := gitrun.Command(catCtx, "", "--git-dir", gitDir, "cat-file", "--batch-check")
+	if err != nil {
+		return nil, err
+	}
+	stdin, err := cat.StdinPipe()
+	if err != nil {
+		return nil, err
+	}
+	stdout, err := cat.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+	var stderr bytes.Buffer
+	cat.Stderr = &stderr
+	if err := cat.Start(); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrGitMissing, err)
+	}
+	out := map[string]int64{}
+	writeErr := func() error {
+		for _, oid := range oids {
+			if _, err := io.WriteString(stdin, oid+"\n"); err != nil {
+				return err
+			}
+		}
+		return nil
+	}()
+	if writeErr == nil {
+		writeErr = stdin.Close()
+	} else {
+		cancel()
+		_ = stdin.Close()
+	}
+	resp := bufio.NewReader(stdout)
+	if writeErr == nil {
+		for _, oid := range oids {
+			line, err := resp.ReadString('\n')
+			if err != nil {
+				writeErr = err
+				break
+			}
+			fields := strings.Fields(strings.TrimSpace(line))
+			if len(fields) != 3 || fields[0] != oid || fields[1] != "blob" {
+				writeErr = fmt.Errorf("unexpected cat-file header %q", strings.TrimSpace(line))
+				break
+			}
+			size, err := strconv.ParseInt(fields[2], 10, 64)
+			if err != nil || size < 0 {
+				writeErr = fmt.Errorf("unexpected cat-file header %q", strings.TrimSpace(line))
+				break
+			}
+			out[oid] = size
+		}
+	}
+	if writeErr != nil {
+		cancel()
+	}
+	waitErr := cat.Wait()
+	if writeErr != nil {
+		return nil, preferCancel(ctx, writeErr)
+	}
+	if waitErr != nil {
+		return nil, &gitrun.ExitError{Args: []string{"cat-file"}, Stderr: gitrun.Sanitize(stderr.String()), Err: waitErr}
+	}
+	return out, nil
+}
+
+func catBatch(ctx context.Context, gitDir string, oids []string, _ bool) (map[string][]byte, error) {
+	out := map[string][]byte{}
+	if len(oids) == 0 {
+		return out, nil
+	}
+	catCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	cat, err := gitrun.Command(catCtx, "", "--git-dir", gitDir, "cat-file", "--batch")
+	if err != nil {
+		return nil, err
+	}
+	stdin, err := cat.StdinPipe()
+	if err != nil {
+		return nil, err
+	}
+	stdout, err := cat.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+	var stderr bytes.Buffer
+	cat.Stderr = &stderr
+	if err := cat.Start(); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrGitMissing, err)
+	}
+	resp := bufio.NewReader(stdout)
+	var writeErr error
+	for _, oid := range oids {
+		if ctx.Err() != nil {
+			writeErr = ctx.Err()
+			break
+		}
+		data, err := readBlob(stdin, resp, oid, maxTotalBytes)
+		if err != nil {
+			writeErr = err
+			break
+		}
+		out[oid] = data
+	}
+	if writeErr != nil {
+		cancel()
+	}
+	_ = stdin.Close()
+	waitErr := cat.Wait()
+	if writeErr != nil {
+		return nil, preferCancel(ctx, writeErr)
+	}
+	if waitErr != nil {
+		return nil, &gitrun.ExitError{Args: []string{"cat-file"}, Stderr: gitrun.Sanitize(stderr.String()), Err: waitErr}
+	}
+	return out, nil
+}
+
+// NewStagedTree creates an empty private tree and remembers every index
+// object so referenced paths can be added later.
+func NewStagedTree(objs []IndexObject, gitDir string) (*Workspace, error) {
+	dir, err := os.MkdirTemp("", "tripcord-staged-")
+	if err != nil {
+		return nil, err
+	}
+	ws := &Workspace{dir: dir, tree: filepath.Join(dir, "tree"), gitDir: gitDir, index: map[string]IndexObject{}}
+	if err := os.Mkdir(ws.tree, 0o700); err != nil {
+		_ = ws.Close()
+		return nil, err
+	}
+	for _, obj := range objs {
+		ws.index[obj.Path] = obj
+	}
+	return ws, nil
+}
+
+// Put writes objs into the tree. Content objects are read from git.
+// Sparse objects are sized holes, so a scan sees the real size without
+// the bytes. Gitlinks become empty directories.
+func (w *Workspace) Put(ctx context.Context, objs []IndexObject) error {
+	if w == nil {
+		return errors.New("nil workspace")
+	}
+	entries := make([]treeEntry, len(objs))
+	for i, obj := range objs {
+		kind := obj.Kind
+		if kind == "" {
+			kind = "blob"
+		}
+		if obj.Mode == "160000" {
+			kind = "commit"
+		}
+		entries[i] = treeEntry{mode: obj.Mode, kind: kind, oid: obj.OID, path: obj.Path, sparse: obj.Sparse}
+	}
+	if err := materializeEntries(ctx, w.gitDir, w.tree, entries); err != nil {
+		return preferCancel(ctx, err)
+	}
+	return ctx.Err()
+}
+
+func parseIndex(raw []byte) ([]treeEntry, error) {
+	var entries []treeEntry
+	for _, rec := range bytes.Split(bytes.TrimSuffix(raw, []byte{0}), []byte{0}) {
+		if len(rec) == 0 {
+			continue
+		}
+		meta, path, ok := bytes.Cut(rec, []byte{'\t'})
+		if !ok {
+			return nil, fmt.Errorf("unexpected index record %q", rec)
+		}
+		fields := strings.Fields(string(meta))
+		if len(fields) != 3 {
+			return nil, fmt.Errorf("unexpected index record %q", rec)
+		}
+		if fields[2] != "0" {
+			return nil, fmt.Errorf("index has unmerged path %q", path)
+		}
+		kind := "blob"
+		if fields[0] == "160000" {
+			kind = "commit"
+		}
+		entries = append(entries, treeEntry{mode: fields[0], kind: kind, oid: fields[1], path: string(path)})
+	}
+	return entries, nil
 }
 
 // preferCancel reports ctx's error when the context is already done.
@@ -236,10 +622,11 @@ func clone(ctx context.Context, url, gitDir string) error {
 }
 
 type treeEntry struct {
-	mode string
-	kind string
-	oid  string
-	path string
+	mode   string
+	kind   string
+	oid    string
+	path   string
+	sparse int64
 }
 
 // materialize writes gitDir's HEAD tree into tree. Blobs come from
@@ -262,6 +649,10 @@ func materialize(ctx context.Context, gitDir, tree string) error {
 	if err != nil {
 		return err
 	}
+	return materializeEntries(ctx, gitDir, tree, entries)
+}
+
+func materializeEntries(ctx context.Context, gitDir, tree string, entries []treeEntry) error {
 	if len(entries) > maxEntries {
 		return fmt.Errorf("tree has %d entries, more than the %d preopen writes", len(entries), maxEntries)
 	}
@@ -342,8 +733,14 @@ func writeEntries(ctx context.Context, entries []treeEntry, tree string, req io.
 		if err := chargeEntry(&used); err != nil {
 			return err
 		}
-		if e.kind == "commit" {
-			if err := os.Mkdir(dest, 0o755); err != nil {
+		if e.kind == "commit" || e.mode == "160000" {
+			if err := os.Mkdir(dest, 0o755); err != nil && !errors.Is(err, fs.ErrExist) {
+				return fmt.Errorf("tree entry %q: %w", e.path, err)
+			}
+			continue
+		}
+		if e.sparse > 0 {
+			if err := sparseFile(dest, e.sparse); err != nil {
 				return fmt.Errorf("tree entry %q: %w", e.path, err)
 			}
 			continue
@@ -482,9 +879,23 @@ func writeEntry(dest string, e treeEntry, data []byte) error {
 		return writeFile(dest, data, 0o755)
 	case "100644", "100664":
 		return writeFile(dest, data, 0o644)
+	case "160000":
+		return os.Mkdir(dest, 0o755)
 	default:
 		return fmt.Errorf("unexpected file mode %s", e.mode)
 	}
+}
+
+func sparseFile(dest string, size int64) error {
+	f, err := os.OpenFile(dest, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		return err
+	}
+	if err := f.Truncate(size); err != nil {
+		_ = f.Close()
+		return err
+	}
+	return f.Close()
 }
 
 func writeFile(dest string, data []byte, perm os.FileMode) error {

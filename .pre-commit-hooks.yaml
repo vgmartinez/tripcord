@@ -1,0 +1,26 @@
+- id: tripcord-config
+  name: tripcord staged configuration scan
+  language: golang
+  entry: tripcord scan --staged
+  pass_filenames: true
+  require_serial: true
+  always_run: true
+  # types defaults to [file], and that list is an AND: identify tags a
+  # symlink `symlink`, not `file`, so the default drops every symlink
+  # even when types_or names it. An empty types list matches every tag.
+  # types_or then keeps a regular file or a symlink, which is what
+  # `pre-commit run --all-files` must pass, including a symlink whose
+  # target is outside the tree or untracked. See docs/pre-commit.md.
+  types: []
+  types_or: [file, symlink]
+  # Tripcord decides what counts as configuration, not a pre-commit files
+  # regex: a config file can be found only by its content (a plugin manifest
+  # reference) or by a symlink target, not by its own path or extension.
+  # pass_filenames stays true so `pre-commit run --all-files` and
+  # `--from-ref`/`--to-ref` (how pre-commit.ci runs hooks, with nothing
+  # staged) pass the files they are reviewing. always_run keeps the hook
+  # from being skipped when no filename is passed, which is what a
+  # deletion looks like: the path no longer exists, so pre-commit never
+  # names it. `tripcord scan --staged` unions those passed paths with its
+  # own diff-index change set, so a batch that was not given the deleted
+  # path still sees it (see docs/pre-commit.md).
