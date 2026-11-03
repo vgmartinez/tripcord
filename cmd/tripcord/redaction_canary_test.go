@@ -465,17 +465,21 @@ func TestRedactionCanaryPanic(t *testing.T) {
 		for _, extra := range [][]string{nil, {"--on-failure", "block"}} {
 			code, stdout, stderr := runHookCLI(t, strings.NewReader(stdin), append([]string{"--harness", string(in.harness), "--event", in.event}, extra...)...)
 			want := "tripcord hook: internal error\n"
+			wantCode := int(exitcode.Internal)
 			if extra != nil {
 				want = "tripcord hook failed closed: internal error\n"
+				wantCode = int(exitcode.Block)
 			}
 			if stderr != want {
 				t.Errorf("%s: stderr %q, want %q", in.harness, stderr, want)
+			}
+			if code != wantCode {
+				t.Errorf("%s: exit %d, want %d", in.harness, code, wantCode)
 			}
 			assertHookOutputClean(t, "hook panic", stdout, stderr)
 			if strings.Contains(stdout+stderr, "panic") || strings.Contains(stdout+stderr, os.Getenv("HOME")) {
 				t.Errorf("hook panic output: %q %q", stdout, stderr)
 			}
-			_ = code
 		}
 	}
 
