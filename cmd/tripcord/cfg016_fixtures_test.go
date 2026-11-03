@@ -218,8 +218,6 @@ var cfg016Fixtures = map[string]cfg016Fixture{
 		edit: writeFile(embedded.ClaudeLocalSettingsPath, localDisableAllHooks)},
 	"local-copilot-disable-all-hooks": {kind: "positivos", args: embedArgs("--harness", "copilot"), tracked: true,
 		edit: writeFile(embedded.CopilotLocalSettingsPath, localDisableAllHooks)},
-	"local-claude-hooks-override": {kind: "positivos", args: embedArgs("--harness", "claude"), tracked: true,
-		edit: writeFile(embedded.ClaudeLocalSettingsPath, localPreToolUse)},
 	"base-local-disable-all-hooks": {kind: "positivos", edit: writeFile(embedded.ClaudeLocalSettingsPath, localDisableAllHooks),
 		againstBase: true, tracked: true},
 	"local-policy-tracked": {kind: "positivos", args: embedArgs("--harness", "claude"), tracked: true,

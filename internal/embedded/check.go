@@ -45,9 +45,6 @@ const (
 	// sets disableAllHooks. The harness applies it over the shared
 	// settings, so committing it turns every hook off for everyone.
 	StateLocalDisabled = "local-disabled"
-	// StateLocalOverride: a tracked settings.local.json defines hooks
-	// for an event Tripcord wires, without Tripcord's entry.
-	StateLocalOverride = "local-override"
 	// StateLocalPolicy: the repository tracks, or a staged change
 	// stages, .tripcord/policy.local.yaml. That file is a per-checkout
 	// layer; a tracked copy overrides everyone's effective policy
@@ -341,7 +338,7 @@ func Check(root string, opts CheckOptions) ([]model.ConfigItem, error) {
 	// policy.local.yaml, whether or not the base was embedded, so base
 	// mode always checks them.
 	if (active || opts.Base != nil) && opts.Tracked != nil {
-		c.localSettings(r, opts.Tracked, active)
+		c.localSettings(r, opts.Tracked)
 		c.policyLocal(r, opts.Tracked)
 	}
 	return c.items, c.err
@@ -363,8 +360,11 @@ func PolicyWeakened(aspects []string, raw []byte) ([]model.ConfigItem, error) {
 
 // localSettings checks the settings.local.json files the repository
 // tracks. Claude Code and Copilot CLI apply them over the shared
-// settings, so a committed one is shared configuration.
-func (c *checker) localSettings(r *adapters.SafeReader, tracked func(string) bool, active bool) {
+// settings, so a committed one is shared configuration. Both harnesses
+// merge hooks across files rather than letting a local one replace the
+// shared file's, so only disableAllHooks is checked here; a local hook
+// for an event Tripcord also wires still runs alongside it.
+func (c *checker) localSettings(r *adapters.SafeReader, tracked func(string) bool) {
 	for _, l := range localSettings {
 		if !c.selected(l.harness) {
 			continue
@@ -380,15 +380,6 @@ func (c *checker) localSettings(r *adapters.SafeReader, tracked func(string) boo
 		}
 		if off, _ := top["disableAllHooks"].(bool); off {
 			c.add(l.harness, l.path, subjectLocal, "", StateLocalDisabled, raw, nil)
-		}
-		if !active {
-			continue
-		}
-		hooks, _ := top["hooks"].(map[string]any)
-		for _, e := range HookEntries(l.harness) {
-			if _, ok := hooks[e.Event]; ok && entryState(e, hooks, "") != "" {
-				c.add(l.harness, l.path, subjectLocal+":"+e.Event, e.Event, StateLocalOverride, raw, nil)
-			}
 		}
 	}
 }

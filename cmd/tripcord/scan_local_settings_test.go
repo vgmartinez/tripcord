@@ -10,10 +10,7 @@ import (
 	"github.com/vgmartinez/tripcord/internal/exitcode"
 )
 
-const (
-	titleLocalDisabled = "Committed settings.local.json turns off every hook"
-	titleLocalOverride = "Committed settings.local.json replaces Tripcord's hook"
-)
+const titleLocalDisabled = "Committed settings.local.json turns off every hook"
 
 func TestScanReportsTrackedLocalSettings(t *testing.T) {
 	for _, tc := range []struct {
@@ -37,13 +34,18 @@ func TestScanReportsTrackedLocalSettings(t *testing.T) {
 	}
 }
 
-func TestScanReportsTrackedLocalHookOverride(t *testing.T) {
+// TestScanDoesNotReportTrackedLocalHookOverride is the reviewer's
+// correction: Claude Code and Copilot CLI merge hooks across settings
+// files rather than letting a local one replace the shared file's hook
+// for the same event, so a tracked settings.local.json that only adds
+// its own hook for an event Tripcord also wires is not reported.
+// disableAllHooks is still checked (TestScanReportsTrackedLocalSettings).
+func TestScanDoesNotReportTrackedLocalHookOverride(t *testing.T) {
 	repo := embeddedBase(t, "--harness", "claude")
 	writeTestFile(t, repo, embedded.ClaudeLocalSettingsPath, localPreToolUse)
 	runGit(t, repo, "add", "--", embedded.ClaudeLocalSettingsPath)
-	want := []guardFinding{{embedded.ClaudeLocalSettingsPath, titleLocalOverride}}
-	if code, got := guardFindings(t, repo); code != int(exitcode.Findings) || !slices.Equal(got, want) {
-		t.Fatalf("exit %d\ngot  %v\nwant %v", code, got, want)
+	if code, got := guardFindings(t, repo); code != int(exitcode.OK) || len(got) != 0 {
+		t.Fatalf("exit %d: %v", code, got)
 	}
 }
 

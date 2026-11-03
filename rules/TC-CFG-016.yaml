@@ -72,13 +72,13 @@
 # settings.local.json is personal, the same exclusion TC-CFG-004 and
 # TC-CFG-005 make for Claude Code, so the disableAllHooks clause skips
 # it. Claude Code and Copilot CLI apply it over the shared settings,
-# though, so one the repository tracks is shared configuration. In an
-# embedded repository, and with a base revision, internal/embedded
-# checks each tracked settings.local.json:
+# though, so one the repository tracks is shared configuration. Both
+# harnesses merge hooks across files rather than letting a local one
+# replace the shared file's for the same event, so only disableAllHooks
+# is checked. In an embedded repository, and with a base revision,
+# internal/embedded checks each tracked settings.local.json:
 #
 #   local-disabled  it sets disableAllHooks: true.
-#   local-override  it defines hooks for an event Tripcord wires without
-#                   Tripcord's entry (embedded repositories only).
 #
 # A settings.local.json git does not track stays personal and is not
 # reported.
@@ -172,11 +172,6 @@ severity_when:
     when: |
       has(payload.setting) && payload.setting == "tripcordGuard" && has(payload.state) && payload.state == "local-disabled"
     fix: "Remove the file from the repository with `git rm --cached` and add it to .gitignore. settings.local.json is personal; Claude Code and Copilot CLI apply it over the shared settings, so a committed disableAllHooks turns off Tripcord's guard for everyone who checks out the branch."
-  - severity: high
-    title: "Committed settings.local.json replaces Tripcord's hook"
-    when: |
-      has(payload.setting) && payload.setting == "tripcordGuard" && has(payload.state) && payload.state == "local-override"
-    fix: "Remove the file from the repository with `git rm --cached` and add it to .gitignore, or move shared hooks into the shared settings file next to Tripcord's entry. A committed settings.local.json is applied over the shared settings for everyone who checks out the branch."
   - severity: high
     title: "A committed policy.local.yaml overrides everyone's policy"
     when: |
