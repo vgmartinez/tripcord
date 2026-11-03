@@ -12,6 +12,7 @@ import (
 	"github.com/vgmartinez/tripcord/internal/embedded"
 	"github.com/vgmartinez/tripcord/internal/exitcode"
 	"github.com/vgmartinez/tripcord/internal/model"
+	"github.com/vgmartinez/tripcord/internal/output"
 )
 
 const initUsage = `tripcord init [PATH] [--embed] [--harness h,...] [--version V --sha256 os-arch=HEX ...] [--force] [--dry-run]
@@ -103,9 +104,12 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 			return fail(exitcode.Internal, err)
 		}
 	}
+	// The diff quotes the existing files around each change, and a
+	// harness settings file can hold credentials (an env block, an MCP
+	// server's token), so it is redacted like any other output.
 	if dryRun {
 		for _, c := range changes {
-			if code := writeString(stdout, embedded.UnifiedDiff(c)); code != int(exitcode.OK) {
+			if code := writeString(stdout, output.DefaultRedactor(embedded.UnifiedDiff(c))); code != int(exitcode.OK) {
 				return code
 			}
 		}
