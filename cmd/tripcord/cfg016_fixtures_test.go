@@ -159,7 +159,7 @@ var cfg016Fixtures = map[string]cfg016Fixture{
 	"embed-bootstrap-changed": {kind: "positivos", args: embedArgs("--harness", "claude"),
 		edit: replaceInFile(embedded.BootstrapPath, `[ "$got" = "$want" ]`, `true`)},
 	"embed-bootstrap-digest-forged": {kind: "positivos", args: embedArgs("--harness", "claude"), edit: forgeDigest},
-	"embed-manifest-unreadable":     {kind: "positivos", args: embedArgs("--harness", "claude"), edit: writeFile(embedded.ManifestPath, "{\n")},
+	"embed-manifest-unreadable":     {kind: "positivos", args: embedArgs("--harness", "claude,cursor,copilot"), edit: writeFile(embedded.ManifestPath, "{\n")},
 	"embed-workflow-changed": {kind: "positivos", args: embedArgs("--harness", "claude"),
 		edit: replaceInFile(embedded.WorkflowPath, "fail-on: high", "fail-on: critical")},
 	"embed-copilot-step-changed": {kind: "positivos", args: embedArgs("--harness", "copilot"),
