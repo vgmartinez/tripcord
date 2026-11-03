@@ -144,7 +144,7 @@ func TestBootstrapScriptHasNoUnpinnedFetch(t *testing.T) {
 			t.Errorf("bootstrap.sh contains %q", banned)
 		}
 	}
-	for _, want := range []string{"set -eu", "TRIPCORD_VERSION='0.1.0'", `"$cp_tool" "$cached" "$copy"`, `got="$(sha256_of "$copy")"`, `exec "$copy" hook "$@"`} {
+	for _, want := range []string{"set -eu", "TRIPCORD_VERSION='0.1.0'", `"$cp_tool" "$cached" "$copy"`, `got="$(sha256_of "$copy")"`, `run_copy "$copy" hook "$@"`} {
 		if !strings.Contains(script, want) {
 			t.Errorf("bootstrap.sh lacks %q", want)
 		}
@@ -266,15 +266,15 @@ func TestBootstrapFailsClosed(t *testing.T) {
 		{"group-writable platform dir", nil, func(t *testing.T, e *bootstrapEnv) {
 			e.putCache(t, fakeBinary)
 			mustChmod(t, filepath.Dir(e.cached()), 0o770)
-		}, "is group- or world-writable"},
+		}, "group- or world-writable"},
 		{"world-writable version dir", nil, func(t *testing.T, e *bootstrapEnv) {
 			e.putCache(t, fakeBinary)
 			mustChmod(t, filepath.Dir(filepath.Dir(e.cached())), 0o707)
-		}, "is group- or world-writable"},
+		}, "group- or world-writable"},
 		{"world-writable tripcord root", nil, func(t *testing.T, e *bootstrapEnv) {
 			e.putCache(t, fakeBinary)
 			mustChmod(t, filepath.Join(e.cache, "tripcord"), 0o777)
-		}, "is group- or world-writable"},
+		}, "group- or world-writable"},
 		{"symlinked version dir", nil, func(t *testing.T, e *bootstrapEnv) {
 			e.putCache(t, fakeBinary)
 			version := filepath.Dir(filepath.Dir(e.cached()))
@@ -285,7 +285,7 @@ func TestBootstrapFailsClosed(t *testing.T) {
 			if err := os.Symlink(moved, version); err != nil {
 				t.Fatal(err)
 			}
-		}, "is a symlink"},
+		}, "are not directories or are symlinks"},
 		{"group-writable run dir", nil, func(t *testing.T, e *bootstrapEnv) {
 			e.putCache(t, fakeBinary)
 			runs := filepath.Join(e.cache, "tripcord", ".run")
@@ -293,7 +293,7 @@ func TestBootstrapFailsClosed(t *testing.T) {
 				t.Fatal(err)
 			}
 			mustChmod(t, runs, 0o770)
-		}, "is group- or world-writable"},
+		}, "group- or world-writable"},
 	} {
 		for _, args := range [][]string{{"install"}, {"session-start", "--harness", "claude"}, {"hook", "--harness", "claude", "--event", HookEvent, "--on-failure", "block"}} {
 			t.Run(tc.name+" "+args[0], func(t *testing.T) {
@@ -366,7 +366,7 @@ const selfPathBinary = "#!/bin/sh\nprintf '%s\\n' \"$0\" >\"$TRIPCORD_TEST_ARGS\
 
 // TestBootstrapRunsPrivateCopy: the binary that runs is a copy in a
 // directory only this user can enter, never the cached file itself, and
-// a mode that does not exec removes the copy.
+// both modes remove the copy afterward.
 func TestBootstrapRunsPrivateCopy(t *testing.T) {
 	for _, args := range [][]string{{"hook", "--harness", "claude", "--event", HookEvent}, {"install"}} {
 		t.Run(args[0], func(t *testing.T) {
@@ -385,10 +385,7 @@ func TestBootstrapRunsPrivateCopy(t *testing.T) {
 				t.Fatalf("%s: %v, %v; want mode 0700", runs, info, err)
 			}
 			_, err = os.Stat(filepath.Dir(ran))
-			switch {
-			case args[0] == "hook" && err != nil:
-				t.Fatalf("hook mode: the copy's directory is gone before exec could use it: %v", err)
-			case args[0] != "hook" && !errors.Is(err, os.ErrNotExist):
+			if !errors.Is(err, os.ErrNotExist) {
 				t.Fatalf("%s left its copy behind: %v", args[0], err)
 			}
 		})
@@ -528,5 +525,83 @@ func TestBootstrapRefusesCacheDirOfAnotherUser(t *testing.T) {
 	code, _, stderr := e.runSplit(t, "hook", "--harness", "claude", "--event", HookEvent)
 	if code != 2 || !strings.Contains(stderr, "is owned by another user") || e.ran(t) != "" {
 		t.Fatalf("exit %d, stderr %q", code, stderr)
+	}
+}
+
+// TestBootstrapCacheFillDocsWorkUnderUmask0002 follows the documented
+// cache-fill mkdir under the regular-user umask used by Fedora and by
+// Debian/Ubuntu with USERGROUPS_ENAB. The documented umask and chmod
+// leave a cache bootstrap.sh accepts.
+func TestBootstrapCacheFillDocsWorkUnderUmask0002(t *testing.T) {
+	e := newBootstrapEnv(t, nil)
+	cache := filepath.Dir(e.cached())
+	fill := exec.Command("sh", "-c", `umask 0002; mkdir -p "$1"; chmod go-w "${1%/*/*}" "${1%/*}" "$1"`, "fill", cache)
+	if out, err := fill.CombinedOutput(); err != nil {
+		t.Fatalf("documented cache fill: %v: %s", err, out)
+	}
+	if err := os.WriteFile(e.cached(), []byte(fakeBinary), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if code, out := e.run(t, "hook", "--harness", "claude", "--event", HookEvent); code != 0 {
+		t.Fatalf("bootstrap rejected the documented cache: exit %d: %s", code, out)
+	}
+}
+
+// TestBootstrapReportsAllWritableCacheDirs gives every cache parent the
+// umask-0002 mode and requires one error to name all of them and one
+// chmod go-w command to fix them all.
+func TestBootstrapReportsAllWritableCacheDirs(t *testing.T) {
+	e := newBootstrapEnv(t, nil)
+	e.putCache(t, fakeBinary)
+	root := filepath.Join(e.cache, "tripcord")
+	version := filepath.Join(root, "0.1.0")
+	platform := filepath.Dir(e.cached())
+	for _, dir := range []string{root, version, platform} {
+		mustChmod(t, dir, 0o775)
+	}
+	code, _, stderr := e.runSplit(t, "hook", "--harness", "claude", "--event", HookEvent)
+	want := "run chmod go-w " + root + " " + version + " " + platform
+	if code != 2 || !strings.Contains(stderr, root) || !strings.Contains(stderr, version) || !strings.Contains(stderr, platform) || !strings.Contains(stderr, want) {
+		t.Fatalf("exit %d, stderr %q, want every bad directory and %q", code, stderr, want)
+	}
+}
+
+// TestBootstrapNixToolLookup documents the lookup order and its safe
+// Nix condition. The template uses the standard paths first, then only
+// accepts the Nix profile after stat says that directory is root-owned
+// and neither group nor other can write it.
+func TestBootstrapNixToolLookup(t *testing.T) {
+	script := string(Bootstrap(testPin))
+	for _, want := range []string{
+		`for dir in /usr/bin /bin; do`,
+		`nix_bin=/run/current-system/sw/bin`,
+		`"$nix_bin/stat" -c '%u:%a' "$nix_bin"`,
+		`0:[0-7][0-5][0-5]|0:[0-7][0-5][0-5][0-5]`,
+		`if nix_tools_safe && [ -x "/run/current-system/sw/bin/$1" ]; then`,
+	} {
+		if !strings.Contains(script, want) {
+			t.Errorf("bootstrap.sh lacks %q", want)
+		}
+	}
+	standard := strings.Index(script, `for dir in /usr/bin /bin; do`)
+	nix := strings.Index(script, `if nix_tools_safe &&`)
+	if standard < 0 || nix < standard {
+		t.Fatalf("tool lookup is not standard paths before safe Nix: standard=%d nix=%d", standard, nix)
+	}
+}
+
+// TestBootstrapExecFailureNamesNoexec uses an executable whose
+// interpreter does not exist, the same exec failure shell returns for
+// a noexec filesystem. The bootstrap must explain noexec instead of
+// leaking 126 or 127.
+func TestBootstrapExecFailureNamesNoexec(t *testing.T) {
+	const missingInterpreter = "#!/not/a/real/interpreter\n"
+	e := newBootstrapEnv(t, map[string]string{hostPlatform(t): sum(missingInterpreter)})
+	e.putCache(t, missingInterpreter)
+	for _, args := range [][]string{{"hook", "--harness", "claude", "--event", HookEvent}, {"install"}} {
+		code, _, stderr := e.runSplit(t, args...)
+		if code != 2 || !strings.Contains(stderr, "noexec mount is a likely cause") {
+			t.Fatalf("%s: exit %d stderr %q", args[0], code, stderr)
+		}
 	}
 }

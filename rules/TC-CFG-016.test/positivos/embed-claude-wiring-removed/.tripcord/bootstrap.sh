@@ -48,6 +48,19 @@ fail() {
 
 # The tools that decide what runs are called by absolute path, never
 # through the caller's PATH, which the caller may have prepended to.
+# NixOS links its system tools under /run/current-system/sw/bin. Only
+# use that directory when it is root-owned and not writable by group or
+# other users. Its stat verifies the directory before other tools there
+# are selected; a Nix system populates that link as root.
+nix_tools_safe() {
+  nix_bin=/run/current-system/sw/bin
+  [ -d "$nix_bin" ] && [ -x "$nix_bin/stat" ] || return 1
+  nix_owner_mode="$("$nix_bin/stat" -c '%u:%a' "$nix_bin" 2>/dev/null)" || return 1
+  case "$nix_owner_mode" in
+    0:[0-7][0-5][0-5]|0:[0-7][0-5][0-5][0-5]) return 0 ;;
+    *) return 1 ;;
+  esac
+}
 system_tool() {
   for dir in /usr/bin /bin; do
     if [ -x "$dir/$1" ]; then
@@ -55,6 +68,10 @@ system_tool() {
       return 0
     fi
   done
+  if nix_tools_safe && [ -x "/run/current-system/sw/bin/$1" ]; then
+    printf '%s\n' "/run/current-system/sw/bin/$1"
+    return 0
+  fi
   return 1
 }
 need() {
@@ -152,23 +169,44 @@ if [ ! -e "$cached" ] && [ ! -L "$cached" ]; then
 fi
 
 uid="$("$id_tool" -u)"
-# private_dir fails unless $1 is a directory, not a symlink, that this
-# user owns and no one else can write: otherwise another user could
-# replace the binary in it, or the copy of it, after it was checked.
-private_dir() {
-  if [ -L "$1" ] || [ ! -d "$1" ]; then
-    fail "the cache directory $1 is not a directory or is a symlink; it must be a directory you own"
+# private_dirs fails unless every directory is a directory, not a
+# symlink, owned by this user, and not writable by anyone else. It
+# reports every bad directory at once so a cache filled under umask 0002
+# can be fixed by one chmod command before any hook is wired.
+private_dirs() {
+  bad_type=''
+  bad_owner=''
+  bad_mode=''
+  for dir in "$@"; do
+    if [ -L "$dir" ] || [ ! -d "$dir" ]; then
+      bad_type="$bad_type $dir"
+      continue
+    fi
+    if [ -z "$("$find_tool" "$dir" -prune -user "$uid" -print)" ]; then
+      bad_owner="$bad_owner $dir"
+    fi
+    if [ -n "$("$find_tool" "$dir" -prune \( -perm -0020 -o -perm -0002 \) -print)" ]; then
+      bad_mode="$bad_mode $dir"
+    fi
+  done
+  if [ -n "$bad_type" ]; then
+    fail "cache directories are not directories or are symlinks:$bad_type"
   fi
-  if [ -z "$("$find_tool" "$1" -prune -user "$uid" -print)" ]; then
-    fail "the cache directory $1 is owned by another user; it must be owned by you"
-  fi
-  if [ -n "$("$find_tool" "$1" -prune \( -perm -0020 -o -perm -0002 \) -print)" ]; then
-    fail "the cache directory $1 is group- or world-writable; run chmod go-w on it"
+  if [ -n "$bad_owner$bad_mode" ]; then
+    message="unsafe cache directories:$bad_owner$bad_mode"
+    if [ -n "$bad_mode" ]; then
+      message="$message (group- or world-writable)"
+    fi
+    if [ -n "$bad_mode" ]; then
+      message="$message; run chmod go-w$bad_mode"
+    fi
+    if [ -n "$bad_owner" ]; then
+      message="$message; cache directories must be owned by uid $uid"
+    fi
+    fail "$message"
   fi
 }
-for dir in "$tripcord_root" "$tripcord_root/$TRIPCORD_VERSION" "$cache_dir"; do
-  private_dir "$dir"
-done
+private_dirs "$tripcord_root" "$tripcord_root/$TRIPCORD_VERSION" "$cache_dir"
 
 if [ -L "$cached" ] || [ ! -f "$cached" ]; then
   fail "the cached tripcord at $cached is not a regular file; replace it with a go build -trimpath of the pinned commit"
@@ -178,14 +216,14 @@ if [ ! -x "$cached" ]; then
 fi
 
 # The copy lives under the cache root, not TMPDIR, which may be mounted
-# noexec. exec leaves the copy of a hook run behind, so each run first
-# removes this user's copies more than a minute old: a hook run ends
-# within seconds, and a running binary does not need its file.
+# noexec. The script waits for the copy rather than execing it, so it
+# can turn an exec failure (including noexec) into an exit-2 reason and
+# remove the copy through its exit trap.
 runs="$tripcord_root/.run"
 if [ ! -e "$runs" ] && [ ! -L "$runs" ]; then
   "$mkdir_tool" -m 0700 "$runs" 2>/dev/null || [ -d "$runs" ] || fail "cannot create $runs"
 fi
-private_dir "$runs"
+private_dirs "$runs"
 "$find_tool" "$runs" -mindepth 1 -maxdepth 1 -type d -name 'run.*' -user "$uid" -mmin +1 -exec "$rm_tool" -rf {} + 2>/dev/null || true
 run="$(umask 077 && "$mktemp_tool" -d "$runs/run.XXXXXX")" || fail "cannot create a private directory in $runs"
 "$chmod_tool" 0700 "$run"
@@ -197,7 +235,19 @@ if [ "$got" != "$want" ]; then
   fail "the cached tripcord at $cached has SHA-256 $got, not the pinned $want; it was not run"
 fi
 
+run_copy() {
+  if "$@"; then
+    return 0
+  else
+    status=$?
+  fi
+  case "$status" in
+    126|127) fail "cannot execute $copy; a noexec mount is a likely cause" ;;
+    *) exit "$status" ;;
+  esac
+}
 if [ "$mode" = hook ]; then
-  exec "$copy" hook "$@"
+  run_copy "$copy" hook "$@"
+  exit 0
 fi
-"$copy" scan --config "$repo_root" >&2
+run_copy "$copy" scan --config "$repo_root" >&2

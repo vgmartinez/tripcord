@@ -90,7 +90,9 @@ bootstrap, which runs only the pinned binary from its cache: build it
 there with `go build -trimpath` of the pinned commit
 ([init](init.md#bootstrap)). A hook that cannot decide, or finds no
 verified binary, blocks the tool call, except a Copilot hook that times
-out ([init](init.md)).
+out ([init](init.md)). The bootstrap cannot defend against another
+process already running as the same user, which can replace its private
+copy; that local same-user compromise is outside its threat model.
 
 ## Does tripcord cover agent workflows triggered by issue comments?
 
