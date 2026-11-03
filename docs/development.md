@@ -83,11 +83,11 @@ renders the pages again and pushes them to the wiki repository's
 A finding's `decision` is `allow`, `deny`, `warn`, `audit`, or `ask`.
 Policy mode (`enforce`, `warn`, `audit`) is a separate vocabulary.
 
-In hook mode (coming in v0), `ask` maps to the harness's native
-human-confirmation prompt where that harness supports one (Claude Code,
-Cursor) and degrades to `deny` with an explanatory message elsewhere. The
-mapping itself is implemented with hook mode. Today the model only
-records `ask` as a valid decision.
+In hook mode, `ask` maps to the harness's native human-confirmation
+prompt where that harness has one (Claude Code `PreToolUse`, Cursor
+`beforeShellExecution`) and degrades to `deny` with an explanatory
+message elsewhere; each adapter's `RenderDecision` does the mapping
+([Hook](hook.md#output)). No custom rule produces `ask` yet.
 
 ## Repository identity
 

@@ -40,6 +40,7 @@ var docPages = map[string]string{
 	"commands.md":              "Commands",
 	"scan.md":                  "Scan",
 	"init.md":                  "Init",
+	"hook.md":                  "Hook",
 	"preopen.md":               "Preopen",
 	"pr-context.md":            "PR-Context",
 	"fingerprint.md":           "Fingerprints",
@@ -76,7 +77,7 @@ type group struct {
 // Rules-Catalog.
 var sidebar = []group{
 	{"Start", []string{"Home", "Getting-Started", "Commands", "FAQ"}},
-	{"Commands", []string{"Scan", "Init", "Preopen", "PR-Context", "Fingerprints", "Output-and-Sinks"}},
+	{"Commands", []string{"Scan", "Init", "Hook", "Preopen", "PR-Context", "Fingerprints", "Output-and-Sinks"}},
 	{"CI and hooks", []string{"GitHub-Action", "Pre-commit"}},
 	{"Configuration", []string{"Policy", "Harness-Adapters", "Rules-Catalog"}},
 	{"Adapters", []string{

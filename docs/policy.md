@@ -2,8 +2,9 @@
 
 `internal/policy` merges policy layers and picks the mode and fail-on
 for the surface that is about to run. `scan`, `preopen`, `pr-context`,
-and the GitHub Action consume that result. The `hook` surface is for
-hook mode, which is coming in v0.
+and the GitHub Action consume that result. The `hook` surface is
+[`tripcord hook`](hook.md), which decides from the `custom` event
+rules.
 
 ## Files and locations
 
@@ -35,7 +36,7 @@ surfaces are `scan`, `preopen`, `pr-context`, `action`, and `hook`.
 | Surface | Mode | Fail-on |
 | --- | --- | --- |
 | scan, preopen, pr-context, action | `enforce` | `high` |
-| hook (coming in v0) | `warn` | `high` |
+| hook | `warn` | `high` |
 
 A finding blocks the run (exit 1, or a hook block) only when mode is
 `enforce` and the finding's severity is at or above fail-on. `audit`

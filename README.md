@@ -49,7 +49,7 @@ tripcord init .
 tripcord init . --embed --version <version> --sha256 linux-x64=<sha256> --dry-run
 ```
 
-`--version` and `--sha256` pin the binary the hooks may run; `--dry-run` prints the diff. The embedded hooks call `tripcord hook`, which is coming in v0, so `--embed` is not ready to ship to users yet. See [Init](https://github.com/vgmartinez/tripcord/wiki/Init).
+`--version` and `--sha256` pin the binary the hooks may run; `--dry-run` prints the diff. The embedded hooks run [`tripcord hook`](https://github.com/vgmartinez/tripcord/wiki/Hook) from the verified binary. `--embed` is not ready to ship to users yet: its hooks do not fail closed on every harness, and the bootstrap has no published package to install. See [Init](https://github.com/vgmartinez/tripcord/wiki/Init).
 
 **3. Run it on every pull request**, with the GitHub Action:
 

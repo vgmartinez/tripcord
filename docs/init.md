@@ -10,12 +10,13 @@ subdirectory of a Git repository exits 3.
 
 > **Not releasable yet.** `init --embed` wires each hook-capable harness
 > to run `bash .tripcord/bootstrap.sh hook --harness <h> --event
-> pre-tool`, which runs the verified binary's `tripcord hook`. This
-> build has no `hook` subcommand; hook mode is coming in v0.
-> Until it lands, the Claude Code hook blocks every tool call
-> (`onFailure: block`) and the Cursor hook fails closed. Do not cut a
-> release that contains `init --embed` before hook mode. `make
-> release-gate` (see "Release gate" below) fails until then.
+> pre-tool`, which runs the verified binary's
+> [`tripcord hook`](hook.md). The wiring does not pass `--on-failure
+> block` yet, so an invalid policy exits 3: the Claude Code
+> (`onFailure: block`) and Cursor (`failClosed`) hooks block on that,
+> but Copilot blocks only on exit 2. The bootstrap's npm and PyPI sources are not published, so
+> only a binary already in its cache can run. Do not cut a release that
+> contains `init --embed` until both are fixed.
 >
 > The generated `.github/workflows/tripcord.yml` pins the reusable
 > workflow at `main@6a12795`. `tripcord-pr.yml` at that commit pins the
@@ -350,8 +351,7 @@ action at `main@8b33b1b`, which has both. The generated workflow calls
 `tripcord-pr.yml` at `main@6a12795`, and the file there pins the same
 action, so both paths pass. It reads the pinned commits with `git show`,
 so the clone must have them (`fetch-depth: 0`).
-`TestReleaseGateHookSubcommand` still fails until hook mode (coming in v0) lands;
-that failure is the missing `hook` subcommand.
+Both pass on this tree.
 
 Without the variable both log that the gate was not requested and pass,
 so pull request CI stays green. There is no release workflow in this

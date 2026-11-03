@@ -233,3 +233,14 @@ blocking diagnostics in the JSON, Markdown, text, and SARIF reports, notes
 that the scan is incomplete, and exits 3 after writing the findings. With
 `--since`, repository diagnostics are limited to changed files. See
 [scan.md](../scan.md).
+
+## Hook mode
+
+`tripcord hook --harness claude --event pre-tool` reads a `PreToolUse`
+hook's stdin (`session_id`, `hook_event_name`, `tool_name`,
+`tool_input`). `ParseHookInput` keeps the tool name and the `command`,
+file path, and `url` of `tool_input`, and `RenderDecision` writes
+`hookSpecificOutput.permissionDecision` (`deny` or `ask`) with the
+reason. A deny also exits 2 with the reason on stderr. An allow prints
+`{}` and leaves the call to Claude Code's own permission prompts. See
+[Hook](../hook.md).

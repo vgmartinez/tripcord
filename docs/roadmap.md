@@ -5,18 +5,18 @@ pre-release v0 tree described in [Release notes](release-notes.md).
 
 ## In this tree
 
-`scan`, `init` (including `--embed`), `preopen`, `pr-context`, the
+`scan`, `init` (including `--embed`), [`hook`](hook.md), `preopen`, `pr-context`, the
 [GitHub Action](github-action.md) and its reusable workflows, and the
 [pre-commit hook](pre-commit.md).
 
 ## Coming in v0
 
-- Hook mode: `tripcord hook`, which the harness hooks `init --embed`
-  writes call before each tool use. Until it lands `init --embed` is not
-  releasable ([init](init.md#release-gate)), and exit code 2 (hook-mode
-  block) is defined but unused.
-- The `ask` decision mapped to each harness's confirmation prompt in hook
-  mode ([Development](development.md#decisions)).
+- Hook mode wired by `init --embed`: the generated hooks pass
+  `--on-failure block`, and `bootstrap.sh` installs without an
+  unpublished package and fails closed. Until then `init --embed` is not
+  releasable ([init](init.md)).
+- A custom rule that asks for confirmation. `tripcord hook` already
+  renders `ask` in each harness's format ([Hook](hook.md#output)).
 
 ## Later
 

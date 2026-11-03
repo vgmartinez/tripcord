@@ -19,6 +19,7 @@ unknown command prints the usage and exits 3.
 | --- | --- | --- |
 | `scan` | Statically scans a checkout's coding-agent configuration. | [scan](scan.md) |
 | `init` | Writes `.tripcord/policy.yaml`; with `--embed`, also the pinned bootstrap, the pull request workflow, and each harness's hook wiring. | [init](init.md) |
+| `hook` | Decides one Claude Code, Cursor, or Copilot hook event from the policy's custom event rules. | [hook](hook.md) |
 | `preopen` | Fetches a repository without running anything it controls, scans it, and removes it. | [preopen](preopen.md) |
 | `pr-context` | Reports whether a pull request looks agent-authored and evaluates TC-CFG-014. | [pr-context](pr-context.md) |
 
@@ -27,10 +28,6 @@ Two more pages describe what every command shares:
 (there is no `fingerprint` subcommand), and
 [output and sinks](output.md), the `text`, `json`, `sarif`, `md`, and
 `gha` formats.
-
-`tripcord hook`, the hook mode that `init --embed` wires into each
-harness, is coming in v0. This build answers it with an unknown command
-(exit 3).
 
 To scan staged coding-agent configuration before committing, install the
 [`tripcord-config` pre-commit hook](pre-commit.md). It reads the Git
@@ -70,10 +67,19 @@ or setup wiring of each harness in `--harness` (default
 `--dry-run` prints a diff; `--force` resolves conflicts it can. Every
 hook runs `.tripcord/bootstrap.sh`, which runs the checksum-verified
 binary by absolute path, never a `tripcord` from `PATH`. Its `hook` mode
-runs `tripcord hook`, which is coming in v0: do not release `--embed`
-before it. TC-CFG-016 reports an embed that is missing, edited, or,
+runs `tripcord hook`. `--embed` is not releasable yet: the wiring does
+not fail closed on every harness and the bootstrap has no published
+package to install. TC-CFG-016 reports an embed that is missing, edited, or,
 against a pull request's base, removed or re-pinned. Details are in
 [init](init.md).
+
+## `tripcord hook`
+
+`tripcord hook --harness <claude|cursor|copilot> --event <e>` reads one
+hook event as the harness's JSON on stdin and writes the decision in the
+harness's format: exit 0 allows and 2 blocks. `--on-failure block` makes
+an invalid input or policy, or an internal error, block instead of
+exiting 3 or 4. See [hook](hook.md).
 
 ## `tripcord preopen`
 
@@ -93,7 +99,7 @@ repository's own `.tripcord` policy. See [preopen](preopen.md).
 | --- | --- |
 | 0 | No finding meets the effective threshold. `--help` also exits 0. |
 | 1 | At least one finding meets the threshold, and the effective mode is `enforce`. |
-| 2 | Hook-mode block, defined in `internal/exitcode`. `scan` does not return 2. The hook command is coming in v0. |
+| 2 | `hook` blocked the tool call ([hook](hook.md#exit-codes)). `scan` does not return 2. |
 | 3 | Invalid flags or format, a policy or configuration error, a Git ref `--since` cannot use, an invalid `--output` or `--policy` path, a broken fingerprint key, `--secrets` or `--all`, an unknown command, or an incomplete scan. |
 | 4 | Internal error, or a failure to start Git or finish writing the output file. |
 
@@ -106,7 +112,7 @@ over exit 1. Informational notes, such as an extra adapter pulled in by
 no policy file, `scan` uses `enforce` and fail-on `high`
 ([Policy](policy.md)).
 
-`init`, `preopen`, and `pr-context` list their own exit codes on their
-pages: [init](init.md#exit-codes),
+`init`, `hook`, `preopen`, and `pr-context` list their own exit codes on their
+pages: [init](init.md#exit-codes), [hook](hook.md#exit-codes),
 [preopen](preopen.md#flags-policy-and-exit-codes), and
 [pr-context](pr-context.md#exit-codes).

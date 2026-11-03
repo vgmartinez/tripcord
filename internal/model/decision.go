@@ -8,9 +8,8 @@ import "fmt"
 //
 // In hook mode, ask maps to the harness's native human-confirmation
 // prompt where that harness supports one (Claude Code, Cursor) and
-// degrades to deny with an explanatory message elsewhere. That
-// mapping is implemented later, in the hook PR. This package only
-// accepts ask as a decision value.
+// degrades to deny with an explanatory message elsewhere. Each hook
+// adapter's RenderDecision implements that mapping.
 type Decision string
 
 const (

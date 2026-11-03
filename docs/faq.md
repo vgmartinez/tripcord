@@ -39,7 +39,7 @@ Exit 3 is a usage, configuration, or incomplete-scan error
   `--harness` ([Harness adapters](adapters/README.md)).
 - **A locked policy.** `--fail-on` may tighten a locked ceiling but not
   loosen it ([Policy](policy.md#what-overrides-them)).
-- **An unknown command**, such as `tripcord hook` (coming in v0).
+- **An unknown command**, such as `tripcord fingerprint`.
 
 ## Why does the same finding have a different fingerprint in CI?
 
@@ -84,10 +84,10 @@ Check out with `fetch-depth: 0`
 ## Does `init --embed` work today?
 
 It writes every file, and `scan` checks the embed (TC-CFG-016). The
-pre-tool hooks it wires run `tripcord hook`, which is coming in v0. Until
-then the Claude Code hook blocks every tool call and the Cursor hook fails
-closed, so do not ship `--embed` to users yet
-([init](init.md)).
+pre-tool hooks it wires run [`tripcord hook`](hook.md) through the
+verified bootstrap. The wiring does not pass `--on-failure block` yet,
+and the bootstrap has no published package to install from, so do not
+ship `--embed` to users yet ([init](init.md)).
 
 ## Does tripcord cover agent workflows triggered by issue comments?
 

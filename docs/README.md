@@ -58,8 +58,9 @@ In GitHub Actions, call the reusable workflow pinned by commit
    ```
 
    `init --embed` also wires each harness's hooks to a pinned,
-   checksum-verified bootstrap. Its hook mode runs `tripcord hook`,
-   which is coming in v0, so read [Init](init.md) before you embed.
+   checksum-verified bootstrap that runs [`tripcord hook`](hook.md).
+   `--embed` is not releasable yet, so read [Init](init.md) before you
+   embed.
 
 3. Run it on every pull request with the
    [GitHub Action](github-action.md), or before every commit with the

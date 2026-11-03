@@ -113,6 +113,18 @@ reported. Nesting deeper than 64 levels fails closed.
 Reads, symlink handling, limits, and diagnostics are those of the
 [Claude adapter](claude.md#safe-reads).
 
+## Hook mode
+
+`tripcord hook --harness cursor` takes `--event pre-tool`
+(`preToolUse`), `before-shell` (`beforeShellExecution`), and
+`before-read` (`beforeReadFile`). The input's `hook_event_name` must
+match. `ParseHookInput` keeps the tool name and the `command`, file path,
+and `url` of `tool_input`, the `command` of a shell execution, or the
+`file_path` of a read; the content Cursor sends with a read is dropped.
+`RenderDecision` writes `{"permission": "allow" | "deny", "user_message",
+"agent_message"}`, and `ask` on `beforeShellExecution`. A deny also
+exits 2 with the reason on stderr. See [Hook](../hook.md).
+
 ## Sources
 
 - [Cursor hooks](https://cursor.com/docs/hooks)
