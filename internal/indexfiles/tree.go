@@ -56,12 +56,9 @@ func buildTree(entries []Entry) (*fileTree, error) {
 				cur = child
 				continue
 			}
-			mode := "100644"
-			switch e.Mode {
-			case "120000":
-				mode = "120000"
-			case "160000":
-				mode = "160000"
+			mode := e.Mode
+			switch mode {
+			case "120000", "160000":
 			case "100644", "100755", "100664", "":
 				mode = "100644"
 			default:
