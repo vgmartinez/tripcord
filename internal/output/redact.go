@@ -679,14 +679,46 @@ func redactColonAssignments(value string, removed *[]string) string {
 		if !found {
 			break
 		}
-		body := ""
 		ok := (h.start == 0 || !isAlnum(value[h.start-1])) && CredentialName(h.name) &&
 			!imageRefs.contains(h.start)
 		if ok && !spansFound {
 			spans, spansFound = findLiteralSpans(value), true
 		}
-		if ok = ok && !spans.contains(h.start); ok {
-			body = colonValue(value[h.valStart:], colonValueStop(value, h.start, h.openQuote, h.closeQuote, h.sep))
+		ok = ok && !spans.contains(h.start)
+		stop := ""
+		if ok {
+			stop = colonValueStop(value, h.start, h.openQuote, h.closeQuote, h.sep)
+			if stop == "" {
+				if headerEnd, bodyEnd, isBlock := blockScalarSpan(value, h.valStart, lineIndent(value, h.start)); isBlock {
+					b.WriteString(value[pos:headerEnd])
+					pos = headerEnd
+					if bodyEnd > headerEnd {
+						*removed = append(*removed, value[headerEnd:bodyEnd])
+						b.WriteString(redactedBlockScalarBody(value[headerEnd:bodyEnd]))
+						pos = bodyEnd
+					}
+					continue
+				}
+				if strings.Contains(h.sep, "\n") && startsAssignmentHead(value, h.valStart) {
+					// h's colon has nothing after it but a newline: its
+					// "value" is a nested, more-indented key
+					// ("token:\n  password: ..."), not a scalar of its
+					// own. Leave it unredacted (it is a name, not a
+					// secret) and let the loop find that nested key
+					// itself, instead of colonValue running past it: an
+					// unquoted value runs through a "|" or ">" on its
+					// own line, which would otherwise consume that
+					// key's own block scalar indicator (blockScalarSpan,
+					// above) and leave its body unredacted.
+					b.WriteString(value[pos:h.valStart])
+					pos = h.valStart
+					continue
+				}
+			}
+		}
+		body := ""
+		if ok {
+			body = colonValue(value[h.valStart:], stop)
 		}
 		b.WriteString(value[pos:h.valStart])
 		pos = h.valStart
@@ -699,6 +731,94 @@ func redactColonAssignments(value string, removed *[]string) string {
 	}
 	b.WriteString(value[pos:])
 	return b.String()
+}
+
+// blockScalarSpan recognizes a YAML block scalar value starting at
+// valStart: "|" or ">", an optional chomping indicator ("-" or "+") and
+// a single-digit indentation indicator, in either order, then nothing
+// but blanks or a "#" comment to the end of the line ("api_key: |-",
+// "api_key: >2", "api_key: |2-"). keyIndent is the credential name's own
+// line indentation (from lineIndent), the threshold a block scalar's
+// content must be indented past. headerEnd is the offset just past the
+// indicator's own line; bodyEnd is the offset past every blank line and
+// every line indented more than keyIndent that follows, the block's
+// content, which colonValue cannot see because it stops at the first
+// newline. ok is false when valStart does not start a block scalar, so
+// the caller falls back to colonValue.
+func blockScalarSpan(value string, valStart, keyIndent int) (headerEnd, bodyEnd int, ok bool) {
+	if valStart >= len(value) || (value[valStart] != '|' && value[valStart] != '>') {
+		return 0, 0, false
+	}
+	i := valStart + 1
+	for n := 0; n < 2 && i < len(value) && isBlockScalarIndicator(value[i]); n++ {
+		i++
+	}
+	for i < len(value) && (value[i] == ' ' || value[i] == '\t') {
+		i++
+	}
+	if i < len(value) && value[i] == '#' {
+		for i < len(value) && value[i] != '\n' && value[i] != '\r' {
+			i++
+		}
+	}
+	if i < len(value) && value[i] != '\n' && value[i] != '\r' {
+		return 0, 0, false
+	}
+	if i < len(value) && value[i] == '\r' {
+		i++
+	}
+	if i < len(value) && value[i] == '\n' {
+		i++
+	}
+	headerEnd = i
+	for i < len(value) {
+		lineStart := i
+		lineEnd := lineStart
+		for lineEnd < len(value) && value[lineEnd] != '\n' {
+			lineEnd++
+		}
+		line := strings.TrimSuffix(value[lineStart:lineEnd], "\r")
+		indent := 0
+		for indent < len(line) && (line[indent] == ' ' || line[indent] == '\t') {
+			indent++
+		}
+		if indent < len(line) && indent <= keyIndent {
+			break
+		}
+		i = lineEnd
+		if i < len(value) && value[i] == '\n' {
+			i++
+		}
+	}
+	return headerEnd, i, true
+}
+
+func isBlockScalarIndicator(c byte) bool {
+	return c == '-' || c == '+' || (c >= '1' && c <= '9')
+}
+
+// lineIndent returns the number of leading blanks on the line containing
+// pos. For a credential name's own position, colonValueStop has already
+// confirmed every byte back to the start of the line is a blank.
+func lineIndent(value string, pos int) int {
+	lineStart := strings.LastIndexByte(value[:pos], '\n') + 1
+	return pos - lineStart
+}
+
+// redactedBlockScalarBody is a YAML block scalar's content, replaced by
+// one [REDACTED] line at the first line's own indentation, so a secret
+// split across lines by "|" or ">" is not left in the output the way a
+// single-line value would catch it.
+func redactedBlockScalarBody(body string) string {
+	indent := 0
+	for indent < len(body) && (body[indent] == ' ' || body[indent] == '\t') {
+		indent++
+	}
+	nl := ""
+	if strings.HasSuffix(body, "\n") {
+		nl = "\n"
+	}
+	return body[:indent] + redactedMarker + nl
 }
 
 // findContainerImageSpans returns tag-shaped image arguments in the only
@@ -768,6 +888,38 @@ func imageTag(value string) bool {
 		return false
 	}
 	return true
+}
+
+// startsAssignmentHead reports whether pos starts another "name:" head:
+// a name (optionally quoted), optionally followed by blanks, then ":".
+// It excludes a URL scheme ("https://..."), whose own ":" is not a
+// mapping key. redactColonAssignments uses it, only when the previous
+// key's colon is followed by nothing but a newline, to tell a key with
+// no scalar value of its own, holding a nested, more-indented key
+// ("token:\n  password: ..."), from a key whose value is a plain scalar
+// wrapped onto the next line ("token:\n  opaque-value"): only the
+// former's "value" is itself a key head.
+func startsAssignmentHead(value string, pos int) bool {
+	if pos < len(value) && (value[pos] == '"' || value[pos] == '\'') {
+		quote := value[pos]
+		end := strings.IndexByte(value[pos+1:], quote)
+		if end < 0 {
+			return false
+		}
+		pos += end + 2
+	} else {
+		start := pos
+		for pos < len(value) && isNameByte(value[pos]) {
+			pos++
+		}
+		if pos == start {
+			return false
+		}
+	}
+	for pos < len(value) && (value[pos] == ' ' || value[pos] == '\t') {
+		pos++
+	}
+	return pos < len(value) && value[pos] == ':' && !strings.HasPrefix(value[pos:], "://")
 }
 
 // colonValue returns the "key: value" value at the start of rest: a
