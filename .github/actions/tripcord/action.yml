@@ -174,10 +174,14 @@ runs:
           args+=(--fail-on "$TRIPCORD_FAIL_ON")
         fi
         if [ -n "$TRIPCORD_BASE" ]; then
-          if ! git -C "$TRIPCORD_PATH" cat-file -e "${TRIPCORD_BASE}^{commit}" 2>/dev/null; then
-            echo "::error::tripcord base commit ${TRIPCORD_BASE} is not in the checkout; check out with fetch-depth: 0, or set base to an empty string"
+          if ! git -C "$TRIPCORD_PATH" rev-parse --git-dir >/dev/null 2>&1; then
+            echo "::notice::tripcord path is not a Git repository; scanning without --base"
+          else
+            if ! git -C "$TRIPCORD_PATH" cat-file -e "${TRIPCORD_BASE}^{commit}" 2>/dev/null; then
+              echo "::error::tripcord base commit ${TRIPCORD_BASE} is not in the checkout; check out with fetch-depth: 0, or set base to an empty string"
+            fi
+            args+=(--base "$TRIPCORD_BASE")
           fi
-          args+=(--base "$TRIPCORD_BASE")
         fi
         "$TRIPCORD" scan "$TRIPCORD_PATH" --format gha "${args[@]}"
         status=$?

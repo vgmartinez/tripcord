@@ -54,7 +54,9 @@ or re-pins a Tripcord embed, or drops a harness from it, fails
 [TC-CFG-016](rules/TC-CFG-016.md) even when the head tree has no embed
 left to check. The base commit must be in the checkout
 (`fetch-depth: 0`); if it is not, the action logs an error and the scan
-exits 3, which fails the job. Set `base: ""` to scan the head alone.
+exits 3, which fails the job. A `path` that is not inside a Git
+repository has no history to compare, so the action logs a notice and
+scans without `--base`. Set `base: ""` to scan the head alone.
 The reusable workflows leave `base` at its default; they reach it once
 their action pin is bumped past this change.
 

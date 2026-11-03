@@ -620,6 +620,33 @@ func TestActionScanComparesWithPullRequestBase(t *testing.T) {
 			t.Fatalf("%s\n%s", exit, out)
 		}
 	})
+	t.Run("path is not a git repository", func(t *testing.T) {
+		plain := t.TempDir()
+		writeFile(t, filepath.Join(plain, "README"), "x\n")
+		cmd := exec.Command("bash", "-c", scan.Run)
+		output := filepath.Join(t.TempDir(), "output")
+		cmd.Env = append(os.Environ(),
+			"TRIPCORD="+bin,
+			"TRIPCORD_PATH="+plain,
+			"TRIPCORD_FAIL_ON=",
+			"TRIPCORD_BASE="+base,
+			"TRIPCORD_SARIF="+filepath.Join(t.TempDir(), "tripcord.sarif"),
+			"TRIPCORD_MARKDOWN="+filepath.Join(t.TempDir(), "tripcord.md"),
+			"GITHUB_OUTPUT="+output,
+			"GIT_CEILING_DIRECTORIES="+filepath.Dir(plain),
+		)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("scan step: %v\n%s", err, out)
+		}
+		raw, err := os.ReadFile(output)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if exit := strings.TrimSpace(string(raw)); exit != "exit-code=0" || !strings.Contains(string(out), "not a Git repository") {
+			t.Fatalf("%s\n%s", exit, out)
+		}
+	})
 	t.Run("base not fetched", func(t *testing.T) {
 		exit, out := run(t, strings.Repeat("b", 40))
 		if exit != "exit-code=3" || !strings.Contains(out, "fetch-depth: 0") {
