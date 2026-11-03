@@ -67,16 +67,18 @@ func toolArgs(raw json.RawMessage) (map[string]any, error) {
 	return args, nil
 }
 
-// RenderDecision renders v for Copilot: a deny (and an ask, which
-// Copilot has no prompt for) exits 2 with the reason on stderr, which
-// blocks the tool call. Everything else exits 0 with nothing on stdout;
+// RenderDecision renders v for Copilot: a deny exits 2 with the reason
+// on stderr, which blocks the tool call. An ask is a deny too: the
+// Copilot CLI has a native ask, but the coding agent treats one as a
+// deny, and both send the same preToolUse input, so the CLI cannot be
+// told apart. Everything else exits 0 with nothing on stdout;
 // a warning goes to stderr.
 func RenderDecision(_ string, v hook.Verdict) hook.Output {
 	switch v.Decision {
 	case model.DecisionDeny:
 		return hook.Output{Stderr: v.Reason + "\n", Exit: exitcode.Block}
 	case model.DecisionAsk:
-		return hook.Output{Stderr: v.Reason + " (Copilot has no confirmation prompt, so the call is denied)\n", Exit: exitcode.Block}
+		return hook.Output{Stderr: v.Reason + " (tripcord cannot ask on Copilot, so the call is denied)\n", Exit: exitcode.Block}
 	case model.DecisionWarn:
 		return hook.Output{Stderr: v.Reason + "\n", Exit: exitcode.OK}
 	case model.DecisionAllow, model.DecisionAudit:

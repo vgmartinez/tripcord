@@ -43,10 +43,10 @@ const (
 const MaxStdinBytes = 4 << 20
 
 // Timeout bounds one hook run from start to verdict. It is shorter than
-// every harness's own hook timeout (Claude Code and Copilot default to
-// 60 s; init --embed sets Copilot's pre-tool timeoutSec to 60), so a
-// slow run ends in Tripcord's verdict rather than the harness's, which
-// fails open on Copilot.
+// the harnesses' own hook timeouts (Claude Code's default command-hook
+// timeout is 600 s; init --embed sets Copilot's pre-tool timeoutSec to
+// 60), so a slow run ends in Tripcord's verdict rather than the
+// harness's: a timed-out Copilot hook lets the tool call through.
 const Timeout = 10 * time.Second
 
 // OnFailure is what `tripcord hook` does when it cannot reach a verdict:

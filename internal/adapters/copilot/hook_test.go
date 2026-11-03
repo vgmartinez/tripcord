@@ -94,7 +94,7 @@ func TestRenderDecision(t *testing.T) {
 		exit   exitcode.Code
 	}{
 		"deny":  {hook.Verdict{Decision: model.DecisionDeny, Reason: "no"}, "no\n", exitcode.Block},
-		"ask":   {hook.Verdict{Decision: model.DecisionAsk, Reason: "confirm"}, "confirm (Copilot has no confirmation prompt, so the call is denied)\n", exitcode.Block},
+		"ask":   {hook.Verdict{Decision: model.DecisionAsk, Reason: "confirm"}, "confirm (tripcord cannot ask on Copilot, so the call is denied)\n", exitcode.Block},
 		"warn":  {hook.Verdict{Decision: model.DecisionWarn, Reason: "careful"}, "careful\n", exitcode.OK},
 		"allow": {hook.Verdict{Decision: model.DecisionAllow}, "", exitcode.OK},
 		"audit": {hook.Verdict{Decision: model.DecisionAudit, Reason: "noted"}, "", exitcode.OK},

@@ -11,12 +11,19 @@ subdirectory of a Git repository exits 3.
 > **Not releasable yet.** `init --embed` wires each hook-capable harness
 > to run `bash .tripcord/bootstrap.sh hook --harness <h> --event
 > pre-tool`, which runs the verified binary's
-> [`tripcord hook`](hook.md). The wiring does not pass `--on-failure
-> block` yet, so an invalid policy exits 3: the Claude Code
-> (`onFailure: block`) and Cursor (`failClosed`) hooks block on that,
-> but Copilot blocks only on exit 2. The bootstrap's npm and PyPI sources are not published, so
-> only a binary already in its cache can run. Do not cut a release that
-> contains `init --embed` until both are fixed.
+> [`tripcord hook`](hook.md). Each generated hook blocks the tool call
+> when the hook fails: the Claude Code hook has `onFailure: block`, the
+> Cursor hook `failClosed`, and Copilot blocks a `preToolUse` hook on
+> any non-zero exit or crash. Two gaps remain. A Copilot hook that times
+> out lets the call through; `tripcord hook` ends its own run after
+> 10 s, under the 60 s `timeoutSec` init sets. A Claude Code release
+> older than the `onFailure` field treats a failed hook as non-blocking.
+> Fail-closed inside `tripcord hook` (`--on-failure block`) is set by the
+> generated wiring, which does not pass it yet. The bootstrap's npm and
+> PyPI sources are not published, so only a binary already in its cache
+> can run. Do not cut a release that contains `init --embed` until the
+> wiring passes `--on-failure block` and the bootstrap no longer depends
+> on unpublished packages.
 >
 > The generated `.github/workflows/tripcord.yml` pins the reusable
 > workflow at `main@6a12795`. `tripcord-pr.yml` at that commit pins the

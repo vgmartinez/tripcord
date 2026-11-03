@@ -85,9 +85,11 @@ Check out with `fetch-depth: 0`
 
 It writes every file, and `scan` checks the embed (TC-CFG-016). The
 pre-tool hooks it wires run [`tripcord hook`](hook.md) through the
-verified bootstrap. The wiring does not pass `--on-failure block` yet,
-and the bootstrap has no published package to install from, so do not
-ship `--embed` to users yet ([init](init.md)).
+verified bootstrap, and each generated hook blocks the tool call when
+the hook fails, except a Copilot hook that times out or a Claude Code
+release that predates `onFailure`. The bootstrap has no published
+package to install from, so do not ship `--embed` to users yet
+([init](init.md)).
 
 ## Does tripcord cover agent workflows triggered by issue comments?
 
