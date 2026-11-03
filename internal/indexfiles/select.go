@@ -380,7 +380,7 @@ func addPolicy(tree *fileTree, byPath map[string]*Entry, read func(string) ([]by
 // selects, so a staged scan sees the same Tripcord embed a checkout
 // scan does.
 func addEmbed(tree *fileTree, byPath map[string]*Entry, add func(string, bool, int64)) {
-	for _, p := range []string{embedded.WorkflowPath, embedded.CopilotSetupStepsPath} {
+	for _, p := range []string{embedded.WorkflowPath, embedded.CopilotSetupStepsPath, embedded.ClaudeLocalSettingsPath, embedded.CopilotLocalSettingsPath} {
 		if e := byPath[p]; e != nil && e.Mode != "160000" {
 			place(tree, byPath, e, add)
 		}

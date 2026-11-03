@@ -25,13 +25,19 @@ const cfg016FixtureDir = "../../rules/TC-CFG-016.test"
 // init runs with args (nil for no init), then edit changes the tree.
 // With againstBase, the fixture is <name>.json instead: the config
 // items embedded.Check reports for the edited tree compared with the
-// tree before the edit, the way scan --since sees a pull request.
+// tree before the edit, the way scan --since sees a pull request. With
+// tracked, it is <name>.json too, with every file tracked by git: a raw
+// fixture directory is not a repository, so its settings.local.json is
+// personal.
 type cfg016Fixture struct {
 	kind        string
 	args        []string
 	edit        func(t *testing.T, dir string)
 	againstBase bool
+	tracked     bool
 }
+
+func (fx cfg016Fixture) items() bool { return fx.againstBase || fx.tracked }
 
 func edits(steps ...func(*testing.T, string)) func(*testing.T, string) {
 	return func(t *testing.T, dir string) {
@@ -144,6 +150,11 @@ const userClaudeSettings = `{
 }
 `
 
+const (
+	localDisableAllHooks = "{\n  \"disableAllHooks\": true\n}\n"
+	localPreToolUse      = "{\n  \"hooks\": {\n    \"PreToolUse\": [\n      {\n        \"matcher\": \"*\",\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"true\"\n          }\n        ]\n      }\n    ]\n  }\n}\n"
+)
+
 func userRepo(t *testing.T, dir string) {
 	t.Helper()
 	writeTestFile(t, dir, embedded.ClaudeSettingsPath, userClaudeSettings)
@@ -195,19 +206,35 @@ var cfg016Fixtures = map[string]cfg016Fixture{
 	"embed-crlf-checkout": {kind: "negativos", args: embedArgs("--harness", "claude"), edit: edits(
 		removeFile(embedded.GitattributesPath),
 		crlf(embedded.BootstrapPath), crlf(embedded.ManifestPath), crlf(embedded.WorkflowPath), crlf(embedded.ClaudeSettingsPath))},
+	"local-claude-disable-all-hooks": {kind: "positivos", args: embedArgs("--harness", "claude"), tracked: true,
+		edit: writeFile(embedded.ClaudeLocalSettingsPath, localDisableAllHooks)},
+	"local-copilot-disable-all-hooks": {kind: "positivos", args: embedArgs("--harness", "copilot"), tracked: true,
+		edit: writeFile(embedded.CopilotLocalSettingsPath, localDisableAllHooks)},
+	"local-claude-hooks-override": {kind: "positivos", args: embedArgs("--harness", "claude"), tracked: true,
+		edit: writeFile(embedded.ClaudeLocalSettingsPath, localPreToolUse)},
+	"base-local-disable-all-hooks": {kind: "positivos", edit: writeFile(embedded.ClaudeLocalSettingsPath, localDisableAllHooks),
+		againstBase: true, tracked: true},
 	"embed-fresh":       {kind: "negativos", args: embedArgs()},
 	"embed-claude-only": {kind: "negativos", args: embedArgs("--harness", "claude")},
 	"no-embed":          {kind: "negativos", edit: userRepo},
 	"init-policy-only":  {kind: "negativos", args: []string{"init"}, edit: userRepo},
 }
 
-// checkAgainstBase is what scan --since reports for TC-CFG-016 when dir
-// is the head and base the revision before it, as fixture JSON.
-func checkAgainstBase(t *testing.T, base, dir string) map[string]string {
+// checkItems is what scan reports for TC-CFG-016 in dir, as fixture
+// JSON: compared with base, the revision before it, when base is not
+// empty, and with every file tracked when tracked is set.
+func checkItems(t *testing.T, base, dir string, tracked bool) map[string]string {
 	t.Helper()
-	items, err := embedded.Check(dir, embedded.CheckOptions{Base: func(rel string) ([]byte, error) {
-		return os.ReadFile(filepath.Join(base, filepath.FromSlash(rel)))
-	}})
+	var opts embedded.CheckOptions
+	if base != "" {
+		opts.Base = func(rel string) ([]byte, error) {
+			return os.ReadFile(filepath.Join(base, filepath.FromSlash(rel)))
+		}
+	}
+	if tracked {
+		opts.Tracked = func(string) bool { return true }
+	}
+	items, err := embedded.Check(dir, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -244,9 +271,9 @@ func TestCFG016FixturesMatchInit(t *testing.T) {
 			}
 			committed := filepath.Join(cfg016FixtureDir, fx.kind, name)
 			want, read := snapshot(t, dir), snapshot
-			if fx.againstBase {
+			if fx.items() {
 				committed += ".json"
-				want, read = checkAgainstBase(t, base, dir), readFixtureFile
+				want, read = checkItems(t, base, dir, fx.tracked), readFixtureFile
 			}
 			if os.Getenv("UPDATE_GOLDEN") == "1" {
 				if err := os.RemoveAll(committed); err != nil {

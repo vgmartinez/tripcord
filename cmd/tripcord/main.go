@@ -247,6 +247,7 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 		target.stagedNotes = notes
 		target.stagedSources = sources
 		target.redactRoot = ws.Tree()
+		target.indexTree = true
 		target.stageMore = func(items []model.ConfigItem) error {
 			if ctx.Err() != nil {
 				return ctx.Err()
@@ -292,6 +293,9 @@ type scanTarget struct {
 	// temporary directory the pre-commit caller never asked about. It
 	// is empty for a normal scan, where root is the repository itself.
 	redactRoot string
+	// indexTree is true when root holds only files of the git index
+	// (the --staged tree), so every file in it is tracked.
+	indexTree bool
 }
 
 func (t scanTarget) configError(stderr io.Writer, err error) int {
@@ -432,7 +436,10 @@ func scanTree(ctx context.Context, t scanTarget, opts scanOptions, stdout, stder
 		if err := scriptcheck.Annotate(root, items); err != nil {
 			return t.internalError(stderr, fmt.Errorf("hook scripts: %w", err))
 		}
-		check := embedded.CheckOptions{Only: requested}
+		check := embedded.CheckOptions{Only: requested, Tracked: trackedIn(ctx, root)}
+		if t.indexTree {
+			check.Tracked = func(string) bool { return true }
+		}
 		if ref := cmp.Or(opts.base, opts.since); ref != "" {
 			read, err := baseReader(ctx, root, ref)
 			if err != nil {
@@ -808,6 +815,15 @@ func baseReader(ctx context.Context, root, ref string) (func(string) ([]byte, er
 		}
 		return data, err
 	}, nil
+}
+
+// trackedIn reports whether root's git index holds rel. Outside a git
+// work tree nothing is tracked.
+func trackedIn(ctx context.Context, root string) func(string) bool {
+	return func(rel string) bool {
+		out, err := gitrun.Run(ctx, root, "--no-pager", "--no-optional-locks", "--literal-pathspecs", "ls-files", "-z", "--", rel)
+		return err == nil && len(out) > 0
+	}
 }
 
 func validateSinceRef(ref string) error {

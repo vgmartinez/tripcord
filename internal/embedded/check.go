@@ -38,7 +38,29 @@ const (
 	// checksum. Re-pinning bootstrap.sh and embed.json together is the
 	// one bootstrap edit the single-revision check cannot see.
 	StateRepinned = "repinned"
+	// StateLocalDisabled: a settings.local.json the repository tracks
+	// sets disableAllHooks. The harness applies it over the shared
+	// settings, so committing it turns every hook off for everyone.
+	StateLocalDisabled = "local-disabled"
+	// StateLocalOverride: a tracked settings.local.json defines hooks
+	// for an event Tripcord wires, without Tripcord's entry.
+	StateLocalOverride = "local-override"
 )
+
+// Local settings files: personal, and so not checked, unless the
+// repository tracks them. Copilot CLI reads both.
+const (
+	ClaudeLocalSettingsPath  = ".claude/settings.local.json"
+	CopilotLocalSettingsPath = ".github/copilot/settings.local.json"
+)
+
+var localSettings = []struct {
+	harness model.Harness
+	path    string
+}{
+	{model.HarnessClaude, ClaudeLocalSettingsPath},
+	{model.HarnessCopilot, CopilotLocalSettingsPath},
+}
 
 // Guard subjects that are not a hook event.
 const (
@@ -48,6 +70,7 @@ const (
 	subjectStep      = "setup-step"
 	subjectHarnesses = "manifest-harnesses"
 	subjectPin       = "manifest-pin"
+	subjectLocal     = "local-settings"
 )
 
 // CheckOptions selects what Check compares.
@@ -60,6 +83,10 @@ type CheckOptions struct {
 	// fs.ErrNotExist for a path the base does not have. Nil checks the
 	// revision on its own.
 	Base func(rel string) ([]byte, error)
+	// Tracked reports whether the repository tracks rel (it is in the
+	// git index). A settings.local.json that is not tracked is personal
+	// and is not checked. Nil tracks nothing.
+	Tracked func(rel string) bool
 }
 
 // file is one file read for the check. state is "" when raw was read.
@@ -86,6 +113,9 @@ type revision struct {
 
 // checkedPaths are every file the check reads.
 var checkedPaths = []string{BootstrapPath, ManifestPath, WorkflowPath, ClaudeSettingsPath, CursorHooksPath, CopilotHooksPath, CopilotSetupStepsPath}
+
+// sourcePaths are every file whose content a guard item depends on.
+var sourcePaths = append(slices.Clone(checkedPaths), ClaudeLocalSettingsPath, CopilotLocalSettingsPath)
 
 func newRevision(read func(rel string) (file, error)) (*revision, error) {
 	t := &revision{files: map[string]file{}}
@@ -258,28 +288,67 @@ func Check(root string, opts CheckOptions) ([]model.ConfigItem, error) {
 		}
 	}
 	c := &checker{head: head, base: base, only: opts.Only}
-	if base == nil && !head.embedded() {
-		left := head.leftovers()
-		if !left.any() {
-			return nil, nil
-		}
-		c.leftover = &left
-	}
-	c.manifest()
-	c.ownFile(subjectBootstrap, BootstrapPath, func(m Manifest) []byte { return Bootstrap(m.Pin()) })
-	if c.leftover == nil || c.leftover.workflow {
-		c.ownFile(subjectWorkflow, WorkflowPath, func(Manifest) []byte { return Workflow() })
-	}
-	wired := c.wired()
-	for _, h := range HookHarnesses {
-		if slices.Contains(wired, h) && c.selected(h) {
-			c.hookHarness(h)
+	active := base != nil || head.embedded()
+	if !active {
+		if left := head.leftovers(); left.any() {
+			c.leftover = &left
+			active = true
 		}
 	}
-	if slices.Contains(wired, model.HarnessCopilot) && c.head.manifestOK && c.selected(model.HarnessCopilot) {
-		c.setupStep()
+	if active {
+		c.manifest()
+		c.ownFile(subjectBootstrap, BootstrapPath, func(m Manifest) []byte { return Bootstrap(m.Pin()) })
+		if c.leftover == nil || c.leftover.workflow {
+			c.ownFile(subjectWorkflow, WorkflowPath, func(Manifest) []byte { return Workflow() })
+		}
+		wired := c.wired()
+		for _, h := range HookHarnesses {
+			if slices.Contains(wired, h) && c.selected(h) {
+				c.hookHarness(h)
+			}
+		}
+		if slices.Contains(wired, model.HarnessCopilot) && c.head.manifestOK && c.selected(model.HarnessCopilot) {
+			c.setupStep()
+		}
+	}
+	// A pull request can commit a settings.local.json whether or not
+	// the base was embedded, so base mode always checks them.
+	if (active || opts.Base != nil) && opts.Tracked != nil {
+		c.localSettings(r, opts.Tracked, active)
 	}
 	return c.items, c.err
+}
+
+// localSettings checks the settings.local.json files the repository
+// tracks. Claude Code and Copilot CLI apply them over the shared
+// settings, so a committed one is shared configuration.
+func (c *checker) localSettings(r *adapters.SafeReader, tracked func(string) bool, active bool) {
+	for _, l := range localSettings {
+		if !c.selected(l.harness) {
+			continue
+		}
+		raw, err := r.ReadFile(l.path, adapters.MaxConfigFileBytes)
+		if err != nil || !tracked(l.path) {
+			continue
+		}
+		doc, _, err := kit.DecodeJSON(raw, kit.StrictJSON, string(l.harness))
+		top, isObject := doc.(map[string]any)
+		if err != nil || !isObject {
+			continue
+		}
+		if off, _ := top["disableAllHooks"].(bool); off {
+			c.add(l.harness, l.path, subjectLocal, "", StateLocalDisabled, raw, nil)
+		}
+		if !active {
+			continue
+		}
+		hooks, _ := top["hooks"].(map[string]any)
+		for _, e := range HookEntries(l.harness) {
+			if _, ok := hooks[e.Event]; ok && entryState(e, hooks, "") != "" {
+				c.add(l.harness, l.path, subjectLocal+":"+e.Event, e.Event, StateLocalOverride, raw, nil)
+			}
+		}
+	}
 }
 
 type checker struct {
@@ -539,7 +608,7 @@ func (c *checker) add(h model.Harness, path, subject, event, state string, raw [
 		Payload: body,
 		// Whether this item exists depends on every file the check
 		// reads: a staged change to any of them must report it.
-		SourcePaths: slices.Clone(checkedPaths),
+		SourcePaths: slices.Clone(sourcePaths),
 	})
 }
 

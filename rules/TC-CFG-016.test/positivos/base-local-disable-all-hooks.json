@@ -1,0 +1,15 @@
+[
+  {
+    "harness": "claude",
+    "scope": "repo",
+    "path": ".claude/settings.local.json",
+    "sha256": "a5d257bab91684b76c5119c480012d56f802441c62562f4fb65eedb07ce134d3",
+    "kind": "permissions",
+    "payload": {
+      "key": "[\"tripcordGuard\",\"local-settings\"]",
+      "setting": "tripcordGuard",
+      "state": "local-disabled",
+      "subject": "local-settings"
+    }
+  }
+]

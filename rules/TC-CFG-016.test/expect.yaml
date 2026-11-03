@@ -24,3 +24,7 @@ positivos:
   base-embed-removed.json: high
   base-harness-dropped.json: high
   base-repinned.json: high
+  local-claude-disable-all-hooks.json: high
+  local-copilot-disable-all-hooks.json: high
+  local-claude-hooks-override.json: high
+  base-local-disable-all-hooks.json: high

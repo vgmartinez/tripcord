@@ -1,0 +1,16 @@
+[
+  {
+    "harness": "claude",
+    "scope": "repo",
+    "path": ".claude/settings.local.json",
+    "sha256": "648f09fd98ea7e102165c6b215b4a6974d0bfc5ec3bd8f67572f8af03d9266d7",
+    "kind": "permissions",
+    "payload": {
+      "event": "PreToolUse",
+      "key": "[\"tripcordGuard\",\"local-settings:PreToolUse\"]",
+      "setting": "tripcordGuard",
+      "state": "local-override",
+      "subject": "local-settings:PreToolUse"
+    }
+  }
+]
