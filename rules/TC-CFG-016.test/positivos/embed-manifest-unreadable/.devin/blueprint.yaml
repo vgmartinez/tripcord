@@ -1,4 +1,0 @@
-# Written by tripcord init --embed.
-maintenance:
-  - name: tripcord
-    run: bash .tripcord/bootstrap.sh install

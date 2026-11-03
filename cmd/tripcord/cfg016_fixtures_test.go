@@ -17,7 +17,11 @@ import (
 
 const cfg016FixtureDir = "../../rules/TC-CFG-016.test"
 
-// cfg016Fixture is a TC-CFG-016 fixture built from real init output:
+// cfg016Fixture is a TC-CFG-016 fixture built from real init output.
+// New raw fixtures select only the harnesses their case needs: every
+// agent-config file they carry counts toward pr-context's per-pull-
+// request path limit (TC-CFG-014).
+//
 // init runs with args (nil for no init), then edit changes the tree.
 // With againstBase, the fixture is <name>.json instead: the config
 // items embedded.Check reports for the edited tree compared with the
@@ -146,17 +150,19 @@ var cfg016Fixtures = map[string]cfg016Fixture{
 		edit: replaceInFile(embedded.ClaudeSettingsPath, `"onFailure": "block"`, `"onFailure": "continue"`)},
 	"embed-claude-disable-all-hooks": {kind: "positivos", args: embedArgs(),
 		edit: replaceInFile(embedded.ClaudeSettingsPath, "{\n  \"hooks\"", "{\n  \"disableAllHooks\": true,\n  \"hooks\"")},
-	"embed-guard-removed-workflow-left": {kind: "positivos", args: embedArgs(), edit: removeGuard},
+	"embed-guard-removed-workflow-left": {kind: "positivos", args: embedArgs("--harness", "claude,copilot"),
+		edit: edits(removeFile(embedded.BootstrapPath), removeFile(embedded.ManifestPath), removeFile(embedded.CopilotHooksPath),
+			writeFile(embedded.ClaudeSettingsPath, emptyClaudeHooks))},
 	"embed-leftover-claude-hook": {kind: "positivos", args: embedArgs("--harness", "claude"),
 		edit: edits(removeFile(embedded.BootstrapPath), removeFile(embedded.ManifestPath), removeFile(embedded.WorkflowPath))},
-	"embed-bootstrap-missing": {kind: "positivos", args: embedArgs(), edit: removeFile(embedded.BootstrapPath)},
-	"embed-bootstrap-changed": {kind: "positivos", args: embedArgs(),
+	"embed-bootstrap-missing": {kind: "positivos", args: embedArgs("--harness", "claude"), edit: removeFile(embedded.BootstrapPath)},
+	"embed-bootstrap-changed": {kind: "positivos", args: embedArgs("--harness", "claude"),
 		edit: replaceInFile(embedded.BootstrapPath, `[ "$got" = "$want" ]`, `true`)},
-	"embed-bootstrap-digest-forged": {kind: "positivos", args: embedArgs(), edit: forgeDigest},
-	"embed-manifest-unreadable":     {kind: "positivos", args: embedArgs(), edit: writeFile(embedded.ManifestPath, "{\n")},
-	"embed-workflow-changed": {kind: "positivos", args: embedArgs(),
+	"embed-bootstrap-digest-forged": {kind: "positivos", args: embedArgs("--harness", "claude"), edit: forgeDigest},
+	"embed-manifest-unreadable":     {kind: "positivos", args: embedArgs("--harness", "claude"), edit: writeFile(embedded.ManifestPath, "{\n")},
+	"embed-workflow-changed": {kind: "positivos", args: embedArgs("--harness", "claude"),
 		edit: replaceInFile(embedded.WorkflowPath, "fail-on: high", "fail-on: critical")},
-	"embed-copilot-step-changed": {kind: "positivos", args: embedArgs(),
+	"embed-copilot-step-changed": {kind: "positivos", args: embedArgs("--harness", "copilot"),
 		edit: replaceInFile(embedded.CopilotSetupStepsPath, "run: bash .tripcord/bootstrap.sh install", "run: bash .tripcord/bootstrap.sh install || true")},
 	"base-guard-removed": {kind: "positivos", args: embedArgs(), edit: removeGuard, againstBase: true},
 	"base-embed-removed": {kind: "positivos", args: embedArgs(), againstBase: true,

@@ -5,11 +5,7 @@
     "linux-x64": "0000000000000000000000000000000000000000000000000000000000000000"
   },
   "harnesses": [
-    "claude",
-    "cursor",
-    "copilot",
-    "devin",
-    "codex"
+    "claude"
   ],
   "files": [
     {
@@ -19,11 +15,6 @@
     {
       "path": ".github/workflows/tripcord.yml",
       "sha256": "de28ae793bb4bb4945dc4b54f7afba5675bb407f98d2fafff6724ea536aff2ba"
-    },
-    {
-      "path": ".github/workflows/copilot-setup-steps.yml",
-      "step": "Tripcord bootstrap",
-      "sha256": "591047426ca45077ff170cb8c7b8bb8d7b5d722679189ce064ba23236df25a73"
     }
   ],
   "hooks": [
@@ -38,30 +29,6 @@
       "path": ".claude/settings.json",
       "event": "PreToolUse",
       "sha256": "3ce2977b6677c2e831268759e813283b13613620fcfd8dae7a73116f458912ef"
-    },
-    {
-      "harness": "cursor",
-      "path": ".cursor/hooks.json",
-      "event": "sessionStart",
-      "sha256": "abe6517009e5da8733eb7c6989230a1b3fe7a5de725ff4a8d352ce3c0278f48f"
-    },
-    {
-      "harness": "cursor",
-      "path": ".cursor/hooks.json",
-      "event": "preToolUse",
-      "sha256": "099ab6e4a2a8732bdb2ce27626d4bc638f6b315e1c6455fe107da92581595edb"
-    },
-    {
-      "harness": "copilot",
-      "path": ".github/hooks/tripcord.json",
-      "event": "sessionStart",
-      "sha256": "f5d43cbc60daa916c8625aca341397decf39f554067a2e2c617667de096dac2d"
-    },
-    {
-      "harness": "copilot",
-      "path": ".github/hooks/tripcord.json",
-      "event": "preToolUse",
-      "sha256": "162e8cb9c8b2cda4fdecf270ed3040da649e788761d0feee700189c6aa5b6fe0"
     }
   ]
 }
