@@ -195,7 +195,7 @@
     {
       "id": "TCA-2026-0010",
       "aliases": ["CVE-2026-120323", "GHSA-c48q-fjwh-j7gg"],
-      "summary": "@samanhappy/mcphub from 1.0.0 through 1.1.7 discloses information through passthroughHeaders",
+      "summary": "@samanhappy/mcphub from 1.0.0 before 1.1.8 discloses information through passthroughHeaders",
       "severity": "moderate",
       "affected": [
         {

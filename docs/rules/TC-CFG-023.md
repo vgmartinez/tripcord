@@ -80,8 +80,8 @@ pack patch. Every other advisory ships in the monthly release.
 | TCA-2026-0006 | pypi `mcp-server-git` | <2025.12.18 | 2025.12.18 | moderate, reported high |
 | TCA-2026-0007 | pypi `mcp-server-git` | <2025.12.18 | 2025.12.18 | moderate, reported high |
 | TCA-2026-0008 | pypi `mcp-server-git` | <2026.1.14 | 2026.1.14 | moderate, reported high |
-| TCA-2026-0009 | pypi `awslabs.aws-serverless-mcp-server` | <0.2.1 | 0.2.1 | moderate, reported high |
-| TCA-2026-0010 | npm `@samanhappy/mcphub` | >=1.0.0, <1.1.8 | 1.1.8 | moderate, reported high |
+| TCA-2026-0009 | pypi `awslabs.aws-serverless-mcp-server` | <0.2.1 | 0.2.1 | moderate |
+| TCA-2026-0010 | npm `@samanhappy/mcphub` | >=1.0.0, <1.1.8 | 1.1.8 | moderate |
 
 prefab-ui is a library. It matches only when the argv names it, for
 example `--with prefab-ui==0.20.2`. A transitive dependency of another

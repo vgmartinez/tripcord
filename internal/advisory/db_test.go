@@ -135,6 +135,33 @@ func TestSeedList(t *testing.T) {
 	}
 }
 
+func TestMCPHubBounds(t *testing.T) {
+	t.Parallel()
+	db := loadSeed(t)
+	// 1.0.0 is the first published version that contains the introduced
+	// commit. 0.12.17 is the published version immediately before it.
+	// 1.0.46 is still below the fix. 1.1.8 and 1.2.0 are the fix and a
+	// later release.
+	affected := []string{"1.0.0", "1.0.45", "1.0.46", "1.1.0", "1.1.7"}
+	clear := []string{"0.12.17", "1.1.8", "1.1.15", "1.2.0"}
+	for _, version := range affected {
+		hits, err := db.Match([]PackageRef{{
+			Ecosystem: EcoNPM, Name: "@samanhappy/mcphub", Kind: KindExact, Version: version,
+		}})
+		if err != nil || len(hits) != 1 || hits[0].ID != "TCA-2026-0010" {
+			t.Fatalf("%s hits = %+v %v", version, hits, err)
+		}
+	}
+	for _, version := range clear {
+		hits, err := db.Match([]PackageRef{{
+			Ecosystem: EcoNPM, Name: "@samanhappy/mcphub", Kind: KindExact, Version: version,
+		}})
+		if err != nil || len(hits) != 0 {
+			t.Fatalf("%s hits = %+v %v", version, hits, err)
+		}
+	}
+}
+
 func TestAdvisoryRejects(t *testing.T) {
 	t.Parallel()
 	cases := map[string]string{
