@@ -67,7 +67,8 @@ can be high and another medium. An item no clause accepts is not a
 match, so `when` holds only what the clauses share and each pattern is
 written once. A policy severity override replaces the per-match
 result. A clause may also set `title`, which replaces the rule title on
-its findings when the rule title does not say why that match fired.
+its findings when the rule title does not say why that match fired, and
+`fix`, which replaces the rule fix on them the same way.
 
 `evidence: hidden_chars` is the only optional evidence. It adds an
 excerpt naming the file's hidden code points by code point, line, and

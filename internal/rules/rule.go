@@ -69,11 +69,13 @@ const (
 
 // SeverityWhen is one per-match severity clause. Title, when set,
 // replaces the rule title on the findings of that clause, for a match
-// whose reason the rule title does not say.
+// whose reason the rule title does not say. Fix, when set, replaces the
+// rule fix the same way.
 type SeverityWhen struct {
 	Severity string `yaml:"severity"`
 	When     string `yaml:"when"`
 	Title    string `yaml:"title"`
+	Fix      string `yaml:"fix"`
 }
 
 // ParseSpec decodes and validates one rule document. It does not
@@ -183,11 +185,12 @@ func validateRef(ref string) error {
 	return nil
 }
 
-// SeverityClause is a compiled per-match severity. Title is empty when
-// the clause keeps the rule title.
+// SeverityClause is a compiled per-match severity. Title and Fix are
+// empty when the clause keeps the rule's own.
 type SeverityClause struct {
 	Severity model.Severity
 	Title    string
+	Fix      string
 	When     *Expr
 }
 
@@ -228,7 +231,7 @@ func Compile(spec *Spec, manifest PackRef, env *Env) (*Rule, error) {
 			return nil, fmt.Errorf("severity_when[%d]: %w", i, err)
 		}
 		sev, _ := model.ParseSeverity(clause.Severity)
-		clauses[i] = SeverityClause{Severity: sev, Title: strings.TrimSpace(clause.Title), When: expr}
+		clauses[i] = SeverityClause{Severity: sev, Title: strings.TrimSpace(clause.Title), Fix: strings.TrimSpace(clause.Fix), When: expr}
 	}
 	sev, _ := model.ParseSeverity(spec.Severity)
 	harness := make([]model.Harness, len(spec.Harness))

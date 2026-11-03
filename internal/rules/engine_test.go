@@ -430,6 +430,7 @@ severity_when:
     when: has(task.label) && task.label == "a"
   - severity: medium
     title: "  Label b  "
+    fix: "  Fix b  "
     when: has(task.label) && task.label == "b"`, 1)))
 	if err != nil {
 		t.Fatal(err)
@@ -439,6 +440,7 @@ severity_when:
 		t.Fatal(err)
 	}
 	engine := NewEngine(testEnv(t), []*Rule{r})
+	wantFix := map[string]string{"a": r.Fix, "b": "Fix b"}
 	for label, want := range map[string]string{"a": r.Title, "b": "Label b"} {
 		res := engine.ScanConfig(context.Background(), []model.ConfigItem{
 			item(model.SurfaceVSCode, ".vscode/tasks.json", model.ConfigKindTask, `{"label":"`+label+`"}`),
@@ -452,6 +454,9 @@ severity_when:
 		}
 		if f.Title != want {
 			t.Errorf("label %s: title %q, want %q", label, f.Title, want)
+		}
+		if f.Fix != wantFix[label] {
+			t.Errorf("label %s: fix %q, want %q", label, f.Fix, wantFix[label])
 		}
 	}
 }

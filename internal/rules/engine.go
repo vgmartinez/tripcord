@@ -54,6 +54,8 @@ type Match struct {
 	Severity model.Severity
 	// Title is the matching clause's title, or empty for the rule title.
 	Title string
+	// Fix is the matching clause's fix, or empty for the rule fix.
+	Fix string
 	// Advisories are the embedded hits behind an evidence:advisory
 	// match. The finding's excerpt, title, and refs are built from them.
 	Advisories []advisory.Hit
@@ -133,7 +135,7 @@ func (m Match) Finding(severity model.Severity, decision model.Decision) (model.
 		Evidence:    evidence,
 		Location:    loc,
 		Refs:        refs,
-		Fix:         m.Rule.Fix,
+		Fix:         cmp.Or(m.Fix, m.Rule.Fix),
 		Fingerprint: fp,
 	}
 	if err := f.Validate(); err != nil {
@@ -263,7 +265,7 @@ func (e *Engine) ScanConfig(ctx context.Context, items []model.ConfigItem) Resul
 			if !matched {
 				continue
 			}
-			match := Match{Rule: r, Item: item, Severity: clause.Severity, Title: clause.Title}
+			match := Match{Rule: r, Item: item, Severity: clause.Severity, Title: clause.Title, Fix: clause.Fix}
 			if r.Evidence == EvidenceAdvisory {
 				hits, err := advisoryHits(in, e.env.Advisories())
 				if stopForEval(&res, r.ID, item, err) {
