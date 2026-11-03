@@ -32,9 +32,11 @@ fetch, and `tool_call` otherwise.
 
 The policy is the hook surface's ([Policy](policy.md#surfaces)): the org
 layers, then `.tripcord/policy.yaml` and `.tripcord/policy.local.yaml`
-of the project. The project is the Git root (the nearest directory with
-a `.git`) at or above `CLAUDE_PROJECT_DIR` for Claude Code or
-`CURSOR_PROJECT_DIR` for Cursor, which must be absolute, or at or above
+of the project. The project is the Git root (the nearest directory
+whose `.git`, after following symlinks, is a directory or a worktree's
+file, the same check `init` makes) at or above `CLAUDE_PROJECT_DIR` for
+Claude Code or `CURSOR_PROJECT_DIR` for Cursor, which must be absolute,
+or at or above
 the working directory when the variable is unset and for Copilot. The
 variable may name a subdirectory or a directory that does not exist,
 and symlinks in it are resolved first, so a link into a subdirectory of

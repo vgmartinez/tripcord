@@ -7,9 +7,10 @@ tripcord init [PATH] [--embed] [--harness h,...] [--version V --sha256 os-arch=H
 `init` writes Tripcord's files into the repository at `PATH` (default:
 the current directory). `PATH` must be the repository root: a
 subdirectory of a Git repository exits 3. With `--embed`, `PATH` must
-be a Git repository (it has a `.git` directory or file); anything else
-exits 3 and writes nothing, because the hooks find the policy at the
-Git root and would block every tool call without one.
+be a Git repository: its `.git`, after following symlinks, is a
+directory or a regular file (a worktree's), as the hook requires.
+Anything else exits 3 and writes nothing, because the hooks find the
+policy at the Git root and would block every tool call without one.
 
 > **Fail-closed, with two gaps.** `init --embed` wires each hook-capable
 > harness to run `bash .tripcord/bootstrap.sh hook --harness <h> --event
@@ -187,13 +188,22 @@ bash .tripcord/bootstrap.sh session-start [--harness claude|cursor|copilot]
 bash .tripcord/bootstrap.sh hook --harness <h> --event <e> [--on-failure block|error]
 ```
 
-The bootstrap never downloads or installs anything. Every mode checks
+The bootstrap never downloads or installs anything. Every mode copies
 the binary at
 `${XDG_CACHE_HOME:-$HOME/.cache}/tripcord/<version>/<os-arch>/tripcord`
-against the SHA-256 pinned for the running platform and runs it by
-absolute path. `install` and `session-start` then run `tripcord scan
---config` on the repository; `hook` `exec`s `tripcord hook` with its
-arguments.
+into a new directory of mode `0700` under
+`${XDG_CACHE_HOME:-$HOME/.cache}/tripcord/.run/`, checks the copy
+against the SHA-256 pinned for the running platform, and runs the copy
+by absolute path. The file that runs is the file that was hashed, so
+replacing the cached binary between the check and the run does not
+work. `install` and `session-start` then run `tripcord scan --config`
+on the repository and remove the copy; `hook` `exec`s `tripcord hook`
+with its arguments. `exec` leaves that copy behind, so each run first
+removes this user's copies more than a minute old.
+
+The tools that decide what runs (`sha256sum` or, on macOS, `shasum`,
+and `find`, `id`, `cp`, `mktemp`, `uname`, and the others the script
+calls) come from `/usr/bin` or `/bin`, never from the caller's `PATH`.
 
 There is no published release, so fill the cache with a build of the
 commit the pin was made from, on each machine the agents run on:
@@ -216,9 +226,15 @@ It fails closed. Each of these exits 2 with `tripcord bootstrap:
 - no binary in the cache (the reason names the path to fill);
 - a binary with another SHA-256 (the reason names both digests);
 - a binary that is a symlink or not a regular file;
+- a binary without the execute bit (`chmod 0755` it), rather than the
+  shell's 126;
+- a cache directory, from `tripcord/` down to `<os-arch>/` and
+  including `tripcord/.run/`, that is a symlink, is owned by another
+  user, or is group- or world-writable (`chmod go-w` it): another user
+  could swap the binary there;
 - no SHA-256 pinned for the platform, or an unsupported OS or
   architecture;
-- no `sha256sum` or `shasum`;
+- no `sha256sum` or `shasum` in `/usr/bin` or `/bin`;
 - a relative `XDG_CACHE_HOME`, or a symlinked `.tripcord` or
   `bootstrap.sh`;
 - a usage error.
