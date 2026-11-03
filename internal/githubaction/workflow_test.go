@@ -11,7 +11,16 @@ import (
 	"testing"
 
 	"go.yaml.in/yaml/v3"
+
+	"github.com/vgmartinez/tripcord/internal/project"
 )
+
+// runningInCI is the CI environment of the process that started the
+// test binary. It is read at init, before a test can change CI, so the
+// pre-commit rev check follows TestPinsHaveEmbedCheck: a shallow or
+// non-git checkout fails when the process was started in CI and skips
+// otherwise.
+var runningInCI = ciRequiresPinnedObject(os.Getenv)
 
 const (
 	workflowCheckout  = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
@@ -448,24 +457,267 @@ func TestPreCommitHookContract(t *testing.T) {
 			}
 		}
 	}
-	docs, err := os.ReadFile(filepath.Join("..", "..", "docs", "pre-commit.md"))
+	// README.md and docs/pre-commit.md each pin the hook with a tripcord
+	// repo line and a rev. The rev is whatever follows "rev:", so a
+	// branch or tag (main, v1, v1.2.3, release) or a short sha fails the
+	// 40-character check instead of being ignored. A full sha also needs
+	// a "# main@" comment that is a prefix of it.
+	root := filepath.Join("..", "..")
+	var revs []preCommitRev
+	for _, rel := range []string{"README.md", "docs/pre-commit.md"} {
+		raw, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		found := preCommitRevsIn(rel, string(raw))
+		if len(found) == 0 {
+			t.Errorf("%s has no tripcord pre-commit rev", rel)
+		}
+		revs = append(revs, found...)
+	}
+	formatOK := true
+	for _, rev := range revs {
+		if err := preCommitRevFormat(rev); err != nil {
+			t.Error(err)
+			formatOK = false
+		}
+	}
+	if !formatOK {
+		return
+	}
+	// The sha-length check always runs. The git half needs history:
+	// outside CI a shallow or non-git checkout skips, and in CI it fails.
+	if !preCommitHistoryAvailable(t, root) {
+		return
+	}
+	ref := preCommitMainRef(t, root)
+	seen := map[string]bool{}
+	for _, rev := range revs {
+		if seen[rev.sha] {
+			continue
+		}
+		seen[rev.sha] = true
+		if err := gitAt(root, "merge-base", "--is-ancestor", rev.sha, ref); err != nil {
+			t.Errorf("%s rev %s is not on %s", rev.where, rev.sha, ref)
+			continue
+		}
+		// The pin must be a commit that actually ships the hook. A commit
+		// with no .pre-commit-hooks.yaml, or one whose manifest lacks
+		// tripcord-config, fails closed.
+		requirePinnedHookManifest(t, root, rev.sha)
+	}
+}
+
+// preCommitRev is one tripcord pre-commit pin: the rev token and the
+// optional "# main@" comment after it.
+type preCommitRev struct {
+	where, sha, comment string
+}
+
+// preCommitRevRE matches a tripcord repo line and the rev on the next
+// line. The rev group is everything up to whitespace or a comment, so
+// @-style branch and tag refs are pins and fail the sha check.
+var preCommitRevRE = regexp.MustCompile(`(?m)repo:[ \t]+https://github\.com/` + regexp.QuoteMeta(project.Repository) + `(?:\.git)?[ \t]*\r?\n[ \t]*rev:[ \t]+([^\s#]+)(?:[ \t]+#[ \t]*main@([0-9a-fA-F]+))?`)
+
+func preCommitRevsIn(where, text string) []preCommitRev {
+	var out []preCommitRev
+	for _, m := range preCommitRevRE.FindAllStringSubmatch(text, -1) {
+		out = append(out, preCommitRev{where: where, sha: m[1], comment: m[2]})
+	}
+	return out
+}
+
+func preCommitRevFormat(rev preCommitRev) error {
+	if len(rev.sha) != 40 {
+		return fmt.Errorf("%s rev %q, want a 40-character lowercase sha", rev.where, rev.sha)
+	}
+	for _, c := range rev.sha {
+		switch {
+		case c >= '0' && c <= '9', c >= 'a' && c <= 'f':
+		default:
+			return fmt.Errorf("%s rev %q, want a 40-character lowercase sha", rev.where, rev.sha)
+		}
+	}
+	if len(rev.comment) < 7 || len(rev.comment) > len(rev.sha) || !strings.HasPrefix(rev.sha, rev.comment) {
+		return fmt.Errorf("%s rev %s is missing a # main@ comment that is a prefix of the sha", rev.where, rev.sha)
+	}
+	for _, c := range rev.comment {
+		switch {
+		case c >= '0' && c <= '9', c >= 'a' && c <= 'f':
+		default:
+			return fmt.Errorf("%s rev %s comment %q is not a lowercase sha prefix", rev.where, rev.sha, rev.comment)
+		}
+	}
+	return nil
+}
+
+// TestPreCommitRevRejectsBranchAndTag checks that a documented rev of
+// main, v1, v1.2.3, or release fails the 40-character check, as does a
+// short sha, and that a full sha still needs its # main@ comment.
+func TestPreCommitRevRejectsBranchAndTag(t *testing.T) {
+	repo := "repo: https://github.com/" + project.Repository
+	full := "c44853c105b84c1e2928aab1c75f2da31c29d13e"
+	text := strings.Join([]string{
+		repo, "rev: main",
+		repo, "rev: v1",
+		repo, "rev: v1.2.3",
+		repo, "rev: release",
+		repo, "rev: c44853c # main@c44853c",
+		repo, "rev: " + full,
+		repo, "rev: " + full + " # main@c44853c",
+	}, "\n")
+	revs := preCommitRevsIn("sample", text)
+	if len(revs) != 7 {
+		t.Fatalf("revs = %+v, want the four refs, the short sha, the bare sha, and the commented sha", revs)
+	}
+	for _, rev := range revs[:6] {
+		if err := preCommitRevFormat(rev); err == nil {
+			t.Errorf("%s rev %q with comment %q passed the format check", rev.where, rev.sha, rev.comment)
+		}
+	}
+	if err := preCommitRevFormat(revs[6]); err != nil {
+		t.Error(err)
+	}
+}
+
+// preCommitHistoryAvailable reports whether this clone can prove a rev
+// is on main. Outside CI it skips when git, the checkout, or main is
+// missing, or when the clone is shallow. When the process was started
+// with CI or GITHUB_ACTIONS set, a shallow clone and a directory that
+// is not a git checkout fail. runningInCI records that environment at
+// init.
+func preCommitHistoryAvailable(t *testing.T, root string) bool {
+	t.Helper()
+	reason, skip := preCommitHistoryProblem(root)
+	if skip {
+		t.Skip(reason)
+	}
+	if reason != "" {
+		t.Fatal(reason)
+	}
+	return true
+}
+
+func preCommitHistoryProblem(root string) (reason string, skip bool) {
+	if _, err := exec.LookPath("git"); err != nil {
+		return "git is not installed", true
+	}
+	out, err := gitText(root, "rev-parse", "--is-inside-work-tree")
+	if err != nil || strings.TrimSpace(out) != "true" {
+		return preCommitFailOrSkip("not a git checkout")
+	}
+	shallow, err := gitText(root, "rev-parse", "--is-shallow-repository")
 	if err != nil {
+		return preCommitFailOrSkip("not a git checkout")
+	}
+	if strings.TrimSpace(shallow) == "true" {
+		return preCommitFailOrSkip("shallow clone: the pinned commit may be missing; the checkout needs fetch-depth: 0")
+	}
+	if preCommitMainRefOf(root) == "" {
+		return preCommitFailOrSkip("neither origin/main nor main is in this clone, so a rev cannot be checked against main")
+	}
+	return "", false
+}
+
+func preCommitFailOrSkip(reason string) (string, bool) {
+	if runningInCI {
+		return reason, false
+	}
+	return reason, true
+}
+
+func preCommitMainRef(t *testing.T, root string) string {
+	t.Helper()
+	ref := preCommitMainRefOf(root)
+	if ref == "" {
+		t.Fatal("neither origin/main nor main is in this clone")
+	}
+	return ref
+}
+
+func preCommitMainRefOf(root string) string {
+	for _, ref := range []string{"origin/main", "main"} {
+		if gitAt(root, "rev-parse", "--verify", "--quiet", ref) == nil {
+			return ref
+		}
+	}
+	return ""
+}
+
+// TestPreCommitHistoryFailsShallowAndNonGitInCI checks that a shallow
+// clone and a directory that is not a git checkout fail the git half of
+// the pre-commit rev check when the process started in CI, and skip
+// otherwise. It assigns runningInCI directly, the same way
+// TestPinsHaveEmbedCheck's history check does.
+func TestPreCommitHistoryFailsShallowAndNonGitInCI(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	nonGit := t.TempDir()
+	shallow := shallowPreCommitClone(t)
+
+	setPreCommitRunningInCI(t, true)
+	if reason, skip := preCommitHistoryProblem(nonGit); skip || !strings.Contains(reason, "not a git checkout") {
+		t.Fatalf("non-git checkout in CI: skip=%v reason=%q", skip, reason)
+	}
+	if reason, skip := preCommitHistoryProblem(shallow); skip || !strings.Contains(reason, "shallow") {
+		t.Fatalf("shallow clone in CI: skip=%v reason=%q", skip, reason)
+	}
+
+	setPreCommitRunningInCI(t, false)
+	if reason, skip := preCommitHistoryProblem(nonGit); !skip {
+		t.Fatalf("non-git checkout outside CI: skip=%v reason=%q", skip, reason)
+	}
+	if reason, skip := preCommitHistoryProblem(shallow); !skip {
+		t.Fatalf("shallow clone outside CI: skip=%v reason=%q", skip, reason)
+	}
+}
+
+func setPreCommitRunningInCI(t *testing.T, v bool) {
+	t.Helper()
+	prev := runningInCI
+	runningInCI = v
+	t.Cleanup(func() { runningInCI = prev })
+}
+
+func shallowPreCommitClone(t *testing.T) string {
+	t.Helper()
+	src := t.TempDir()
+	gitInDir(t, src, "init", "-b", "main")
+	gitInDir(t, src, "config", "user.email", "tripcord@example.com")
+	gitInDir(t, src, "config", "user.name", "Tripcord")
+	if err := os.WriteFile(filepath.Join(src, "README"), []byte("x\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	pin := regexp.MustCompile(`rev: ([0-9a-f]{40}) # main@([0-9a-f]{7,40})`)
-	match := pin.FindStringSubmatch(string(docs))
-	if match == nil {
-		t.Fatal("docs pre-commit example does not pin rev to a full SHA with a main comment")
+	gitInDir(t, src, "add", "README")
+	gitInDir(t, src, "commit", "-m", "init")
+	dst := t.TempDir()
+	// A local path is cloned with --local, which ignores --depth.
+	gitInDir(t, src, "clone", "--no-local", "--depth", "1", src, dst)
+	return dst
+}
+
+func gitInDir(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	out, err := gitText(dir, args...)
+	if err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
 	}
-	if !strings.HasPrefix(match[1], match[2]) {
-		t.Fatalf("docs pin %s does not match comment %s", match[1], match[2])
+}
+
+func gitAt(dir string, args ...string) error {
+	_, err := gitText(dir, args...)
+	return err
+}
+
+func gitText(dir string, args ...string) (string, error) {
+	cmd := exec.Command("git", append([]string{"--no-optional-locks"}, args...)...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return string(out), err
 	}
-	// The pin must be a commit that actually ships the hook. 6944e28 is
-	// in history and has no .pre-commit-hooks.yaml, so this fails closed
-	// on that old pin. A local shallow clone that does not have the
-	// commit object skips. CI must fail instead, so a depth-1 checkout
-	// cannot hide a stale pin.
-	requirePinnedHookManifest(t, filepath.Join("..", ".."), match[1])
+	return string(out), nil
 }
 
 // ciRequiresPinnedObject reports whether a missing pin must fail the
@@ -478,10 +730,11 @@ func ciRequiresPinnedObject(getenv func(string) string) bool {
 // requirePinnedHookManifest checks that sha's tree contains
 // .pre-commit-hooks.yaml and that the manifest declares tripcord-config.
 // A missing commit object skips on a local run and fails in CI.
+// runningInCI was captured at init; a later change to CI does not flip it.
 func requirePinnedHookManifest(t *testing.T, root, sha string) {
 	t.Helper()
 	if !gitObjectExists(t, root, sha) {
-		if ciRequiresPinnedObject(os.Getenv) {
+		if runningInCI {
 			t.Fatalf("pinned rev %s is not in the local git object database; the checkout needs fetch-depth: 0", sha)
 		}
 		t.Skipf("pinned rev %s is not in the local git object database; skipping the .pre-commit-hooks.yaml check (shallow clone)", sha)
