@@ -8,16 +8,22 @@ the only mode that requires Git. To scan a repository before cloning it
 yourself, use [`tripcord preopen`](preopen.md).
 
 `--staged` reads the Git index into a private temporary tree and uses the
-staged version of each file. The tree contains the paths a normal repository
-scan would open — adapter discovery files, `.tripcord` policy and review
-files, scripts and checksum files those rules follow, and in-repo symlink
-targets — under the same caps as that scan. A gitlink is an empty directory.
-A path absent from the index is missing. Only findings located in the paths
-passed after `--staged` are reported, and at least one path is required.
-Staged deletions have no finding. Outside a repository, with an empty index,
-with no paths, or after an incomplete or internal scan, it exits non-zero; a
-pre-commit hook therefore blocks the commit. A signal after the tree exists
-closes it and exits 3.
+staged version of each file, except when `PRE_COMMIT_FROM_REF` and
+`PRE_COMMIT_TO_REF` are both set: then it reads the working tree, which is
+what pre-commit checked out at the `TO` revision. The tree, in the index
+case, contains the paths a normal repository scan would open — adapter
+discovery files, `.tripcord` policy and review files, scripts and checksum
+files those rules follow, and in-repo symlink targets — under the same caps
+as that scan. A gitlink is an empty directory. A path absent from the index
+is missing. A finding is reported when its location or any path in its
+source set is in the change set: the union of paths passed after `--staged`
+and the paths that differ between `HEAD` and the index, including deletions.
+With nothing staged and no paths, nothing is reported. With the two
+pre-commit ref variables set, the change set also includes the three-dot
+diff `FROM...TO` (see [pre-commit.md](pre-commit.md)). Outside a repository,
+with an empty index in the index mode, or after an incomplete or internal
+scan, it exits non-zero; a pre-commit hook therefore blocks the commit. A
+signal after the staged tree exists closes it and exits 3.
 
 ## Flags
 
@@ -66,7 +72,7 @@ using `s1`. The key is never printed. See
 | --- | --- |
 | 0 | No finding meets the effective threshold. |
 | 1 | At least one finding meets the effective threshold. |
-| 3 | Invalid flags or format, configuration/policy error, a Git ref `--since` cannot use, an invalid `--output` or `--policy` path, an invalid or unreadable fingerprint key (`TRIPCORD_FINGERPRINT_KEY` or `~/.tripcord/fingerprint.key` shorter than 16 bytes, not hex, an odd number of hex characters, corrupt, a symlink, or — on Unix — wrongly owned or too permissive; see [fingerprint.md](fingerprint.md#fail-closed-vs-s1-fallback)), unavailable v0 secret scan, unknown command, `--staged` with no paths, a staged scan interrupted after its tree exists, or an incomplete scan (below). `--help` exits 0. |
+| 3 | Invalid flags or format, configuration/policy error, a Git ref `--since` cannot use, an invalid `--output` or `--policy` path, an invalid or unreadable fingerprint key (`TRIPCORD_FINGERPRINT_KEY` or `~/.tripcord/fingerprint.key` shorter than 16 bytes, not hex, an odd number of hex characters, corrupt, a symlink, or — on Unix — wrongly owned or too permissive; see [fingerprint.md](fingerprint.md#fail-closed-vs-s1-fallback)), unavailable v0 secret scan, unknown command, a staged scan interrupted after its tree exists, or an incomplete scan (below). `--help` exits 0. |
 | 4 | Internal error, or a failure to start Git or finish writing the output file. |
 
 When an adapter cannot fully read the configuration (malformed, oversized,

@@ -410,7 +410,7 @@ func TestPreCommitHookContract(t *testing.T) {
 		"id":             "tripcord-config",
 		"language":       "golang",
 		"entry":          "tripcord scan --staged",
-		"pass_filenames": "false",
+		"pass_filenames": "true",
 		"require_serial": "true",
 		"always_run":     "true",
 	} {

@@ -33,21 +33,42 @@ commit applies to that commit's finding.
 An interrupt during materialization closes the temporary tree and exits 3
 with the bypass line below.
 
-The hook's manifest sets `pass_filenames: false` and `always_run: true`:
-pre-commit invokes `tripcord scan --staged` on every commit with no file
-arguments at all, regardless of which paths changed or what kind of change
-they are. This matters because pre-commit's own default file-type filtering
-(`types: [file]`) would otherwise skip a commit that only retargets a
-symlink or only deletes a file — pre-commit reports `(no files to check)
-Skipped` for those without ever invoking the hook. With no paths given, the
-hook computes its own staged change set directly from the Git index, with
-`git diff-index --cached --name-status -z --no-renames` diffed against
-`HEAD` (or, on a repository's first commit, the empty tree). That change set
-covers every added, modified, deleted, type-changed (for example a symlink
-retarget), and mode-changed path in the proposed commit. Passing explicit
-paths to `tripcord scan --staged` still works, for direct or manual use
-outside pre-commit; given paths replace the self-computed change set instead
-of extending it.
+The hook's manifest sets `pass_filenames: true`, `always_run: true`, and
+`require_serial: true`. `pass_filenames` stays on so `pre-commit run
+--all-files` and `pre-commit run --from-ref FROM --to-ref TO` — the way
+pre-commit.ci and other CI run hooks, when nothing is staged — pass the
+files they are reviewing. With `pass_filenames: false` those commands
+invoked the hook with no paths and an empty index, and the scan reported
+nothing. `always_run` keeps the hook from being skipped when pre-commit's
+default `types: [file]` filter matches no filenames. That filter is what
+drops a symlink (identify tags it `symlink`, not `file`) and what, together
+with pre-commit requiring the path to exist, drops a deletion. A commit that
+only retargets a symlink, or only deletes a file, would otherwise print
+`(no files to check) Skipped` and never run the hook.
+
+`tripcord scan --staged` reports findings against the **union** of the
+paths it was given and the staged change set from
+`git diff-index --cached --name-status -z --no-renames`, diffed against
+`HEAD` (or, on a repository's first commit, the empty tree). That change
+set covers every added, modified, deleted, type-changed (for example a
+symlink retarget), and mode-changed path in the proposed commit. A commit
+with nothing staged and no paths reports nothing. Passing paths does not
+replace the diff-index set; it adds to it. pre-commit may split a large
+changeset into several hook invocations ("batches") of file paths. Every
+batch unions the same diff-index set, so a finding whose staged path landed
+in a different batch is still reported, and the same finding can be printed
+more than once. That duplication is harmless: any reported finding blocks
+the commit.
+
+`types` is left at pre-commit's default `[file]`. `types: [file, symlink]`
+would not help: `types` requires every listed tag, and a path is never both
+a regular file and a symlink. Under `--all-files`, a symlink path itself is
+therefore not passed. The finding is still reported when the symlink's
+target is a tracked regular file, because that target is in the finding's
+source set and `--all-files` does pass it. A finding whose only in-repo
+path is the symlink (its target is not a tracked regular file) is not
+passed by `--all-files`; the diff-index union still covers it on a commit
+that stages the symlink.
 
 The hook reports a finding when any file in that finding's **source set** is
 in the change set, not only when the finding's own location changed. A
@@ -78,11 +99,18 @@ manifest that references it, retargeting only a symlink reports a finding
 located at the symlink path, deleting only a checksum file reports the
 finding it was covering, and adding only a plugin manifest reports every
 finding its already-committed hooks, skills, agents, and commands produce.
-With `pass_filenames: false`, pre-commit invokes the hook exactly once per
-commit with no arguments, instead of batching file paths across several
-invocations the way a `pass_filenames: true` hook would; `tripcord scan
---staged` always sees the whole proposed commit's self-computed change set
-in that one invocation.
+
+When `PRE_COMMIT_FROM_REF` and `PRE_COMMIT_TO_REF` are both set
+(`pre-commit run --from-ref` / `--to-ref`, which is how pre-commit.ci
+invokes hooks), the change set also includes
+`git diff --name-status -z --no-renames FROM...TO`. That is the three-dot
+form pre-commit 4.7.0 uses in `get_changed_files`: changes on `TO` since
+the merge base with `FROM`. If that diff fails — newer git does this when
+the two revisions have no merge base — the hook retries `FROM..TO`, the
+same fallback pre-commit uses. Deletions in the range are in that diff
+even though pre-commit does not pass a path that no longer exists. In this
+mode the scan reads the working tree, which is the checkout pre-commit
+left at `TO`, and not the Git index.
 
 Any reported finding blocks the commit, including one that was already present
 in an edited config file. This deliberately fails closed; filtering for only
@@ -94,12 +122,32 @@ commit. Fix the problem and rerun the hook. The emergency bypass is
 
 ## What the hook does not cover
 
-Git does not invoke any local hook, including `pre-commit`, for a merge that
-completes without a conflict (a clean merge or a fast-forward). A merge that
-introduces an unsafe configuration change through either side, with no
-conflicting hunk on the affected file, lands with the pre-commit hook never
-having run. CI's own scan of the merged tree is the backstop for that case,
-not this hook.
+Git does not invoke the `pre-commit` hook for a merge that completes without
+a conflict (a clean merge or a fast-forward). A merge that introduces an
+unsafe configuration change through either side, with no conflicting hunk on
+the affected file, lands with that hook never having run. To scan a merge
+that creates a commit, including one with no conflicts, also install
+pre-commit's `pre-merge-commit` stage:
+
+```sh
+pre-commit install --hook-type pre-merge-commit
+```
+
+Git runs `pre-merge-commit` after the merge has been carried out and before
+it creates the merge commit. A non-zero status from this hook aborts that
+commit. The manifest does not set `stages`, so the hook runs in
+`pre-merge-commit` once that hook type is installed. A fast-forward that
+does not create a commit still does not run it. CI's scan of the merged
+tree is the backstop wherever the stage is not installed.
+
+The repository walk stops after 200,000 directory entries, the same cap as
+a checkout scan. Past that limit the scan is incomplete and exits 3, so
+this hook blocks every commit in a repository that large, including a
+commit that does not touch configuration. Skip the hook there
+(`SKIP=tripcord-config`, or leave it out of `.pre-commit-config.yaml`).
+`tripcord scan` of a path inside a Git repository starts at that
+repository's root and hits the same cap, so a tree that large has to be
+scanned as its own checkout, not as a subdirectory of a bigger one.
 
 A commit that only changes a `.tripcord` policy file (an exception, a
 severity override, a scope change) and touches no configuration file can

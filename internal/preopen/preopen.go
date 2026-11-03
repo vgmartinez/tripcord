@@ -205,14 +205,13 @@ func ListIndex(ctx context.Context, repo, indexFile string) (objs []IndexObject,
 // between HEAD (or, on the first commit, the empty tree) and the index
 // at indexFile: added, modified, deleted, type-changed (for example a
 // symlink retargeted, or a file replaced by a symlink), and
-// mode-changed entries alike. It is how `tripcord scan --staged`
-// computes its own change set when pre-commit passes no paths
-// (pass_filenames: false, always_run: true): pre-commit's own file-type
-// filtering would otherwise skip a commit that only touches a symlink,
-// or never name a staged deletion at all.
-// indexFile, when set, is the index git is building for a commit
-// currently in a hook (see gitrun.IndexEnv); an empty indexFile reads
-// .git/index, as a direct, non-hook invocation would.
+// mode-changed entries alike. `tripcord scan --staged` unions this set
+// with any paths the caller passed. pre-commit's default types: [file]
+// filter never names a symlink or a staged deletion, and a commit that
+// only touches one of those would otherwise be invisible; diff-index
+// still lists them. indexFile, when set, is the index git is building
+// for a commit currently in a hook (see gitrun.IndexEnv); an empty
+// indexFile reads .git/index, as a direct, non-hook invocation would.
 func StagedChangeSet(ctx context.Context, repo, indexFile string) (map[string]bool, error) {
 	if _, err := exec.LookPath("git"); err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrGitMissing, err)
@@ -226,6 +225,53 @@ func StagedChangeSet(ctx context.Context, repo, indexFile string) (map[string]bo
 		return nil, err
 	}
 	return parseNameStatus(raw)
+}
+
+// RefRangeChangeSet reports every repository-relative path that differs
+// between from and to, the way pre-commit 4.7.0 chooses files for
+// `pre-commit run --from-ref FROM --to-ref TO` (see
+// pre_commit/git.py get_changed_files). That function runs
+// `git diff --name-only -z FROM...TO` — the three-dot form, changes on
+// TO since the merge base with FROM — and, only when that command
+// fails (newer git has no merge base for unrelated histories), falls
+// back to `FROM..TO`. This uses the same pair, with --name-status and
+// --no-renames so a rename is a deletion plus an addition and the
+// deleted path is still in the set. Deletions are included;
+// pre-commit's own filename filter drops them because the path no
+// longer exists. The diff is of the two trees, not of the index.
+func RefRangeChangeSet(ctx context.Context, repo, from, to string) (map[string]bool, error) {
+	if err := validRevision(from); err != nil {
+		return nil, err
+	}
+	if err := validRevision(to); err != nil {
+		return nil, err
+	}
+	if _, err := exec.LookPath("git"); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrGitMissing, err)
+	}
+	raw, err := gitrun.Run(ctx, repo, "diff", "--name-status", "-z", "--no-renames", from+"..."+to, "--")
+	if err != nil {
+		var exitErr *gitrun.ExitError
+		if !errors.As(err, &exitErr) {
+			return nil, err
+		}
+		raw, err = gitrun.Run(ctx, repo, "diff", "--name-status", "-z", "--no-renames", from+".."+to, "--")
+		if err != nil {
+			return nil, err
+		}
+	}
+	return parseNameStatus(raw)
+}
+
+// validRevision rejects a revision that could be read as a git option
+// or that carries a control character. pre-commit passes the caller's
+// --from-ref and --to-ref through unchanged; they are still one
+// argument each, not a shell string.
+func validRevision(rev string) error {
+	if rev == "" || strings.HasPrefix(rev, "-") || strings.ContainsAny(rev, "\x00\n\r") {
+		return fmt.Errorf("invalid revision %q", rev)
+	}
+	return nil
 }
 
 // diffBase is the tree-ish StagedChangeSet diffs the index against: HEAD,

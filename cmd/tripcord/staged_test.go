@@ -351,11 +351,11 @@ func TestScanStagedSignalClosesTree(t *testing.T) {
 	}
 }
 
-// TestScanStagedNoPathsComputesItsOwnChangeSet covers the hook manifest
-// change (pass_filenames: false, always_run: true): with no path
-// arguments, `scan --staged` must compute the staged change set itself
-// from the index, rather than require pre-commit to pass any path, and
-// it must still catch a staged finding.
+// TestScanStagedNoPathsComputesItsOwnChangeSet covers a hook invocation
+// with no path arguments (a symlink-only or deletion-only diff, which
+// pre-commit's default types filter does not pass). `scan --staged`
+// still computes the staged change set from the index and reports a
+// staged finding. Nothing staged and no paths reports nothing.
 func TestScanStagedNoPathsComputesItsOwnChangeSet(t *testing.T) {
 	bin := buildStagedBinary(t)
 	t.Run("clean index reports nothing", func(t *testing.T) {

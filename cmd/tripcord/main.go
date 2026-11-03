@@ -62,11 +62,12 @@ Usage:
 scan performs static configuration scanning only. A PATH inside a Git
 repository scans that whole repository from its git root. Monorepo scoping
 is tracked in https://github.com/vgmartinez/tripcord/issues/59.
---staged scans the Git index in a private temporary tree. With no path
-arguments, it computes its own staged change set from the index (added,
-modified, deleted, type-changed, and mode-changed paths); explicit paths
-are also accepted, for direct or manual use. That change set selects which
-finding locations are reported.
+--staged scans the Git index in a private temporary tree. The change set
+is the union of any paths given on the command line and the paths that
+differ between HEAD and the index (added, modified, deleted, type-changed,
+and mode-changed). With nothing staged and no paths, nothing is reported.
+When PRE_COMMIT_FROM_REF and PRE_COMMIT_TO_REF are set, that range is
+included too and the scan reads the working tree instead of the index.
 --scope selects repository
 (the default), user, managed, or all. The default does not read the home
 directory or system settings.
@@ -171,15 +172,60 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 		// needs the proposed commit's content, rather than carried by
 		// gitrun.Env for every git invocation tripcord makes.
 		indexFile := os.Getenv("GIT_INDEX_FILE")
-		if opts.stagedFiles == nil {
-			changed, err := preopen.StagedChangeSet(ctx, root, indexFile)
+		// The change set is the union of paths the caller passed (a
+		// pre-commit batch, or an explicit manual invocation) and every
+		// path that differs between HEAD and this index. A batch that
+		// does not name a staged symlink or deletion still sees it,
+		// because diff-index does; every batch unions the same
+		// diff-index set, so the same finding can be reported from more
+		// than one batch.
+		changed, err := preopen.StagedChangeSet(ctx, root, indexFile)
+		if err != nil {
+			code := target.configError(stderr, fmt.Errorf("--staged: %w", err))
+			writeString(stderr, "tripcord scan: staged scan blocked the commit; bypass only with git commit --no-verify\n")
+			return code
+		}
+		for path := range opts.stagedFiles {
+			changed[path] = true
+		}
+		// pre-commit run --from-ref/--to-ref, including pre-commit.ci,
+		// sets both. Nothing is staged in that mode, so diff-index is
+		// empty, and pre-commit's filename filter drops deletions. The
+		// range diff puts them back. Content is the working tree at TO,
+		// which is what pre-commit checked out, not the index.
+		fromRef := os.Getenv("PRE_COMMIT_FROM_REF")
+		toRef := os.Getenv("PRE_COMMIT_TO_REF")
+		if fromRef != "" && toRef != "" {
+			ranged, err := preopen.RefRangeChangeSet(ctx, root, fromRef, toRef)
 			if err != nil {
 				code := target.configError(stderr, fmt.Errorf("--staged: %w", err))
 				writeString(stderr, "tripcord scan: staged scan blocked the commit; bypass only with git commit --no-verify\n")
 				return code
 			}
+			for path := range ranged {
+				changed[path] = true
+			}
 			opts.stagedFiles = changed
+			sources, notes, err := indexfiles.WorktreeSources(root)
+			if err != nil {
+				code := target.configError(stderr, fmt.Errorf("--staged: %w", err))
+				writeString(stderr, "tripcord scan: staged scan blocked the commit; bypass only with git commit --no-verify\n")
+				return code
+			}
+			target.root, target.policyRoot = root, root
+			target.stagedNotes = notes
+			target.stagedSources = sources
+			code := scanTree(ctx, target, opts, stdout, stderr)
+			if ctx.Err() != nil {
+				writeString(stderr, "tripcord scan: staged scan blocked the commit; bypass only with git commit --no-verify\n")
+				return int(exitcode.Config)
+			}
+			if code == int(exitcode.Config) || code == int(exitcode.Internal) {
+				writeString(stderr, "tripcord scan: staged scan blocked the commit; bypass only with git commit --no-verify\n")
+			}
+			return code
 		}
+		opts.stagedFiles = changed
 		ws, notes, sources, err := indexfiles.Materialize(ctx, root, indexFile)
 		if err != nil {
 			code := target.configError(stderr, fmt.Errorf("--staged: %w", err))
@@ -510,7 +556,7 @@ func parseCommandFlags(cmd flagCommand, args []string, stdout io.Writer) (scanOp
 	flags.StringVar(&opts.failOn, "fail-on", "", "low, medium, high, or critical")
 	flags.StringVar(&opts.policy, "policy", "", "policy file")
 	flags.StringVar(&opts.orgPolicy, "org-policy", "", "organization policy file")
-	flags.BoolVar(&opts.staged, "staged", false, "scan Git's staged index; with no paths, computes its own staged change set")
+	flags.BoolVar(&opts.staged, "staged", false, "scan Git's staged index; paths are unioned with the staged change set")
 	if err := flags.Parse(normalized); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			var buf bytes.Buffer
@@ -520,7 +566,7 @@ func parseCommandFlags(cmd flagCommand, args []string, stdout io.Writer) (scanOp
 			flags.SetOutput(&buf)
 			flags.PrintDefaults()
 			if cmd == scanCommand {
-				if _, werr := buf.WriteString("\nA PATH inside a Git repository scans that whole repository from its git root.\nMonorepo scoping is tracked in https://github.com/vgmartinez/tripcord/issues/59.\n--staged scans the Git index. With no paths, it computes its own staged\nchange set; explicit paths are also accepted for direct use.\n"); werr != nil {
+				if _, werr := buf.WriteString("\nA PATH inside a Git repository scans that whole repository from its git root.\nMonorepo scoping is tracked in https://github.com/vgmartinez/tripcord/issues/59.\n--staged scans the Git index. Paths are unioned with the staged change set\n(added, modified, deleted, type-changed, and mode-changed). With nothing\nstaged and no paths, nothing is reported.\n"); werr != nil {
 					return scanOptions{}, fmt.Errorf("%w: %w", errHelpWrite, werr)
 				}
 			}
@@ -548,10 +594,10 @@ func parseCommandFlags(cmd flagCommand, args []string, stdout io.Writer) (scanOp
 	case opts.staged:
 		opts.path = "."
 		if flags.NArg() > 0 {
-			// Explicit paths stay supported for direct, manual use: with
-			// none given, the scan computes its own staged change set
-			// (see preopen.StagedChangeSet), since a hook invoked with
-			// pass_filenames: false never names any.
+			// Paths name one pre-commit batch, or a direct manual
+			// invocation. They are unioned with the diff-index change
+			// set in runScan; they do not replace it. With none given,
+			// only that change set is used.
 			opts.stagedFiles, err = stagedPaths(flags.Args())
 			if err != nil {
 				return opts, err

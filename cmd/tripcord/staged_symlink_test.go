@@ -11,10 +11,10 @@ import (
 // only retargets .claude/settings.json's symlink was skipped entirely by
 // pre-commit, because pre-commit's default types: [file] filtering
 // excludes a symlink-type diff from pass_filenames, so the hook never
-// saw the retarget. With pass_filenames: false and always_run: true,
-// pre-commit now invokes the hook unconditionally, and `scan --staged`
-// must compute its own staged change set (including the symlink's
-// entry) and report the finding its new target reaches.
+// saw the retarget. always_run keeps the hook invoked when the default
+// types: [file] filter passes no filenames, and `scan --staged` unions
+// that empty argument list with its own diff-index change set, which
+// includes the symlink, and reports the finding its new target reaches.
 func TestScanStagedSymlinkRetargetWithNoPaths(t *testing.T) {
 	bin := buildStagedBinary(t)
 	repo := stagedRepo(t)
@@ -79,9 +79,10 @@ func TestScanStagedNewSymlinkWithNoPaths(t *testing.T) {
 }
 
 // TestStagedPreCommitHookSymlinkRetargetBlocksRealCommit exercises N1's
-// exact repro end to end through a real git commit and the installed
-// native pre-commit hook invoked the way pre-commit now calls it: with
-// no file arguments (pass_filenames: false, always_run: true).
+// exact repro end to end through a real git commit and a hook invoked
+// with no file arguments, which is what pre-commit does for a
+// symlink-only diff under its default types: [file] filter. always_run
+// still starts the hook, and the diff-index change set supplies the path.
 func TestStagedPreCommitHookSymlinkRetargetBlocksRealCommit(t *testing.T) {
 	bin := buildStagedBinary(t)
 	repo := stagedRepo(t)

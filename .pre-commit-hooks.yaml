@@ -2,19 +2,22 @@
   name: tripcord staged configuration scan
   language: golang
   entry: tripcord scan --staged
-  pass_filenames: false
+  pass_filenames: true
   require_serial: true
   always_run: true
   # Tripcord decides what counts as configuration, not a pre-commit files
   # regex: a config file can be found only by its content (a plugin manifest
   # reference) or by a symlink target, not by its own path or extension.
-  # pass_filenames: false and always_run: true mean pre-commit invokes the
-  # hook on every commit without naming any file: pre-commit's own type and
-  # pattern filtering (for example its default types: [file], which excludes
-  # a symlink-only change and any path a staged deletion no longer names)
-  # would otherwise skip commits this hook must still see. With no path
-  # arguments, `tripcord scan --staged` computes its own staged change set
-  # from the Git index (see docs/pre-commit.md), covering added, modified,
-  # deleted, type-changed, and mode-changed paths, and reports a finding
-  # whenever any file in its source set is among them, even when that set
-  # does not include the finding's own path.
+  # pass_filenames stays true so `pre-commit run --all-files` and
+  # `--from-ref`/`--to-ref` (how pre-commit.ci runs hooks, with nothing
+  # staged) pass the files they are reviewing. always_run keeps the hook
+  # from being skipped when the default types: [file] filter matches
+  # nothing, which is what a symlink-only commit or a deletion looks like
+  # to pre-commit. `tripcord scan --staged` unions those passed paths with
+  # its own diff-index change set, so a batch that was not given the
+  # symlink or the deleted path still sees it (see docs/pre-commit.md).
+  # types is left at pre-commit's default [file]. A symlink is not a
+  # `file` to identify, so --all-files does not pass the symlink path
+  # itself; the finding is still reported when the symlink's target is a
+  # tracked regular file, because that target is in the finding's source
+  # set and is passed. See docs/pre-commit.md.
