@@ -39,12 +39,12 @@ type repoPin struct {
 // reusable workflow to anything other than a full 40-character sha that
 // is on main and whose tree contains the embed check. Every uses line
 // also needs a "# main@<short>" comment that is a prefix of that sha.
-// A branch or tag ref (@main, @v1) is not a commit pin. A clone that
-// does not have the history skips the git checks; the sha-length check
-// always runs. A shallow clone and a non-git checkout skip even when
-// CI is set. A non-shallow CI checkout that is missing the recorded
-// minimum fails, and TestVetAndTestFetchesFullHistory keeps the vet
-// and test job at fetch-depth 0 so that checkout has the objects.
+// A branch or tag ref (@main, @v1) is not a commit pin. The sha-length
+// check always runs. Outside CI, a clone that does not have the history
+// skips the git checks. When CI or GITHUB_ACTIONS is set, a shallow
+// clone and a directory that is not a git checkout fail those checks.
+// TestVetAndTestFetchesFullHistory keeps the vet and test job at
+// fetch-depth 0 so that checkout has the objects.
 func TestPinsHaveEmbedCheck(t *testing.T) {
 	root := filepath.Join("..", "..")
 	pins := collectRepoPins(t, root)
@@ -124,8 +124,8 @@ func TestUsesPinIgnoresBranchAndTag(t *testing.T) {
 }
 
 // TestVetAndTestFetchesFullHistory keeps the job that runs
-// TestPinsHaveEmbedCheck from dropping to a shallow checkout. A shallow
-// clone skips the git half of that test, including when CI is set.
+// TestPinsHaveEmbedCheck from dropping to a shallow checkout. In CI a
+// shallow clone fails the git half of that test.
 func TestVetAndTestFetchesFullHistory(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join("..", "..", ".github", "workflows", "ci.yml"))
 	if err != nil {
@@ -170,51 +170,63 @@ func TestVetAndTestFetchesFullHistory(t *testing.T) {
 	}
 }
 
-// TestPinHistorySkipsShallowAndNonGitInCI checks that a shallow clone
-// and a directory that is not a git checkout skip the git half of
-// TestPinsHaveEmbedCheck when CI and GITHUB_ACTIONS are set. A
-// non-shallow checkout that is missing the recorded minimum still fails
-// in that environment.
-func TestPinHistorySkipsShallowAndNonGitInCI(t *testing.T) {
+// TestPinHistoryFailsShallowAndNonGitInCI checks that a shallow clone
+// and a directory that is not a git checkout fail the git half of
+// TestPinsHaveEmbedCheck when CI or GITHUB_ACTIONS is set, and skip
+// when both are unset. A non-shallow checkout that is missing the
+// recorded minimum still fails in CI.
+func TestPinHistoryFailsShallowAndNonGitInCI(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git is not installed")
 	}
+	nonGit := t.TempDir()
+	shallow := shallowClone(t)
+	full := tempRepo(t)
+
 	t.Setenv("CI", "true")
 	t.Setenv("GITHUB_ACTIONS", "true")
-
-	if reason, skip := pinHistoryProblem(t.TempDir()); !skip {
-		t.Fatalf("non-git checkout: skip=%v reason=%q", skip, reason)
+	if reason, skip := pinHistoryProblem(nonGit); skip || !strings.Contains(reason, "not a git checkout") {
+		t.Fatalf("non-git checkout in CI: skip=%v reason=%q", skip, reason)
 	}
-
-	src := t.TempDir()
-	gitIn(t, src, "init", "-b", "main")
-	gitIn(t, src, "config", "user.email", "tripcord@example.com")
-	gitIn(t, src, "config", "user.name", "Tripcord")
-	if err := os.WriteFile(filepath.Join(src, "README"), []byte("x\n"), 0o644); err != nil {
-		t.Fatal(err)
+	if reason, skip := pinHistoryProblem(shallow); skip || !strings.Contains(reason, "shallow") {
+		t.Fatalf("shallow clone in CI: skip=%v reason=%q", skip, reason)
 	}
-	gitIn(t, src, "add", "README")
-	gitIn(t, src, "commit", "-m", "init")
-	shallow := t.TempDir()
-	// A local path is cloned with --local, which ignores --depth.
-	gitIn(t, src, "clone", "--no-local", "--depth", "1", src, shallow)
-	if reason, skip := pinHistoryProblem(shallow); !skip {
-		t.Fatalf("shallow clone: skip=%v reason=%q", skip, reason)
-	}
-
-	full := t.TempDir()
-	gitIn(t, full, "init", "-b", "main")
-	gitIn(t, full, "config", "user.email", "tripcord@example.com")
-	gitIn(t, full, "config", "user.name", "Tripcord")
-	if err := os.WriteFile(filepath.Join(full, "README"), []byte("x\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	gitIn(t, full, "add", "README")
-	gitIn(t, full, "commit", "-m", "init")
 	reason, skip := pinHistoryProblem(full)
 	if skip || !strings.Contains(reason, embedCheckMinimum) {
 		t.Fatalf("non-shallow CI checkout missing the minimum: skip=%v reason=%q", skip, reason)
 	}
+
+	t.Setenv("CI", "")
+	t.Setenv("GITHUB_ACTIONS", "")
+	if reason, skip := pinHistoryProblem(nonGit); !skip {
+		t.Fatalf("non-git checkout outside CI: skip=%v reason=%q", skip, reason)
+	}
+	if reason, skip := pinHistoryProblem(shallow); !skip {
+		t.Fatalf("shallow clone outside CI: skip=%v reason=%q", skip, reason)
+	}
+}
+
+func tempRepo(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	gitIn(t, dir, "init", "-b", "main")
+	gitIn(t, dir, "config", "user.email", "tripcord@example.com")
+	gitIn(t, dir, "config", "user.name", "Tripcord")
+	if err := os.WriteFile(filepath.Join(dir, "README"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, dir, "add", "README")
+	gitIn(t, dir, "commit", "-m", "init")
+	return dir
+}
+
+func shallowClone(t *testing.T) string {
+	t.Helper()
+	src := tempRepo(t)
+	dst := t.TempDir()
+	// A local path is cloned with --local, which ignores --depth.
+	gitIn(t, src, "clone", "--no-local", "--depth", "1", src, dst)
+	return dst
 }
 
 func collectRepoPins(t *testing.T, root string) []repoPin {
@@ -328,9 +340,10 @@ func commitPinSHA(s string) bool {
 }
 
 // pinHistoryAvailable reports whether this clone can prove a pin is on
-// main. It skips when git, the checkout, or the recorded minimum is
-// missing. A shallow clone and a non-git checkout skip even in CI. A
-// non-shallow CI checkout that is missing the minimum fails.
+// main. Outside CI it skips when git, the checkout, or the recorded
+// minimum is missing. When CI or GITHUB_ACTIONS is set, a shallow clone
+// and a directory that is not a git checkout fail, as does a non-shallow
+// checkout that is missing the minimum.
 func pinHistoryAvailable(t *testing.T, root string) bool {
 	t.Helper()
 	reason, skip := pinHistoryProblem(root)
@@ -344,38 +357,40 @@ func pinHistoryAvailable(t *testing.T, root string) bool {
 }
 
 // pinHistoryProblem reports why root cannot prove a pin is on main.
-// skip is true when the caller should skip rather than fail. CI does
-// not turn a shallow clone or a non-git checkout into a failure.
+// skip is true when the caller should skip rather than fail. Outside CI
+// a shallow clone and a non-git checkout skip. When CI or GITHUB_ACTIONS
+// is set, both are failures.
 func pinHistoryProblem(root string) (reason string, skip bool) {
 	if _, err := exec.LookPath("git"); err != nil {
 		return "git is not installed", true
 	}
 	out, err := gitOutput(root, "rev-parse", "--is-inside-work-tree")
 	if err != nil || strings.TrimSpace(out) != "true" {
-		return "not a git checkout", true
+		return ciFailOrSkip("not a git checkout")
 	}
 	shallow, err := gitOutput(root, "rev-parse", "--is-shallow-repository")
 	if err != nil {
-		return "not a git checkout", true
+		return ciFailOrSkip("not a git checkout")
 	}
 	if strings.TrimSpace(shallow) == "true" {
-		return "shallow clone: the pinned commit may be missing", true
+		return ciFailOrSkip("shallow clone: the pinned commit may be missing; the checkout needs fetch-depth: 0")
 	}
 	if gitRun(root, "cat-file", "-e", embedCheckMinimum) != nil {
-		msg := fmt.Sprintf("recorded minimum %s is not in this clone; the checkout needs fetch-depth: 0", embedCheckMinimum)
-		if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
-			return msg, false
-		}
-		return msg, true
+		return ciFailOrSkip(fmt.Sprintf("recorded minimum %s is not in this clone; the checkout needs fetch-depth: 0", embedCheckMinimum))
 	}
 	if mainRefOf(root) == "" {
-		msg := "neither origin/main nor main is in this clone, so a pin cannot be checked against main"
-		if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
-			return msg, false
-		}
-		return msg, true
+		return ciFailOrSkip("neither origin/main nor main is in this clone, so a pin cannot be checked against main")
 	}
 	return "", false
+}
+
+// ciFailOrSkip fails the history check when CI or GITHUB_ACTIONS is set
+// and skips it otherwise.
+func ciFailOrSkip(reason string) (string, bool) {
+	if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
+		return reason, false
+	}
+	return reason, true
 }
 
 func mainRef(t *testing.T, root string) string {

@@ -25,7 +25,8 @@ jobs:
           persist-credentials: false
           # TestPreCommitHookContract reads the pinned rev's
           # .pre-commit-hooks.yaml. TestPinsHaveEmbedCheck reads the
-          # pinned commits on main. Depth 1 omits those commits.
+          # pinned commits on main. A depth-1 checkout is shallow, and
+          # in CI that test fails instead of skipping.
           # TestVetAndTestFetchesFullHistory keeps this at 0.
           fetch-depth: 0
 
