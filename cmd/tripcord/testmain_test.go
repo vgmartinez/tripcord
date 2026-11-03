@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 
@@ -34,6 +35,9 @@ func TestMain(m *testing.M) {
 		}
 	}
 	loadRules = cachedRules(loadRules)
+	// No test reads the terminal or the go command's stdin: hook tests
+	// set their own input.
+	hookStdin = strings.NewReader("")
 	code := m.Run()
 	_ = os.RemoveAll(home)
 	os.Exit(code)

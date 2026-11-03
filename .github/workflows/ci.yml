@@ -164,6 +164,11 @@ jobs:
           TRIPCORD_PERF_BUDGET: "1"
         run: go test ./cmd/tripcord -run '^TestStagedBulkBlobsPerfBudget$' -count 1 -v
 
+      - name: Hook cold-start budget
+        env:
+          TRIPCORD_PERF_BUDGET: "1"
+        run: go test ./cmd/tripcord -run '^TestHookColdStartBudget$' -count 1 -v
+
   precommit:
     name: pre-commit hook
     runs-on: ubuntu-latest

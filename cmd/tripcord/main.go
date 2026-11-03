@@ -1,7 +1,8 @@
 // Command tripcord is the Tripcord command-line interface.
 //
-// The root command uses the standard library only, so a later hook mode
-// can cold-start quickly.
+// Hook mode (hook.go) never compiles the core rule pack unless the
+// policy needs its catalog, so it cold-starts inside the hook latency
+// budget (p95 under 25 ms; see TestHookColdStartBudget).
 package main
 
 import (
@@ -64,6 +65,7 @@ Usage:
   tripcord pr-context [flags]
   tripcord preopen <git-url|path> [flags]
   tripcord init [PATH] [--embed] [--harness h,...] [flags]
+  tripcord hook --harness <claude|cursor|copilot> --event <e> [--on-failure block|error]
 
 scan performs static configuration scanning only. A PATH inside a Git
 repository scans that whole repository from its git root. Monorepo scoping
@@ -87,6 +89,9 @@ the repository's own .tripcord policy.
 init writes .tripcord/policy.yaml. With --embed it also writes the pinned
 bootstrap script, the pull request workflow, and each harness's hook and
 setup wiring, merging into existing files; see docs/init.md.
+hook reads one harness hook event as JSON on stdin, evaluates the
+policy's custom event rules, and writes the decision in the harness's
+format: exit 0 allows and 2 blocks. See docs/hook.md.
 --secrets (v1) and --all (v1) are not available.
 `
 
@@ -111,6 +116,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runPreopen(args[1:], stdout, stderr)
 	case "init":
 		return runInit(args[1:], stdout, stderr)
+	case "hook":
+		return runHook(args[1:], stdout, stderr)
 	default:
 		msg := fmt.Sprintf("tripcord: unknown command %q\n\n%s", args[0], usage)
 		writeString(stderr, msg)

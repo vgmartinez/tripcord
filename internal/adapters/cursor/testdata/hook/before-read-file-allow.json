@@ -1,0 +1,13 @@
+{
+  "conversation_id": "5d1e7c0a-2b4f-4a8e-b6c3-9f0e1d2c3b4a",
+  "generation_id": "4d5e6f7a-8b9c-4d0e-1f2a-3b4c5d6e7f8a",
+  "model": "claude-sonnet",
+  "hook_event_name": "beforeReadFile",
+  "cursor_version": "2.1.42",
+  "workspace_roots": ["/home/dev/project"],
+  "user_email": "dev@example.com",
+  "transcript_path": null,
+  "file_path": "/home/dev/project/README.md",
+  "content": "# project\n",
+  "attachments": []
+}

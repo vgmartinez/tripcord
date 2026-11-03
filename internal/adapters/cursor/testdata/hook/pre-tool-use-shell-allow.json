@@ -1,0 +1,17 @@
+{
+  "conversation_id": "5d1e7c0a-2b4f-4a8e-b6c3-9f0e1d2c3b4a",
+  "generation_id": "0f9e8d7c-6b5a-4c3d-8e2f-1a0b9c8d7e6f",
+  "model": "claude-sonnet",
+  "hook_event_name": "preToolUse",
+  "cursor_version": "2.1.42",
+  "workspace_roots": ["/home/dev/project"],
+  "user_email": "dev@example.com",
+  "transcript_path": null,
+  "tool_name": "Shell",
+  "tool_input": {
+    "command": "go test ./...",
+    "working_directory": "/home/dev/project"
+  },
+  "tool_use_id": "call_8Jr3MnO0qSt5UvW2",
+  "cwd": "/home/dev/project"
+}

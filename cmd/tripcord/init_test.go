@@ -247,8 +247,7 @@ func TestInitWiringInvokesTripcordHook(t *testing.T) {
 // wiring init writes runs bootstrap.sh, which execs the verified binary
 // as `tripcord hook <HookArgs>`, so a build without that subcommand must
 // not ship. It runs only with TRIPCORD_RELEASE_GATE=1 (make
-// release-gate) and then fails, never skips, while hook mode is missing.
-// Hook mode lands in the next PR.
+// release-gate) and then fails, never skips, if hook mode is missing.
 func TestReleaseGateHookSubcommand(t *testing.T) {
 	for _, h := range embedded.HookHarnesses {
 		if line, args := embedded.HookCommandLine(h), strings.Join(embedded.HookArgs(h), " "); !strings.HasSuffix(line, " "+args) {

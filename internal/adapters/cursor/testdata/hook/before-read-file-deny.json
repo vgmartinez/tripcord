@@ -1,0 +1,13 @@
+{
+  "conversation_id": "5d1e7c0a-2b4f-4a8e-b6c3-9f0e1d2c3b4a",
+  "generation_id": "3c4d5e6f-7a8b-4c9d-0e1f-2a3b4c5d6e7f",
+  "model": "claude-sonnet",
+  "hook_event_name": "beforeReadFile",
+  "cursor_version": "2.1.42",
+  "workspace_roots": ["/home/dev/project"],
+  "user_email": "dev@example.com",
+  "transcript_path": null,
+  "file_path": "/home/dev/project/.env",
+  "content": "APP_ENV=fixture\n",
+  "attachments": []
+}

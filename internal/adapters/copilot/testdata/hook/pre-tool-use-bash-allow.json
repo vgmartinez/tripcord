@@ -1,0 +1,6 @@
+{
+  "timestamp": 1793712000000,
+  "cwd": "/home/dev/project",
+  "toolName": "bash",
+  "toolArgs": "{\"command\":\"go test ./...\",\"description\":\"Run the tests\"}"
+}
