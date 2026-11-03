@@ -411,10 +411,89 @@ func gitRepo(t *testing.T) string {
 
 func runGit(t *testing.T, repo string, args ...string) {
 	t.Helper()
-	command := exec.Command("git", append([]string{"-C", repo}, args...)...)
+	// A git command whose discovery walks out of repo into this
+	// checkout would add, commit, or refresh the checkout's index while
+	// other packages' tests read it. Ceiling stops that walk, and a
+	// command that still resolves here fails instead of taking the lock.
+	if len(args) == 0 || args[0] != "init" {
+		if dir, err := absoluteGitDir(repo); err == nil && dir == sourceGitDir(t) {
+			t.Fatalf("git %s in %s uses this checkout's index (%s)", strings.Join(args, " "), repo, dir)
+		}
+	}
+	command := exec.Command("git", append([]string{"-C", repo, "--no-optional-locks"}, args...)...)
+	command.Env = gitTestEnv(repo)
 	out, err := command.CombinedOutput()
 	if err != nil {
 		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+	}
+}
+
+// gitTestEnv is the environment for a test git command in repo. It
+// drops variables that would retarget the command onto another
+// repository's index, and stops discovery from walking above repo.
+func gitTestEnv(repo string) []string {
+	env := make([]string, 0, len(os.Environ())+2)
+	for _, entry := range os.Environ() {
+		key, _, _ := strings.Cut(entry, "=")
+		switch strings.ToUpper(key) {
+		case "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY", "GIT_NAMESPACE", "GIT_PREFIX":
+			continue
+		}
+		env = append(env, entry)
+	}
+	ceiling := repo
+	if abs, err := filepath.Abs(repo); err == nil {
+		ceiling = abs
+	}
+	return append(env, "GIT_CEILING_DIRECTORIES="+ceiling)
+}
+
+func absoluteGitDir(repo string) (string, error) {
+	cmd := exec.Command("git", "-C", repo, "--no-optional-locks", "rev-parse", "--absolute-git-dir")
+	cmd.Env = gitTestEnv(repo)
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Clean(strings.TrimSpace(string(out))), nil
+}
+
+func sourceGitDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for {
+		gitPath := filepath.Join(dir, ".git")
+		info, err := os.Lstat(gitPath)
+		if err == nil {
+			if info.IsDir() {
+				return gitPath
+			}
+			raw, err := os.ReadFile(gitPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			line := strings.TrimSpace(string(raw))
+			gitdir, ok := strings.CutPrefix(line, "gitdir: ")
+			if !ok {
+				t.Fatalf("%s is not a gitdir file", gitPath)
+			}
+			if !filepath.IsAbs(gitdir) {
+				gitdir = filepath.Join(dir, gitdir)
+			}
+			abs, err := filepath.Abs(gitdir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return filepath.Clean(abs)
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			t.Fatal("repository root not found")
+		}
+		dir = parent
 	}
 }
 

@@ -34,7 +34,7 @@ func actionPins(t *testing.T, name, workflow string) []string {
 
 func gitShowAt(t *testing.T, rev, rel string) (string, error) {
 	t.Helper()
-	out, err := exec.Command("git", "-C", filepath.Join("..", ".."), "show", rev+":"+rel).Output()
+	out, err := exec.Command("git", "-C", filepath.Join("..", ".."), "--no-optional-locks", "show", rev+":"+rel).Output()
 	var exit *exec.ExitError
 	if errors.As(err, &exit) {
 		return "", errors.New(strings.TrimSpace(string(exit.Stderr)))

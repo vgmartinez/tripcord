@@ -16,17 +16,17 @@ func TestWorkflowPinNamesReusableWorkflow(t *testing.T) {
 	if err != nil {
 		t.Skip("git is not installed")
 	}
-	shallow, err := exec.Command(git, "rev-parse", "--is-shallow-repository").Output()
+	shallow, err := exec.Command(git, "--no-optional-locks", "rev-parse", "--is-shallow-repository").Output()
 	if err != nil {
 		t.Skip("not a git checkout")
 	}
 	if strings.TrimSpace(string(shallow)) == "true" {
 		t.Skip("shallow clone: the pinned commit may be missing")
 	}
-	if out, err := exec.Command(git, "cat-file", "-e", WorkflowPin+":.github/workflows/tripcord-pr.yml").CombinedOutput(); err != nil {
+	if out, err := exec.Command(git, "--no-optional-locks", "cat-file", "-e", WorkflowPin+":.github/workflows/tripcord-pr.yml").CombinedOutput(); err != nil {
 		t.Fatalf("%s has no .github/workflows/tripcord-pr.yml: %v %s", WorkflowPin, err, out)
 	}
-	if out, err := exec.Command(git, "merge-base", "--is-ancestor", WorkflowPin, "HEAD").CombinedOutput(); err != nil {
+	if out, err := exec.Command(git, "--no-optional-locks", "merge-base", "--is-ancestor", WorkflowPin, "HEAD").CombinedOutput(); err != nil {
 		t.Fatalf("%s is not an ancestor of HEAD: %v %s", WorkflowPin, err, out)
 	}
 }

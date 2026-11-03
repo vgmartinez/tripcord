@@ -178,7 +178,7 @@ func ListIndex(ctx context.Context, repo, indexFile string) (objs []IndexObject,
 	if _, err := exec.LookPath("git"); err != nil {
 		return nil, "", fmt.Errorf("%w: %w", ErrGitMissing, err)
 	}
-	raw, err := gitrun.RunIndexed(ctx, repo, indexFile, "ls-files", "--stage", "-z")
+	raw, err := gitrun.RunIndexed(ctx, repo, indexFile, "--no-optional-locks", "ls-files", "--stage", "-z")
 	if err != nil {
 		return nil, "", err
 	}
@@ -186,7 +186,7 @@ func ListIndex(ctx context.Context, repo, indexFile string) (objs []IndexObject,
 	if err != nil {
 		return nil, "", err
 	}
-	gitDirRaw, err := gitrun.Run(ctx, repo, "rev-parse", "--git-dir")
+	gitDirRaw, err := gitrun.Run(ctx, repo, "--no-optional-locks", "rev-parse", "--git-dir")
 	if err != nil {
 		return nil, "", err
 	}
@@ -220,7 +220,11 @@ func StagedChangeSet(ctx context.Context, repo, indexFile string) (map[string]bo
 	if err != nil {
 		return nil, err
 	}
-	raw, err := gitrun.RunIndexed(ctx, repo, indexFile, "diff-index", "--cached", "--name-status", "-z", "--no-renames", treeish)
+	// --no-optional-locks keeps this read from refreshing the index.
+	// Refreshing takes .git/index.lock and rewrites the cache-tree, which
+	// races with anything else reading that checkout, including another
+	// test process.
+	raw, err := gitrun.RunIndexed(ctx, repo, indexFile, "--no-optional-locks", "diff-index", "--cached", "--name-status", "-z", "--no-renames", treeish)
 	if err != nil {
 		return nil, err
 	}
@@ -249,13 +253,13 @@ func RefRangeChangeSet(ctx context.Context, repo, from, to string) (map[string]b
 	if _, err := exec.LookPath("git"); err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrGitMissing, err)
 	}
-	raw, err := gitrun.Run(ctx, repo, "diff", "--name-status", "-z", "--no-renames", from+"..."+to, "--")
+	raw, err := gitrun.Run(ctx, repo, "--no-optional-locks", "diff", "--name-status", "-z", "--no-renames", from+"..."+to, "--")
 	if err != nil {
 		var exitErr *gitrun.ExitError
 		if !errors.As(err, &exitErr) {
 			return nil, err
 		}
-		raw, err = gitrun.Run(ctx, repo, "diff", "--name-status", "-z", "--no-renames", from+".."+to, "--")
+		raw, err = gitrun.Run(ctx, repo, "--no-optional-locks", "diff", "--name-status", "-z", "--no-renames", from+".."+to, "--")
 		if err != nil {
 			return nil, err
 		}
@@ -282,7 +286,7 @@ func validRevision(rev string) error {
 // stdin unset, which os/exec connects to the null device, giving mktree
 // no entries to read.
 func diffBase(ctx context.Context, repo, indexFile string) (string, error) {
-	if _, err := gitrun.RunIndexed(ctx, repo, indexFile, "rev-parse", "--verify", "--quiet", "HEAD"); err != nil {
+	if _, err := gitrun.RunIndexed(ctx, repo, indexFile, "--no-optional-locks", "rev-parse", "--verify", "--quiet", "HEAD"); err != nil {
 		var exitErr *gitrun.ExitError
 		if errors.As(err, &exitErr) {
 			raw, err := gitrun.Run(ctx, repo, "mktree", "--missing")

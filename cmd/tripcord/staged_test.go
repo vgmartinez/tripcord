@@ -464,8 +464,14 @@ func stagedGit(t *testing.T, repo string, args ...string) {
 
 func stagedGitOut(t *testing.T, repo string, args ...string) string {
 	t.Helper()
-	cmd := exec.Command("git", args...)
+	if len(args) == 0 || args[0] != "init" {
+		if dir, err := absoluteGitDir(repo); err == nil && dir == sourceGitDir(t) {
+			t.Fatalf("git %s in %s uses this checkout's index (%s)", strings.Join(args, " "), repo, dir)
+		}
+	}
+	cmd := exec.Command("git", append([]string{"--no-optional-locks"}, args...)...)
 	cmd.Dir = repo
+	cmd.Env = gitTestEnv(repo)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)

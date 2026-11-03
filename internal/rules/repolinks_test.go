@@ -3,6 +3,7 @@ package rules
 import (
 	"archive/tar"
 	"bytes"
+	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -18,7 +19,8 @@ const noSymlinksHelp = "the repository must not track symlinks: GitHub's action 
 // TestNoTrackedSymlinks fails on any mode 120000 entry in the index.
 func TestNoTrackedSymlinks(t *testing.T) {
 	root := repoRoot(t)
-	for _, line := range strings.Split(gitOutput(t, root, "ls-files", "-s"), "\n") {
+	index := copyIndex(t, root)
+	for _, line := range strings.Split(gitOutput(t, root, index, "--no-optional-locks", "ls-files", "-s"), "\n") {
 		meta, path, ok := strings.Cut(line, "\t")
 		if !ok {
 			continue
@@ -34,8 +36,12 @@ func TestNoTrackedSymlinks(t *testing.T) {
 // action and only directories and regular files.
 func TestGitArchiveExtractsAction(t *testing.T) {
 	root := repoRoot(t)
-	tree := strings.TrimSpace(gitOutput(t, root, "write-tree"))
-	archive := gitStdout(t, root, "archive", "--format=tar", tree)
+	// write-tree locks .git/index and rewrites its cache-tree. Other
+	// packages' tests run in parallel and must not have to wait on, or
+	// lose to, that lock, so this uses a private copy of the index.
+	index := copyIndex(t, root)
+	tree := strings.TrimSpace(gitOutput(t, root, index, "--no-optional-locks", "write-tree"))
+	archive := gitStdout(t, root, index, "--no-optional-locks", "archive", "--format=tar", tree)
 	dest := t.TempDir()
 	tr := tar.NewReader(bytes.NewReader(archive))
 	sawAction := false
@@ -103,18 +109,47 @@ func repoRoot(t *testing.T) string {
 	}
 }
 
-func gitOutput(t *testing.T, root string, args ...string) string {
+// copyIndex is a private copy of root's index. GIT_INDEX_FILE pointing
+// at it makes read-only git commands, and write-tree, lock this file
+// instead of the checkout's .git/index, which other test processes may
+// be reading at the same time.
+func copyIndex(t *testing.T, root string) string {
 	t.Helper()
-	return string(gitStdout(t, root, args...))
+	src := strings.TrimSpace(gitOutput(t, root, "", "--no-optional-locks", "rev-parse", "--git-path", "index"))
+	if !filepath.IsAbs(src) {
+		src = filepath.Join(root, src)
+	}
+	data, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dst := filepath.Join(t.TempDir(), "index")
+	if err := os.WriteFile(dst, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return dst
 }
 
-func gitStdout(t *testing.T, root string, args ...string) []byte {
+func gitOutput(t *testing.T, root, index string, args ...string) string {
+	t.Helper()
+	return string(gitStdout(t, root, index, args...))
+}
+
+func gitStdout(t *testing.T, root, index string, args ...string) []byte {
 	t.Helper()
 	cmd := exec.Command("git", args...)
 	cmd.Dir = root
+	if index != "" {
+		cmd.Env = append(os.Environ(), "GIT_INDEX_FILE="+index)
+	}
 	out, err := cmd.Output()
 	if err != nil {
-		t.Fatalf("git %s: %v", strings.Join(args, " "), err)
+		stderr := ""
+		var exit *exec.ExitError
+		if errors.As(err, &exit) {
+			stderr = strings.TrimSpace(string(exit.Stderr))
+		}
+		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, stderr)
 	}
 	return out
 }
