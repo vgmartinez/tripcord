@@ -75,6 +75,14 @@ func (e *bootstrapEnv) putCache(t *testing.T, content string) {
 
 func (e *bootstrapEnv) run(t *testing.T, args ...string) (int, string) {
 	t.Helper()
+	code, stdout, stderr := e.runSplit(t, args...)
+	return code, stdout + stderr
+}
+
+// runSplit runs bootstrap.sh and returns its stdout and stderr apart,
+// since harnesses parse stdout.
+func (e *bootstrapEnv) runSplit(t *testing.T, args ...string) (int, string, string) {
+	t.Helper()
 	cmd := exec.Command("sh", append([]string{filepath.Join(e.repo, BootstrapPath)}, args...)...)
 	cmd.Env = append([]string{
 		"PATH=" + e.stubs + string(os.PathListSeparator) + os.Getenv("PATH"),
@@ -83,16 +91,18 @@ func (e *bootstrapEnv) run(t *testing.T, args ...string) (int, string) {
 		"TMPDIR=" + t.TempDir(),
 		"TRIPCORD_TEST_ARGS=" + e.args,
 	}, e.extraEnv...)
-	out, err := cmd.CombinedOutput()
+	var stdout, stderr strings.Builder
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	err := cmd.Run()
 	var exit *exec.ExitError
 	switch {
 	case err == nil:
-		return 0, string(out)
+		return 0, stdout.String(), stderr.String()
 	case errors.As(err, &exit):
-		return exit.ExitCode(), string(out)
+		return exit.ExitCode(), stdout.String(), stderr.String()
 	default:
 		t.Fatal(err)
-		return 0, ""
+		return 0, "", ""
 	}
 }
 
@@ -121,35 +131,140 @@ func TestBootstrapScriptHasNoUnpinnedFetch(t *testing.T) {
 			t.Errorf("bootstrap.sh contains %q", banned)
 		}
 	}
-	for _, want := range []string{"set -eu", "TRIPCORD_INSTALL_SOURCES='npm pypi cache'", "mktemp -d", "chmod 0700 \"$tmp\"", "TRIPCORD_VERSION='0.1.0'"} {
+	for _, want := range []string{"set -eu", `TRIPCORD_INSTALL_SOURCES="${TRIPCORD_INSTALL_SOURCES:-npm pypi cache}"`, "mktemp -d", "chmod 0700 \"$tmp\"", "TRIPCORD_VERSION='0.1.0'", `exec "$cached" hook "$@"`} {
 		if !strings.Contains(script, want) {
 			t.Errorf("bootstrap.sh lacks %q", want)
 		}
 	}
+	for _, banned := range []string{"GITHUB_PATH", "CLAUDE_ENV_FILE", "export PATH"} {
+		if strings.Contains(code.String(), banned) {
+			t.Errorf("bootstrap.sh edits PATH via %q; hooks must run the cached binary by absolute path", banned)
+		}
+	}
 }
 
-func TestBootstrapUsesVerifiedCache(t *testing.T) {
+// fakeScanBinary records its arguments and writes to stdout, which
+// bootstrap.sh must keep off the harness's stdout.
+const fakeScanBinary = "#!/bin/sh\nprintf '%s\\n' \"$@\" >\"$TRIPCORD_TEST_ARGS\"\necho 'scan report'\n"
+
+func TestBootstrapSessionStartUsesVerifiedCache(t *testing.T) {
+	for _, tc := range []struct {
+		args   []string
+		stdout string
+	}{
+		{[]string{"session-start"}, ""},
+		{[]string{"session-start", "--harness", "claude"}, ""},
+		{[]string{"session-start", "--harness", "copilot"}, ""},
+		{[]string{"session-start", "--harness", "cursor"}, "{}\n"},
+		{[]string{"install"}, ""},
+	} {
+		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
+			e := newBootstrapEnv(t, map[string]string{hostPlatform(t): sum(fakeScanBinary)})
+			e.putCache(t, fakeScanBinary)
+			code, stdout, stderr := e.runSplit(t, tc.args...)
+			if code != 0 {
+				t.Fatalf("exit %d: %s", code, stderr)
+			}
+			root, err := filepath.EvalSymlinks(e.repo)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := e.ran(t); got != "scan\n--config\n"+root+"\n" {
+				t.Fatalf("binary ran with %q", got)
+			}
+			if stdout != tc.stdout {
+				t.Errorf("stdout = %q, want %q", stdout, tc.stdout)
+			}
+			if !strings.Contains(stderr, "scan report") {
+				t.Errorf("scan output missing from stderr: %q", stderr)
+			}
+		})
+	}
+}
+
+func TestBootstrapCursorSessionStartFailureKeepsJSON(t *testing.T) {
 	e := newBootstrapEnv(t, nil)
-	e.putCache(t, fakeBinary)
-	githubPath := filepath.Join(t.TempDir(), "path")
-	claudeEnv := filepath.Join(t.TempDir(), "env")
-	e.extraEnv = []string{"GITHUB_PATH=" + githubPath, "CLAUDE_ENV_FILE=" + claudeEnv}
-	code, out := e.run(t, "session-start")
+	code, stdout, stderr := e.runSplit(t, "session-start", "--harness", "cursor")
+	if code == 0 || stdout != "{}\n" || !strings.Contains(stderr, "matching SHA-256") {
+		t.Fatalf("exit %d, stdout %q, stderr %q", code, stdout, stderr)
+	}
+}
+
+func TestBootstrapHookExecsCachedBinary(t *testing.T) {
+	const echoBinary = "#!/bin/sh\nprintf '%s\\n' \"$@\" >\"$TRIPCORD_TEST_ARGS\"\nprintf '{\"permission\":\"allow\"}\\n'\n"
+	e := newBootstrapEnv(t, map[string]string{hostPlatform(t): sum(echoBinary)})
+	e.putCache(t, echoBinary)
+	code, stdout, stderr := e.runSplit(t, "hook", "--harness", "cursor", "--event", HookEvent)
 	if code != 0 {
-		t.Fatalf("exit %d: %s", code, out)
+		t.Fatalf("exit %d: %s", code, stderr)
 	}
-	root, err := filepath.EvalSymlinks(e.repo)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := e.ran(t); got != "scan\n--config\n"+root+"\n" {
+	if got := e.ran(t); got != "hook\n--harness\ncursor\n--event\n"+HookEvent+"\n" {
 		t.Fatalf("binary ran with %q", got)
 	}
-	if raw, _ := os.ReadFile(githubPath); string(raw) != filepath.Dir(e.cached())+"\n" {
-		t.Errorf("GITHUB_PATH = %q", raw)
+	if stdout != `{"permission":"allow"}`+"\n" || stderr != "" {
+		t.Fatalf("stdout %q, stderr %q", stdout, stderr)
 	}
-	if raw, _ := os.ReadFile(claudeEnv); !strings.HasPrefix(string(raw), "export PATH='"+filepath.Dir(e.cached())+"':") {
-		t.Errorf("CLAUDE_ENV_FILE = %q", raw)
+}
+
+func TestBootstrapHookNeverInstalls(t *testing.T) {
+	for name, setup := range map[string]func(*testing.T, *bootstrapEnv){
+		"no cache":       func(*testing.T, *bootstrapEnv) {},
+		"tampered cache": func(t *testing.T, e *bootstrapEnv) { e.putCache(t, fakeBinary+"# tampered\n") },
+	} {
+		t.Run(name, func(t *testing.T) {
+			e := newBootstrapEnv(t, nil)
+			npmRan := filepath.Join(t.TempDir(), "npm-ran")
+			e.stub(t, "npm", "#!/bin/sh\ntouch '"+npmRan+"'\nexit 1\n")
+			setup(t, e)
+			code, stdout, stderr := e.runSplit(t, "hook", "--harness", "claude", "--event", HookEvent)
+			if code == 0 || stdout != "" || !strings.Contains(stderr, "bootstrap.sh install") || e.ran(t) != "" {
+				t.Fatalf("exit %d, stdout %q, stderr %q", code, stdout, stderr)
+			}
+			if _, err := os.Stat(npmRan); !errors.Is(err, os.ErrNotExist) {
+				t.Fatal("hook mode tried to install")
+			}
+		})
+	}
+}
+
+func TestBootstrapInstallSourcesOverride(t *testing.T) {
+	t.Run("cache only skips npm", func(t *testing.T) {
+		e := newBootstrapEnv(t, nil)
+		e.putCache(t, fakeBinary)
+		npmRan := filepath.Join(t.TempDir(), "npm-ran")
+		e.stub(t, "npm", "#!/bin/sh\ntouch '"+npmRan+"'\nexit 1\n")
+		e.extraEnv = []string{"TRIPCORD_INSTALL_SOURCES=cache"}
+		if code, out := e.run(t, "install"); code != 0 {
+			t.Fatalf("exit %d: %s", code, out)
+		}
+		if _, err := os.Stat(npmRan); !errors.Is(err, os.ErrNotExist) {
+			t.Fatal("npm ran although TRIPCORD_INSTALL_SOURCES=cache")
+		}
+	})
+	t.Run("npm only ignores the cache", func(t *testing.T) {
+		e := newBootstrapEnv(t, nil)
+		e.putCache(t, fakeBinary)
+		e.extraEnv = []string{"TRIPCORD_INSTALL_SOURCES=npm"}
+		if code, out := e.run(t, "install"); code == 0 || !strings.Contains(out, "tried: npm") || e.ran(t) != "" {
+			t.Fatalf("exit %d: %s", code, out)
+		}
+	})
+	t.Run("unknown source", func(t *testing.T) {
+		e := newBootstrapEnv(t, nil)
+		e.putCache(t, fakeBinary)
+		e.extraEnv = []string{"TRIPCORD_INSTALL_SOURCES=cache https://example.invalid"}
+		if code, out := e.run(t, "install"); code != 3 || !strings.Contains(out, "unknown install source") || e.ran(t) != "" {
+			t.Fatalf("exit %d: %s", code, out)
+		}
+	})
+}
+
+func TestBootstrapRejectsRelativeCacheRoot(t *testing.T) {
+	e := newBootstrapEnv(t, nil)
+	e.putCache(t, fakeBinary)
+	e.extraEnv = []string{"XDG_CACHE_HOME=relative/cache"}
+	if code, out := e.run(t, "install"); code != 3 || !strings.Contains(out, "absolute path") || e.ran(t) != "" {
+		t.Fatalf("exit %d: %s", code, out)
 	}
 }
 

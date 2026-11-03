@@ -82,18 +82,28 @@ const bootstrapTemplate = `#!/bin/sh
 #   tripcord init --embed --force --version <v> --sha256 <os-arch>=<hex>
 #
 # Installs the pinned Tripcord release, checks the binary against the
-# pinned SHA-256, and runs tripcord scan --config on this repository.
-# It fails closed: an unpinned platform, no network, or a checksum
-# mismatch exits non-zero, and no unverified binary is ever run. There
-# is no fallback to another version, to latest, or to curl | sh.
+# pinned SHA-256, and runs it. It fails closed: an unpinned platform, no
+# network, or a checksum mismatch exits non-zero, and no unverified
+# binary is ever run. There is no fallback to another version, to
+# latest, or to curl | sh. tripcord scan compares this file with the
+# pin recorded in .tripcord/embed.json (TC-CFG-016); do not edit it.
 #
-# Usage: bash .tripcord/bootstrap.sh install|session-start
+# Usage:
+#   bash .tripcord/bootstrap.sh install
+#   bash .tripcord/bootstrap.sh session-start [--harness claude|cursor|copilot]
+#   bash .tripcord/bootstrap.sh hook --harness <h> --event <e>
+#
+# install and session-start install the release and run
+# tripcord scan --config. hook runs the installed binary's hook mode by
+# absolute path and never installs. Diagnostics and scan output go to
+# stderr; stdout carries only what the harness reads: {} for a Cursor
+# session start, and the binary's own output in hook mode.
 set -eu
 
 TRIPCORD_VERSION='@VERSION@'
 
 # ---------------------------------------------------------------------
-# Install source. Tried in order; every candidate is verified against
+# Install sources, tried in order. Every candidate is verified against
 # the pinned SHA-256 before it is used.
 #   npm    npm pack @tripcord/cli-<os>-<arch>@<version> from the
 #          configured npm registry
@@ -101,26 +111,61 @@ TRIPCORD_VERSION='@VERSION@'
 #   cache  a binary already in the cache directory (for example, one a
 #          cloud agent snapshot kept)
 # The npm and PyPI packages are pending the distribution pipeline and
-# are not published yet; until they are, only cache can succeed.
-TRIPCORD_INSTALL_SOURCES='npm pypi cache'
+# are not published yet; until they are, only cache can succeed. Set
+# TRIPCORD_INSTALL_SOURCES in the environment, to a space-separated
+# subset of these, to change the order or skip a source for one run.
+TRIPCORD_INSTALL_SOURCES="${TRIPCORD_INSTALL_SOURCES:-npm pypi cache}"
 # ---------------------------------------------------------------------
+
+emit_json=''
+tmp=''
+on_exit() {
+  status=$?
+  if [ -n "$tmp" ]; then
+    rm -rf "$tmp"
+  fi
+  if [ -n "$emit_json" ]; then
+    printf '{}\n'
+  fi
+  exit "$status"
+}
+trap on_exit EXIT
+trap 'exit 1' HUP INT TERM
 
 fail() {
   printf 'tripcord bootstrap: %s\n' "$1" >&2
   exit "${2:-1}"
 }
 
+usage='usage: bootstrap.sh install | session-start [--harness claude|cursor|copilot] | hook --harness <h> --event <e>'
+mode="${1:-}"
+case "$mode" in
+  install)
+    [ "$#" -eq 1 ] || fail "$usage" 2
+    ;;
+  session-start)
+    case "$#:${2:-}" in
+      1:) ;;
+      3:--harness)
+        case "$3" in
+          cursor) emit_json=1 ;;
+          claude|copilot) ;;
+          *) fail "$usage" 2 ;;
+        esac
+        ;;
+      *) fail "$usage" 2 ;;
+    esac
+    ;;
+  hook) ;;
+  *) fail "$usage" 2 ;;
+esac
+shift
+
 pinned_sha256() {
   case "$1" in
 @CASES@    *) return 1 ;;
   esac
 }
-
-mode="${1:-}"
-case "$mode" in
-  install|session-start) ;;
-  *) fail "usage: bootstrap.sh install|session-start" 2 ;;
-esac
 
 case "$(uname -s)" in
   Linux) os=linux ;;
@@ -164,14 +209,28 @@ verified() {
 script_dir="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)"
 repo_root="$(CDPATH='' cd -- "$script_dir/.." && pwd -P)"
 cache_root="${XDG_CACHE_HOME:-${HOME:?HOME is not set}/.cache}"
+case "$cache_root" in
+  /*) ;;
+  *) fail "the cache directory must be an absolute path: $cache_root" 3 ;;
+esac
 cache_dir="$cache_root/tripcord/$TRIPCORD_VERSION/$platform"
 cached="$cache_dir/tripcord"
+
+if [ "$mode" = hook ]; then
+  verified "$cached" || fail "tripcord $TRIPCORD_VERSION for $platform is not installed with a matching SHA-256; run bash .tripcord/bootstrap.sh install"
+  exec "$cached" hook "$@"
+fi
+
+for source in $TRIPCORD_INSTALL_SOURCES; do
+  case "$source" in
+    npm|pypi|cache) ;;
+    *) fail "unknown install source: $source (want npm, pypi, or cache)" 3 ;;
+  esac
+done
 
 umask 077
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/tripcord-bootstrap.XXXXXX")"
 chmod 0700 "$tmp"
-trap 'rm -rf "$tmp"' EXIT
-trap 'exit 1' HUP INT TERM
 
 fetch_npm() {
   command -v npm >/dev/null 2>&1 || return 1
@@ -228,7 +287,6 @@ for source in $TRIPCORD_INSTALL_SOURCES; do
     npm) fetch_npm || continue ;;
     pypi) fetch_pypi || continue ;;
     cache) fetch_cache || continue ;;
-    *) fail "unknown install source: $source" 3 ;;
   esac
   found="$source"
   break
@@ -245,15 +303,5 @@ if [ "$found" != cache ]; then
   verified "$cached" || fail "installed binary does not match the pinned SHA-256"
 fi
 
-if [ -n "${GITHUB_PATH:-}" ]; then
-  printf '%s\n' "$cache_dir" >>"$GITHUB_PATH"
-fi
-if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
-  case "$cache_dir" in
-    *"'"*) fail "cache directory contains a single quote: $cache_dir" 3 ;;
-  esac
-  printf "export PATH='%s':\"\$PATH\"\n" "$cache_dir" >>"$CLAUDE_ENV_FILE"
-fi
-
-"$cached" scan --config "$repo_root"
+"$cached" scan --config "$repo_root" >&2
 `
