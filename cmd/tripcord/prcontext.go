@@ -586,7 +586,7 @@ func loadPrContextPolicyFrom(ctx context.Context, repo, base, managed string) (*
 		return nil, err
 	}
 	defer func() { _ = os.RemoveAll(root) }()
-	if err := materializeBasePolicy(ctx, repo, base, root); err != nil {
+	if err := materializeBasePolicy(ctx, repo, base, root, policy.RepoFile, false); err != nil {
 		return nil, err
 	}
 	opts := policy.Options{
@@ -608,13 +608,18 @@ func loadPrContextPolicyFrom(ctx context.Context, repo, base, managed string) (*
 // same thing for the root file. Other git failures stay errors.
 var errBaseUnavailable = errors.New("base revision is not available")
 
-// materializeBasePolicy writes <base>:.tripcord/policy.yaml and the
-// relative files it extends into dest, using paths relative to the
-// repository root. A missing file, a missing base, or a directory that
-// is not a git repository leaves dest empty. policy.local.yaml is never
-// written. Absolute extends are left for policy.Load, which reads them
-// from the machine rather than the checkout.
-func materializeBasePolicy(ctx context.Context, repo, base, dest string) error {
+// materializeBasePolicy writes <base>:rel and the relative files it
+// extends into dest, using paths relative to the repository root. rel
+// is policy.RepoFile for the implicit repository policy, or an explicit
+// --policy path already resolved inside the repository. required marks
+// rel itself as required (an explicit --policy path) or not (the
+// implicit policy.yaml, which is optional). A missing file, a missing
+// base, or a directory that is not a git repository leaves dest empty
+// when rel is not required, or is an error when it is.
+// policy.local.yaml is never written, whichever rel names. Absolute
+// extends are left for policy.Load, which reads them from the machine
+// rather than the checkout.
+func materializeBasePolicy(ctx context.Context, repo, base, dest, rel string, required bool) error {
 	seen := map[string]bool{}
 	var walk func(rel string, required bool, depth int) error
 	walk = func(rel string, required bool, depth int) error {
@@ -666,7 +671,7 @@ func materializeBasePolicy(ctx context.Context, repo, base, dest string) error {
 		}
 		return nil
 	}
-	return walk(policy.RepoFile, false, 0)
+	return walk(rel, required, 0)
 }
 
 func repoRelExtend(from, entry string) (string, error) {

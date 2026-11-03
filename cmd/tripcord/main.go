@@ -371,7 +371,11 @@ func scanTree(ctx context.Context, t scanTarget, opts scanOptions, stdout, stder
 	// The change's own policy is loaded only to report how it weakens
 	// the base's (TC-CFG-016).
 	var headPolicy *policy.Effective
-	if baseSHA != "" && opts.policy == "" {
+	switch {
+	case baseSHA == "":
+		// below: no base, so no change to compare the head's policy
+		// with. The head's own policy.local.yaml handling above stands.
+	case opts.policy == "":
 		headOpts := policyOpts
 		headOpts.SkipLocal = true
 		if headPolicy, err = policy.Load(headOpts); err != nil {
@@ -382,10 +386,27 @@ func scanTree(ctx context.Context, t scanTarget, opts scanOptions, stdout, stder
 			return t.internalError(stderr, err)
 		}
 		defer func() { _ = os.RemoveAll(dir) }()
-		if err := materializeBasePolicy(ctx, root, baseSHA, dir); err != nil {
+		if err := materializeBasePolicy(ctx, root, baseSHA, dir, policy.RepoFile, false); err != nil {
 			return t.configError(stderr, err)
 		}
 		policyOpts.RepoRoot, policyOpts.SkipLocal = dir, true
+	default:
+		// An explicit --policy file inside the repository is read from
+		// the base the same way: the change under review must not be
+		// able to pick its own, weaker, explicit policy either. A path
+		// outside the repository (a shared, machine-local, or managed
+		// file) is used as given, the same as without a base.
+		if rel, ok := policyPathInRepo(root, opts.policy); ok {
+			dir, err := os.MkdirTemp("", "tripcord-base-policy-")
+			if err != nil {
+				return t.internalError(stderr, err)
+			}
+			defer func() { _ = os.RemoveAll(dir) }()
+			if err := materializeBasePolicy(ctx, root, baseSHA, dir, rel, true); err != nil {
+				return t.configError(stderr, err)
+			}
+			policyOpts.RepoPolicy, policyOpts.SkipLocal = filepath.Join(dir, filepath.FromSlash(rel)), true
+		}
 	}
 	effective, err := policy.Load(policyOpts)
 	if err != nil {
@@ -868,6 +889,28 @@ func baseReader(ctx context.Context, root, sha string) func(string) ([]byte, err
 		}
 		return data, err
 	}
+}
+
+// policyPathInRepo resolves an explicit --policy path (given, like any
+// other file argument, relative to the working directory, not
+// necessarily root) and reports the repository-relative path when it
+// resolves inside root. Only a path inside the repository is read from
+// the base revision instead of the working tree; one outside it (a
+// shared, machine-local, or managed file) is used as given.
+func policyPathInRepo(root, policyPath string) (string, bool) {
+	abs, err := filepath.Abs(policyPath)
+	if err != nil {
+		return "", false
+	}
+	rel, err := filepath.Rel(root, abs)
+	if err != nil {
+		return "", false
+	}
+	rel = filepath.ToSlash(rel)
+	if rel == "." || rel == ".." || strings.HasPrefix(rel, "../") {
+		return "", false
+	}
+	return rel, true
 }
 
 // trackedIn reports whether root's git index holds rel. Outside a git
