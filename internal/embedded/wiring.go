@@ -31,6 +31,7 @@ const (
 	CopilotSetupStepsPath = ".github/workflows/copilot-setup-steps.yml"
 	DevinBlueprintPath    = ".devin/blueprint.yaml"
 	AgentsPath            = "AGENTS.md"
+	GitattributesPath     = ".gitattributes"
 )
 
 // ManifestSchema is the schema id of .tripcord/embed.json.

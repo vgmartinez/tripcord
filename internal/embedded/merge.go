@@ -30,10 +30,59 @@ func unmergeablef(format string, args ...any) error {
 
 // ownFile is a file only Tripcord writes: it must equal want.
 func ownFile(old []byte, exists bool, want []byte, force bool, hint string) ([]byte, error) {
-	if !exists || bytes.Equal(old, want) || force {
+	if !exists || bytes.Equal(lf(old), want) || force {
 		return want, nil
 	}
 	return nil, conflictf("the file differs from what init writes; %s", hint)
+}
+
+// lf is b with CRLF line endings converted to LF: the form init writes
+// and the check hashes, whatever core.autocrlf did to the checkout.
+func lf(b []byte) []byte {
+	return bytes.ReplaceAll(b, []byte("\r\n"), []byte("\n"))
+}
+
+const gitattributesComment = "# Tripcord embed: bash needs LF, and tripcord scan hashes these files."
+
+// gitattributesLines keep the files only init writes LF in every
+// checkout, including a Windows one with core.autocrlf.
+func gitattributesLines() []string {
+	var lines []string
+	for _, p := range []string{BootstrapPath, ManifestPath, WorkflowPath, CopilotHooksPath} {
+		lines = append(lines, "/"+p+" text eol=lf")
+	}
+	return lines
+}
+
+// mergeGitattributes appends the lines of gitattributesLines that old
+// does not already have. Later lines win in .gitattributes, so appending
+// them overrides an earlier pattern that matches these files.
+func mergeGitattributes(old []byte, exists bool) ([]byte, error) {
+	text := string(old)
+	have := map[string]bool{}
+	for _, line := range strings.Split(string(lf(old)), "\n") {
+		have[strings.TrimSpace(line)] = true
+	}
+	var add []string
+	for _, line := range gitattributesLines() {
+		if !have[line] {
+			add = append(add, line)
+		}
+	}
+	if len(add) == 0 {
+		return old, nil
+	}
+	if !have[gitattributesComment] {
+		add = append([]string{gitattributesComment}, add...)
+	}
+	eol := "\n"
+	if strings.Contains(text, "\r\n") {
+		eol = "\r\n"
+	}
+	if exists && text != "" && !strings.HasSuffix(text, "\n") {
+		text += eol
+	}
+	return []byte(text + strings.Join(add, eol) + eol), nil
 }
 
 // hookFile describes a JSON file of hook arrays keyed by event.

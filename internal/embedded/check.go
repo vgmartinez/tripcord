@@ -289,8 +289,8 @@ type checker struct {
 	// harnesses those pieces name, not harnesses nothing wired.
 	leftover *leftover
 	only     []model.Harness
-	items      []model.ConfigItem
-	err        error
+	items    []model.ConfigItem
+	err      error
 }
 
 func (c *checker) selected(h model.Harness) bool {
@@ -376,7 +376,7 @@ func (c *checker) ownFile(subject, path string, render func(Manifest) []byte) {
 		c.add(model.SurfaceGeneric, path, subject, "", StateUnreadable, nil, nil)
 	case c.head.manifestOK:
 		want := digest(render(c.head.manifest))
-		if state := compare(digest(f.raw), want, c.head.manifest.recordedFile(path, "")); state != "" {
+		if state := compare(digest(lf(f.raw)), want, c.head.manifest.recordedFile(path, "")); state != "" {
 			c.add(model.SurfaceGeneric, path, subject, "", state, f.raw, nil)
 		}
 	}

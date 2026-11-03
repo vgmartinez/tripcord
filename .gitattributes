@@ -1,1 +1,2 @@
 internal/adapters/claude/testdata/** -text
+rules/TC-CFG-016.test/negativos/embed-crlf-checkout/** -text

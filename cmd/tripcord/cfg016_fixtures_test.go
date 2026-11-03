@@ -94,6 +94,22 @@ func removeFile(rel string) func(*testing.T, string) {
 	}
 }
 
+// crlf converts rel to CRLF line endings, the way a Windows checkout
+// with core.autocrlf writes it.
+func crlf(rel string) func(*testing.T, string) {
+	return func(t *testing.T, dir string) {
+		t.Helper()
+		p := filepath.Join(dir, filepath.FromSlash(rel))
+		raw, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(strings.ReplaceAll(string(raw), "\n", "\r\n")), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func replaceInFile(rel, old, replacement string) func(*testing.T, string) {
 	return func(t *testing.T, dir string) {
 		t.Helper()
@@ -176,6 +192,9 @@ var cfg016Fixtures = map[string]cfg016Fixture{
 				t.Fatalf("re-pin: exit %d: %s", code, stderr)
 			}
 		}},
+	"embed-crlf-checkout": {kind: "negativos", args: embedArgs("--harness", "claude"), edit: edits(
+		removeFile(embedded.GitattributesPath),
+		crlf(embedded.BootstrapPath), crlf(embedded.ManifestPath), crlf(embedded.WorkflowPath), crlf(embedded.ClaudeSettingsPath))},
 	"embed-fresh":       {kind: "negativos", args: embedArgs()},
 	"embed-claude-only": {kind: "negativos", args: embedArgs("--harness", "claude")},
 	"no-embed":          {kind: "negativos", edit: userRepo},

@@ -136,7 +136,7 @@ func TestInitEmbedIdempotent(t *testing.T) {
 	want := []string{
 		embedded.AgentsPath, embedded.ClaudeSettingsPath, embedded.CursorEnvironmentPath, embedded.CursorHooksPath,
 		embedded.DevinBlueprintPath, embedded.CopilotHooksPath, embedded.CopilotSetupStepsPath, embedded.WorkflowPath,
-		embedded.BootstrapPath, embedded.ManifestPath, embedded.PolicyPath,
+		embedded.BootstrapPath, embedded.ManifestPath, embedded.PolicyPath, embedded.GitattributesPath,
 	}
 	if got := slices.Sorted(maps.Keys(first)); !slices.Equal(got, slices.Sorted(slices.Values(want))) {
 		t.Fatalf("files = %v", got)
@@ -274,7 +274,7 @@ func TestInitHarnessLimitsWiring(t *testing.T) {
 	}
 	files := snapshot(t, dir)
 	got := slices.Sorted(maps.Keys(files))
-	want := []string{".claude/settings.json", ".github/workflows/tripcord.yml", ".tripcord/bootstrap.sh", ".tripcord/embed.json", ".tripcord/policy.yaml"}
+	want := []string{".claude/settings.json", ".gitattributes", ".github/workflows/tripcord.yml", ".tripcord/bootstrap.sh", ".tripcord/embed.json", ".tripcord/policy.yaml"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("files = %v, want %v", got, want)
 	}
