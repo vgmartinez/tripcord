@@ -14,6 +14,13 @@ default `path` of `.` does not include Tripcord's own tree. Set
 `binary` to an existing executable to skip the build.
 `actions/setup-go` caches modules for the build.
 
+`path` is a directory in the workspace. A path inside a Git repository
+scans that whole repository from its git root; it does not narrow
+discovery to the directory. Monorepo scoping is tracked in
+[#59](https://github.com/vgmartinez/tripcord/issues/59). The action
+fails before the scan when `path` is empty, does not exist, is not a
+directory, or is an empty directory.
+
 An empty `fail-on` leaves the threshold to the CLI and the repository
 policy. The action passes `--fail-on` only when the caller sets the
 input. The CLI default is enforce mode with fail-on `high`. A locked
@@ -57,8 +64,9 @@ upload code scanning results. None of these cases fails the job.
 
 ## Inputs and permissions
 
-`path` defaults to `.` and `upload-sarif` defaults to `true`. Set
-`comment: true` to create or update a marked Markdown comment on
+`path` defaults to `.`. As above, a path inside a Git repository scans
+that repository from its git root. `upload-sarif` defaults to `true`.
+Set `comment: true` to create or update a marked Markdown comment on
 pull-request events.
 
 A job that calls the composite action directly needs

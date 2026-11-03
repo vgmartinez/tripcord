@@ -317,18 +317,118 @@ jobs:
           fi
           echo "DCO sign-off present on ${#commits[@]} commit(s)."
 
-  tripcord:
-    name: Tripcord
+  tripcord-caller:
+    name: Tripcord caller
     if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read # checkout the repository being scanned
       pull-requests: read # read pull request reviews
       security-events: write # upload the SARIF report
-    uses: ./.github/workflows/tripcord-pr.yml # zizmor: ignore[self-repository] local reusable workflow
-    with:
-      path: tripcord-ci-fixture
-      fail-on: critical
-      assert-fixture: enabled
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Read pull request reviews
+        id: reviews
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const fs = require("fs");
+            const path = require("path");
+            try {
+              const pullRequest = context.payload.pull_request;
+              if (!pullRequest || !pullRequest.number) {
+                core.warning("Tripcord reviews skipped: this event has no pull request.");
+                return;
+              }
+              const { owner, repo } = context.repo;
+              const reviews = await github.paginate(github.rest.pulls.listReviews, {
+                owner,
+                repo,
+                pull_number: pullRequest.number,
+                per_page: 100,
+              });
+              const file = path.join(process.env.RUNNER_TEMP, "tripcord-reviews.json");
+              fs.writeFileSync(file, JSON.stringify(reviews));
+              core.setOutput("reviews-file", file);
+            } catch {
+              core.warning("Tripcord reviews skipped: unable to read pull request reviews.");
+            }
+
+      - name: Tripcord
+        id: tripcord
+        continue-on-error: true
+        uses: vgmartinez/tripcord/.github/actions/tripcord@141db48dc10a3df719b20cf2f357e184d629c046 # main@141db48 # zizmor: ignore[ref-version-mismatch]
+        with:
+          path: testdata/ci-caller
+          reviews-file: ${{ steps.reviews.outputs.reviews-file }}
+
+      - name: Assert remote scan
+        shell: bash
+        env:
+          TRIPCORD_OUTCOME: ${{ steps.tripcord.outcome }}
+          TRIPCORD_EXIT: ${{ steps.tripcord.outputs.scan-exit-code }}
+          TRIPCORD_SARIF: ${{ steps.tripcord.outputs.sarif }}
+          TRIPCORD_PR_EXIT: ${{ steps.tripcord.outputs.pr-context-exit-code }}
+          TRIPCORD_IS_AGENT: ${{ steps.tripcord.outputs.is_agent }}
+        run: |
+          set -euo pipefail
+          echo "assertion outcome=${TRIPCORD_OUTCOME}"
+          echo "assertion scan-exit-code=${TRIPCORD_EXIT}"
+          echo "assertion pr-context-exit-code=${TRIPCORD_PR_EXIT}"
+          echo "assertion is_agent=${TRIPCORD_IS_AGENT}"
+          if [ "$TRIPCORD_OUTCOME" != "failure" ]; then
+            echo "assertion failed: outcome is not failure" >&2
+            exit 1
+          fi
+          echo "assertion passed: outcome is failure"
+          if [ "$TRIPCORD_EXIT" != "1" ]; then
+            echo "assertion failed: scan exit-code is not 1" >&2
+            exit 1
+          fi
+          echo "assertion passed: scan exit-code is 1"
+          case "$TRIPCORD_PR_EXIT" in
+            0|1)
+              echo "assertion passed: pr-context exit is ${TRIPCORD_PR_EXIT}"
+              ;;
+            *)
+              echo "assertion failed: pr-context exit ${TRIPCORD_PR_EXIT} is not 0 or 1" >&2
+              exit 1
+              ;;
+          esac
+          case "$TRIPCORD_IS_AGENT" in
+            true|false)
+              echo "assertion passed: pr-context produced is_agent=${TRIPCORD_IS_AGENT}"
+              ;;
+            *)
+              echo "assertion failed: pr-context produced no is_agent output" >&2
+              exit 1
+              ;;
+          esac
+          python3 - "$TRIPCORD_SARIF" <<'PY'
+          import json, sys
+          path = sys.argv[1]
+          with open(path, encoding="utf-8") as fh:
+              doc = json.load(fh)
+          hits = []
+          for run in doc.get("runs", []):
+              for result in run.get("results", []):
+                  if result.get("ruleId") != "TC-CFG-001":
+                      continue
+                  for loc in result.get("locations") or []:
+                      uri = (((loc.get("physicalLocation") or {}).get("artifactLocation") or {}).get("uri") or "")
+                      norm = uri.replace("\\", "/")
+                      if norm == "testdata/ci-caller" or norm.startswith("testdata/ci-caller/"):
+                          hits.append(norm)
+          if not hits:
+              sys.exit("assertion failed: SARIF has no TC-CFG-001 location under testdata/ci-caller/")
+          print("assertion passed: SARIF TC-CFG-001 at " + hits[0])
+          PY
 
   local-action:
     name: local action
@@ -340,9 +440,13 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Prepare empty scan directory
+      - name: Prepare scan directory
         shell: bash
-        run: mkdir -p -- "${RUNNER_TEMP}/tripcord-ci"
+        run: |
+          set -euo pipefail
+          dir="${RUNNER_TEMP}/tripcord-ci"
+          mkdir -p -- "$dir"
+          printf 'ci scan placeholder\n' > "$dir/README"
 
       - name: Tripcord
         uses: ./.github/actions/tripcord # zizmor: ignore[self-repository] load this checkout's action

@@ -58,6 +58,28 @@ outputs:
 runs:
   using: composite
   steps:
+    - id: check-path
+      shell: bash
+      env:
+        TRIPCORD_PATH: ${{ inputs.path }}
+      run: |
+        set -euo pipefail
+        if [ -z "$TRIPCORD_PATH" ]; then
+          echo "::error::tripcord path is empty"
+          exit 1
+        fi
+        if [ ! -e "$TRIPCORD_PATH" ]; then
+          echo "::error::tripcord path does not exist: $TRIPCORD_PATH"
+          exit 1
+        fi
+        if [ ! -d "$TRIPCORD_PATH" ]; then
+          echo "::error::tripcord path is not a directory: $TRIPCORD_PATH"
+          exit 1
+        fi
+        if [ -z "$(ls -A -- "$TRIPCORD_PATH")" ]; then
+          echo "::error::tripcord path is empty: $TRIPCORD_PATH"
+          exit 1
+        fi
     - id: paths
       shell: bash
       run: |

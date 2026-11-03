@@ -15,28 +15,25 @@ import (
 const (
 	workflowCheckout  = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
 	workflowScript    = "actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3"
-	workflowAction    = "vgmartinez/tripcord/.github/actions/tripcord@7ffdcbea10174609eb58284c21bcb94aee4a2a82"
-	workflowActionPin = workflowAction + " # main@7ffdcbe"
+	workflowAction    = "vgmartinez/tripcord/.github/actions/tripcord@141db48dc10a3df719b20cf2f357e184d629c046"
+	workflowActionPin = workflowAction + " # main@141db48"
 )
 
 func TestTripcordWorkflowContract(t *testing.T) {
 	scan := readWorkflow(t, "tripcord-pr.yml")
 	comment := readWorkflow(t, "tripcord-pr-comment.yml")
-	scanScript, scanPrepare, scanWith := checkOneJobWorkflow(t, scan, map[string]string{
+	scanScript, scanWith := checkOneJobWorkflow(t, scan, map[string]string{
 		"contents":        "read",
 		"pull-requests":   "read",
 		"security-events": "write",
 	})
-	commentScript, commentPrepare, commentWith := checkOneJobWorkflow(t, comment, map[string]string{
+	commentScript, commentWith := checkOneJobWorkflow(t, comment, map[string]string{
 		"contents":        "read",
 		"pull-requests":   "write",
 		"security-events": "write",
 	})
 	if scanScript != commentScript {
 		t.Fatal("review scripts differ between the scan and comment workflows")
-	}
-	if scanPrepare != commentPrepare {
-		t.Fatal("scan directory setup differs between the scan and comment workflows")
 	}
 	checkReviewsScript(t, scanScript)
 	if scanWith != commentWith {
@@ -73,47 +70,6 @@ func TestDocumentedCallerPermissionsCoverJobs(t *testing.T) {
 		}
 	}
 
-	ci := readWorkflow(t, "ci.yml")
-	var callers []map[string]string
-	for _, job := range ci.jobs {
-		for _, site := range job.uses {
-			if calledWorkflow(site.uses) != "tripcord-pr.yml" {
-				continue
-			}
-			if site.uses != "./.github/workflows/tripcord-pr.yml" {
-				t.Fatalf("ci.yml uses %q, want ./.github/workflows/tripcord-pr.yml", site.uses)
-			}
-			if site.perms == nil {
-				t.Fatal("ci.yml tripcord caller has no permissions")
-			}
-			callers = append(callers, permMap(t, site.perms))
-			if scalar(job.ifNode) != "github.event_name == 'pull_request'" {
-				t.Fatalf("ci.yml caller if = %q, want pull_request", scalar(job.ifNode))
-			}
-			with := mapping(t, job.with)
-			if scalar(with["path"]) != "tripcord-ci-fixture" {
-				t.Fatalf("ci.yml path = %q, want the planted fixture inside the checkout", scalar(with["path"]))
-			}
-			if scalar(with["fail-on"]) != "critical" {
-				t.Fatalf("ci.yml fail-on = %q, want critical", scalar(with["fail-on"]))
-			}
-			if scalar(with["assert-fixture"]) != "enabled" {
-				t.Fatalf("ci.yml assert-fixture = %q, want enabled", scalar(with["assert-fixture"]))
-			}
-		}
-	}
-	if len(callers) != 1 {
-		t.Fatalf("ci.yml has %d tripcord-pr.yml callers, want 1", len(callers))
-	}
-	jobs := nestedJobPermissions(t, root, "tripcord-pr.yml", map[string]bool{})
-	for id, perms := range jobs {
-		if gaps := permissionGaps(callers[0], perms); len(gaps) != 0 {
-			t.Errorf("ci.yml does not cover job %s: %s", id, strings.Join(gaps, "; "))
-		}
-	}
-	if !samePerms(callers[0], maxPermissions(jobs)) {
-		t.Errorf("ci.yml permissions = %v, want the exact permissions %v", callers[0], maxPermissions(jobs))
-	}
 }
 
 type workflowFile struct {
@@ -147,7 +103,7 @@ func readWorkflow(t *testing.T, name string) workflowFile {
 	return workflowFile{text: string(data), jobs: jobsOf(t, &root)}
 }
 
-func checkOneJobWorkflow(t *testing.T, wf workflowFile, wantPerms map[string]string) (string, string, string) {
+func checkOneJobWorkflow(t *testing.T, wf workflowFile, wantPerms map[string]string) (string, string) {
 	t.Helper()
 	text := wf.text
 	if strings.Contains(text, "pull_request_target") {
@@ -157,7 +113,7 @@ func checkOneJobWorkflow(t *testing.T, wf workflowFile, wantPerms map[string]str
 		t.Fatal("workflow inherits secrets")
 	}
 	if !strings.Contains(text, workflowActionPin) {
-		t.Fatal("action pin is missing # main@7ffdcbe")
+		t.Fatal("action pin is missing # main@141db48")
 	}
 	for _, version := range []string{"# v7.0.1", "# v9.0.0"} {
 		if !strings.Contains(text, version) {
@@ -179,16 +135,7 @@ func checkOneJobWorkflow(t *testing.T, wf workflowFile, wantPerms map[string]str
 	}
 	call := mapping(t, triggers["workflow_call"])
 	inputs := mapping(t, call["inputs"])
-	wantDefaults := map[string]string{
-		"ref":            "",
-		"binary":         "",
-		"path":           ".",
-		"fail-on":        "",
-		"upload-sarif":   "true",
-		"comment":        "false",
-		"github-token":   "",
-		"assert-fixture": "disabled",
-	}
+	wantDefaults := actionInputDefaults(t)
 	if len(inputs) != len(wantDefaults) {
 		t.Fatalf("inputs = %v, want %v", keys(inputs), keysOf(wantDefaults))
 	}
@@ -235,8 +182,8 @@ func checkOneJobWorkflow(t *testing.T, wf workflowFile, wantPerms map[string]str
 
 	pin := regexp.MustCompile(`^[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)+@[0-9a-f]{40}$`)
 	steps := seq(t, job["steps"])
-	if len(steps) != 7 {
-		t.Fatalf("scan has %d steps, want checkout, reviews, scan directory setup, fixture, review selection, action, and assertion", len(steps))
+	if len(steps) != 3 {
+		t.Fatalf("scan has %d steps, want checkout, reviews, and the action", len(steps))
 	}
 	checkoutStep := mapping(t, steps[0])
 	if scalar(checkoutStep["uses"]) != workflowCheckout {
@@ -262,33 +209,7 @@ func checkOneJobWorkflow(t *testing.T, wf workflowFile, wantPerms map[string]str
 		t.Fatal("reviews step has no script")
 	}
 
-	prepareStep := mapping(t, steps[2])
-	prepare := scalar(prepareStep["run"])
-	if !strings.Contains(prepare, `case "$TRIPCORD_PATH" in`) || !strings.Contains(prepare, `"$RUNNER_TEMP"/*)`) || !strings.Contains(prepare, "mkdir -p --") {
-		t.Fatal("scan directory setup does not create only a path inside RUNNER_TEMP")
-	}
-	if strings.Contains(prepare, "${{") {
-		t.Fatal("scan directory setup interpolates an expression into run")
-	}
-
-	fixtureStep := mapping(t, steps[3])
-	if scalar(fixtureStep["if"]) != "inputs.assert-fixture == 'enabled'" || scalar(fixtureStep["name"]) != "Create TC-CFG-001 fixture" {
-		t.Fatal("fixture step does not create TC-CFG-001 only when requested")
-	}
-	if fixtureRun := scalar(fixtureStep["run"]); !strings.Contains(fixtureRun, "git init --quiet tripcord-ci-fixture") {
-		t.Fatal("fixture step does not initialize the planted fixture as its own repository")
-	}
-
-	reviewFileStep := mapping(t, steps[4])
-	reviewFileRun := scalar(reviewFileStep["run"])
-	if scalar(reviewFileStep["id"]) != "review-file" ||
-		!strings.Contains(reviewFileRun, `"$TRIPCORD_ASSERT_FIXTURE" = "enabled"`) ||
-		!strings.Contains(reviewFileRun, `echo "reviews-file="`) ||
-		!strings.Contains(reviewFileRun, `echo "reviews-file=$TRIPCORD_REVIEWS_FILE"`) {
-		t.Fatal("review file selection does not omit reviews only for the fixture assertion")
-	}
-
-	actionStep := mapping(t, steps[5])
+	actionStep := mapping(t, steps[2])
 	if scalar(actionStep["uses"]) != workflowAction {
 		t.Fatalf("action uses %q", scalar(actionStep["uses"]))
 	}
@@ -308,17 +229,14 @@ func checkOneJobWorkflow(t *testing.T, wf workflowFile, wantPerms map[string]str
 	if scalar(actionWith["github-token"]) != "${{ inputs.github-token != '' && inputs.github-token || github.token }}" {
 		t.Fatalf("github-token = %q", scalar(actionWith["github-token"]))
 	}
-	if scalar(actionWith["reviews-file"]) != "${{ steps.review-file.outputs.reviews-file }}" {
+	if scalar(actionWith["reviews-file"]) != "${{ steps.reviews.outputs.reviews-file }}" {
 		t.Fatalf("reviews-file = %q", scalar(actionWith["reviews-file"]))
 	}
-	assertStep := mapping(t, steps[6])
-	assertRun := scalar(assertStep["run"])
-	if scalar(assertStep["if"]) != "inputs.assert-fixture == 'enabled'" ||
-		!strings.Contains(assertRun, "TC-CFG-001") {
-		t.Fatal("fixture assertion does not require TC-CFG-001 in the SARIF")
+	if strings.Contains(text, "assert-fixture") || strings.Contains(text, "git init") || strings.Contains(text, "mkdir -p") {
+		t.Fatal("workflow still plants a fixture or creates the scan directory")
 	}
 
-	for _, step := range []map[string]*yaml.Node{checkoutStep, reviewsStep, fixtureStep, reviewFileStep, actionStep, assertStep} {
+	for _, step := range []map[string]*yaml.Node{checkoutStep, reviewsStep, actionStep} {
 		if strings.Contains(scalar(step["run"]), "${{") {
 			t.Fatal("step interpolates an expression into run")
 		}
@@ -327,7 +245,110 @@ func checkOneJobWorkflow(t *testing.T, wf workflowFile, wantPerms map[string]str
 			t.Errorf("uses unpinned action %q", uses)
 		}
 	}
-	return script, prepare, encodeScalars(actionWith)
+	return script, encodeScalars(actionWith)
+}
+
+func actionInputDefaults(t *testing.T) map[string]string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("..", "..", ".github", "actions", "tripcord", "action.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var action struct {
+		Inputs map[string]struct {
+			Default string `yaml:"default"`
+		} `yaml:"inputs"`
+	}
+	if err := yaml.Unmarshal(data, &action); err != nil {
+		t.Fatal(err)
+	}
+	out := make(map[string]string, len(action.Inputs))
+	for name, input := range action.Inputs {
+		if name == "reviews-file" {
+			continue
+		}
+		out[name] = input.Default
+	}
+	// A workflow_call default cannot be an expression. An empty token
+	// falls through to github.token at the action step.
+	out["github-token"] = ""
+	return out
+}
+
+func TestCICallerUsesPinnedRemoteAction(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", ".github", "workflows", "ci.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	for _, gone := range []string{"assert-fixture", "tripcord-ci-fixture", "git init", "./.github/workflows/tripcord-pr.yml"} {
+		if strings.Contains(text, gone) {
+			t.Fatalf("ci.yml still contains %s", gone)
+		}
+	}
+	if !strings.Contains(text, workflowActionPin) {
+		t.Fatal("caller is not pinned to main@141db48")
+	}
+	var root yaml.Node
+	if err := yaml.Unmarshal(data, &root); err != nil {
+		t.Fatal(err)
+	}
+	job := mapping(t, mapping(t, mapping(t, &root)["jobs"])["tripcord-caller"])
+	if scalar(job["if"]) != "github.event_name == 'pull_request'" {
+		t.Fatalf("caller if = %q, want pull_request", scalar(job["if"]))
+	}
+	wantPerms := map[string]string{
+		"contents":        "read",
+		"pull-requests":   "read",
+		"security-events": "write",
+	}
+	if got := permMap(t, job["permissions"]); !samePerms(got, wantPerms) {
+		t.Fatalf("caller permissions = %v, want %v", got, wantPerms)
+	}
+	var actionStep, assertStep map[string]*yaml.Node
+	sawReviews := false
+	for _, step := range seq(t, job["steps"]) {
+		parsed := mapping(t, step)
+		switch scalar(parsed["id"]) {
+		case "reviews":
+			sawReviews = true
+			checkReviewsScript(t, scalar(mapping(t, parsed["with"])["script"]))
+		case "tripcord":
+			actionStep = parsed
+		}
+		if scalar(parsed["name"]) == "Assert remote scan" {
+			assertStep = parsed
+		}
+	}
+	if !sawReviews || actionStep == nil || assertStep == nil {
+		t.Fatal("caller is missing reviews, the remote action, or the assertion")
+	}
+	if scalar(actionStep["uses"]) != workflowAction {
+		t.Fatalf("caller uses %q", scalar(actionStep["uses"]))
+	}
+	if scalar(actionStep["continue-on-error"]) != "true" {
+		t.Fatal("caller action does not continue on error")
+	}
+	with := mapping(t, actionStep["with"])
+	if scalar(with["path"]) != "testdata/ci-caller" {
+		t.Fatalf("path = %q, want testdata/ci-caller", scalar(with["path"]))
+	}
+	if scalar(with["reviews-file"]) != "${{ steps.reviews.outputs.reviews-file }}" {
+		t.Fatalf("reviews-file = %q", scalar(with["reviews-file"]))
+	}
+	run := scalar(assertStep["run"])
+	for _, want := range []string{
+		"outcome is not failure",
+		"scan exit-code is not 1",
+		"TC-CFG-001",
+		"testdata/ci-caller/",
+		"0|1",
+		"no is_agent output",
+	} {
+		if !strings.Contains(run, want) {
+			t.Errorf("assertion missing %s", want)
+		}
+	}
 }
 
 func checkReviewsScript(t *testing.T, script string) {

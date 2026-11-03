@@ -198,6 +198,91 @@ func TestTripcordActionContract(t *testing.T) {
 	})
 }
 
+func TestActionRejectsMissingOrEmptyPath(t *testing.T) {
+	action := parseAction(t)
+	var check actionStep
+	checkAt, scanAt := -1, -1
+	for i, step := range action.Runs.Steps {
+		switch step.ID {
+		case "check-path":
+			check = step
+			checkAt = i
+		case "scan":
+			scanAt = i
+		}
+	}
+	if check.Run == "" {
+		t.Fatal("action has no path check")
+	}
+	if checkAt < 0 || scanAt < 0 || checkAt > scanAt {
+		t.Fatalf("path check is not before the scan: check=%d scan=%d", checkAt, scanAt)
+	}
+	if strings.Contains(check.Run, "${{") {
+		t.Fatal("path check interpolates an expression into run")
+	}
+	run := func(t *testing.T, path string) (int, string) {
+		t.Helper()
+		cmd := exec.Command("bash", "-c", check.Run)
+		cmd.Env = append(os.Environ(), "TRIPCORD_PATH="+path)
+		out, err := cmd.CombinedOutput()
+		return exitCode(t, err), string(out)
+	}
+	t.Run("empty", func(t *testing.T) {
+		if code, out := run(t, ""); code == 0 || !strings.Contains(out, "path is empty") {
+			t.Fatalf("empty path = %d\n%s", code, out)
+		}
+	})
+	t.Run("missing", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "missing")
+		if code, out := run(t, path); code == 0 || !strings.Contains(out, "does not exist") {
+			t.Fatalf("missing path = %d\n%s", code, out)
+		}
+	})
+	t.Run("file", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "file")
+		if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if code, out := run(t, path); code == 0 || !strings.Contains(out, "not a directory") {
+			t.Fatalf("file path = %d\n%s", code, out)
+		}
+	})
+	t.Run("empty directory", func(t *testing.T) {
+		if code, out := run(t, t.TempDir()); code == 0 || !strings.Contains(out, "path is empty") {
+			t.Fatalf("empty directory = %d\n%s", code, out)
+		}
+	})
+	t.Run("directory", func(t *testing.T) {
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, "README"), []byte("x\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if code, out := run(t, dir); code != 0 {
+			t.Fatalf("non-empty directory = %d\n%s", code, out)
+		}
+	})
+}
+
+func TestCICallerFixtureIsTCFG001(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "testdata", "ci-caller", ".claude", "settings.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, ".claude", "settings.json"), string(raw))
+	cmd := exec.Command(buildTripcord(t), "scan", "--format", "sarif", root)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err = cmd.Run()
+	if code := exitCode(t, err); code != 1 {
+		t.Fatalf("fixture scan = %d, want 1\nstderr: %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "TC-CFG-001") || !strings.Contains(stdout.String(), ".claude/settings.json") {
+		t.Fatalf("fixture SARIF does not report TC-CFG-001 at the settings file:\n%s", stdout.String())
+	}
+}
+
 func TestRefCheckoutIsRemovedBeforeDefaultPathScan(t *testing.T) {
 	action := parseAction(t)
 	if got := action.Inputs["path"].Default; got != "." {

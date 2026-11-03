@@ -54,7 +54,10 @@ Usage:
   tripcord pr-context [flags]
   tripcord preopen <git-url|path> [flags]
 
-scan performs static configuration scanning only. --scope selects repository
+scan performs static configuration scanning only. A PATH inside a Git
+repository scans that whole repository from its git root. Monorepo scoping
+is tracked in https://github.com/vgmartinez/tripcord/issues/59.
+--scope selects repository
 (the default), user, managed, or all. The default does not read the home
 directory or system settings.
 pr-context reports whether a pull request looks agent-authored. It reads a
@@ -382,6 +385,11 @@ func parseCommandFlags(cmd flagCommand, args []string, stdout io.Writer) (scanOp
 			}
 			flags.SetOutput(&buf)
 			flags.PrintDefaults()
+			if cmd == scanCommand {
+				if _, werr := buf.WriteString("\nA PATH inside a Git repository scans that whole repository from its git root.\nMonorepo scoping is tracked in https://github.com/vgmartinez/tripcord/issues/59.\n"); werr != nil {
+					return scanOptions{}, fmt.Errorf("%w: %w", errHelpWrite, werr)
+				}
+			}
 			if writeString(stdout, buf.String()) != int(exitcode.OK) {
 				return scanOptions{}, errHelpWrite
 			}

@@ -245,6 +245,9 @@ func TestScanHelpMarksSecretFlagsAsV1(t *testing.T) {
 					t.Fatalf("help = %q", help)
 				}
 			}
+			if !strings.Contains(help, "git root") || !strings.Contains(help, "https://github.com/vgmartinez/tripcord/issues/59") {
+				t.Fatalf("help = %q", help)
+			}
 		})
 	}
 }
