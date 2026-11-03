@@ -13,15 +13,25 @@ repos:
 ```
 
 The hook runs `tripcord scan --staged`. It builds a private temporary tree
-from the Git index, not the working tree: partially staged files use their
-staged contents, staged deletions produce no findings, and an unstaged-only
-edit does not affect the decision. Symlinks are preserved and resolved under
-that temporary tree.
+from the Git index: partially staged files use their staged contents, staged
+deletions produce no findings, and an unstaged-only edit does not affect the
+decision. Symlinks are preserved and resolved under that temporary tree.
 
-All index files are materialized because rules can cross file boundaries.
-For example, staged policies, approval exceptions, review data, skill hook
-scripts, and setup links are read from the same proposed commit. An approval
-added in the same commit applies to that commit's finding.
+The tree holds the paths a repository scan opens, under the same file, byte,
+and walk caps as that scan: adapter discovery files, `.tripcord` policy and
+review files (including files an in-repo `extends` chain names), hook and
+skill scripts and TC-CFG-009 checksum files those rules follow, and symlink
+targets inside the repository. A gitlink is an empty directory, matching an
+uninitialized submodule in a checkout scan. A path the index does not contain
+is missing, the same result as a scan of a checkout of that commit. Staged
+policies, approval exceptions, review data, skill hook scripts, and setup
+links are read from that same proposed commit, so an approval added in the
+commit applies to that commit's finding.
+
+`tripcord scan --staged` with no paths exits 3 and reports
+`--staged needs the staged file paths (pre-commit passes them)`. After the
+tree is materialized, an interrupt closes it and exits 3 with the bypass
+line below.
 
 The hook reports only findings located in the files pre-commit passes to it.
 Any reported finding blocks the commit, including one that was already present

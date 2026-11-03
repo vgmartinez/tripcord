@@ -62,7 +62,7 @@ func runPreopen(args []string, stdout, stderr io.Writer) int {
 	// does not exist. --policy and --org-policy still apply.
 	target.root = ws.Tree()
 	target.policyRoot = filepath.Join(ws.Dir(), "no-repository-policy")
-	code := scanTree(target, opts, stdout, stderr)
+	code := scanTree(context.Background(), target, opts, stdout, stderr)
 	if ctx.Err() != nil {
 		return target.internalError(stderr, errors.New("interrupted; the temporary clone was removed"))
 	}

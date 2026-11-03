@@ -34,11 +34,11 @@ import (
 	"github.com/vgmartinez/tripcord/internal/adapters/windsurf"
 	"github.com/vgmartinez/tripcord/internal/exitcode"
 	"github.com/vgmartinez/tripcord/internal/fpkey"
+	"github.com/vgmartinez/tripcord/internal/indexfiles"
 	"github.com/vgmartinez/tripcord/internal/model"
 	"github.com/vgmartinez/tripcord/internal/output"
 	"github.com/vgmartinez/tripcord/internal/pathx"
 	"github.com/vgmartinez/tripcord/internal/policy"
-	"github.com/vgmartinez/tripcord/internal/preopen"
 	"github.com/vgmartinez/tripcord/internal/rules"
 	"github.com/vgmartinez/tripcord/internal/scriptcheck"
 )
@@ -60,8 +60,8 @@ Usage:
 scan performs static configuration scanning only. A PATH inside a Git
 repository scans that whole repository from its git root. Monorepo scoping
 is tracked in https://github.com/vgmartinez/tripcord/issues/59.
---staged scans the Git index in a private temporary tree; remaining paths
-select which finding locations are reported.
+--staged scans the Git index in a private temporary tree and requires the
+staged file paths. Those paths select which finding locations are reported.
 --scope selects repository
 (the default), user, managed, or all. The default does not read the home
 directory or system settings.
@@ -128,7 +128,11 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 	}
 	target := scanTarget{prog: "tripcord scan"}
 	if err != nil {
-		return target.configError(stderr, err)
+		code := target.configError(stderr, err)
+		if opts.staged {
+			writeString(stderr, "tripcord scan: staged scan blocked the commit; bypass only with git commit --no-verify\n")
+		}
+		return code
 	}
 	if opts.secrets || opts.all {
 		return target.configError(stderr, errors.New("secret scanning lands in v1; v0 supports --config only"))
@@ -154,7 +158,7 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 		}
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 		defer stop()
-		ws, err := preopen.FromIndex(ctx, root)
+		ws, notes, err := indexfiles.Materialize(ctx, root)
 		if err != nil {
 			code := target.configError(stderr, fmt.Errorf("--staged: %w", err))
 			writeString(stderr, "tripcord scan: staged scan blocked the commit; bypass only with git commit --no-verify\n")
@@ -162,14 +166,26 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 		}
 		defer func() { _ = ws.Close() }()
 		target.root, target.policyRoot = ws.Tree(), ws.Tree()
-		code := scanTree(target, opts, stdout, stderr)
+		target.stagedNotes = notes
+		target.stageMore = func(items []model.ConfigItem) error {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			return indexfiles.AddReferences(ctx, ws, scriptcheck.ReferencedPaths(items))
+		}
+		code := scanTree(ctx, target, opts, stdout, stderr)
+		if ctx.Err() != nil {
+			_ = ws.Close()
+			writeString(stderr, "tripcord scan: staged scan blocked the commit; bypass only with git commit --no-verify\n")
+			return int(exitcode.Config)
+		}
 		if code == int(exitcode.Config) || code == int(exitcode.Internal) {
 			writeString(stderr, "tripcord scan: staged scan blocked the commit; bypass only with git commit --no-verify\n")
 		}
 		return code
 	}
 	target.root, target.policyRoot = root, root
-	return scanTree(target, opts, stdout, stderr)
+	return scanTree(context.Background(), target, opts, stdout, stderr)
 }
 
 // scanTarget is the tree scanTree reads. prog prefixes every message.
@@ -178,9 +194,11 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 // policy for preopen, which must not let a cloned repository set its
 // own policy or exceptions.
 type scanTarget struct {
-	prog       string
-	root       string
-	policyRoot string
+	prog        string
+	root        string
+	policyRoot  string
+	stagedNotes []adapters.Diagnostic
+	stageMore   func([]model.ConfigItem) error
 }
 
 func (t scanTarget) configError(stderr io.Writer, err error) int {
@@ -195,7 +213,7 @@ func (t scanTarget) internalError(stderr io.Writer, err error) int {
 
 // scanTree scans t.root with opts, writes the findings, and returns the
 // scan exit code.
-func scanTree(t scanTarget, opts scanOptions, stdout, stderr io.Writer) int {
+func scanTree(ctx context.Context, t scanTarget, opts scanOptions, stdout, stderr io.Writer) int {
 	root := t.root
 	env, catalog, err := loadRules(scanLimits())
 	if err != nil {
@@ -256,7 +274,7 @@ func scanTree(t scanTarget, opts scanOptions, stdout, stderr io.Writer) int {
 		selected = append(selected, generic.New(generic.Options{TasksOnly: true, FingerprintKey: key}))
 	}
 	var items []model.ConfigItem
-	var diagnostics []adapters.Diagnostic
+	diagnostics := append([]adapters.Diagnostic{}, t.stagedNotes...)
 	if keyNote != "" && writeString(stderr, t.prog+": "+keyNote+"\n") != int(exitcode.OK) {
 		return int(exitcode.Internal)
 	}
@@ -268,7 +286,13 @@ func scanTree(t scanTarget, opts scanOptions, stdout, stderr io.Writer) int {
 		})
 	}
 	for _, adapter := range selected {
-		discovered, err := adapter.Discover(context.Background(), root)
+		if ctx.Err() != nil {
+			return int(exitcode.Config)
+		}
+		discovered, err := adapter.Discover(ctx, root)
+		if ctx.Err() != nil {
+			return int(exitcode.Config)
+		}
 		var partial *adapters.DiagnosticError
 		switch {
 		case errors.As(err, &partial):
@@ -277,6 +301,17 @@ func scanTree(t scanTarget, opts scanOptions, stdout, stderr io.Writer) int {
 			return t.internalError(stderr, fmt.Errorf("%s discovery: %w", adapter.Harness(), err))
 		}
 		items = append(items, discovered...)
+	}
+	if t.stageMore != nil {
+		if err := t.stageMore(items); err != nil {
+			if ctx.Err() != nil {
+				return int(exitcode.Config)
+			}
+			return t.internalError(stderr, fmt.Errorf("staged references: %w", err))
+		}
+	}
+	if ctx.Err() != nil {
+		return int(exitcode.Config)
 	}
 	if repoScope {
 		if err := scriptcheck.Annotate(root, items); err != nil {
@@ -301,7 +336,13 @@ func scanTree(t scanTarget, opts scanOptions, stdout, stderr io.Writer) int {
 		})
 	}
 	engine := rules.NewEngine(env, catalog.Rules(), rules.WithFilter(effective.RuleFilter()))
-	result := engine.ScanConfig(context.Background(), items)
+	if ctx.Err() != nil {
+		return int(exitcode.Config)
+	}
+	result := engine.ScanConfig(ctx, items)
+	if ctx.Err() != nil {
+		return int(exitcode.Config)
+	}
 	diagnostics = append(diagnostics, evalDiagnostics(result.Errors)...)
 	diagnostics = append(diagnostics, opaqueDiagnostics(result.Notices)...)
 	findings := make([]model.Finding, 0, len(result.Matches))
@@ -418,7 +459,7 @@ func parseCommandFlags(cmd flagCommand, args []string, stdout io.Writer) (scanOp
 	flags.StringVar(&opts.failOn, "fail-on", "", "low, medium, high, or critical")
 	flags.StringVar(&opts.policy, "policy", "", "policy file")
 	flags.StringVar(&opts.orgPolicy, "org-policy", "", "organization policy file")
-	flags.BoolVar(&opts.staged, "staged", false, "scan Git's staged index; remaining paths select reported findings")
+	flags.BoolVar(&opts.staged, "staged", false, "scan Git's staged index; remaining paths are the staged files pre-commit passes")
 	if err := flags.Parse(normalized); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			var buf bytes.Buffer
@@ -428,7 +469,7 @@ func parseCommandFlags(cmd flagCommand, args []string, stdout io.Writer) (scanOp
 			flags.SetOutput(&buf)
 			flags.PrintDefaults()
 			if cmd == scanCommand {
-				if _, werr := buf.WriteString("\nA PATH inside a Git repository scans that whole repository from its git root.\nMonorepo scoping is tracked in https://github.com/vgmartinez/tripcord/issues/59.\n--staged scans the Git index; remaining paths select reported finding locations.\n"); werr != nil {
+				if _, werr := buf.WriteString("\nA PATH inside a Git repository scans that whole repository from its git root.\nMonorepo scoping is tracked in https://github.com/vgmartinez/tripcord/issues/59.\n--staged scans the Git index and needs the staged file paths.\n"); werr != nil {
 					return scanOptions{}, fmt.Errorf("%w: %w", errHelpWrite, werr)
 				}
 			}
@@ -454,6 +495,9 @@ func parseCommandFlags(cmd flagCommand, args []string, stdout io.Writer) (scanOp
 	case cmd == preopenCommand && flags.NArg() != 1:
 		return opts, errors.New("preopen takes exactly one git URL or local path")
 	case opts.staged:
+		if flags.NArg() == 0 {
+			return opts, errors.New("--staged needs the staged file paths (pre-commit passes them)")
+		}
 		opts.path = "."
 		opts.stagedFiles, err = stagedPaths(flags.Args())
 		if err != nil {

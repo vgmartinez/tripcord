@@ -115,6 +115,37 @@ func outsideClass(resolved string) string {
 	return shellcmd.Absolute
 }
 
+// ReferencedPaths returns repository-relative hook scripts and checksum
+// files that items name. A path the index does not contain is still
+// listed; the caller treats that as missing.
+func ReferencedPaths(items []model.ConfigItem) []string {
+	var out []string
+	seen := map[string]bool{}
+	add := func(rel string) {
+		rel = path.Clean(rel)
+		if rel == "." || rel == ".." || strings.HasPrefix(rel, "../") || path.IsAbs(rel) || seen[rel] {
+			return
+		}
+		seen[rel] = true
+		out = append(out, rel)
+	}
+	for _, item := range items {
+		if item.Scope != model.ScopeRepo {
+			continue
+		}
+		for _, rel := range Scripts(item) {
+			add(rel)
+		}
+		if item.Kind != model.ConfigKindEnvSetup {
+			continue
+		}
+		for _, name := range checksumNames(decode(item)) {
+			add(name)
+		}
+	}
+	return out
+}
+
 // Scripts returns the repository-relative paths of the project scripts
 // item runs, or nil when it cannot tell where they are.
 func Scripts(item model.ConfigItem) []string {
