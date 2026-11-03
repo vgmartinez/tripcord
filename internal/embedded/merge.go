@@ -241,6 +241,55 @@ func runStep(name string) *yaml.Node {
 	}}
 }
 
+// isCopilotStep reports whether step is the one init adds: a run of the
+// install command with, at most, a name. Any other key (if,
+// continue-on-error, shell, env) could change whether or how it runs.
+func isCopilotStep(step *yaml.Node) bool {
+	if step == nil || step.Kind != yaml.MappingNode {
+		return false
+	}
+	run := mapValue(step, "run")
+	if run == nil || run.Kind != yaml.ScalarNode || strings.TrimSpace(run.Value) != installCommand {
+		return false
+	}
+	for i := 0; i+1 < len(step.Content); i += 2 {
+		if k := step.Content[i].Value; k != "name" && k != "run" {
+			return false
+		}
+	}
+	return true
+}
+
+// yamlNode converts a decoded YAML node into a node, every scalar as a
+// string.
+func yamlNode(n *yaml.Node) *node {
+	switch n.Kind {
+	case yaml.DocumentNode:
+		if len(n.Content) == 1 {
+			return yamlNode(n.Content[0])
+		}
+	case yaml.AliasNode:
+		if n.Alias != nil {
+			return yamlNode(n.Alias)
+		}
+	case yaml.MappingNode:
+		out := &node{kind: kindObject}
+		for i := 0; i+1 < len(n.Content); i += 2 {
+			out.set(n.Content[i].Value, yamlNode(n.Content[i+1]))
+		}
+		return out
+	case yaml.SequenceNode:
+		out := &node{kind: kindArray}
+		for _, c := range n.Content {
+			out.items = append(out.items, yamlNode(c))
+		}
+		return out
+	case yaml.ScalarNode:
+		return toNode(n.Value)
+	}
+	return toNode(nil)
+}
+
 // mergeSetupSteps appends the bootstrap step to the copilot-setup-steps
 // job.
 func mergeSetupSteps(old []byte, exists bool, force bool) ([]byte, error) {
@@ -257,20 +306,19 @@ func mergeSetupSteps(old []byte, exists bool, force bool) ([]byte, error) {
 	}
 	checkout := false
 	for _, step := range steps.Content {
-		run := mapValue(step, "run")
-		if run != nil && strings.TrimSpace(run.Value) == installCommand {
+		if isCopilotStep(step) {
 			return old, nil
 		}
 		if uses := mapValue(step, "uses"); uses != nil && strings.HasPrefix(uses.Value, "actions/checkout@") {
 			checkout = true
 		}
 	}
-	for _, step := range steps.Content {
-		if run := mapValue(step, "run"); run != nil && containsFold(run.Value, "tripcord") {
+	for i, step := range steps.Content {
+		if namesTripcord(yamlNode(step)) {
 			if !force {
-				return nil, conflictf("a step already runs Tripcord with a different command")
+				return nil, conflictf("a step already runs Tripcord with a different command or options")
 			}
-			run.Value = installCommand
+			steps.Content[i] = runStep(copilotStepName)
 			return encodeYAML(doc.root)
 		}
 	}

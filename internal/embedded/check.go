@@ -1,12 +1,14 @@
 package embedded
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io/fs"
+	"maps"
 	"slices"
+	"strings"
+
+	"go.yaml.in/yaml/v3"
 
 	"github.com/vgmartinez/tripcord/internal/adapters"
 	"github.com/vgmartinez/tripcord/internal/adapters/kit"
@@ -15,176 +17,470 @@ import (
 
 // Guard states a TC-CFG-016 item reports.
 const (
-	// StateMissing: the wiring file, or the hook in it, is not there.
+	// StateMissing: the file, or the hook or step in it, is not there.
 	StateMissing = "missing"
-	// StateChanged: the event still has a hook that names tripcord, or the
-	// manifest records the hook, but no entry matches what init wrote.
+	// StateChanged: the file, hook, or step differs from what init
+	// writes for the recorded pin, and from what the manifest records.
 	StateChanged = "changed"
-	// StateUnreadable: the wiring file could not be read or parsed.
+	// StateStale: it is what the manifest records, but not what this
+	// build of init writes: an older Tripcord wrote it.
+	StateStale = "stale"
+	// StateUnreadable: the file could not be read or parsed.
 	StateUnreadable = "unreadable"
+	// StateRemoved: the base revision had it and this change removes it.
+	StateRemoved = "removed"
+	// StateDropped: this change drops a harness the base manifest wired.
+	StateDropped = "dropped"
+	// StateRepinned: this change changes the pinned version or a
+	// checksum. Re-pinning bootstrap.sh and embed.json together is the
+	// one bootstrap edit the single-revision check cannot see.
+	StateRepinned = "repinned"
 )
 
-// Present reports whether root holds a Tripcord embed: the bootstrap
-// script or the embed manifest. A policy file alone is what
-// `tripcord init` without --embed writes, and is not an embed.
-func Present(root string) (bool, error) {
-	r, err := adapters.NewSafeReader(root)
-	if err != nil {
-		return false, err
-	}
-	defer func() { _ = r.Close() }()
-	return present(r), nil
+// Guard subjects that are not a hook event.
+const (
+	subjectBootstrap = "bootstrap"
+	subjectManifest  = "manifest"
+	subjectWorkflow  = "workflow"
+	subjectStep      = "setup-step"
+	subjectHarnesses = "manifest-harnesses"
+	subjectPin       = "manifest-pin"
+)
+
+// CheckOptions selects what Check compares.
+type CheckOptions struct {
+	// Only, when not empty, limits the harness wiring checked to these
+	// harnesses. Embed files shared by every harness are always checked.
+	Only []model.Harness
+	// Base reads a file of the base revision a change is compared with
+	// (scan --since or --base). It returns an error wrapping
+	// fs.ErrNotExist for a path the base does not have. Nil checks the
+	// revision on its own.
+	Base func(rel string) ([]byte, error)
 }
 
-func present(r *adapters.SafeReader) bool {
-	for _, p := range []string{BootstrapPath, ManifestPath} {
-		if _, err := r.Stat(p); err == nil || !errors.Is(err, fs.ErrNotExist) {
-			return true
-		}
-	}
-	return false
+// file is one file read for the check. state is "" when raw was read.
+type file struct {
+	raw   []byte
+	state string
 }
 
-// Check returns one repository config item for every Tripcord hook that
-// a Tripcord embed in root expects and that is missing, changed, or
-// unreadable. The items are TC-CFG-016 permissions items (setting
-// GuardSetting) at the hook's wiring file. only, when not empty, limits
-// the check to those harnesses.
-//
-// The harnesses checked are the hook harnesses the manifest records.
-// A manifest that is missing or unreadable checks every hook harness,
-// and a recorded digest that differs from the one this build writes
-// counts as changed.
-func Check(root string, only []model.Harness) ([]model.ConfigItem, error) {
-	r, err := adapters.NewSafeReader(root)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = r.Close() }()
-	if !present(r) {
-		return nil, nil
-	}
-	harnesses := HookHarnesses
-	recorded := map[string]string{}
-	if m, ok := readManifest(r); ok {
-		harnesses = nil
-		for _, h := range HookHarnesses {
-			if slices.Contains(m.Harnesses, string(h)) {
-				harnesses = append(harnesses, h)
-			}
-		}
-		for _, hook := range m.Hooks {
-			recorded[hook.Harness+"\x00"+hook.Event] = hook.SHA256
-		}
-	}
-	var items []model.ConfigItem
-	for _, h := range harnesses {
-		if len(only) > 0 && !slices.Contains(only, h) {
-			continue
-		}
-		path := HookPath(h)
-		raw, readErr := r.ReadFile(path, adapters.MaxConfigFileBytes)
-		var hooks map[string]any
-		state := ""
-		switch {
-		case errors.Is(readErr, fs.ErrNotExist):
-			state = StateMissing
-		case readErr != nil:
-			state = StateUnreadable
-		default:
-			syntax := kit.StrictJSON
-			if h == model.HarnessCursor {
-				syntax = kit.JSONC
-			}
-			doc, _, err := kit.DecodeJSON(raw, syntax, string(h))
-			top, ok := doc.(map[string]any)
-			if err != nil || !ok {
-				state = StateUnreadable
-				break
-			}
-			hooks, _ = top["hooks"].(map[string]any)
-		}
-		for _, e := range HookEntries(h) {
-			s := state
-			if s == "" {
-				s = entryState(e, hooks, recorded)
-			}
-			if s == "" {
-				continue
-			}
-			item, err := guardItem(e, s, raw)
-			if err != nil {
-				return nil, err
-			}
-			items = append(items, item)
-		}
-	}
-	return items, nil
+func (f file) exists() bool { return f.state != StateMissing }
+
+// revision is the files of one revision the check reads.
+type revision struct {
+	files    map[string]file
+	manifest Manifest
+	// manifestOK is true when embed.json parses as a manifest with a
+	// valid pin.
+	manifestOK bool
 }
 
-func readManifest(r *adapters.SafeReader) (Manifest, bool) {
-	raw, err := r.ReadFile(ManifestPath, adapters.MaxConfigFileBytes)
-	if err != nil {
-		return Manifest{}, false
+// checkedPaths are every file the check reads.
+var checkedPaths = []string{BootstrapPath, ManifestPath, WorkflowPath, ClaudeSettingsPath, CursorHooksPath, CopilotHooksPath, CopilotSetupStepsPath}
+
+func newRevision(read func(rel string) (file, error)) (*revision, error) {
+	t := &revision{files: map[string]file{}}
+	for _, p := range checkedPaths {
+		f, err := read(p)
+		if err != nil {
+			return nil, err
+		}
+		t.files[p] = f
 	}
+	if m := t.files[ManifestPath]; m.state == "" {
+		t.manifest, t.manifestOK = parseManifest(m.raw)
+	}
+	return t, nil
+}
+
+func parseManifest(raw []byte) (Manifest, bool) {
 	var m Manifest
-	if err := json.Unmarshal(raw, &m); err != nil || m.Schema != ManifestSchema {
+	if err := json.Unmarshal(raw, &m); err != nil || m.Schema != ManifestSchema || m.Pin().Validate() != nil {
 		return Manifest{}, false
 	}
 	return m, true
 }
 
-// entryState is "" when hooks.<e.Event> holds an entry identical to e
-// and the manifest, if it records e, records e's digest.
-func entryState(e HookEntry, hooks map[string]any, recorded map[string]string) string {
-	want := e.SHA256()
-	if got, ok := recorded[string(e.Harness)+"\x00"+e.Event]; ok && got != want {
+// embedded reports whether t holds the embed's own files.
+func (t *revision) embedded() bool {
+	return t.files[BootstrapPath].exists() || t.files[ManifestPath].exists()
+}
+
+// leftovers reports whether t holds anything else init --embed writes:
+// the workflow, or a hook that runs .tripcord/bootstrap.sh. A hook that
+// runs tripcord some other way is the documented manual wiring, not an
+// embed, so it does not count.
+func (t *revision) leftovers() bool {
+	if t.files[WorkflowPath].exists() {
+		return true
+	}
+	for _, h := range HookHarnesses {
+		hooks, ok := t.hooks(h)
+		if !ok {
+			continue
+		}
+		for _, list := range hooks {
+			if runsBootstrap(anyNode(list)) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func runsBootstrap(n *node) bool {
+	if s, ok := n.str(); ok {
+		return strings.Contains(s, BootstrapPath)
+	}
+	return slices.ContainsFunc(n.items, runsBootstrap)
+}
+
+// hooks is the hooks object of h's wiring file. ok is false when the
+// file is missing or does not parse.
+func (t *revision) hooks(h model.Harness) (map[string]any, bool) {
+	f := t.files[HookPath(h)]
+	if f.state != "" {
+		return nil, false
+	}
+	syntax := kit.StrictJSON
+	if h == model.HarnessCursor {
+		syntax = kit.JSONC
+	}
+	doc, _, err := kit.DecodeJSON(f.raw, syntax, string(h))
+	top, isObject := doc.(map[string]any)
+	if err != nil || !isObject {
+		return nil, false
+	}
+	hooks, _ := top["hooks"].(map[string]any)
+	return hooks, true
+}
+
+// hadTripcordHook reports whether hooks.<event> in t names tripcord.
+func (t *revision) hadTripcordHook(h model.Harness, event string) bool {
+	hooks, ok := t.hooks(h)
+	return ok && namesTripcord(anyNode(hooks[event]))
+}
+
+// Check returns one repository config item for every part of a Tripcord
+// embed that is missing, changed, stale, or unreadable in root, and,
+// with opts.Base, every part a change removes or weakens relative to
+// the base. The items are TC-CFG-016 permissions items (setting
+// GuardSetting).
+//
+// root is embedded when it has bootstrap.sh or embed.json, or anything
+// else only init --embed writes (the workflow, or a hook that runs
+// .tripcord/bootstrap.sh), or when the base is embedded. bootstrap.sh and
+// the workflow are compared with what init renders from the pin
+// embed.json records, so a manifest whose recorded digests were edited
+// to match does not pass them. Hooks are checked for the harnesses the
+// manifest records, every hook harness when there is none, and, with a
+// base, the harnesses the base manifest records as well.
+func Check(root string, opts CheckOptions) ([]model.ConfigItem, error) {
+	r, err := adapters.NewSafeReader(root)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = r.Close() }()
+	head, err := newRevision(func(rel string) (file, error) {
+		raw, err := r.ReadFile(rel, adapters.MaxConfigFileBytes)
+		switch {
+		case errors.Is(err, fs.ErrNotExist):
+			return file{state: StateMissing}, nil
+		case err != nil:
+			return file{state: StateUnreadable}, nil
+		}
+		return file{raw: raw}, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	var base *revision
+	if opts.Base != nil {
+		base, err = newRevision(func(rel string) (file, error) {
+			raw, err := opts.Base(rel)
+			switch {
+			case errors.Is(err, fs.ErrNotExist):
+				return file{state: StateMissing}, nil
+			case err != nil:
+				return file{}, err
+			}
+			return file{raw: raw}, nil
+		})
+		if err != nil {
+			return nil, err
+		}
+		if !base.embedded() {
+			base = nil
+		}
+	}
+	if base == nil && !head.embedded() && !head.leftovers() {
+		return nil, nil
+	}
+	c := &checker{head: head, base: base, only: opts.Only}
+	c.manifest()
+	c.ownFile(subjectBootstrap, BootstrapPath, func(m Manifest) []byte { return Bootstrap(m.Pin()) })
+	c.ownFile(subjectWorkflow, WorkflowPath, func(Manifest) []byte { return Workflow() })
+	wired := c.wired()
+	for _, h := range HookHarnesses {
+		if slices.Contains(wired, h) && c.selected(h) {
+			c.hookHarness(h)
+		}
+	}
+	if slices.Contains(wired, model.HarnessCopilot) && c.head.manifestOK && c.selected(model.HarnessCopilot) {
+		c.setupStep()
+	}
+	return c.items, c.err
+}
+
+type checker struct {
+	head, base *revision
+	only       []model.Harness
+	items      []model.ConfigItem
+	err        error
+}
+
+func (c *checker) selected(h model.Harness) bool {
+	return len(c.only) == 0 || slices.Contains(c.only, h)
+}
+
+// wired is the hook harnesses to check, plus copilot when it is wired.
+func (c *checker) wired() []model.Harness {
+	var names []string
+	switch {
+	case c.head.manifestOK:
+		names = c.head.manifest.Harnesses
+	case c.base != nil && c.base.manifestOK:
+		names = c.base.manifest.Harnesses
+	default:
+		return HookHarnesses
+	}
+	if c.base != nil && c.base.manifestOK {
+		names = append(slices.Clone(names), c.base.manifest.Harnesses...)
+	}
+	var out []model.Harness
+	for _, h := range Harnesses {
+		if slices.Contains(names, string(h)) {
+			out = append(out, h)
+		}
+	}
+	return out
+}
+
+// absent is the state of something the head does not have: removed when
+// the base had it.
+func (c *checker) absent(baseHad bool) string {
+	if c.base != nil && baseHad {
+		return StateRemoved
+	}
+	return StateMissing
+}
+
+func (c *checker) manifest() {
+	f := c.head.files[ManifestPath]
+	switch {
+	case !f.exists():
+		c.add(model.SurfaceGeneric, ManifestPath, subjectManifest, "", c.absent(c.base != nil && c.base.files[ManifestPath].exists()), f.raw, nil)
+		return
+	case !c.head.manifestOK:
+		c.add(model.SurfaceGeneric, ManifestPath, subjectManifest, "", StateUnreadable, f.raw, nil)
+		return
+	}
+	if c.base == nil || !c.base.manifestOK {
+		return
+	}
+	was, now := c.base.manifest, c.head.manifest
+	var dropped []string
+	for _, h := range was.Harnesses {
+		if !slices.Contains(now.Harnesses, h) {
+			dropped = append(dropped, h)
+		}
+	}
+	if len(dropped) > 0 {
+		c.add(model.SurfaceGeneric, ManifestPath, subjectHarnesses, "", StateDropped, f.raw, map[string]string{"harnesses": strings.Join(dropped, ",")})
+	}
+	if was.Version != now.Version || !maps.Equal(was.SHA256, now.SHA256) {
+		c.add(model.SurfaceGeneric, ManifestPath, subjectPin, "", StateRepinned, f.raw, map[string]string{"from": was.Version, "to": now.Version})
+	}
+}
+
+// ownFile checks a file only init writes against render(manifest).
+// Without a valid manifest there is no pin to render from, and the
+// manifest item already reports that.
+func (c *checker) ownFile(subject, path string, render func(Manifest) []byte) {
+	f := c.head.files[path]
+	switch {
+	case !f.exists():
+		c.add(model.SurfaceGeneric, path, subject, "", c.absent(c.base != nil && c.base.files[path].exists()), nil, nil)
+	case f.state != "":
+		c.add(model.SurfaceGeneric, path, subject, "", StateUnreadable, nil, nil)
+	case c.head.manifestOK:
+		want := digest(render(c.head.manifest))
+		if state := compare(digest(f.raw), want, c.head.manifest.recordedFile(path, "")); state != "" {
+			c.add(model.SurfaceGeneric, path, subject, "", state, f.raw, nil)
+		}
+	}
+}
+
+// compare is "" when got is want, stale when got is what the manifest
+// recorded and that is not want, and changed otherwise.
+func compare(got, want, recorded string) string {
+	switch {
+	case got == want:
+		return ""
+	case recorded != "" && got == recorded:
+		return StateStale
+	default:
 		return StateChanged
 	}
+}
+
+func (c *checker) hookHarness(h model.Harness) {
+	path := HookPath(h)
+	f := c.head.files[path]
+	hooks, parsed := c.head.hooks(h)
+	recorded := map[string]string{}
+	if c.head.manifestOK {
+		for _, hook := range c.head.manifest.Hooks {
+			if hook.Harness == string(h) {
+				recorded[hook.Event] = hook.SHA256
+			}
+		}
+	}
+	for _, e := range HookEntries(h) {
+		var state string
+		switch {
+		case !f.exists():
+			state = c.absent(c.base != nil && c.base.hadTripcordHook(h, e.Event))
+		case !parsed:
+			state = StateUnreadable
+		default:
+			state = entryState(e, hooks, recorded[e.Event])
+			if state == StateMissing {
+				state = c.absent(c.base != nil && c.base.hadTripcordHook(h, e.Event))
+			}
+		}
+		if state != "" {
+			c.add(h, path, e.Event, e.Event, state, f.raw, nil)
+		}
+	}
+}
+
+// entryState is "" when hooks.<e.Event> holds an entry identical to e.
+// An entry whose digest the manifest records, when that is not e's, is
+// stale; any other entry that names tripcord is changed.
+func entryState(e HookEntry, hooks map[string]any, recorded string) string {
 	list, _ := hooks[e.Event].([]any)
-	changed := false
+	state := StateMissing
 	for _, v := range list {
 		n := anyNode(v)
 		if n.equal(e.entry) {
 			return ""
 		}
-		if namesTripcord(n) {
-			changed = true
+		switch {
+		case recorded != "" && recorded != e.SHA256() && hookDigest(e.Event, n) == recorded:
+			state = StateStale
+		case state == StateMissing && namesTripcord(n):
+			state = StateChanged
 		}
 	}
-	if changed {
-		return StateChanged
-	}
-	return StateMissing
+	return state
 }
 
-func guardItem(e HookEntry, state string, raw []byte) (model.ConfigItem, error) {
-	key, err := json.Marshal([]string{GuardSetting, e.Event})
-	if err != nil {
-		return model.ConfigItem{}, err
+func hookDigest(event string, n *node) string {
+	return digest(append([]byte(event+"\x00"), n.canonical()...))
+}
+
+// setupStep checks the step init adds to copilot-setup-steps.yml.
+func (c *checker) setupStep() {
+	f := c.head.files[CopilotSetupStepsPath]
+	baseHad := c.base != nil && c.base.hasTripcordStep()
+	if !f.exists() {
+		c.add(model.HarnessCopilot, CopilotSetupStepsPath, subjectStep, "", c.absent(baseHad), nil, nil)
+		return
 	}
-	payload, err := json.Marshal(map[string]string{
+	steps, ok := setupSteps(f)
+	if !ok {
+		c.add(model.HarnessCopilot, CopilotSetupStepsPath, subjectStep, "", StateUnreadable, f.raw, nil)
+		return
+	}
+	want := copilotStep().digest()
+	recorded := c.head.manifest.recordedFile(CopilotSetupStepsPath, copilotStepName)
+	state := StateMissing
+	for _, step := range steps {
+		if isCopilotStep(step) {
+			return
+		}
+		n := yamlNode(step)
+		switch {
+		case recorded != "" && recorded != want && n.digest() == recorded:
+			state = StateStale
+		case state == StateMissing && namesTripcord(n):
+			state = StateChanged
+		}
+	}
+	if state == StateMissing {
+		state = c.absent(baseHad)
+	}
+	c.add(model.HarnessCopilot, CopilotSetupStepsPath, subjectStep, "", state, f.raw, nil)
+}
+
+func (t *revision) hasTripcordStep() bool {
+	steps, ok := setupSteps(t.files[CopilotSetupStepsPath])
+	return ok && slices.ContainsFunc(steps, func(s *yaml.Node) bool { return namesTripcord(yamlNode(s)) })
+}
+
+// setupSteps is jobs.copilot-setup-steps.steps of f.
+func setupSteps(f file) ([]*yaml.Node, bool) {
+	if f.state != "" {
+		return nil, false
+	}
+	var doc yaml.Node
+	if err := yaml.Unmarshal(f.raw, &doc); err != nil || doc.Kind != yaml.DocumentNode || len(doc.Content) != 1 {
+		return nil, false
+	}
+	steps := mapValue(mapValue(mapValue(doc.Content[0], "jobs"), "copilot-setup-steps"), "steps")
+	if steps == nil || steps.Kind != yaml.SequenceNode {
+		return nil, false
+	}
+	return steps.Content, true
+}
+
+func (c *checker) add(h model.Harness, path, subject, event, state string, raw []byte, extra map[string]string) {
+	if c.err != nil {
+		return
+	}
+	key, err := json.Marshal([]string{GuardSetting, subject})
+	if err != nil {
+		c.err = err
+		return
+	}
+	payload := map[string]string{
 		"setting": GuardSetting,
-		"event":   e.Event,
+		"subject": subject,
 		"state":   state,
-		"sha256":  e.SHA256(),
 		"key":     string(key),
-	})
-	if err != nil {
-		return model.ConfigItem{}, err
 	}
-	sum := sha256.Sum256(raw)
-	return model.ConfigItem{
-		Harness: e.Harness,
+	if event != "" {
+		payload["event"] = event
+	}
+	maps.Copy(payload, extra)
+	body, err := json.Marshal(payload)
+	if err != nil {
+		c.err = err
+		return
+	}
+	c.items = append(c.items, model.ConfigItem{
+		Harness: h,
 		Scope:   model.ScopeRepo,
-		Path:    e.Path,
-		SHA256:  hex.EncodeToString(sum[:]),
+		Path:    path,
+		SHA256:  digest(raw),
 		Kind:    model.ConfigKindPermissions,
-		Payload: payload,
-		// Whether this item exists depends on the embed files too: a
-		// staged change to either one must report it.
-		SourcePaths: []string{BootstrapPath, ManifestPath},
-	}, nil
+		Payload: body,
+		// Whether this item exists depends on every file the check
+		// reads: a staged change to any of them must report it.
+		SourcePaths: slices.Clone(checkedPaths),
+	})
 }
 
 // anyNode converts a kit.DecodeJSON value into a node.
@@ -192,12 +488,7 @@ func anyNode(v any) *node {
 	switch t := v.(type) {
 	case map[string]any:
 		n := &node{kind: kindObject}
-		keys := make([]string, 0, len(t))
-		for k := range t {
-			keys = append(keys, k)
-		}
-		slices.Sort(keys)
-		for _, k := range keys {
+		for _, k := range slices.Sorted(maps.Keys(t)) {
 			n.set(k, anyNode(t[k]))
 		}
 		return n

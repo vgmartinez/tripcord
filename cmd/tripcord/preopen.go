@@ -34,8 +34,8 @@ func runPreopen(args []string, stdout, stderr io.Writer) int {
 		return target.configError(stderr, err)
 	case opts.secrets || opts.all:
 		return target.configError(stderr, errors.New("secret scanning lands in v1; v0 supports --config only"))
-	case opts.since != "":
-		return target.configError(stderr, errors.New("--since is not available: preopen fetches only the latest commit"))
+	case opts.since != "" || opts.base != "":
+		return target.configError(stderr, errors.New("--since and --base are not available: preopen fetches only the latest commit"))
 	case opts.scope != "repo":
 		return target.configError(stderr, errors.New("--scope must be repo: preopen scans the fetched repository only"))
 	}

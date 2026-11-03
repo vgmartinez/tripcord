@@ -11,6 +11,7 @@ package embedded
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"maps"
 	"slices"
 	"strings"
 
@@ -38,8 +39,8 @@ const ManifestSchema = "tripcord.embed/v1"
 // GuardSetting is the payload setting of a TC-CFG-016 guard item.
 const GuardSetting = "tripcordGuard"
 
-// bootstrapCommand is how every harness runs the bootstrap script from
-// the repository root. Claude Code passes the script as an argument.
+// bootstrapCommand is how setup steps run the bootstrap script from the
+// repository root.
 const bootstrapCommand = "bash " + BootstrapPath
 
 // Harnesses are the harnesses init can wire, in the order it writes them.
@@ -61,15 +62,45 @@ var HookHarnesses = []model.Harness{model.HarnessClaude, model.HarnessCursor, mo
 // `tripcord hook`.
 const HookEvent = "pre-tool"
 
-// HookArgs is the argv after "tripcord" that the pre-tool hook of h runs.
+// HookArgs is the argv after the tripcord binary that the pre-tool hook
+// of h runs. bootstrap.sh passes it to the verified binary unchanged.
 func HookArgs(h model.Harness) []string {
 	return []string{"hook", "--harness", string(h), "--event", HookEvent}
 }
 
-// HookCommandLine is HookArgs as one command line.
-func HookCommandLine(h model.Harness) string {
-	return "tripcord " + strings.Join(HookArgs(h), " ")
+// projectBootstrap is how a hook of h names bootstrap.sh. Claude Code
+// and Cursor set a project directory variable. Copilot sets none; its
+// hooks run with cwd "." (the repository root).
+func projectBootstrap(h model.Harness) string {
+	switch h {
+	case model.HarnessClaude:
+		return `"${CLAUDE_PROJECT_DIR}/` + BootstrapPath + `"`
+	case model.HarnessCursor:
+		return `"${CURSOR_PROJECT_DIR}/` + BootstrapPath + `"`
+	default:
+		return BootstrapPath
+	}
 }
+
+// HookCommandLine is the command the pre-tool hook of h runs: the
+// bootstrap script in hook mode, which execs the verified binary with
+// HookArgs. Hooks never run tripcord from PATH.
+func HookCommandLine(h model.Harness) string {
+	return "bash " + projectBootstrap(h) + " " + strings.Join(HookArgs(h), " ")
+}
+
+// sessionCommandLine is the command the session-start hook of h runs.
+func sessionCommandLine(h model.Harness) string {
+	return "bash " + projectBootstrap(h) + " session-start --harness " + string(h)
+}
+
+// Copilot command-hook timeouts, in seconds. A timed-out Copilot
+// command hook fails open, so these leave room for a cold install
+// (session start) and for checksumming the cached binary (pre-tool).
+const (
+	copilotSessionTimeoutSec = 300
+	copilotHookTimeoutSec    = 60
+)
 
 // HookEntry is one hook init writes: an element of the array under
 // hooks.<Event> in Path.
@@ -107,25 +138,19 @@ func HookEntries(h model.Harness) []HookEntry {
 	path := HookPath(h)
 	switch h {
 	case model.HarnessClaude:
-		args := make([]any, 0, 5)
-		for _, a := range HookArgs(h) {
-			args = append(args, a)
-		}
 		return []HookEntry{
 			{Harness: h, Path: path, Event: "SessionStart", entry: object(
 				"matcher", "startup|resume",
 				"hooks", array(object(
 					"type", "command",
-					"command", "bash",
-					"args", array("${CLAUDE_PROJECT_DIR}/"+BootstrapPath, "session-start"),
+					"command", sessionCommandLine(h),
 				)),
 			)},
 			{Harness: h, Path: path, Event: "PreToolUse", entry: object(
 				"matcher", "*",
 				"hooks", array(object(
 					"type", "command",
-					"command", "tripcord",
-					"args", array(args...),
+					"command", HookCommandLine(h),
 					"onFailure", "block",
 				)),
 			)},
@@ -133,7 +158,7 @@ func HookEntries(h model.Harness) []HookEntry {
 	case model.HarnessCursor:
 		return []HookEntry{
 			{Harness: h, Path: path, Event: "sessionStart", entry: object(
-				"command", bootstrapCommand+" session-start",
+				"command", sessionCommandLine(h),
 			)},
 			{Harness: h, Path: path, Event: "preToolUse", entry: object(
 				"command", HookCommandLine(h),
@@ -144,13 +169,15 @@ func HookEntries(h model.Harness) []HookEntry {
 		return []HookEntry{
 			{Harness: h, Path: path, Event: "sessionStart", entry: object(
 				"type", "command",
-				"bash", bootstrapCommand+" session-start",
+				"bash", sessionCommandLine(h),
 				"cwd", ".",
+				"timeoutSec", copilotSessionTimeoutSec,
 			)},
 			{Harness: h, Path: path, Event: "preToolUse", entry: object(
 				"type", "command",
 				"bash", HookCommandLine(h),
 				"cwd", ".",
+				"timeoutSec", copilotHookTimeoutSec,
 			)},
 		}
 	default:
@@ -158,13 +185,23 @@ func HookEntries(h model.Harness) []HookEntry {
 	}
 }
 
-// Manifest is .tripcord/embed.json: the harnesses init wired and the
-// digests of the hooks it wrote.
+// Manifest is .tripcord/embed.json: the pin bootstrap.sh was rendered
+// from, the harnesses init wired, and the digests of what it wrote.
 type Manifest struct {
-	Schema    string         `json:"schema"`
-	Version   string         `json:"version"`
-	Harnesses []string       `json:"harnesses"`
-	Hooks     []ManifestHook `json:"hooks"`
+	Schema    string            `json:"schema"`
+	Version   string            `json:"version"`
+	SHA256    map[string]string `json:"sha256"`
+	Harnesses []string          `json:"harnesses"`
+	Files     []ManifestFile    `json:"files"`
+	Hooks     []ManifestHook    `json:"hooks"`
+}
+
+// ManifestFile records the SHA-256 of a generated file, or of the step
+// init adds to a file it merges into (Step names it).
+type ManifestFile struct {
+	Path   string `json:"path"`
+	Step   string `json:"step,omitempty"`
+	SHA256 string `json:"sha256"`
 }
 
 // ManifestHook records one HookEntry.
@@ -175,13 +212,29 @@ type ManifestHook struct {
 	SHA256  string `json:"sha256"`
 }
 
-func newManifest(version string, harnesses []model.Harness) Manifest {
-	m := Manifest{Schema: ManifestSchema, Version: version, Harnesses: []string{}, Hooks: []ManifestHook{}}
+// Pin is the release the manifest records.
+func (m Manifest) Pin() Pin { return Pin{Version: m.Version, SHA256: m.SHA256} }
+
+func newManifest(pin Pin, harnesses []model.Harness) Manifest {
+	m := Manifest{
+		Schema:    ManifestSchema,
+		Version:   pin.Version,
+		SHA256:    maps.Clone(pin.SHA256),
+		Harnesses: []string{},
+		Files: []ManifestFile{
+			{Path: BootstrapPath, SHA256: digest(Bootstrap(pin))},
+			{Path: WorkflowPath, SHA256: digest(Workflow())},
+		},
+		Hooks: []ManifestHook{},
+	}
 	for _, h := range Harnesses {
 		if !slices.Contains(harnesses, h) {
 			continue
 		}
 		m.Harnesses = append(m.Harnesses, string(h))
+		if h == model.HarnessCopilot {
+			m.Files = append(m.Files, ManifestFile{Path: CopilotSetupStepsPath, Step: copilotStepName, SHA256: copilotStep().digest()})
+		}
 		for _, e := range HookEntries(h) {
 			m.Hooks = append(m.Hooks, ManifestHook{Harness: string(h), Path: e.Path, Event: e.Event, SHA256: e.SHA256()})
 		}
@@ -189,10 +242,33 @@ func newManifest(version string, harnesses []model.Harness) Manifest {
 	return m
 }
 
+// recordedFile is the digest the manifest records for path (and step).
+func (m Manifest) recordedFile(path, step string) string {
+	for _, f := range m.Files {
+		if f.Path == path && f.Step == step {
+			return f.SHA256
+		}
+	}
+	return ""
+}
+
 func (m Manifest) node() *node {
 	harnesses := make([]any, len(m.Harnesses))
 	for i, h := range m.Harnesses {
 		harnesses[i] = h
+	}
+	platforms := slices.Sorted(maps.Keys(m.SHA256))
+	sums := make([]any, 0, 2*len(platforms))
+	for _, p := range platforms {
+		sums = append(sums, p, m.SHA256[p])
+	}
+	files := make([]any, len(m.Files))
+	for i, f := range m.Files {
+		if f.Step != "" {
+			files[i] = object("path", f.Path, "step", f.Step, "sha256", f.SHA256)
+		} else {
+			files[i] = object("path", f.Path, "sha256", f.SHA256)
+		}
 	}
 	hooks := make([]any, len(m.Hooks))
 	for i, h := range m.Hooks {
@@ -201,7 +277,14 @@ func (m Manifest) node() *node {
 	return object(
 		"schema", m.Schema,
 		"version", m.Version,
+		"sha256", object(sums...),
 		"harnesses", array(harnesses...),
+		"files", array(files...),
 		"hooks", array(hooks...),
 	)
+}
+
+func digest(b []byte) string {
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
 }

@@ -38,6 +38,9 @@ func object(pairs ...any) *node {
 	return n
 }
 
+// digest is the SHA-256 of n's canonical JSON.
+func (n *node) digest() string { return digest(n.canonical()) }
+
 func array(items ...any) *node {
 	n := &node{kind: kindArray}
 	for _, item := range items {

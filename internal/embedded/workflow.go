@@ -79,8 +79,13 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: copilot-setup-steps-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   copilot-setup-steps:
+    name: Copilot setup steps
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -93,6 +98,11 @@ jobs:
       - name: ` + copilotStepName + `
         run: ` + installCommand + `
 `)
+}
+
+// copilotStep is the step init adds to copilot-setup-steps.yml.
+func copilotStep() *node {
+	return object("name", copilotStepName, "run", installCommand)
 }
 
 // DevinBlueprint returns a new .devin/blueprint.yaml.

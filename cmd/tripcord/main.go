@@ -6,6 +6,7 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"flag"
@@ -36,6 +37,7 @@ import (
 	"github.com/vgmartinez/tripcord/internal/embedded"
 	"github.com/vgmartinez/tripcord/internal/exitcode"
 	"github.com/vgmartinez/tripcord/internal/fpkey"
+	"github.com/vgmartinez/tripcord/internal/gitrun"
 	"github.com/vgmartinez/tripcord/internal/indexfiles"
 	"github.com/vgmartinez/tripcord/internal/model"
 	"github.com/vgmartinez/tripcord/internal/output"
@@ -123,6 +125,7 @@ type scanOptions struct {
 	format      string
 	output      string
 	since       string
+	base        string
 	failOn      string
 	policy      string
 	orgPolicy   string
@@ -164,8 +167,8 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 			writeString(stderr, "tripcord scan: staged scan blocked the commit; bypass only with git commit --no-verify\n")
 			return code
 		}
-		if opts.scope != "repo" || opts.since != "" || opts.policy != "" || opts.orgPolicy != "" {
-			code := target.configError(stderr, errors.New("--staged requires repo scope and index policy, and does not support --since, --policy, or --org-policy"))
+		if opts.scope != "repo" || opts.since != "" || opts.base != "" || opts.policy != "" || opts.orgPolicy != "" {
+			code := target.configError(stderr, errors.New("--staged requires repo scope and index policy, and does not support --since, --base, --policy, or --org-policy"))
 			writeString(stderr, "tripcord scan: staged scan blocked the commit; bypass only with git commit --no-verify\n")
 			return code
 		}
@@ -414,11 +417,30 @@ func scanTree(ctx context.Context, t scanTarget, opts scanOptions, stdout, stder
 	if ctx.Err() != nil {
 		return int(exitcode.Config)
 	}
+	var changed map[string]bool
+	if opts.since != "" {
+		changed, err = changedFiles(root, opts.since)
+		if err != nil {
+			var invoke *gitInvokeError
+			if errors.As(err, &invoke) && invoke.missing {
+				return t.internalError(stderr, err)
+			}
+			return t.configError(stderr, err)
+		}
+	}
 	if repoScope {
 		if err := scriptcheck.Annotate(root, items); err != nil {
 			return t.internalError(stderr, fmt.Errorf("hook scripts: %w", err))
 		}
-		guards, err := embedded.Check(root, requested)
+		check := embedded.CheckOptions{Only: requested}
+		if ref := cmp.Or(opts.base, opts.since); ref != "" {
+			read, err := baseReader(ctx, root, ref)
+			if err != nil {
+				return t.configError(stderr, err)
+			}
+			check.Base = read
+		}
+		guards, err := embedded.Check(root, check)
 		if err != nil {
 			return t.internalError(stderr, fmt.Errorf("embedded guard: %w", err))
 		}
@@ -429,14 +451,6 @@ func scanTree(ctx context.Context, t scanTarget, opts scanOptions, stdout, stder
 	}
 	diagnostics = adapters.DedupeEscapingSymlinkDiagnostics(diagnostics)
 	if opts.since != "" {
-		changed, err := changedFiles(root, opts.since)
-		if err != nil {
-			var invoke *gitInvokeError
-			if errors.As(err, &invoke) && invoke.missing {
-				return t.internalError(stderr, err)
-			}
-			return t.configError(stderr, err)
-		}
 		items = slices.DeleteFunc(items, func(item model.ConfigItem) bool {
 			return item.Scope != model.ScopeRepo || !changed[item.Path]
 		})
@@ -565,6 +579,7 @@ func parseCommandFlags(cmd flagCommand, args []string, stdout io.Writer) (scanOp
 	flags.StringVar(&opts.format, "format", "text", "text, json, sarif, md, or gha")
 	flags.StringVar(&opts.output, "output", "-", "output path or - for stdout")
 	flags.StringVar(&opts.since, "since", "", "files changed between the ref and HEAD; requires git")
+	flags.StringVar(&opts.base, "base", "", "base revision of a change: also report a Tripcord embed the change removes or weakens (TC-CFG-016); requires git. --since implies it")
 	flags.StringVar(&opts.failOn, "fail-on", "", "low, medium, high, or critical")
 	flags.StringVar(&opts.policy, "policy", "", "policy file")
 	flags.StringVar(&opts.orgPolicy, "org-policy", "", "organization policy file")
@@ -598,6 +613,14 @@ func parseCommandFlags(cmd flagCommand, args []string, stdout io.Writer) (scanOp
 	if opts.since != "" {
 		if err := validateSinceRef(opts.since); err != nil {
 			return scanOptions{}, err
+		}
+	}
+	if opts.base != "" {
+		if strings.HasPrefix(opts.base, "-") || strings.ContainsAny(opts.base, "\x00\n\r") {
+			return scanOptions{}, fmt.Errorf("--base %q: git ref must not start with '-' or contain a control character", opts.base)
+		}
+		if opts.since != "" && opts.since != opts.base {
+			return scanOptions{}, errors.New("--base and --since name different revisions; --since alone compares with its ref")
 		}
 	}
 	switch {
@@ -738,7 +761,7 @@ func repoRoot(dir string) bool {
 
 func normalizeScanArgs(args []string) ([]string, error) {
 	valueFlags := map[string]bool{
-		"harness": true, "format": true, "output": true, "since": true,
+		"harness": true, "format": true, "output": true, "since": true, "base": true,
 		"fail-on": true, "policy": true, "org-policy": true, "scope": true,
 	}
 	var flags []string
@@ -764,6 +787,27 @@ func normalizeScanArgs(args []string) ([]string, error) {
 		}
 	}
 	return append(append(flags, "--"), positionals...), nil
+}
+
+// baseReader resolves ref to a commit of root and returns a reader of
+// its files for embedded.Check. A path the commit does not have is
+// fs.ErrNotExist.
+func baseReader(ctx context.Context, root, ref string) (func(string) ([]byte, error), error) {
+	out, err := gitrun.Run(ctx, root, "--no-pager", "--no-optional-locks", "rev-parse", "--verify", "--quiet", "--end-of-options", ref+"^{commit}")
+	if err != nil {
+		return nil, fmt.Errorf("base %q is not a commit of this repository", ref)
+	}
+	sha := strings.TrimSpace(string(out))
+	if !fullSHA(sha) {
+		return nil, fmt.Errorf("base %q did not resolve to a commit", ref)
+	}
+	return func(rel string) ([]byte, error) {
+		data, err := gitShowBlob(ctx, root, sha, rel)
+		if errors.Is(err, errBaseUnavailable) {
+			return nil, fmt.Errorf("base %s is not available", sha)
+		}
+		return data, err
+	}, nil
 }
 
 func validateSinceRef(ref string) error {

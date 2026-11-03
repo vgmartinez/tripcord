@@ -86,7 +86,7 @@ func adapterDiscover(ctx context.Context, root string) ([]model.ConfigItem, erro
 	if err := scriptcheck.Annotate(root, items); err != nil {
 		return nil, err
 	}
-	guards, err := embedded.Check(root, nil)
+	guards, err := embedded.Check(root, embedded.CheckOptions{})
 	if err != nil {
 		return nil, err
 	}

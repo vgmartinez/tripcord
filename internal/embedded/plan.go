@@ -150,7 +150,7 @@ func embedSteps(opts Options, harnesses []model.Harness) []step {
 			return ownFile(old, exists, Bootstrap(opts.Pin), force, "--force re-pins it to this --version and --sha256")
 		}},
 		{path: ManifestPath, mode: 0o644, merge: func(old []byte, exists bool) ([]byte, error) {
-			return mergeManifest(old, exists, opts.Pin.Version, harnesses, force)
+			return mergeManifest(old, exists, opts.Pin, harnesses, force)
 		}},
 		{path: WorkflowPath, mode: 0o644, merge: func(old []byte, exists bool) ([]byte, error) {
 			return ownFile(old, exists, Workflow(), force, "--force replaces it")
@@ -200,7 +200,7 @@ func embedSteps(opts Options, harnesses []model.Harness) []step {
 
 // mergeManifest records the union of the harnesses already wired and
 // the ones this run wires.
-func mergeManifest(old []byte, exists bool, version string, harnesses []model.Harness, force bool) ([]byte, error) {
+func mergeManifest(old []byte, exists bool, pin Pin, harnesses []model.Harness, force bool) ([]byte, error) {
 	all := slices.Clone(harnesses)
 	if exists {
 		var m Manifest
@@ -215,7 +215,7 @@ func mergeManifest(old []byte, exists bool, version string, harnesses []model.Ha
 			}
 		}
 	}
-	return newManifest(version, all).node().encode("  "), nil
+	return newManifest(pin, all).node().encode("  "), nil
 }
 
 // Apply writes every change that is not already in place. It returns
