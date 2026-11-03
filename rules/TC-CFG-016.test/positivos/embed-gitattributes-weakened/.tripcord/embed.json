@@ -1,0 +1,34 @@
+{
+  "schema": "tripcord.embed/v1",
+  "version": "0.1.0",
+  "sha256": {
+    "linux-x64": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "harnesses": [
+    "claude"
+  ],
+  "files": [
+    {
+      "path": ".tripcord/bootstrap.sh",
+      "sha256": "7d1a978ee7315ce6cdf48d5f28fa2c913e3ecfe831549f3baf3830a6fb11df77"
+    },
+    {
+      "path": ".github/workflows/tripcord.yml",
+      "sha256": "de28ae793bb4bb4945dc4b54f7afba5675bb407f98d2fafff6724ea536aff2ba"
+    }
+  ],
+  "hooks": [
+    {
+      "harness": "claude",
+      "path": ".claude/settings.json",
+      "event": "SessionStart",
+      "sha256": "2a43a6768d77210aa384bc246184f3d34e2383284683b5477585e0987e797e96"
+    },
+    {
+      "harness": "claude",
+      "path": ".claude/settings.json",
+      "event": "PreToolUse",
+      "sha256": "3ce2977b6677c2e831268759e813283b13613620fcfd8dae7a73116f458912ef"
+    }
+  ]
+}

@@ -48,6 +48,12 @@ const (
 	// StateLocalOverride: a tracked settings.local.json defines hooks
 	// for an event Tripcord wires, without Tripcord's entry.
 	StateLocalOverride = "local-override"
+	// StateLocalPolicy: the repository tracks, or a staged change
+	// stages, .tripcord/policy.local.yaml. That file is a per-checkout
+	// layer; a tracked copy overrides everyone's effective policy
+	// instead of only its own, so the scan never loads it (see
+	// cmd/tripcord's SkipLocal wiring) and reports it here instead.
+	StateLocalPolicy = "local-policy"
 )
 
 // Local settings files: personal, and so not checked, unless the
@@ -67,14 +73,16 @@ var localSettings = []struct {
 
 // Guard subjects that are not a hook event.
 const (
-	subjectBootstrap = "bootstrap"
-	subjectManifest  = "manifest"
-	subjectWorkflow  = "workflow"
-	subjectStep      = "setup-step"
-	subjectHarnesses = "manifest-harnesses"
-	subjectPin       = "manifest-pin"
-	subjectLocal     = "local-settings"
-	subjectPolicy    = "policy"
+	subjectBootstrap     = "bootstrap"
+	subjectManifest      = "manifest"
+	subjectWorkflow      = "workflow"
+	subjectStep          = "setup-step"
+	subjectHarnesses     = "manifest-harnesses"
+	subjectPin           = "manifest-pin"
+	subjectLocal         = "local-settings"
+	subjectPolicy        = "policy"
+	subjectPolicyLocal   = "policy-local"
+	subjectGitattributes = "gitattributes"
 )
 
 // CheckOptions selects what Check compares.
@@ -91,6 +99,12 @@ type CheckOptions struct {
 	// git index). A settings.local.json that is not tracked is personal
 	// and is not checked. Nil tracks nothing.
 	Tracked func(rel string) bool
+	// IndexTree is true when root holds only the git index's content (a
+	// --staged scan's private tree), read with no checkout smudge or
+	// autocrlf filter: a file with CRLF line endings there did not pass
+	// through one, however it looks, so it is hashed as its raw bytes
+	// with no uniform-CRLF leniency at all.
+	IndexTree bool
 }
 
 // file is one file read for the check. state is "" when raw was read.
@@ -113,16 +127,21 @@ type revision struct {
 	// manifestOK is true when embed.json parses as a manifest with a
 	// valid pin.
 	manifestOK bool
+	// blob is true when every file here was read as a git blob (the
+	// base revision, always, or the head with CheckOptions.IndexTree):
+	// no checkout filter ran, so CRLF is never given uniform-autocrlf
+	// leniency; see lf and ownFile.
+	blob bool
 }
 
 // checkedPaths are every file the check reads.
-var checkedPaths = []string{BootstrapPath, ManifestPath, WorkflowPath, ClaudeSettingsPath, CursorHooksPath, CopilotHooksPath, CopilotSetupStepsPath}
+var checkedPaths = []string{BootstrapPath, ManifestPath, WorkflowPath, ClaudeSettingsPath, CursorHooksPath, CopilotHooksPath, CopilotSetupStepsPath, GitattributesPath}
 
 // sourcePaths are every file whose content a guard item depends on.
-var sourcePaths = append(slices.Clone(checkedPaths), ClaudeLocalSettingsPath, CopilotLocalSettingsPath)
+var sourcePaths = append(slices.Clone(checkedPaths), ClaudeLocalSettingsPath, CopilotLocalSettingsPath, PolicyLocalPath)
 
-func newRevision(read func(rel string) (file, error)) (*revision, error) {
-	t := &revision{files: map[string]file{}}
+func newRevision(blob bool, read func(rel string) (file, error)) (*revision, error) {
+	t := &revision{files: map[string]file{}, blob: blob}
 	for _, p := range checkedPaths {
 		f, err := read(p)
 		if err != nil {
@@ -256,7 +275,7 @@ func Check(root string, opts CheckOptions) ([]model.ConfigItem, error) {
 		return nil, err
 	}
 	defer func() { _ = r.Close() }()
-	head, err := newRevision(func(rel string) (file, error) {
+	head, err := newRevision(opts.IndexTree, func(rel string) (file, error) {
 		linked := strings.HasPrefix(rel, ".tripcord/") && (isSymlink(root, ".tripcord") || isSymlink(root, rel))
 		raw, err := r.ReadFile(rel, adapters.MaxConfigFileBytes)
 		switch {
@@ -274,7 +293,7 @@ func Check(root string, opts CheckOptions) ([]model.ConfigItem, error) {
 	}
 	var base *revision
 	if opts.Base != nil {
-		base, err = newRevision(func(rel string) (file, error) {
+		base, err = newRevision(true, func(rel string) (file, error) {
 			raw, err := opts.Base(rel)
 			switch {
 			case errors.Is(err, fs.ErrNotExist):
@@ -305,6 +324,9 @@ func Check(root string, opts CheckOptions) ([]model.ConfigItem, error) {
 		if c.leftover == nil || c.leftover.workflow {
 			c.ownFile(subjectWorkflow, WorkflowPath, func(Manifest) []byte { return Workflow() })
 		}
+		if c.leftover == nil {
+			c.gitattributes()
+		}
 		wired := c.wired()
 		for _, h := range HookHarnesses {
 			if slices.Contains(wired, h) && c.selected(h) {
@@ -315,10 +337,12 @@ func Check(root string, opts CheckOptions) ([]model.ConfigItem, error) {
 			c.setupStep()
 		}
 	}
-	// A pull request can commit a settings.local.json whether or not
-	// the base was embedded, so base mode always checks them.
+	// A pull request can commit a settings.local.json, or
+	// policy.local.yaml, whether or not the base was embedded, so base
+	// mode always checks them.
 	if (active || opts.Base != nil) && opts.Tracked != nil {
 		c.localSettings(r, opts.Tracked, active)
+		c.policyLocal(r, opts.Tracked)
 	}
 	return c.items, c.err
 }
@@ -367,6 +391,22 @@ func (c *checker) localSettings(r *adapters.SafeReader, tracked func(string) boo
 			}
 		}
 	}
+}
+
+// policyLocal reports a git-tracked, or staged, .tripcord/policy.local.yaml.
+// It is a per-checkout layer; a copy the repository tracks overrides the
+// effective policy for everyone who checks the branch out, not only the
+// person who committed it, so the scan does not load it (see cmd/tripcord's
+// SkipLocal wiring) and reports it here instead.
+func (c *checker) policyLocal(r *adapters.SafeReader, tracked func(string) bool) {
+	if !tracked(PolicyLocalPath) {
+		return
+	}
+	raw, err := r.ReadFile(PolicyLocalPath, adapters.MaxConfigFileBytes)
+	if err != nil {
+		return
+	}
+	c.add(model.SurfaceGeneric, PolicyLocalPath, subjectPolicyLocal, "", StateLocalPolicy, raw, nil)
 }
 
 type checker struct {
@@ -463,9 +503,87 @@ func (c *checker) ownFile(subject, path string, render func(Manifest) []byte) {
 		c.add(model.SurfaceGeneric, path, subject, "", StateUnreadable, nil, nil)
 	case c.head.manifestOK:
 		want := digest(render(c.head.manifest))
-		if state := compare(digest(lf(f.raw)), want, c.head.manifest.recordedFile(path, "")); state != "" {
+		if state := compare(digest(c.head.contentBytes(f.raw)), want, c.head.manifest.recordedFile(path, "")); state != "" {
 			c.add(model.SurfaceGeneric, path, subject, "", state, f.raw, nil)
 		}
+	}
+}
+
+// contentBytes is raw with CRLF normalized to LF, unless t.blob: a git
+// blob was read with no checkout filter, so a CRLF there is never given
+// the uniform-autocrlf-checkout leniency lf otherwise applies.
+func (t *revision) contentBytes(raw []byte) []byte {
+	if t.blob {
+		return raw
+	}
+	return lf(raw)
+}
+
+// gitattributesTargets are the paths gitattributesLines pins to
+// text eol=lf.
+func gitattributesTargets() []string {
+	return []string{BootstrapPath, ManifestPath, WorkflowPath, CopilotHooksPath}
+}
+
+// gitattributesState is the text and eol attributes raw resolves for
+// path, matching only the exact literal pattern mergeGitattributes
+// writes ("/"+path): Git resolves an attribute by the last matching
+// pattern in the file, per attribute name, so a later line for the same
+// pattern overrides an earlier one, including ours.
+func gitattributesState(raw []byte, path string) (text, eol string) {
+	pattern := "/" + path
+	for _, line := range strings.Split(string(raw), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 0 || strings.HasPrefix(fields[0], "#") || fields[0] != pattern {
+			continue
+		}
+		for _, attr := range fields[1:] {
+			switch {
+			case attr == "text":
+				text = "text"
+			case attr == "-text" || attr == "!text":
+				text = attr
+			case strings.HasPrefix(attr, "eol="):
+				eol = attr
+			}
+		}
+	}
+	return text, eol
+}
+
+// gitattributesOK reports whether raw resolves text eol=lf for every
+// path gitattributesTargets lists.
+func gitattributesOK(raw []byte) bool {
+	for _, path := range gitattributesTargets() {
+		text, eol := gitattributesState(raw, path)
+		if text != "text" || eol != "eol=lf" {
+			return false
+		}
+	}
+	return true
+}
+
+// gitattributes checks that .gitattributes still pins every embed file
+// bash runs, or that the check hashes, to text eol=lf: removing those
+// lines, or a later line that overrides text or eol for the same
+// pattern (-text, eol=crlf), lets a checkout, or a committed file,
+// carry a CR that bash sees but a uniformly-converted digest would not.
+func (c *checker) gitattributes() {
+	f := c.head.files[GitattributesPath]
+	switch {
+	case f.linked:
+		c.add(model.SurfaceGeneric, GitattributesPath, subjectGitattributes, "", StateChanged, f.raw, nil)
+		return
+	case !f.exists():
+		baseHad := c.base != nil && c.base.files[GitattributesPath].exists() && gitattributesOK(c.base.files[GitattributesPath].raw)
+		c.add(model.SurfaceGeneric, GitattributesPath, subjectGitattributes, "", c.absent(baseHad), nil, nil)
+		return
+	case f.state != "":
+		c.add(model.SurfaceGeneric, GitattributesPath, subjectGitattributes, "", StateUnreadable, nil, nil)
+		return
+	}
+	if !gitattributesOK(f.raw) {
+		c.add(model.SurfaceGeneric, GitattributesPath, subjectGitattributes, "", StateChanged, f.raw, nil)
 	}
 }
 

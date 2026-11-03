@@ -156,6 +156,7 @@ func embedSteps(opts Options, harnesses []model.Harness) []step {
 			return ownFile(old, exists, Workflow(), force, "--force replaces it")
 		}},
 		{path: GitattributesPath, mode: 0o644, merge: mergeGitattributes},
+		{path: GitignorePath, mode: 0o644, merge: mergeGitignore},
 	}
 	for _, h := range Harnesses {
 		if !slices.Contains(harnesses, h) {

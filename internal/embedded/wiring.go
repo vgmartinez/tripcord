@@ -32,6 +32,14 @@ const (
 	DevinBlueprintPath    = ".devin/blueprint.yaml"
 	AgentsPath            = "AGENTS.md"
 	GitattributesPath     = ".gitattributes"
+	// PolicyLocalPath is the per-checkout policy layer (policy.LocalFile
+	// in internal/policy, duplicated here the same way PolicyPath
+	// duplicates policy.RepoFile) that a tracked copy weakens for
+	// everyone; see TC-CFG-016.
+	PolicyLocalPath = ".tripcord/policy.local.yaml"
+	// GitignorePath is where init --embed adds PolicyLocalPath so a
+	// fresh checkout does not accidentally track it.
+	GitignorePath = ".gitignore"
 )
 
 // ManifestSchema is the schema id of .tripcord/embed.json.

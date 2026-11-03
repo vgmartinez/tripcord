@@ -29,3 +29,7 @@ positivos:
   local-claude-hooks-override.json: high
   base-local-disable-all-hooks.json: high
   base-policy-weakened.json: high
+  local-policy-tracked.json: high
+  base-local-policy-tracked.json: high
+  embed-gitattributes-removed: high
+  embed-gitattributes-weakened: high

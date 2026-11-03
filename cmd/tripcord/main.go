@@ -345,9 +345,25 @@ func scanTree(ctx context.Context, t scanTarget, opts scanOptions, stdout, stder
 			return t.configError(stderr, err)
 		}
 	}
+	// tracked reports whether root's git index holds rel: for a staged
+	// scan, t.root already holds only index content, so every path in
+	// it is tracked (or about to be committed) by definition.
+	tracked := trackedIn(ctx, root)
+	if t.indexTree {
+		tracked = func(string) bool { return true }
+	}
 	policyOpts := policy.Options{RepoRoot: t.policyRoot, RepoPolicy: opts.policy, Surface: policy.SurfaceScan, Env: env, Catalog: catalog}
 	if opts.orgPolicy != "" {
 		policyOpts.OrgPolicy = []string{opts.orgPolicy}
+	}
+	// A tracked, or staged, policy.local.yaml is shared configuration,
+	// not personal, and it is a high TC-CFG-016 finding (below) rather
+	// than a decision-maker: committing it would otherwise let the
+	// change relax its own scan, and every scan after that merges, by
+	// weakening a per-checkout layer that is supposed to be each
+	// developer's own.
+	if opts.policy == "" && tracked(policy.LocalFile) {
+		policyOpts.SkipLocal = true
 	}
 	// Compared with a base, the repository policy is the base's, as in
 	// pr-context: the change under review must not set its own mode,
@@ -475,10 +491,7 @@ func scanTree(ctx context.Context, t scanTarget, opts scanOptions, stdout, stder
 		if err := scriptcheck.Annotate(root, items); err != nil {
 			return t.internalError(stderr, fmt.Errorf("hook scripts: %w", err))
 		}
-		check := embedded.CheckOptions{Only: requested, Tracked: trackedIn(ctx, root)}
-		if t.indexTree {
-			check.Tracked = func(string) bool { return true }
-		}
+		check := embedded.CheckOptions{Only: requested, Tracked: tracked, IndexTree: t.indexTree}
 		if baseSHA != "" {
 			check.Base = baseReader(ctx, root, baseSHA)
 		}

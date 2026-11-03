@@ -37,9 +37,39 @@ func ownFile(old []byte, exists bool, want []byte, force bool, hint string) ([]b
 }
 
 // lf is b with CRLF line endings converted to LF: the form init writes
-// and the check hashes, whatever core.autocrlf did to the checkout.
+// and the check hashes, whatever core.autocrlf did to the checkout. It
+// normalizes only when allCRLF(b): a real autocrlf checkout converts a
+// file uniformly, so a file with even one bare LF, or one line ending
+// in a bare CR, is not in that shape and is hashed as its raw bytes.
+// Converting it anyway would let a single CR injected on one line (a
+// `.gitattributes` `-text` override for that path makes this possible;
+// see TC-CFG-016) disappear before the digest compares it, while bash
+// still sees it and lets it split or redirect the line it is on.
 func lf(b []byte) []byte {
+	if !allCRLF(b) {
+		return b
+	}
 	return bytes.ReplaceAll(b, []byte("\r\n"), []byte("\n"))
+}
+
+// allCRLF reports whether b has at least one line ending and every one
+// is CRLF.
+func allCRLF(b []byte) bool {
+	hasLine := false
+	for i := 0; i < len(b); i++ {
+		switch b[i] {
+		case '\n':
+			if i == 0 || b[i-1] != '\r' {
+				return false
+			}
+			hasLine = true
+		case '\r':
+			if i+1 >= len(b) || b[i+1] != '\n' {
+				return false
+			}
+		}
+	}
+	return hasLine
 }
 
 const gitattributesComment = "# Tripcord embed: bash needs LF, and tripcord scan hashes these files."
@@ -83,6 +113,30 @@ func mergeGitattributes(old []byte, exists bool) ([]byte, error) {
 		text += eol
 	}
 	return []byte(text + strings.Join(add, eol) + eol), nil
+}
+
+// gitignoreLine keeps the per-checkout policy layer out of the
+// repository: a tracked one overrides everyone's effective policy once
+// committed (TC-CFG-016), the opposite of what it is for.
+const gitignoreLine = "/" + PolicyLocalPath
+
+// mergeGitignore appends gitignoreLine when old does not already have
+// it, matched line for line like mergeGitattributes.
+func mergeGitignore(old []byte, exists bool) ([]byte, error) {
+	text := string(old)
+	for _, line := range strings.Split(string(lf(old)), "\n") {
+		if strings.TrimSpace(line) == gitignoreLine {
+			return old, nil
+		}
+	}
+	eol := "\n"
+	if strings.Contains(text, "\r\n") {
+		eol = "\r\n"
+	}
+	if exists && text != "" && !strings.HasSuffix(text, "\n") {
+		text += eol
+	}
+	return []byte(text + gitignoreLine + eol), nil
 }
 
 // hookFile describes a JSON file of hook arrays keyed by event.

@@ -1,0 +1,15 @@
+[
+  {
+    "harness": "generic",
+    "scope": "repo",
+    "path": ".tripcord/policy.local.yaml",
+    "sha256": "9d61853cfc6c42e2a106b2927a021a8a212477c52a004fa24fb98baa559f2bf4",
+    "kind": "permissions",
+    "payload": {
+      "key": "[\"tripcordGuard\",\"policy-local\"]",
+      "setting": "tripcordGuard",
+      "state": "local-policy",
+      "subject": "policy-local"
+    }
+  }
+]

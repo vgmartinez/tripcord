@@ -204,9 +204,16 @@ var cfg016Fixtures = map[string]cfg016Fixture{
 				t.Fatalf("re-pin: exit %d: %s", code, stderr)
 			}
 		}},
+	// .gitattributes is kept as init writes it: this fixture is about the
+	// digest's own CRLF leniency (a real autocrlf checkout converts
+	// every line, so lf normalizes it), not about the guard on
+	// .gitattributes itself (see embed-gitattributes-removed and
+	// embed-gitattributes-weakened).
 	"embed-crlf-checkout": {kind: "negativos", args: embedArgs("--harness", "claude"), edit: edits(
-		removeFile(embedded.GitattributesPath),
 		crlf(embedded.BootstrapPath), crlf(embedded.ManifestPath), crlf(embedded.WorkflowPath), crlf(embedded.ClaudeSettingsPath))},
+	"embed-gitattributes-removed": {kind: "positivos", args: embedArgs("--harness", "claude"), edit: removeFile(embedded.GitattributesPath)},
+	"embed-gitattributes-weakened": {kind: "positivos", args: embedArgs("--harness", "claude"),
+		edit: replaceInFile(embedded.GitattributesPath, "/"+embedded.BootstrapPath+" text eol=lf\n", "/"+embedded.BootstrapPath+" -text\n")},
 	"local-claude-disable-all-hooks": {kind: "positivos", args: embedArgs("--harness", "claude"), tracked: true,
 		edit: writeFile(embedded.ClaudeLocalSettingsPath, localDisableAllHooks)},
 	"local-copilot-disable-all-hooks": {kind: "positivos", args: embedArgs("--harness", "copilot"), tracked: true,
@@ -214,6 +221,10 @@ var cfg016Fixtures = map[string]cfg016Fixture{
 	"local-claude-hooks-override": {kind: "positivos", args: embedArgs("--harness", "claude"), tracked: true,
 		edit: writeFile(embedded.ClaudeLocalSettingsPath, localPreToolUse)},
 	"base-local-disable-all-hooks": {kind: "positivos", edit: writeFile(embedded.ClaudeLocalSettingsPath, localDisableAllHooks),
+		againstBase: true, tracked: true},
+	"local-policy-tracked": {kind: "positivos", args: embedArgs("--harness", "claude"), tracked: true,
+		edit: writeFile(embedded.PolicyLocalPath, "version: 1\nmode: audit\n")},
+	"base-local-policy-tracked": {kind: "positivos", edit: writeFile(embedded.PolicyLocalPath, "version: 1\nmode: audit\n"),
 		againstBase: true, tracked: true},
 	"embed-fresh":       {kind: "negativos", args: embedArgs()},
 	"embed-claude-only": {kind: "negativos", args: embedArgs("--harness", "claude")},
