@@ -41,8 +41,31 @@ on_exit() {
 trap on_exit EXIT
 trap 'exit 2' HUP INT TERM
 
+# fold_home prints $1 with each path under $HOME that starts a word
+# written as ~/..., the way the tripcord binary prints one.
+fold_home() {
+  rest=$1
+  out=''
+  case "${HOME:-}" in
+    ''|/) printf '%s\n' "$rest"; return 0 ;;
+  esac
+  while :; do
+    case "$rest" in
+      *"$HOME/"*) ;;
+      *) break ;;
+    esac
+    before=${rest%%"$HOME/"*}
+    case "$before" in
+      ''|*' ') out="$out$before~/" ;;
+      *) out="$out$before$HOME/" ;;
+    esac
+    rest=${rest#*"$HOME/"}
+  done
+  printf '%s\n' "$out$rest"
+}
+
 fail() {
-  printf 'tripcord bootstrap: %s\n' "$1" >&2
+  printf 'tripcord bootstrap: %s\n' "$(fold_home "$1")" >&2
   exit 2
 }
 

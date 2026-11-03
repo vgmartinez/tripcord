@@ -240,3 +240,16 @@ func TestEmbedHookThroughBootstrap(t *testing.T) {
 		}
 	}
 }
+
+// TestEmbedBootstrapErrorFoldsHome: a bootstrap.sh error names the
+// cache under the home directory as ~/..., the way the binary prints a
+// home path, and never the home directory itself.
+func TestEmbedBootstrapErrorFoldsHome(t *testing.T) {
+	e := newEmbedE2E(t)
+	command := e.hookCommand(t, model.HarnessClaude)
+	code, stdout, stderr := e.runHookCommand(t, command, e.repo, []string{"XDG_CACHE_HOME=", "CLAUDE_PROJECT_DIR=" + e.repo}, adapterFixture(t, model.HarnessClaude, "pre-tool-use-bash-allow.json"))
+	want := "is not in the cache at ~/.cache/tripcord/0.1.0/" + e.platform + "/tripcord;"
+	if code != 2 || stdout != "" || !strings.Contains(stderr, want) || strings.Contains(stderr, e.home) {
+		t.Errorf("got exit %d stdout %q stderr %q, want exit 2 and %q without %s", code, stdout, stderr, want, e.home)
+	}
+}

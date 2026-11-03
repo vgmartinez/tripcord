@@ -10,7 +10,7 @@
   "files": [
     {
       "path": ".tripcord/bootstrap.sh",
-      "sha256": "ca02ec5a506762d57487df037821f481f1e2fd187525771539bd88ca945f977b"
+      "sha256": "971752bf3f8534917d90ea0142df0e5e0b28c06f0a95ef47665fbb662f62f7fb"
     },
     {
       "path": ".github/workflows/tripcord.yml",
