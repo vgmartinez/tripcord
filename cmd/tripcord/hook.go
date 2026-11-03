@@ -55,15 +55,27 @@ var hookAdapters = map[model.Harness]hookAdapter{
 	model.HarnessCopilot: {events: copilot.HookEvents, parse: copilot.ParseHookInput, render: copilot.RenderDecision},
 }
 
-// hookStdin and hookTimeout are variables so tests can feed input and
-// shorten the deadline.
+// hookStdin, hookTimeout, and hookDecide are variables so tests can
+// feed input, shorten the deadline, and make the decision panic.
 var (
 	hookStdin   io.Reader = os.Stdin
 	hookTimeout           = hook.Timeout
+	hookDecide            = decideHook
 )
 
-func runHook(args []string, stdout, stderr io.Writer) int {
-	var harness, event, onFailure string
+func runHook(args []string, stdout, stderr io.Writer) (code int) {
+	failClosed := failClosedRequested(args)
+	var ad *hookAdapter
+	var event string
+	// A panic is an internal error: exit 4, or a deny under
+	// --on-failure block, and never a Go stack trace on the harness's
+	// stdout or stderr, which the agent reads.
+	defer func() {
+		if p := recover(); p != nil {
+			code = hookFailure(stdout, stderr, ad, event, failClosed, fmt.Errorf("internal error: %v", p))
+		}
+	}()
+	var harness, onFailure string
 	flags := flag.NewFlagSet("hook", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	flags.StringVar(&harness, "harness", "", "claude, cursor, or copilot")
@@ -77,23 +89,24 @@ func runHook(args []string, stdout, stderr io.Writer) int {
 			flags.PrintDefaults()
 			return writeString(stdout, b.String())
 		}
-		return hookFailure(stdout, stderr, nil, "", failClosedRequested(args), hook.Inputf("%v", err))
+		return hookFailure(stdout, stderr, nil, "", failClosed, hook.Inputf("%v", err))
 	}
 	mode, err := hook.ParseOnFailure(onFailure)
 	if err != nil {
-		return hookFailure(stdout, stderr, nil, "", failClosedRequested(args), &hook.InputError{Err: err})
+		return hookFailure(stdout, stderr, nil, "", failClosed, &hook.InputError{Err: err})
 	}
-	failClosed := mode == hook.OnFailureBlock
+	failClosed = mode == hook.OnFailureBlock
 	if flags.NArg() > 0 {
 		return hookFailure(stdout, stderr, nil, "", failClosed, hook.Inputf("unexpected argument %q", flags.Arg(0)))
 	}
-	ad, ok := hookAdapters[model.Harness(harness)]
+	found, ok := hookAdapters[model.Harness(harness)]
 	if !ok {
 		return hookFailure(stdout, stderr, nil, "", failClosed, hook.Inputf("--harness %q: want claude, cursor, or copilot", harness))
 	}
-	if !slices.Contains(ad.events, event) {
-		return hookFailure(stdout, stderr, &ad, "", failClosed, hook.Inputf("--event %q: %s takes %s", event, harness, strings.Join(ad.events, ", ")))
+	if !slices.Contains(found.events, event) {
+		return hookFailure(stdout, stderr, &found, "", failClosed, hook.Inputf("--event %q: %s takes %s", event, harness, strings.Join(found.events, ", ")))
 	}
+	ad = &found
 
 	ctx, cancel := context.WithTimeout(context.Background(), hookTimeout)
 	defer cancel()
@@ -103,18 +116,24 @@ func runHook(args []string, stdout, stderr io.Writer) int {
 	}
 	done := make(chan result, 1)
 	stdin := hookStdin
+	decide := hookDecide
 	go func() {
-		v, err := decideHook(ctx, stdin, ad, event)
+		defer func() {
+			if p := recover(); p != nil {
+				done <- result{err: fmt.Errorf("internal error: %v", p)}
+			}
+		}()
+		v, err := decide(ctx, stdin, found, event)
 		done <- result{v, err}
 	}()
 	select {
 	case r := <-done:
 		if r.err != nil {
-			return hookFailure(stdout, stderr, &ad, event, failClosed, r.err)
+			return hookFailure(stdout, stderr, ad, event, failClosed, r.err)
 		}
 		return writeHookOutput(stdout, stderr, ad.render(event, r.v))
 	case <-ctx.Done():
-		return hookFailure(stdout, stderr, &ad, event, failClosed, fmt.Errorf("no decision within %v", hookTimeout))
+		return hookFailure(stdout, stderr, ad, event, failClosed, fmt.Errorf("no decision within %v", hookTimeout))
 	}
 }
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -325,6 +326,53 @@ func TestHookMCPVulnsParity(t *testing.T) {
 			if code != int(exitcode.Block) || stdout != want {
 				t.Errorf("got exit %d stdout %q stderr %q, want exit 2 and %q", code, stdout, stderr, want)
 			}
+		})
+	}
+}
+
+// TestHookPanic: a panic while deciding is an internal error, exit 4 or
+// a deny under --on-failure block, and no Go stack trace reaches the
+// harness.
+func TestHookPanic(t *testing.T) {
+	hookProject(t, hookTestPolicy)
+	prev := hookDecide
+	hookDecide = func(context.Context, io.Reader, hookAdapter, string) (hook.Verdict, error) {
+		panic("boom")
+	}
+	t.Cleanup(func() { hookDecide = prev })
+	noStack := func(t *testing.T, out string) {
+		t.Helper()
+		if strings.Contains(out, "goroutine") || strings.Contains(out, ".go:") || strings.Contains(out, "panic") {
+			t.Errorf("output has a stack trace: %q", out)
+		}
+	}
+	code, stdout, stderr := runHookCLI(t, strings.NewReader("{}"), "--harness", "claude", "--event", hook.EventPreTool)
+	if code != int(exitcode.Internal) || stdout != "" || stderr != "tripcord hook: internal error: boom\n" {
+		t.Errorf("got exit %d stdout %q stderr %q", code, stdout, stderr)
+	}
+	noStack(t, stderr)
+	for _, h := range embedded.HookHarnesses {
+		t.Run(string(h), func(t *testing.T) {
+			code, stdout, stderr := runHookCLI(t, strings.NewReader("{}"), "--harness", string(h), "--event", hook.EventPreTool, "--on-failure", "block")
+			reason := "tripcord hook failed closed: internal error: boom"
+			if code != int(exitcode.Block) || stderr != reason+"\n" {
+				t.Fatalf("got exit %d stderr %q", code, stderr)
+			}
+			var want string
+			switch h {
+			case model.HarnessClaude:
+				want = claudeDeny(reason)
+			case model.HarnessCursor:
+				want = cursorDeny(reason)
+			case model.HarnessCopilot:
+				want = ""
+			default:
+				t.Fatalf("no expected output for %s", h)
+			}
+			if stdout != want {
+				t.Errorf("stdout %q, want %q", stdout, want)
+			}
+			noStack(t, stdout+stderr)
 		})
 	}
 }
