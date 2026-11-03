@@ -89,11 +89,11 @@ func compileToolFlags(flags []toolFlag) []toolFlag {
 		var separator string
 		switch {
 		case flags[i].glued && flags[i].separated:
-			separator = `(=|\s+|)`
+			separator = `(` + equalsSeparator + `|` + spaceSeparator + `|)`
 		case flags[i].glued:
 			separator = `()`
 		default:
-			separator = `(=|\s+)`
+			separator = `(` + equalsSeparator + `|` + spaceSeparator + `)`
 		}
 		flags[i].pattern = regexp.MustCompile(`(^|\s)(` + regexp.QuoteMeta(flags[i].flag) + `)` + separator + `('[^']*'|"[^"]*"|` + unquotedCommandValue + `+)`)
 	}
@@ -242,7 +242,8 @@ func wordAfter(words []word, offset int, target string) bool {
 }
 
 // shellSeparators returns the spans of the shell separators ||, &&, ;,
-// |, and newline in command, left to right; a lone "&" is not one.
+// |, and newline in command, left to right; a lone "&" is not one, nor
+// is the newline of a line continuation.
 func shellSeparators(command string) [][]int {
 	var out [][]int
 	for i := 0; i < len(command); {
@@ -256,6 +257,8 @@ func shellSeparators(command string) [][]int {
 			out = append(out, []int{i, i + 2})
 			i += 2
 		case command[i] == '&':
+			i++
+		case command[i] == '\n' && (strings.HasSuffix(command[:i], "\\") || strings.HasSuffix(command[:i], "\\\r")):
 			i++
 		default:
 			out = append(out, []int{i, i + 1})

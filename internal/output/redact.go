@@ -40,7 +40,7 @@ var secretPatterns = []shapePattern{
 	{regexp.MustCompile(`ya29\.[A-Za-z0-9._-]{20,}`), []string{"ya29."}, false},
 	{regexp.MustCompile(`AIza[0-9A-Za-z_-]{35}`), []string{"AIza"}, false},
 	{regexp.MustCompile(`\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}`), []string{"eyJ"}, false},
-	{regexp.MustCompile(`(?i)\bbearer\s+[A-Za-z0-9._~+/-]{20,}=*`), []string{"bearer"}, true},
+	{regexp.MustCompile(`(?i)\bbearer(?:\s|` + lineContinuation + `)+[A-Za-z0-9._~+/-]{20,}=*`), []string{"bearer"}, true},
 	{regexp.MustCompile(`https://hooks\.slack\.com/(?:services|workflows|triggers)/[A-Za-z0-9/_-]+`), []string{"https://hooks.slack.com/"}, false},
 }
 
@@ -96,6 +96,33 @@ var urlUserinfoSlashPattern = regexp.MustCompile(`(://)([^/\s:@]+:([^\s@?#]*/[^\
 // differently.
 const quotedValue = `"(?:[^"\\\n]|\\.)*"|'[^'\n]*'`
 
+// lineContinuation is a shell backslash-newline. The shell deletes it,
+// so in "--token \<newline>  x" the token is x, not the backslash.
+const lineContinuation = `\\\r?\n`
+
+// equalsSeparator and spaceSeparator are the separators between a flag
+// and its value, either of which may continue onto the next line. A
+// space separator needs one blank that is not a continuation's newline:
+// "--token\<newline>x" is the shell word "--tokenx", not a flag and a
+// value.
+const (
+	equalsSeparator = `=(?:` + lineContinuation + `)*`
+	spaceSeparator  = `(?:` + lineContinuation + `)*\s(?:\s|` + lineContinuation + `)*`
+)
+
+// continuationLen returns the length of the lineContinuation at the
+// start of s, or 0.
+func continuationLen(s string) int {
+	switch {
+	case strings.HasPrefix(s, "\\\n"):
+		return 2
+	case strings.HasPrefix(s, "\\\r\n"):
+		return 3
+	default:
+		return 0
+	}
+}
+
 // A shell-style KEY=value assignment is redacted when its key is a
 // credential name (see CredentialName), as in GITHUB_TOKEN,
 // OPENAI_API_KEY, SECRET_KEY, or docker run -e AWS_SECRET_ACCESS_KEY=....
@@ -111,7 +138,7 @@ var assignmentEqualsValue = regexp.MustCompile(`^(?:` + quotedValue + `|` + unqu
 // assignmentHead is a candidate "name=" or "name:" found by
 // nextAssignmentHead: the name holds a credential stem, may be quoted,
 // and is followed by optional whitespace, the separator, and optional
-// whitespace.
+// whitespace and line continuations.
 type assignmentHead struct {
 	start                 int // the name, or the quote right before it
 	nameEnd               int
@@ -214,8 +241,14 @@ func nextAssignmentHead(value string, scan *stemScanner, pos int, sep byte) (ass
 			continue
 		}
 		j++
-		for j < len(value) && isRegexpSpace(value[j]) {
-			j++
+		for j < len(value) {
+			if n := continuationLen(value[j:]); n > 0 {
+				j += n
+			} else if isRegexpSpace(value[j]) {
+				j++
+			} else {
+				break
+			}
 		}
 		h.sep, h.valStart = value[sepStart:j], j
 		return h, true
@@ -329,7 +362,7 @@ const colonValueEnd = ";&|\"'\n)}"
 // Bearer, Basic, or token scheme, in both header ("Authorization: Bearer x")
 // and quoted/JSON ("Authorization":"Bearer x") spellings. The value is not
 // length-limited, and a closing quote is never consumed.
-var authorizationPattern = regexp.MustCompile(`(?i)(authorization["']?\s*:\s*["']?(?:bearer|basic|token)\s+)([^\s;&|"']+)`)
+var authorizationPattern = regexp.MustCompile(`(?i)(authorization["']?\s*:\s*["']?(?:bearer|basic|token)(?:\s|` + lineContinuation + `)+)([^\s;&|"']+)`)
 
 // SecretFlags lists the long-flag spellings whose value is a credential:
 // the --token/--secret/--password/--api-key family and a few common
@@ -409,7 +442,7 @@ func LooksLikeUserPass(value string) bool {
 // "--token --verbose" does not eat the next flag; an "=" value may
 // ("--token=-abc"), since "=" unambiguously ends the flag name.
 var (
-	secretFlagHead       = regexp.MustCompile(`(?i)^(["']?)(` + SecretFlagAlternation() + `)(["']?)(=|\s+)`)
+	secretFlagHead       = regexp.MustCompile(`(?i)^(["']?)(` + SecretFlagAlternation() + `)(["']?)(` + equalsSeparator + `|` + spaceSeparator + `)`)
 	secretFlagEqualValue = regexp.MustCompile(`^(?:` + quotedValue + `|` + unquotedCommandValue + `*)`)
 	secretFlagSpaceValue = regexp.MustCompile(`^(?:` + quotedValue + `|[^-\s;&|"'\n)` + "`" + `]` + unquotedCommandValue + `*)`)
 )
@@ -501,7 +534,7 @@ func unquote(value string) string {
 // curl's documented short form). Groups: flag, separator, value.
 // RedactUserFlags tries it only at a "-" that starts the text or follows
 // whitespace.
-var userFlagPattern = regexp.MustCompile(`(?i)^(` + UserFlagAlternation + `)(=|\s+|)(` + quotedValue + `|` + unquotedCommandValue + `*)`)
+var userFlagPattern = regexp.MustCompile(`(?i)^(` + UserFlagAlternation + `)(` + equalsSeparator + `|` + spaceSeparator + `|)(` + quotedValue + `|` + unquotedCommandValue + `*)`)
 
 // RedactUserFlags replaces the value of a curl-style -u/--user/-user flag
 // with [REDACTED] when it has "user:pass" shape, and returns the raw
