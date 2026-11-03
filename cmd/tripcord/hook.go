@@ -199,7 +199,7 @@ func hookProjectDir(ad hookAdapter) (string, error) {
 		}
 		start = wd
 	}
-	for dir := filepath.Clean(start); ; {
+	for dir := resolveExisting(filepath.Clean(start)); ; {
 		if _, err := os.Lstat(filepath.Join(dir, ".git")); err == nil {
 			return dir, nil
 		}
@@ -208,6 +208,23 @@ func hookProjectDir(ad hookAdapter) (string, error) {
 			return "", hook.Inputf("no Git repository at or above %s (%s), so the project's .tripcord/policy.yaml cannot be found", start, from)
 		}
 		dir = parent
+	}
+}
+
+// resolveExisting resolves the symlinks of dir's nearest existing
+// ancestor, dir itself when it exists, so the walk up to the Git root
+// follows the real tree: the parent of a symlink into a subdirectory of
+// a repository is in that repository, not beside the link.
+func resolveExisting(dir string) string {
+	for d := dir; ; {
+		if real, err := filepath.EvalSymlinks(d); err == nil {
+			return real
+		}
+		parent := filepath.Dir(d)
+		if parent == d {
+			return dir
+		}
+		d = parent
 	}
 }
 

@@ -327,6 +327,48 @@ func TestHookPolicyFromProjectDir(t *testing.T) {
 	}
 }
 
+// TestHookProjectDirSymlink: a project directory that is a symlink into
+// a subdirectory of the repository, from outside it, still finds the
+// repository's policy, through the variable and as the working
+// directory.
+func TestHookProjectDirSymlink(t *testing.T) {
+	root := hookProject(t, hookTestPolicy)
+	sub := filepath.Join(root, "sub", "dir")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(sub, link); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name       string
+		harness    model.Harness
+		event, fix string
+	}{
+		{"CLAUDE_PROJECT_DIR", model.HarnessClaude, hook.EventPreTool, "pre-tool-use-bash-deny.json"},
+		{"CURSOR_PROJECT_DIR", model.HarnessCursor, hook.EventBeforeShell, "before-shell-execution-deny.json"},
+		{"working directory", model.HarnessCopilot, hook.EventPreTool, "pre-tool-use-bash-deny.json"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("CLAUDE_PROJECT_DIR", link)
+			t.Setenv("CURSOR_PROJECT_DIR", link)
+			t.Chdir(link)
+			code, _, stderr := runHookCLI(t, bytes.NewReader(adapterFixture(t, tc.harness, tc.fix)), "--harness", string(tc.harness), "--event", tc.event)
+			if code != int(exitcode.Block) || !strings.Contains(stderr, "ACME-001") {
+				t.Errorf("exit %d stderr %q, want 2 from the project policy", code, stderr)
+			}
+		})
+	}
+	t.Run("missing directory under the link", func(t *testing.T) {
+		t.Setenv("CLAUDE_PROJECT_DIR", filepath.Join(link, "gone"))
+		code, _, stderr := runHookCLI(t, bytes.NewReader(adapterFixture(t, model.HarnessClaude, "pre-tool-use-bash-deny.json")), "--harness", "claude", "--event", hook.EventPreTool)
+		if code != int(exitcode.Block) || !strings.Contains(stderr, "ACME-001") {
+			t.Errorf("exit %d stderr %q, want 2 from the project policy", code, stderr)
+		}
+	})
+}
+
 // TestHookNoGitRepository: with no Git repository at or above the
 // project directory there is no policy to find, and the run fails
 // instead of allowing as if the project had none.
