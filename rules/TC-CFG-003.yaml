@@ -8,8 +8,10 @@
 # mcpServers, OpenCode's command array, Copilot mcp-config.json, and
 # Windsurf mcp_config.json.
 #
-# The command and its args are read as one command line (OpenCode's
-# array is joined). Its first word decides: a shell (sh, bash, zsh,
+# The command and its args are read as one command line. OpenCode is
+# the only schema whose command is an argv array, and only that array
+# is joined. A command array on any other harness is opaque: the entry
+# is not evaluated. Its first word decides: a shell (sh, bash, zsh,
 # dash, ksh, ash, csh, tcsh, fish, cmd, powershell, pwsh) matches, and
 # an interpreter matches only when its inline-code flag comes before any
 # script or -m: python -c, node -e/--eval, perl -e, ruby -e, deno eval.
@@ -36,7 +38,7 @@ when: |
       [
         type(payload.command) == string ?
           ([payload.command] + hook.args(payload)).join(" ") :
-        type(payload.command) == list && payload.command.all(a, type(a) == string) ? payload.command.join(" ") : ""
+        type(payload.command) == list && config.harness == "opencode" && payload.command.all(a, type(a) == string) ? payload.command.join(" ") : ""
       ].exists(h, h.matches(r'''(?i)^\s*(?:[^\s]*[/\\])?(?:(?:(?:ba|z|da|k|a|c|tc|fi)?sh|cmd|powershell|pwsh)(?:\.exe)?(?:\s|$)|python(?:3(?:\.[0-9]+)?)?(?:\.exe)?(?:\s+-[^\sm]\S*)*?\s+-c(?:\s|$)|node(?:\.exe)?(?:\s+-[^\se]\S*)*?\s+(?:-e|--eval)(?:\s|$)|(?:perl|ruby)(?:\.exe)?(?:\s+-[^\se]\S*)*?\s+-e(?:\s|$)|deno(?:\.exe)?\s+eval(?:\s|$))''')) ||
       (type(payload.command) == string && "pipe" in shell.risks(payload.command))
     )

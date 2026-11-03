@@ -109,6 +109,17 @@ func emptyConfig() map[string]any {
 	return m
 }
 
+// inputHarness is the harness bound in config, or empty when the input
+// has no config map. An empty harness does not accept a command array.
+func inputHarness(in *Input) model.Harness {
+	if in == nil {
+		return ""
+	}
+	cfg, _ := in.vars[VarConfig].(map[string]any)
+	h, _ := cfg["harness"].(string)
+	return model.Harness(h)
+}
+
 func configVars(id string, item model.ConfigItem) map[string]any {
 	locations := item.ScriptLocations
 	if locations == nil {

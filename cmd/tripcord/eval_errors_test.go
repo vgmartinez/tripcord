@@ -357,6 +357,111 @@ func TestScanSessionAndMCPArgsNotReadable(t *testing.T) {
 	}
 }
 
+// TestScanClaudeArrayCommandIsOpaque checks a Claude MCP command array.
+// The schema requires a string, so the entry does not match TC-CFG-003 or
+// TC-CFG-023 and the scan is not incomplete. The warning names /command.
+func TestScanClaudeArrayCommandIsOpaque(t *testing.T) {
+	t.Parallel()
+	root := writeRepo(t, map[string]string{
+		".mcp.json": `{"mcpServers":{"shell":{"command":["bash","-c","echo hi"]},"figma":{"command":["npx","-y","figma-developer-mcp@0.6.2"]}}}`,
+	})
+	for _, format := range []string{"text", "json", "sarif"} {
+		t.Run(format, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			code := run([]string{"scan", "--format", format, root}, &stdout, &stderr)
+			if code != int(exitcode.OK) {
+				t.Fatalf("exit %d, stdout %s, stderr %s", code, stdout.String(), stderr.String())
+			}
+			report := stdout.String() + stderr.String()
+			for _, id := range []string{"TC-CFG-003", "TC-CFG-023"} {
+				if strings.Contains(report, id) {
+					t.Fatalf("%s matched:\n%s", id, report)
+				}
+			}
+			if strings.Contains(stderr.String(), "incomplete") {
+				t.Fatalf("%s incomplete:\n%s", format, report)
+			}
+			if format != "json" && strings.Contains(stdout.String(), "incomplete") {
+				t.Fatalf("%s incomplete:\n%s", format, report)
+			}
+			if !strings.Contains(report, ".mcp.json") || !strings.Contains(report, "/command") {
+				t.Fatalf("%s omits /command warning:\n%s", format, report)
+			}
+			switch format {
+			case "text":
+				if !strings.Contains(stdout.String(), "warning: ") || !strings.Contains(stdout.String(), "warning(s)") {
+					t.Fatalf("text = %s", stdout.String())
+				}
+			case "json":
+				if !strings.Contains(stdout.String(), `"schema":"tripcord.diagnostic/v1"`) ||
+					!strings.Contains(stdout.String(), `"incomplete":false`) ||
+					!strings.Contains(stdout.String(), `"level":"warning"`) {
+					t.Fatalf("json = %s", stdout.String())
+				}
+			case "sarif":
+				if !strings.Contains(stdout.String(), `"level": "note"`) || !strings.Contains(stdout.String(), `"executionSuccessful": true`) {
+					t.Fatalf("sarif = %s", stdout.String())
+				}
+			default:
+				t.Fatalf("unhandled format %s", format)
+			}
+		})
+	}
+}
+
+// TestScanCopilotHookObjectArgWarning checks that a Copilot hook with an
+// object argument still matches its scalar command and emits the opaque
+// warning in text, JSON, and SARIF. Copilot reads .github/hooks only at
+// the repository root, so the same file nested under another directory
+// is not a hook and produces no warning.
+func TestScanCopilotHookObjectArgWarning(t *testing.T) {
+	t.Parallel()
+	hook := `{"version":1,"hooks":{"preToolUse":[{"type":"command","exec":"bash","args":["/tmp/x.sh",{"retries":2}]}]}}`
+	t.Run("repo root", func(t *testing.T) {
+		root := writeRepo(t, map[string]string{".github/hooks/check.json": hook})
+		for _, format := range []string{"text", "json", "sarif"} {
+			var stdout, stderr bytes.Buffer
+			if code := run([]string{"scan", "--format", format, root}, &stdout, &stderr); code != int(exitcode.Findings) {
+				t.Fatalf("%s: exit %d, stderr %q", format, code, stderr.String())
+			}
+			report := stdout.String() + stderr.String()
+			if !strings.Contains(report, "TC-CFG-006") || !strings.Contains(report, ".github/hooks/check.json") || !strings.Contains(report, "/args/1") {
+				t.Fatalf("%s report:\n%s", format, report)
+			}
+			switch format {
+			case "text":
+				if !strings.Contains(stdout.String(), "warning: copilot: .github/hooks/check.json: opaque command value ignored at JSON pointer /args/1") {
+					t.Fatalf("text = %s", stdout.String())
+				}
+			case "json":
+				if !strings.Contains(stdout.String(), `"schema":"tripcord.diagnostic/v1"`) ||
+					!strings.Contains(stdout.String(), `"incomplete":false`) ||
+					!strings.Contains(stdout.String(), `"level":"warning"`) ||
+					!strings.Contains(stdout.String(), `"path":".github/hooks/check.json"`) {
+					t.Fatalf("json = %s", stdout.String())
+				}
+			case "sarif":
+				if !strings.Contains(stdout.String(), `"level": "note"`) || !strings.Contains(stdout.String(), `"executionSuccessful": true`) {
+					t.Fatalf("sarif = %s", stdout.String())
+				}
+			default:
+				t.Fatalf("unhandled format %s", format)
+			}
+		}
+	})
+	t.Run("nested hooks are not discovered", func(t *testing.T) {
+		root := writeRepo(t, map[string]string{
+			"rules/TC-CFG-006.test/positivos/copilot-exec-object-arg/.github/hooks/check.json": hook,
+		})
+		var stdout, stderr bytes.Buffer
+		code := run([]string{"scan", "--format", "text", root}, &stdout, &stderr)
+		report := stdout.String() + stderr.String()
+		if code == int(exitcode.Config) || strings.Contains(report, "/args/1") || strings.Contains(report, "opaque command value") {
+			t.Fatalf("exit %d, report:\n%s", code, report)
+		}
+	})
+}
+
 func TestScanOpaqueArgumentKeepsScalarRisksAndReportsWarning(t *testing.T) {
 	t.Parallel()
 	root := writeRepo(t, map[string]string{

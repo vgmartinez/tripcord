@@ -605,6 +605,7 @@ type Expr struct {
 	src    string
 	prg    cel.Program
 	limits Limits
+	env    *Env
 }
 
 // Compile parses, type-checks, and plans src. The result type must be
@@ -645,7 +646,7 @@ func (e *Env) compile(src string, guarded bool) (*Expr, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Expr{src: src, prg: prg, limits: e.limits}, nil
+	return &Expr{src: src, prg: prg, limits: e.limits, env: e}, nil
 }
 
 // Source returns the expression text.
@@ -665,7 +666,21 @@ func (x *Expr) Eval(ctx context.Context, in *Input) (bool, error) {
 	}
 	ectx, cancel := context.WithTimeout(ctx, x.limits.EvalTimeout)
 	defer cancel()
-	out, _, err := x.prg.ContextEval(ectx, in.vars)
+	// mcp.packages and mcp.vulns are late-bound so a command array is argv
+	// only for the harness on this input. Other expressions ignore the
+	// bindings.
+	act, err := cel.FunctionVars(in.vars, map[string]cel.LateBoundFunction{
+		mcpPackagesName: func(_ string, args ...ref.Val) ref.Val {
+			return x.env.mcpCall(inputHarness(in), args, false)
+		},
+		mcpVulnsName: func(_ string, args ...ref.Val) ref.Val {
+			return x.env.mcpCall(inputHarness(in), args, true)
+		},
+	})
+	if err != nil {
+		return false, err
+	}
+	out, _, err := x.prg.ContextEval(ectx, act)
 	if err != nil {
 		var cancelled interpreter.EvalCancelledError
 		switch {
@@ -704,31 +719,32 @@ func ctxError(ctx context.Context) error {
 
 // mcp.packages(payload) lists the packages a known launcher would
 // install. mcp.vulns(payload) lists the embedded advisories those
-// packages match. Object and array elements are opaque. Any other argument
-// that is not a string, number, or bool is ErrHookArgs. With no advisory
-// list, mcp.vulns is empty.
+// packages match. Object and array argument elements are opaque. A
+// command array is argv only when the harness schema accepts one. Any
+// other argument that is not a string, number, or bool is ErrHookArgs.
+// With no advisory list, mcp.vulns is empty. The implementations are
+// supplied per evaluation so they see that harness.
 func (e *Env) mcpPackages() cel.EnvOption {
 	return cel.Function(mcpPackagesName,
 		cel.Overload(overloadMCPPackages, []*cel.Type{cel.DynType}, cel.ListType(cel.DynType),
-			cel.UnaryBinding(func(v ref.Val) ref.Val {
-				return e.mcpCall(v, false)
-			})))
+			cel.LateFunctionBinding()))
 }
 
 func (e *Env) mcpVulns() cel.EnvOption {
 	return cel.Function(mcpVulnsName,
 		cel.Overload(overloadMCPVulns, []*cel.Type{cel.DynType}, cel.ListType(cel.DynType),
-			cel.UnaryBinding(func(v ref.Val) ref.Val {
-				return e.mcpCall(v, true)
-			})))
+			cel.LateFunctionBinding()))
 }
 
-func (e *Env) mcpCall(v ref.Val, vulns bool) ref.Val {
-	payload, err := nativePayload(v)
+func (e *Env) mcpCall(harness model.Harness, args []ref.Val, vulns bool) ref.Val {
+	if len(args) != 1 {
+		return types.NewErr("mcp: want one argument")
+	}
+	payload, err := nativePayload(args[0])
 	if err != nil {
 		return types.WrapErr(err)
 	}
-	refs, work, err := mcppkg.ParsePayload(payload)
+	refs, work, err := mcppkg.ParsePayload(harness, payload)
 	if err != nil {
 		return types.WrapErr(fmt.Errorf("mcp: %w", ErrHookArgs))
 	}

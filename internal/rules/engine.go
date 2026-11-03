@@ -276,7 +276,7 @@ func (e *Engine) ScanConfig(ctx context.Context, items []model.ConfigItem) Resul
 
 func advisoryHits(in *Input, db *advisory.DB) ([]advisory.Hit, error) {
 	raw, _ := in.vars[VarPayload].(map[string]any)
-	refs, _, err := mcppkg.ParsePayload(raw)
+	refs, _, err := mcppkg.ParsePayload(inputHarness(in), raw)
 	if err != nil {
 		return nil, fmt.Errorf("mcp: %w", ErrHookArgs)
 	}
@@ -312,7 +312,8 @@ func stopForEval(res *Result, rule string, item model.ConfigItem, err error) boo
 }
 
 // opaqueCommand reports a command value the selected agent cannot execute.
-// OpenCode is the only supported schema that accepts command as an argv array.
+// An array is argv only for a harness whose schema accepts one. A number,
+// bool, or object is never a command string, so it is opaque too.
 func opaqueCommand(item model.ConfigItem) bool {
 	if item.Kind != model.ConfigKindMCPServer {
 		return false
@@ -329,7 +330,7 @@ func opaqueCommand(item model.ConfigItem) bool {
 	case string:
 		return false
 	case []any:
-		return item.Harness != model.HarnessOpenCode
+		return !mcppkg.AcceptsCommandArray(item.Harness)
 	default:
 		return true
 	}
@@ -351,7 +352,7 @@ func opaqueArgPointers(item model.ConfigItem) []string {
 			}
 		}
 	}
-	if command, ok := payload["command"].([]any); ok && item.Harness == model.HarnessOpenCode {
+	if command, ok := payload["command"].([]any); ok && mcppkg.AcceptsCommandArray(item.Harness) {
 		for i, value := range command {
 			if isOpaqueValue(value) {
 				pointers = append(pointers, fmt.Sprintf("/command/%d", i))

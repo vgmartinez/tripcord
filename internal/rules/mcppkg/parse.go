@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/vgmartinez/tripcord/internal/advisory"
+	"github.com/vgmartinez/tripcord/internal/model"
 	"github.com/vgmartinez/tripcord/internal/rules/shellcmd"
 )
 
@@ -22,16 +23,36 @@ var ErrArgs = errors.New("mcp args are not strings, numbers, or bools")
 
 const opaqueArg = "\x00tripcord-opaque-arg\x00"
 
-// ParsePayload reads payload.command and payload.args. work is the
-// number of argument bytes, charged as CEL cost. A command string with
-// no args is split as a shell command; a substitution makes that split
-// unparsed, which is an empty result and not an error.
-func ParsePayload(payload map[string]any) ([]advisory.PackageRef, int, error) {
+// AcceptsCommandArray reports whether harness executes an MCP command
+// array as argv. OpenCode's local server schema is the only one that
+// does: command is an array of strings. Claude, Cursor, VS Code,
+// Copilot, Gemini, Codex, and Windsurf all require command to be a
+// string, so an array there is not a command the agent can start.
+// Devin has no MCP command array. An unknown harness is treated the
+// same way: the array is not argv.
+func AcceptsCommandArray(h model.Harness) bool {
+	return h == model.HarnessOpenCode
+}
+
+// ParsePayload reads payload.command and payload.args for harness. work
+// is the number of argument bytes, charged as CEL cost. A command string
+// with no args is split as a shell command; a substitution makes that
+// split unparsed, which is an empty result and not an error. A command
+// array is argv only when AcceptsCommandArray(harness) is true. For every
+// other harness it yields no packages and no error; the caller reports
+// the entry as opaque.
+func ParsePayload(harness model.Harness, payload map[string]any) ([]advisory.PackageRef, int, error) {
 	if payload == nil {
 		return nil, 0, nil
 	}
 	command, ok := payload["command"]
 	if !ok || command == nil {
+		return nil, 0, nil
+	}
+	// A command array the harness cannot execute is opaque as an entry.
+	// Unreadable args beside it must not turn that into an evaluation
+	// error; the caller warns at /command and skips the entry.
+	if _, array := command.([]any); array && !AcceptsCommandArray(harness) {
 		return nil, 0, nil
 	}
 	args, err := argStrings(payload["args"])

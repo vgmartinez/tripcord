@@ -1,5 +1,9 @@
-# An object or array package argument is opaque. It must not match and must
-# not fail evaluation. Null and other unreadable arguments still do.
+# An object or array element is opaque. A package written only inside that
+# element does not match (claude-npx-object-arg). A scalar package next to
+# an object argument still matches (claude-npx-vulnerable-object-arg). A
+# command array is argv only for OpenCode (opencode-command-array). On every
+# other harness it is opaque: no match and a warning at /command, not an
+# evaluation error. Null and other unreadable arguments still fail evaluation.
 positivos:
   claude-npx-figma-exact: high
   claude-npx-vulnerable-object-arg: high
