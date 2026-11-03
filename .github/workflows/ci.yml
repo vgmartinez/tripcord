@@ -730,6 +730,65 @@ jobs:
           "$RUNNER_TEMP/actionlint" -version
           "$RUNNER_TEMP/actionlint"
 
+  # init --embed writes a workflow and a shell script into other
+  # repositories. Both must pass the linters this repository holds
+  # itself to. init refuses a subdirectory of a repository, so the
+  # output is generated outside the checkout and copied in.
+  embed-lint:
+    name: init --embed output lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read # checkout the generator
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Generate embed
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="${RUNNER_TEMP}/embed-out"
+          mkdir -p "$out"
+          sum=0000000000000000000000000000000000000000000000000000000000000000
+          go run ./cmd/tripcord init --embed --version 0.1.0 \
+            --sha256 "darwin-arm64=${sum}" --sha256 "darwin-x64=${sum}" \
+            --sha256 "linux-arm64=${sum}" --sha256 "linux-x64=${sum}" "$out"
+          cp -R "$out" "${GITHUB_WORKSPACE}/embed-out"
+
+      - name: shellcheck bootstrap.sh
+        shell: bash
+        run: |
+          set -euo pipefail
+          shellcheck --version
+          shellcheck embed-out/.tripcord/bootstrap.sh
+
+      # v1.7.12. The tarball is pinned by its release checksum.
+      - name: actionlint generated workflows
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="${RUNNER_TEMP}/actionlint.tar.gz"
+          curl -fsSL -o "$archive" https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  ${archive}" | sha256sum -c -
+          tar -xzf "$archive" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" embed-out/.github/workflows/*.yml
+
+      - name: zizmor generated workflows
+        uses: zizmorcore/zizmor-action@53290badfa369cb0bf7ad16342cb62c2fa47ac7b # v0.8.0
+        with:
+          advanced-security: false
+          annotations: true
+          inputs: embed-out/.github/workflows
+
   dco:
     name: DCO
     runs-on: ubuntu-latest
