@@ -4,7 +4,7 @@
 | --- | --- |
 | Severity | high |
 | Harnesses | Claude Code, GitHub Copilot, Gemini CLI; Cursor and the embed's own files for the embed case only |
-| Files | `.claude/settings.json`, `.github/copilot/settings.json`, `.github/hooks/*.json`, `.gemini/settings.json`, `.cursor/hooks.json`; for the embed, `.tripcord/bootstrap.sh`, `.tripcord/embed.json`, `.github/workflows/tripcord.yml`, `.github/workflows/copilot-setup-steps.yml`; tracked `.claude/settings.local.json` and `.github/copilot/settings.local.json`; `.tripcord/policy.yaml` with a base (any depth, repository scope) |
+| Files | `.claude/settings.json`, `.github/copilot/settings.json`, `.github/hooks/*.json`, `.gemini/settings.json`, `.cursor/hooks.json`; for the embed, `.tripcord/bootstrap.sh`, `.tripcord/embed.json`, `.github/workflows/tripcord.yml`, `.github/workflows/copilot-setup-steps.yml`, `.gitattributes`; tracked, or staged, `.claude/settings.local.json`, `.github/copilot/settings.local.json`, and `.tripcord/policy.local.yaml`; `.tripcord/policy.yaml` with a base (any depth, repository scope) |
 | Rule | [`rules/TC-CFG-016.yaml`](../../rules/TC-CFG-016.yaml) |
 
 ## What it detects
@@ -90,6 +90,7 @@ The check covers:
 | Claude Code hooks | `.claude/settings.json` | `SessionStart`, `PreToolUse` |
 | Cursor hooks | `.cursor/hooks.json` | `sessionStart`, `preToolUse` |
 | GitHub Copilot hooks | `.github/hooks/tripcord.json` | `sessionStart`, `preToolUse` |
+| Gitattributes | `.gitattributes` | `text eol=lf` for `bootstrap.sh`, `embed.json`, `tripcord.yml`, and the Copilot hook file |
 
 Hooks are checked for each hook-capable harness the manifest records
 as selected at init time; with no manifest, or one that cannot be
@@ -117,10 +118,27 @@ changed even when its target holds the right bytes: the hooks run the
 path, and the target can change without a reviewed edit to the
 repository. `bootstrap.sh` also refuses to run through one.
 
-Files are hashed with CRLF normalized to LF, so a Windows checkout
-with `core.autocrlf=true` is not reported as edited. `init --embed`
-also writes `.gitattributes` lines (`text eol=lf`) that stop that
-conversion, because `bash` cannot run a CRLF `bootstrap.sh`.
+Files are hashed with CRLF normalized to LF, but only when every line
+in the checked-out file ends in CRLF, the way a real
+`core.autocrlf=true` checkout converts them; a file with a `\r` on only
+one line, among otherwise plain `\n` lines, is hashed as its raw bytes
+instead, so an injected carriage return is not normalized away before
+the compare. A blob read directly from git (the base revision, or a
+`--staged` scan's index tree, both read with no checkout filter) never
+gets this leniency, whichever lines it has. `init --embed` also writes
+`.gitattributes` lines (`text eol=lf`) that stop CRLF conversion in a
+real Windows checkout, because `bash` cannot run a CRLF `bootstrap.sh`.
+
+The scan checks that `.gitattributes` still resolves `text eol=lf` for
+`bootstrap.sh`, `embed.json`, `tripcord.yml`, and the Copilot hook
+file: git resolves an attribute by the last matching pattern in the
+file, so a later line for the same pattern (`-text`, `eol=crlf`) undoes
+an earlier one, including Tripcord's own, and lets a `\r` survive in a
+checkout, or a committed file, that the digest would otherwise have
+converted away while `bash` still sees it. `.gitattributes` itself is
+reported missing, changed (including a symlink, or a later line that
+weakens it), or unreadable the same way `bootstrap.sh` is, and, with a
+base, removed.
 
 ### Pull requests
 
@@ -139,7 +157,8 @@ With a base, the scan loads the repository policy from the base, as
 `pr-context` does, and does not read `.tripcord/policy.local.yaml`, so
 a pull request cannot relax the scan of itself. `weakened` applies
 whether or not the repository is embedded. An explicit `--policy` file
-is used as given.
+inside the repository is read from the base the same way; one outside
+the repository (shared, machine-local, or managed) is used as given.
 
 ### Local settings
 
@@ -163,15 +182,31 @@ rule reports a tracked one, high:
 | State | Title | Meaning |
 | --- | --- | --- |
 | local-disabled | Committed settings.local.json turns off every hook | It sets `disableAllHooks: true`. |
-| local-override | Committed settings.local.json replaces Tripcord's hook | It defines hooks for an event the embed wires without Tripcord's entry (embedded repositories only). |
 
-Both harnesses merge hooks across files, so `local-override` is
-conservative: it reports a local file that would take over the event
-if a harness replaced rather than merged it. An untracked
-`settings.local.json`, or one that does not parse, is not reported.
+Both harnesses merge hooks across files rather than letting a local one
+replace the shared file's hook for the same event, so a tracked
+`settings.local.json` that only adds its own hook for an event the
+embed also wires is not reported; `disableAllHooks` is still checked.
+An untracked `settings.local.json`, or one that does not parse, is not
+reported.
+
+`.tripcord/policy.local.yaml` is the same kind of per-checkout layer:
+[scan.md](../scan.md) documents it as never read for a head compared
+with a base, and `tripcord init --embed` adds it to `.gitignore`, so it
+is meant to stay personal too. A copy the repository tracks, or a
+staged change stages, overrides the effective policy for everyone who
+checks the branch out, not only the person who committed it, the
+opposite of what a per-checkout layer is for, and the scan does not
+load it, so it cannot relax the decision on itself either, including
+on this clause:
+
+| State | Title | Meaning |
+| --- | --- | --- |
+| local-policy | A committed policy.local.yaml overrides everyone's policy | The repository tracks, or a staged change stages, `.tripcord/policy.local.yaml`. |
 
 The `disableAllHooks` advice in the rule's fix applies to the first
-clause only; each embed state carries its own fix.
+clause only; each embed, local, and `.gitattributes` state carries its
+own fix.
 
 Codex, Jules, and Devin have no repository hooks; their wiring
 (`AGENTS.md`, `.devin/blueprint.yaml`) is not checked.

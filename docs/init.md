@@ -57,6 +57,7 @@ Files written for every selection:
 | `.tripcord/embed.json` | Manifest: the pinned version and checksums, the harnesses selected at init time, the SHA-256 of `bootstrap.sh`, `tripcord.yml`, and the generated `copilot-setup-steps.yml` step, and the SHA-256 of every hook entry init wrote. |
 | `.github/workflows/tripcord.yml` | Pull request scan. See "Workflow". |
 | `.gitattributes` | `text eol=lf` for `bootstrap.sh`, `embed.json`, `tripcord.yml`, and `.github/hooks/tripcord.json`, under a `# Tripcord embed` comment. Lines already there are kept; missing ones are appended, in the file's own line ending. |
+| `.gitignore` | `/.tripcord/policy.local.yaml`, appended if not already there, in the file's own line ending. `policy.local.yaml` is a per-checkout layer (see [policy.md](policy.md)); this keeps a fresh checkout from tracking one by accident. |
 
 `bash` cannot run a `bootstrap.sh` with CRLF line endings, and the scan
 hashes these files, so the `.gitattributes` lines keep a Windows
@@ -268,6 +269,21 @@ script and the manifest's digest together still reports.
   `embed.json` was edited to match;
 - **unreadable**: a file cannot be read or parsed.
 
+`bootstrap.sh`, `tripcord.yml`, and the Copilot hook file are hashed
+with CRLF normalized to LF, but only when every line in the checked-out
+file ends in CRLF, the way a real `core.autocrlf=true` checkout
+converts them; a file with a `\r` on only one line is hashed as its raw
+bytes instead, so the digest still sees it. A blob read directly from
+git (a base revision, or a `--staged` scan's index tree) never gets
+this leniency, whichever lines it has. The scan also checks that
+`.gitattributes` still resolves `text eol=lf` for every file this
+normalizes: removing those lines, or a later line for the same pattern
+that turns the file's `text` or `eol` attribute back off (`-text`,
+`eol=crlf`), is itself reported the same way `bootstrap.sh` itself is
+(missing, changed, or removed with a base), because it is what lets a
+checkout, or the repository, keep a `\r` the digest would otherwise
+have normalized away while `bash` still sees it.
+
 ### Pull requests
 
 A pull request can rewrite `bootstrap.sh` and `embed.json` together, for
@@ -286,9 +302,22 @@ has one, and reports, high:
 
 A committed `.claude/settings.local.json` or
 `.github/copilot/settings.local.json` that sets `disableAllHooks: true`
-(**local-disabled**), or that defines hooks for an event the embed
-wires without Tripcord's entry (**local-override**), is reported too;
-see [TC-CFG-016](rules/TC-CFG-016.md).
+(**local-disabled**) is reported too; both harnesses merge hooks across
+files rather than letting a local one replace the shared file's hook
+for the same event, so a local hook for an event the embed also wires
+is not. A committed, or staged, `.tripcord/policy.local.yaml`
+(**local-policy**) is reported the same way: it is a per-checkout
+layer, so a copy the repository tracks overrides the effective policy
+for everyone who checks the branch out, not only the person who added
+it. The scan never loads it to decide its own outcome, with or without
+a base; see [TC-CFG-016](rules/TC-CFG-016.md).
+
+With a base, an explicit `--policy` path inside the repository is also
+read from the base revision, the same as the implicit
+`.tripcord/policy.yaml`: the change under review cannot relax its own
+copy of the file named on the command line either. A path outside the
+repository (shared, machine-local, or managed) is still used as given,
+unaffected by the base; see [scan.md](scan.md).
 
 The composite action passes `--base` with the pull request's base
 commit (its `base` input), so the reusable workflow reports these on
