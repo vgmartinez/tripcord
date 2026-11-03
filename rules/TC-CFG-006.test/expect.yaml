@@ -1,6 +1,7 @@
 # The severities each positive fixture must produce (see
 # internal/rules/fixtures.go, ExpectFile). A negative listed here must
-# fail to evaluate instead of matching.
+# fail to evaluate instead of matching. copilot-exec-object-arg is not
+# listed: an object argument is opaque, so that fixture has no match.
 positivos:
   claude-agent-frontmatter: high
   claude-bash-tmp-payload: high
@@ -36,5 +37,3 @@ positivos:
   shared-skill-tmp: high
   windsurf-home-script: high
   windsurf-powershell-userprofile: high
-negativos:
-  copilot-exec-object-arg: error

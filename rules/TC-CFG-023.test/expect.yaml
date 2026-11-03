@@ -1,5 +1,5 @@
-# Invalid server arguments must make the scan incomplete rather than let a
-# vulnerable pinned MCP server escape detection.
+# An object or array package argument is opaque. It must not match and must
+# not fail evaluation. Null and other unreadable arguments still do.
 positivos:
   claude-npx-figma-exact: high
   cursor-npx-mcp-remote: critical
@@ -22,6 +22,3 @@ positivos:
   claude-kali-gpt-git-commit: high
   cursor-multi-advisory: high
   claude-uvx-range-upper-first: high
-negativos:
-  claude-npx-object-arg: error
-  malformed-fields.json: error

@@ -1,6 +1,7 @@
 package mcppkg
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 	"testing"
@@ -83,8 +84,16 @@ func TestUnparsedAndOpaque(t *testing.T) {
 		t.Fatalf("command string: %+v work %d %v", got, work, err)
 	}
 	_, _, err = ParsePayload(map[string]any{"command": "npx", "args": []any{"-y", map[string]any{"pkg": "x"}}})
-	if err == nil {
-		t.Fatal("object arg accepted")
+	if !errors.Is(err, ErrOpaque) {
+		t.Fatalf("object arg err = %v", err)
+	}
+	_, _, err = ParsePayload(map[string]any{"command": "npx", "args": []any{"-y", []any{"pkg"}}})
+	if !errors.Is(err, ErrOpaque) {
+		t.Fatalf("array arg err = %v", err)
+	}
+	_, _, err = ParsePayload(map[string]any{"command": "npx", "args": []any{"-y", nil}})
+	if !errors.Is(err, ErrArgs) || errors.Is(err, ErrOpaque) {
+		t.Fatalf("null arg err = %v", err)
 	}
 }
 

@@ -124,8 +124,12 @@ var (
 	ErrNotBool    = errors.New("cel expression did not return a bool")
 	ErrInputLimit = errors.New("input exceeds size limit")
 	// ErrHookArgs is hook.argv on args that are not a list of strings,
-	// numbers, and bools.
+	// numbers, and bools, other than an object or array.
 	ErrHookArgs = errors.New("hook args are not strings, numbers, or bools")
+	// ErrOpaqueArgs is hook.argv or mcp.packages on an object or array
+	// argument. The entry is not a command line the agent runs, so the
+	// rule does not match it. It is not an incomplete scan.
+	ErrOpaqueArgs = errors.New("hook args contain an object or array")
 )
 
 // Env compiles expressions against the Tripcord variables. It has the
@@ -381,10 +385,11 @@ var instructionFirstMatchLine = cel.Function(instructionFirstMatchLineName,
 // hook.commands(payload) returns the string values of a hook payload's
 // command fields (model.HookCommandFields); a missing or non-string field is
 // skipped. hook.args(payload) returns args, and hook.argv(payload) returns
-// [exec or command] + args. Number and bool args become their text; either is
-// an evaluation error when args is not a list or holds an object, list, or
-// null (see argvList). They let a rule read every command field without
-// restating the list in each clause.
+// [exec or command] + args. Number and bool args become their text. An object
+// or array argument is ErrOpaqueArgs: that entry is not a match. Any other
+// unreadable args value, including null or a non-list, is ErrHookArgs (see
+// argvList). They let a rule read every command field without restating the
+// list in each clause.
 var hookCommands = cel.Function(hookCommandsName,
 	cel.Overload(overloadHookCommands, []*cel.Type{cel.DynType}, cel.ListType(cel.StringType),
 		cel.UnaryBinding(func(v ref.Val) ref.Val {
@@ -447,12 +452,17 @@ var hookArgs = cel.Function(hookArgsName,
 )
 
 // argvList returns a hook's args as strings. A number or bool is passed
-// to the program as its text, so it is stringified; an object, list, or
-// null element, or args that is not a list, is an error rather than an
-// empty argv, so a rule cannot pass over a hook it could not read.
+// to the program as its text, so it is stringified. An object or array,
+// either as args itself or as one element, is ErrOpaqueArgs. Null, or
+// args that is not a list, is ErrHookArgs. Neither becomes an empty argv,
+// so a rule cannot pass over a hook it could not read by pretending the
+// arguments were absent.
 func argvList(v ref.Val) ([]string, error) {
 	list, ok := v.(traits.Lister)
 	if !ok {
+		if _, isMap := v.(traits.Mapper); isMap {
+			return nil, fmt.Errorf("%s: args is %s: %w", hookArgvName, v.Type().TypeName(), ErrOpaqueArgs)
+		}
 		return nil, fmt.Errorf("%s: args is %s, not a list: %w", hookArgvName, v.Type().TypeName(), ErrHookArgs)
 	}
 	var out []string
@@ -469,6 +479,8 @@ func argvList(v ref.Val) ([]string, error) {
 			out = append(out, strconv.FormatUint(uint64(e), 10))
 		case types.Double:
 			out = append(out, strconv.FormatFloat(float64(e), 'f', -1, 64))
+		case traits.Lister, traits.Mapper:
+			return nil, fmt.Errorf("%s: args element %d is %s: %w", hookArgvName, i, e.Type().TypeName(), ErrOpaqueArgs)
 		default:
 			return nil, fmt.Errorf("%s: args element %d is %s: %w", hookArgvName, i, e.Type().TypeName(), ErrHookArgs)
 		}
@@ -696,13 +708,11 @@ func ctxError(ctx context.Context) error {
 	}
 }
 
-// isAbsent reports a lookup of a key or index that is not in the input.
-// cel-go reports these as *types.Err without a sentinel, so the message
-// prefix is the only signal.
 // mcp.packages(payload) lists the packages a known launcher would
 // install. mcp.vulns(payload) lists the embedded advisories those
-// packages match. Both fail like hook.args when an argument is not a
-// string, number, or bool. With no advisory list, mcp.vulns is empty.
+// packages match. An object or array argument is ErrOpaqueArgs. Any
+// other argument that is not a string, number, or bool is ErrHookArgs.
+// With no advisory list, mcp.vulns is empty.
 func (e *Env) mcpPackages() cel.EnvOption {
 	return cel.Function(mcpPackagesName,
 		cel.Overload(overloadMCPPackages, []*cel.Type{cel.DynType}, cel.ListType(cel.DynType),
@@ -726,6 +736,9 @@ func (e *Env) mcpCall(v ref.Val, vulns bool) ref.Val {
 	}
 	refs, work, err := mcppkg.ParsePayload(payload)
 	if err != nil {
+		if errors.Is(err, mcppkg.ErrOpaque) {
+			return types.WrapErr(fmt.Errorf("mcp: %w", ErrOpaqueArgs))
+		}
 		return types.WrapErr(fmt.Errorf("mcp: %w", ErrHookArgs))
 	}
 	var items []map[string]any
@@ -812,6 +825,9 @@ func newMapList(items []map[string]any, work int) ref.Val {
 	return workList{Lister: list, work: uint64(work)}
 }
 
+// isAbsent reports a lookup of a key or index that is not in the input.
+// cel-go reports these as *types.Err without a sentinel, so the message
+// prefix is the only signal.
 func isAbsent(err error) bool {
 	var celErr *types.Err
 	if !errors.As(err, &celErr) {

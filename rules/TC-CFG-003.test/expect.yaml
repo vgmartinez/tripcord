@@ -1,5 +1,3 @@
-# Invalid server arguments must make the scan incomplete rather than let an
-# inline MCP server escape detection.
-negativos:
-  claude-node-object-arg: error
-  malformed-fields.json: error
+# An object or array argument is opaque: these fixtures must not match and
+# must not fail evaluation. Null and other unreadable arguments still do.
+negativos: {}

@@ -217,16 +217,14 @@ func (e *Engine) ScanConfig(ctx context.Context, items []model.ConfigItem) Resul
 				}
 			}
 			ok, err := r.When.Eval(ctx, in)
-			if err != nil {
-				res.Errors = append(res.Errors, evalError(r.ID, item, err))
+			if stopForEval(&res, r.ID, item, err) {
 				continue
 			}
 			if !ok {
 				continue
 			}
 			clause, matched, err := r.clauseFor(ctx, in)
-			if err != nil {
-				res.Errors = append(res.Errors, evalError(r.ID, item, err))
+			if stopForEval(&res, r.ID, item, err) {
 				continue
 			}
 			if !matched {
@@ -235,8 +233,7 @@ func (e *Engine) ScanConfig(ctx context.Context, items []model.ConfigItem) Resul
 			match := Match{Rule: r, Item: item, Severity: clause.Severity, Title: clause.Title}
 			if r.Evidence == EvidenceAdvisory {
 				hits, err := advisoryHits(in, e.env.Advisories())
-				if err != nil {
-					res.Errors = append(res.Errors, evalError(r.ID, item, err))
+				if stopForEval(&res, r.ID, item, err) {
 					continue
 				}
 				match.Advisories = hits
@@ -251,6 +248,9 @@ func advisoryHits(in *Input, db *advisory.DB) ([]advisory.Hit, error) {
 	raw, _ := in.vars[VarPayload].(map[string]any)
 	refs, _, err := mcppkg.ParsePayload(raw)
 	if err != nil {
+		if errors.Is(err, mcppkg.ErrOpaque) {
+			return nil, fmt.Errorf("mcp: %w", ErrOpaqueArgs)
+		}
 		return nil, fmt.Errorf("mcp: %w", ErrHookArgs)
 	}
 	if db == nil {
@@ -272,4 +272,17 @@ func serverName(item model.ConfigItem) string {
 
 func evalError(rule string, item model.ConfigItem, err error) EvalError {
 	return EvalError{Rule: rule, Harness: item.Harness, Scope: item.Scope, Path: item.Path, Err: err}
+}
+
+// stopForEval reports whether evaluation of this rule should stop for
+// item. An object or array argument is not a match and is not recorded.
+// Every other error is recorded and still stops the rule.
+func stopForEval(res *Result, rule string, item model.ConfigItem, err error) bool {
+	if err == nil {
+		return false
+	}
+	if !errors.Is(err, ErrOpaqueArgs) {
+		res.Errors = append(res.Errors, evalError(rule, item, err))
+	}
+	return true
 }

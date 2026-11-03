@@ -241,9 +241,9 @@ func TestScanRuleErrorKeepsOtherFindings(t *testing.T) {
 }
 
 // TestScanHookArgsNotReadable checks hook.argv on a Copilot exec hook: a
-// number or bool arg is read as its text, and an object, list, or null
-// arg is an incomplete scan, exit 3, with a diagnostic per rule naming
-// the file and none of its content.
+// number or bool arg is read as its text. An object or array arg is
+// opaque, so the scan exits 0 or 1. Null stays an incomplete scan, exit
+// 3, with a diagnostic per rule naming the file and none of its content.
 func TestScanHookArgsNotReadable(t *testing.T) {
 	t.Parallel()
 	hook := func(args string) map[string]string {
@@ -262,33 +262,47 @@ func TestScanHookArgsNotReadable(t *testing.T) {
 	for name, args := range map[string]string{
 		"object": `["/tmp/argsecret.sh", {"argsecret": 2}]`,
 		"list":   `[["/tmp/argsecret.sh"]]`,
-		"null":   `["/tmp/argsecret.sh", null]`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			root := writeRepo(t, hook(args))
 			for _, format := range scanFormats {
 				var stdout, stderr bytes.Buffer
-				if code := run([]string{"scan", "--format", format, root}, &stdout, &stderr); code != int(exitcode.Config) {
+				code := run([]string{"scan", "--format", format, root}, &stdout, &stderr)
+				if code != int(exitcode.OK) && code != int(exitcode.Findings) {
 					t.Fatalf("%s: exit %d, stderr %q", format, code, stderr.String())
 				}
 				report := stdout.String() + stderr.String()
-				for _, id := range []string{"TC-CFG-006", "TC-CFG-008"} {
-					if !strings.Contains(stderr.String(), id+": rule evaluation failed: hook args are not strings, numbers, or bools") {
-						t.Fatalf("%s: no %s diagnostic:\n%s", format, id, stderr.String())
-					}
-				}
-				if !strings.Contains(report, ".github/hooks/check.json") || strings.Contains(report, "argsecret") {
+				if strings.Contains(report, "hook args are not strings") || strings.Contains(report, "argsecret") {
 					t.Fatalf("%s: report:\n%s", format, report)
 				}
 			}
 		})
 	}
+	t.Run("null", func(t *testing.T) {
+		t.Parallel()
+		root := writeRepo(t, hook(`["/tmp/argsecret.sh", null]`))
+		for _, format := range scanFormats {
+			var stdout, stderr bytes.Buffer
+			if code := run([]string{"scan", "--format", format, root}, &stdout, &stderr); code != int(exitcode.Config) {
+				t.Fatalf("%s: exit %d, stderr %q", format, code, stderr.String())
+			}
+			report := stdout.String() + stderr.String()
+			for _, id := range []string{"TC-CFG-006", "TC-CFG-008"} {
+				if !strings.Contains(stderr.String(), id+": rule evaluation failed: hook args are not strings, numbers, or bools") {
+					t.Fatalf("%s: no %s diagnostic:\n%s", format, id, stderr.String())
+				}
+			}
+			if !strings.Contains(report, ".github/hooks/check.json") || strings.Contains(report, "argsecret") {
+				t.Fatalf("%s: report:\n%s", format, report)
+			}
+		}
+	})
 }
 
-// TestScanSessionAndMCPArgsNotReadable keeps TC-CFG-001 and TC-CFG-003 from
-// treating unreadable args as an empty list. The diagnostic names the rule and
-// path but must never include the invalid argument's contents.
+// TestScanSessionAndMCPArgsNotReadable keeps a null or non-list argument
+// from being read as an empty list. An object or array argument is opaque:
+// the scan exits 0 or 1 and does not quote the argument.
 func TestScanSessionAndMCPArgsNotReadable(t *testing.T) {
 	t.Parallel()
 	repo := func(args string) map[string]string {
@@ -298,8 +312,26 @@ func TestScanSessionAndMCPArgsNotReadable(t *testing.T) {
 		}
 	}
 	for name, args := range map[string]string{
-		"object":   `["-e", {"argsecret": true}]`,
-		"list":     `["-e", ["argsecret"]]`,
+		"object": `["-e", {"argsecret": true}]`,
+		"list":   `["-e", ["argsecret"]]`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			root := writeRepo(t, repo(args))
+			for _, format := range scanFormats {
+				var stdout, stderr bytes.Buffer
+				code := run([]string{"scan", "--format", format, root}, &stdout, &stderr)
+				if code != int(exitcode.OK) && code != int(exitcode.Findings) {
+					t.Fatalf("%s: exit %d, stderr %q", format, code, stderr.String())
+				}
+				report := stdout.String() + stderr.String()
+				if strings.Contains(report, "hook args are not strings") || strings.Contains(report, "argsecret") {
+					t.Fatalf("%s: report:\n%s", format, report)
+				}
+			}
+		})
+	}
+	for name, args := range map[string]string{
 		"null":     `["-e", null]`,
 		"non-list": `"argsecret"`,
 	} {

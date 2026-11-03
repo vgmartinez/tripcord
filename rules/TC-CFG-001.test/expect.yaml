@@ -1,4 +1,4 @@
-# Invalid hook arguments must make the scan incomplete rather than let a
-# SessionStart fetch escape detection.
-negativos:
-  copilot-exec-object-arg: error
+# An object argument beside a SessionStart command is opaque. The fixture
+# must not match and must not fail evaluation. Null and other unreadable
+# arguments still make the scan incomplete.
+negativos: {}
