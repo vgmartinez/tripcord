@@ -58,6 +58,7 @@ Usage:
   tripcord scan [PATH] [flags]
   tripcord pr-context [flags]
   tripcord preopen <git-url|path> [flags]
+  tripcord init [PATH] [--embed] [--harness h,...] [flags]
 
 scan performs static configuration scanning only. A PATH inside a Git
 repository scans that whole repository from its git root. Monorepo scoping
@@ -78,6 +79,9 @@ preopen clones a repository into a temporary directory without running its
 hooks, filters, LFS, or submodules, scans it like scan, and removes it. It
 takes the scan flags except --since and --scope other than repo, and ignores
 the repository's own .tripcord policy.
+init writes .tripcord/policy.yaml. With --embed it also writes the pinned
+bootstrap script, the pull request workflow, and each harness's hook and
+setup wiring, merging into existing files; see docs/init.md.
 --secrets (v1) and --all (v1) are not available.
 `
 
@@ -100,6 +104,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runPrContext(args[1:], stdout, stderr)
 	case "preopen":
 		return runPreopen(args[1:], stdout, stderr)
+	case "init":
+		return runInit(args[1:], stdout, stderr)
 	default:
 		msg := fmt.Sprintf("tripcord: unknown command %q\n\n%s", args[0], usage)
 		writeString(stderr, msg)
