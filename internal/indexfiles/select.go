@@ -17,6 +17,7 @@ import (
 	"github.com/vgmartinez/tripcord/internal/adapters/generic"
 	"github.com/vgmartinez/tripcord/internal/adapters/opencode"
 	"github.com/vgmartinez/tripcord/internal/adapters/windsurf"
+	"github.com/vgmartinez/tripcord/internal/embedded"
 	"github.com/vgmartinez/tripcord/internal/model"
 	"github.com/vgmartinez/tripcord/internal/policy"
 )
@@ -144,6 +145,7 @@ func Choose(entries []Entry, read func(oid string) ([]byte, error)) (Plan, error
 		}
 	}
 	addPolicy(tree, byPath, read, add)
+	addEmbed(tree, byPath, add)
 	out := make([]Write, 0, len(writes))
 	for _, w := range writes {
 		out = append(out, w)
@@ -371,6 +373,17 @@ func addPolicy(tree *fileTree, byPath map[string]*Entry, read func(string) ([]by
 			}
 		}
 		pending = next
+	}
+}
+
+// addEmbed places the files embedded.Check reads that no adapter
+// selects, so a staged scan sees the same Tripcord embed a checkout
+// scan does.
+func addEmbed(tree *fileTree, byPath map[string]*Entry, add func(string, bool, int64)) {
+	for _, p := range []string{embedded.WorkflowPath, embedded.CopilotSetupStepsPath} {
+		if e := byPath[p]; e != nil && e.Mode != "160000" {
+			place(tree, byPath, e, add)
+		}
 	}
 }
 
