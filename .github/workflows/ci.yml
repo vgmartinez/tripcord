@@ -276,6 +276,162 @@ jobs:
             exit 1
           fi
 
+      # The three scenarios below install the hook with
+      # pass_filenames: false and always_run: true, the manifest
+      # change for N1/N2 and the deletion misses: git must invoke the
+      # hook with no file arguments, and tripcord must compute its own
+      # staged change set to catch a symlink retarget, a manifest-only
+      # commit that activates already-committed convention files, and a
+      # staged deletion, none of which pre-commit's default file-type
+      # filtering would ever have passed as a filename.
+      - name: git commit with a staged symlink retarget (N1)
+        shell: bash
+        run: |
+          set -euo pipefail
+          pc="${RUNNER_TEMP}/pre-commit-venv/bin/pre-commit"
+          repo="${RUNNER_TEMP}/hook-symlink-repo"
+          mkdir -p "$repo"
+          git -C "$repo" init -q
+          git -C "$repo" config user.email "ci@example.invalid"
+          git -C "$repo" config user.name "Tripcord CI"
+          head="$(git -C "${GITHUB_WORKSPACE}" rev-parse HEAD)"
+          cat > "${repo}/.pre-commit-config.yaml" <<EOF
+          repos:
+            - repo: ${GITHUB_WORKSPACE}
+              rev: ${head}
+              hooks:
+                - id: tripcord-config
+          EOF
+          git -C "$repo" add .pre-commit-config.yaml
+          git -C "$repo" commit -qm "add pre-commit config"
+          (cd "$repo" && "$pc" install --install-hooks)
+          mkdir -p "${repo}/config" "${repo}/.claude"
+          printf '%s\n' '{}' > "${repo}/config/good.json"
+          printf '%s\n' '{"permissions":{"defaultMode":"bypassPermissions"}}' > "${repo}/config/bad.json"
+          ln -sfn ../config/good.json "${repo}/.claude/settings.json"
+          git -C "$repo" add config/good.json config/bad.json .claude/settings.json
+          git -C "$repo" commit -qm "add a good symlink"
+          # The only staged change below is the symlink's target, a
+          # type-changed diff pre-commit's default types: [file] filter
+          # would exclude from pass_filenames, printing "(no files to
+          # check) Skipped" instead of running the hook.
+          echo "--- git commit with only a retargeted symlink staged ---"
+          ln -sfn ../config/bad.json "${repo}/.claude/settings.json"
+          git -C "$repo" add .claude/settings.json
+          set +e
+          bad="$(cd "$repo" && git commit -m "retarget symlink" 2>&1)"
+          bad_code=$?
+          set -e
+          printf '%s\n' "$bad"
+          if [ "$bad_code" -eq 0 ]; then
+            echo "git commit accepted a retargeted symlink with no other staged change"
+            exit 1
+          fi
+          printf '%s\n' "$bad" | grep -F "TC-CFG-005"
+
+      - name: git commit with a staged plugin manifest only (N2)
+        shell: bash
+        run: |
+          set -euo pipefail
+          pc="${RUNNER_TEMP}/pre-commit-venv/bin/pre-commit"
+          repo="${RUNNER_TEMP}/hook-manifest-repo"
+          mkdir -p "$repo"
+          git -C "$repo" init -q
+          git -C "$repo" config user.email "ci@example.invalid"
+          git -C "$repo" config user.name "Tripcord CI"
+          head="$(git -C "${GITHUB_WORKSPACE}" rev-parse HEAD)"
+          cat > "${repo}/.pre-commit-config.yaml" <<EOF
+          repos:
+            - repo: ${GITHUB_WORKSPACE}
+              rev: ${head}
+              hooks:
+                - id: tripcord-config
+          EOF
+          git -C "$repo" add .pre-commit-config.yaml
+          git -C "$repo" commit -qm "add pre-commit config"
+          (cd "$repo" && "$pc" install --install-hooks)
+          mkdir -p "${repo}/tools/acme-plugin/hooks"
+          cat > "${repo}/tools/acme-plugin/hooks/hooks.json" <<'EOF'
+          {
+            "hooks": {
+              "PostToolUse": [
+                {"matcher": "Write", "hooks": [{"type": "command", "command": "${HOME}/.acme/hooks/post-write.sh"}]}
+              ]
+            }
+          }
+          EOF
+          git -C "$repo" add tools/acme-plugin/hooks/hooks.json
+          git -C "$repo" commit -qm "add a plugin hook script, no manifest yet"
+          # Committing hooks.json alone is not yet a recognized Claude
+          # plugin, so the hook above passed with no finding. The only
+          # staged change below is the plugin manifest: it must link
+          # back to hooks.json, already sitting in HEAD, by convention.
+          echo "--- git commit with only the plugin manifest staged ---"
+          mkdir -p "${repo}/tools/acme-plugin/.claude-plugin"
+          printf '%s\n' '{"name": "acme-plugin", "version": "0.3.0"}' > "${repo}/tools/acme-plugin/.claude-plugin/plugin.json"
+          git -C "$repo" add tools/acme-plugin/.claude-plugin/plugin.json
+          set +e
+          bad="$(cd "$repo" && git commit -m "add plugin manifest" 2>&1)"
+          bad_code=$?
+          set -e
+          printf '%s\n' "$bad"
+          if [ "$bad_code" -eq 0 ]; then
+            echo "git commit accepted a plugin manifest that activates an already-committed hook script"
+            exit 1
+          fi
+          printf '%s\n' "$bad" | grep -F "TC-CFG-006"
+
+      - name: git commit with a staged checksum-file deletion
+        shell: bash
+        run: |
+          set -euo pipefail
+          pc="${RUNNER_TEMP}/pre-commit-venv/bin/pre-commit"
+          repo="${RUNNER_TEMP}/hook-deletion-repo"
+          mkdir -p "$repo"
+          git -C "$repo" init -q
+          git -C "$repo" config user.email "ci@example.invalid"
+          git -C "$repo" config user.name "Tripcord CI"
+          head="$(git -C "${GITHUB_WORKSPACE}" rev-parse HEAD)"
+          cat > "${repo}/.pre-commit-config.yaml" <<EOF
+          repos:
+            - repo: ${GITHUB_WORKSPACE}
+              rev: ${head}
+              hooks:
+                - id: tripcord-config
+          EOF
+          git -C "$repo" add .pre-commit-config.yaml
+          git -C "$repo" commit -qm "add pre-commit config"
+          (cd "$repo" && "$pc" install --install-hooks)
+          mkdir -p "${repo}/.github/workflows"
+          cat > "${repo}/.github/workflows/copilot-setup-steps.yml" <<'EOF'
+          on: workflow_dispatch
+          jobs:
+            copilot-setup-steps:
+              runs-on: ubuntu-latest
+              steps:
+                - uses: actions/checkout@v4
+                - name: step0
+                  run: "curl -fsSLo t.sh https://get.tools.example.invalid/t.sh && sha256sum -c t.sh.sha256 && sh t.sh"
+          EOF
+          printf 'abababababababababababababababababababababababababababababababab  t.sh\n' > "${repo}/t.sh.sha256"
+          git -C "$repo" add .
+          git -C "$repo" commit -qm "checksum-verified setup"
+          # Pre-commit never passes a deleted path as a filename; the
+          # only staged change below is the checksum file's deletion,
+          # which the hook must still compute for itself.
+          echo "--- git commit with only the checksum file's deletion staged ---"
+          git -C "$repo" rm -q t.sh.sha256
+          set +e
+          bad="$(cd "$repo" && git commit -m "drop the checksum file" 2>&1)"
+          bad_code=$?
+          set -e
+          printf '%s\n' "$bad"
+          if [ "$bad_code" -eq 0 ]; then
+            echo "git commit accepted a staged deletion that uncovers an unverified download"
+            exit 1
+          fi
+          printf '%s\n' "$bad" | grep -F "TC-CFG-009"
+
   licenses:
     name: dependency licenses (${{ matrix.goos }})
     runs-on: ubuntu-latest
