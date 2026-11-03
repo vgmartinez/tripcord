@@ -378,9 +378,15 @@ func addPolicy(tree *fileTree, byPath map[string]*Entry, read func(string) ([]by
 
 // addEmbed places the files embedded.Check reads that no adapter
 // selects, so a staged scan sees the same Tripcord embed a checkout
-// scan does.
+// scan does. embedded.GitattributesPath (".gitattributes") belongs
+// here too: it is outside .tripcord/, so addPolicy's blanket
+// .tripcord/ prefix never catches it, and no adapter walker treats it
+// as agent config. Without it, a staged scan that never touches
+// .gitattributes still cannot read it from the staged tree, so
+// embedded.Check reports it StateMissing ("missing part of its
+// guard") on every unrelated staged change to an embedded repository.
 func addEmbed(tree *fileTree, byPath map[string]*Entry, add func(string, bool, int64)) {
-	for _, p := range []string{embedded.WorkflowPath, embedded.CopilotSetupStepsPath, embedded.ClaudeLocalSettingsPath, embedded.CopilotLocalSettingsPath} {
+	for _, p := range []string{embedded.WorkflowPath, embedded.CopilotSetupStepsPath, embedded.ClaudeLocalSettingsPath, embedded.CopilotLocalSettingsPath, embedded.GitattributesPath} {
 		if e := byPath[p]; e != nil && e.Mode != "160000" {
 			place(tree, byPath, e, add)
 		}
