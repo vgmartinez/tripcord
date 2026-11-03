@@ -205,12 +205,12 @@ func TestInitWiringInvokesTripcordHook(t *testing.T) {
 		t.Fatalf("claude PreToolUse = %+v", pre)
 	}
 	h := pre[0].Hooks[0]
-	if h.Type != "command" || h.Command != `bash "${CLAUDE_PROJECT_DIR}/.tripcord/bootstrap.sh" hook --harness claude --event pre-tool` || h.Args != nil || h.OnFailure != "block" {
+	if h.Type != "command" || h.Command != `bash "${CLAUDE_PROJECT_DIR:-.}/.tripcord/bootstrap.sh" hook --harness claude --event pre-tool` || h.Args != nil || h.OnFailure != "block" {
 		t.Fatalf("claude pre-tool hook = %+v", h)
 	}
 	start := claude.Hooks["SessionStart"]
 	if len(start) != 1 || start[0].Matcher != "startup|resume" || len(start[0].Hooks) != 1 ||
-		start[0].Hooks[0].Command != `bash "${CLAUDE_PROJECT_DIR}/.tripcord/bootstrap.sh" session-start --harness claude` {
+		start[0].Hooks[0].Command != `bash "${CLAUDE_PROJECT_DIR:-.}/.tripcord/bootstrap.sh" session-start --harness claude` {
 		t.Fatalf("claude SessionStart = %+v", start)
 	}
 

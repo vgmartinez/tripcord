@@ -79,11 +79,13 @@ func HookArgs(h model.Harness) []string {
 
 // projectBootstrap is how a hook of h names bootstrap.sh. Claude Code
 // and Cursor set a project directory variable. Copilot sets none; its
-// hooks run with cwd "." (the repository root).
+// hooks run with cwd "." (the repository root). The Copilot CLI also
+// runs the hooks in .claude/settings.json, without CLAUDE_PROJECT_DIR,
+// so the Claude Code hooks fall back to the working directory.
 func projectBootstrap(h model.Harness) string {
 	switch h {
 	case model.HarnessClaude:
-		return `"${CLAUDE_PROJECT_DIR}/` + BootstrapPath + `"`
+		return `"${CLAUDE_PROJECT_DIR:-.}/` + BootstrapPath + `"`
 	case model.HarnessCursor:
 		return `"${CURSOR_PROJECT_DIR}/` + BootstrapPath + `"`
 	default:

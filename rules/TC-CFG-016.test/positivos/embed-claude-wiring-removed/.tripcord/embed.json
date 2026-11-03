@@ -31,13 +31,13 @@
       "harness": "claude",
       "path": ".claude/settings.json",
       "event": "SessionStart",
-      "sha256": "2a43a6768d77210aa384bc246184f3d34e2383284683b5477585e0987e797e96"
+      "sha256": "3c2b4d1858b4e8afc5cac4838025edb3a8838804765573a3671e99d277f0372d"
     },
     {
       "harness": "claude",
       "path": ".claude/settings.json",
       "event": "PreToolUse",
-      "sha256": "3ce2977b6677c2e831268759e813283b13613620fcfd8dae7a73116f458912ef"
+      "sha256": "0d1d134cd29111d375db76b463bd42963322ac36e2a5697f811e15a658a91af1"
     },
     {
       "harness": "cursor",

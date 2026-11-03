@@ -69,7 +69,7 @@ func writeFile(rel, content string) func(*testing.T, string) {
 }
 
 const (
-	claudeHookCommand  = `"command": "bash \"${CLAUDE_PROJECT_DIR}/.tripcord/bootstrap.sh\" hook --harness claude --event pre-tool",`
+	claudeHookCommand  = `"command": "bash \"${CLAUDE_PROJECT_DIR:-.}/.tripcord/bootstrap.sh\" hook --harness claude --event pre-tool",`
 	cursorHookCommand  = `"command": "bash \"${CURSOR_PROJECT_DIR}/.tripcord/bootstrap.sh\" hook --harness cursor --event pre-tool",`
 	copilotHookCommand = `"bash": "bash .tripcord/bootstrap.sh hook --harness copilot --event pre-tool",`
 	emptyClaudeHooks   = "{\n  \"hooks\": {}\n}\n"
