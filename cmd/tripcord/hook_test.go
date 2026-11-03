@@ -304,6 +304,31 @@ func TestHookPolicyFromProjectDir(t *testing.T) {
 	}
 }
 
+// TestHookMCPVulnsParity: mcp.vulns sees the built-in advisory list in
+// the hook whether the policy loads without the core pack or, because
+// it locks a rule, with it, as in scan.
+func TestHookMCPVulnsParity(t *testing.T) {
+	const rule = `custom:
+  - id: ACME-020
+    deny_if: 'event.command.startsWith("uvx prefab-ui") && mcp.vulns({"command":"uvx","args":["prefab-ui==0.15.0"]}).size() > 0'
+    message: prefab-ui 0.15.0 has a known advisory
+`
+	input := `{"session_id":"s","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"uvx prefab-ui==0.15.0"}}`
+	want := claudeDeny("tripcord blocked this tool call: ACME-020 (high): prefab-ui 0.15.0 has a known advisory")
+	for _, tc := range []struct{ name, policy string }{
+		{"without the core pack", "version: 1\nmode: enforce\n" + rule},
+		{"with the core pack", "version: 1\nmode: enforce\nlocked:\n  rules: [TC-CFG-001]\n" + rule},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			hookProject(t, tc.policy)
+			code, stdout, stderr := runHookCLI(t, strings.NewReader(input), "--harness", "claude", "--event", hook.EventPreTool)
+			if code != int(exitcode.Block) || stdout != want {
+				t.Errorf("got exit %d stdout %q stderr %q, want exit 2 and %q", code, stdout, stderr, want)
+			}
+		})
+	}
+}
+
 // A custom rule that reuses a core rule id is rejected as in scan, even
 // though the hook loads the policy without the core pack first.
 func TestHookCustomRuleCoreIDRejected(t *testing.T) {

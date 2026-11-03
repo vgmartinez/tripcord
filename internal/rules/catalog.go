@@ -6,6 +6,7 @@ import (
 	"os"
 	"slices"
 
+	"github.com/vgmartinez/tripcord/internal/advisory"
 	corepack "github.com/vgmartinez/tripcord/rules"
 )
 
@@ -15,6 +16,14 @@ const CoreSource = "builtin:rules"
 // LoadCore loads the built-in pack embedded from rules/.
 func LoadCore(env *Env) (*Pack, error) {
 	return LoadPack(corepack.FS, CoreSource, env)
+}
+
+// CoreAdvisories returns the built-in pack's offline advisory list, the
+// one LoadCore attaches to its environment, without compiling a rule.
+// An environment that evaluates policy expressions without LoadCore
+// needs it so mcp.vulns sees the same list.
+func CoreAdvisories() (*advisory.DB, error) {
+	return loadAdvisories(corepack.FS, CoreSource)
 }
 
 // LoadDir loads the pack in directory dir.

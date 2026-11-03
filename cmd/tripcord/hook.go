@@ -176,7 +176,11 @@ func hookProjectDir(ad hookAdapter) (string, error) {
 // without it fails, the policy is loaded again with the catalog so the
 // result is the one scan gets.
 func loadHookPolicy(root string, limits rules.Limits) (*policy.Effective, error) {
-	env, err := rules.NewEnv(limits)
+	advisories, err := rules.CoreAdvisories()
+	if err != nil {
+		return nil, err
+	}
+	env, err := rules.NewEnv(limits, rules.WithAdvisories(advisories))
 	if err != nil {
 		return nil, err
 	}
