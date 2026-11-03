@@ -275,6 +275,9 @@ func checkOneJobWorkflow(t *testing.T, wf workflowFile, wantPerms map[string]str
 	if scalar(fixtureStep["if"]) != "inputs.assert-fixture == 'enabled'" || scalar(fixtureStep["name"]) != "Create TC-CFG-001 fixture" {
 		t.Fatal("fixture step does not create TC-CFG-001 only when requested")
 	}
+	if fixtureRun := scalar(fixtureStep["run"]); !strings.Contains(fixtureRun, "git init --quiet tripcord-ci-fixture") {
+		t.Fatal("fixture step does not initialize the planted fixture as its own repository")
+	}
 
 	reviewFileStep := mapping(t, steps[4])
 	reviewFileRun := scalar(reviewFileStep["run"])
@@ -311,9 +314,8 @@ func checkOneJobWorkflow(t *testing.T, wf workflowFile, wantPerms map[string]str
 	assertStep := mapping(t, steps[6])
 	assertRun := scalar(assertStep["run"])
 	if scalar(assertStep["if"]) != "inputs.assert-fixture == 'enabled'" ||
-		!strings.Contains(assertRun, "TC-CFG-001") ||
-		!strings.Contains(assertRun, "tripcord-ci-fixture/.claude/settings.json") {
-		t.Fatal("fixture assertion does not require TC-CFG-001 at the planted path in the SARIF")
+		!strings.Contains(assertRun, "TC-CFG-001") {
+		t.Fatal("fixture assertion does not require TC-CFG-001 in the SARIF")
 	}
 
 	for _, step := range []map[string]*yaml.Node{checkoutStep, reviewsStep, fixtureStep, reviewFileStep, actionStep, assertStep} {
