@@ -17,6 +17,7 @@ import (
 	"github.com/vgmartinez/tripcord/internal/exitcode"
 	"github.com/vgmartinez/tripcord/internal/gitrun"
 	"github.com/vgmartinez/tripcord/internal/model"
+	"github.com/vgmartinez/tripcord/internal/output"
 	"github.com/vgmartinez/tripcord/internal/policy"
 	"github.com/vgmartinez/tripcord/internal/prcontext"
 )
@@ -128,7 +129,7 @@ func runPrContext(args []string, stdout, stderr io.Writer) int {
 	commits, warnings, readErr := prcontext.ReadCommits(context.Background(), repo, ev.Base, ev.Head)
 	if readErr != nil {
 		commits = nil
-		warnings = append(warnings, "commits and notes were not read: "+oneLineError(redactHomeFromError(readErr)))
+		warnings = append(warnings, "commits and notes were not read: "+oneLineError(errorText(readErr)))
 	}
 	result := prcontext.Detect(prcontext.Input{
 		PRLogin:      ev.Login,
@@ -225,7 +226,7 @@ func runPrContext(args []string, stdout, stderr io.Writer) int {
 		}
 		return int(exitcode.OK)
 	case cfg014.StatusIncomplete:
-		writeString(stderr, "tripcord pr-context: TC-CFG-014 incomplete: "+outcome.Reason+"\n")
+		writeString(stderr, "tripcord pr-context: TC-CFG-014 incomplete: "+output.Message(foldHome(outcome.Reason))+"\n")
 		return int(exitcode.Config)
 	default:
 		panic("pr-context: unhandled TC-CFG-014 status " + string(outcome.Status))
@@ -755,6 +756,6 @@ func prContextFail(stderr io.Writer, err error, config bool) int {
 	if errors.Is(err, gitrun.ErrNotInstalled) {
 		code = exitcode.Internal
 	}
-	writeString(stderr, "tripcord pr-context: "+redactHomeFromError(err)+"\n")
+	writeString(stderr, "tripcord pr-context: "+errorText(err)+"\n")
 	return int(code)
 }

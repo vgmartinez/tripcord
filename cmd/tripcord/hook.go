@@ -19,6 +19,7 @@ import (
 	"github.com/vgmartinez/tripcord/internal/hook"
 	"github.com/vgmartinez/tripcord/internal/hook/hookpolicy"
 	"github.com/vgmartinez/tripcord/internal/model"
+	"github.com/vgmartinez/tripcord/internal/output"
 	"github.com/vgmartinez/tripcord/internal/policy"
 	"github.com/vgmartinez/tripcord/internal/rules"
 	corepack "github.com/vgmartinez/tripcord/rules"
@@ -72,7 +73,7 @@ func runHook(args []string, stdout, stderr io.Writer) (code int) {
 	// stdout or stderr, which the agent reads.
 	defer func() {
 		if p := recover(); p != nil {
-			code = hookFailure(stdout, stderr, ad, event, failClosed, fmt.Errorf("internal error: %v", p))
+			code = hookFailure(stdout, stderr, ad, event, failClosed, errInternal)
 		}
 	}()
 	var harness, onFailure string
@@ -120,7 +121,7 @@ func runHook(args []string, stdout, stderr io.Writer) (code int) {
 	go func() {
 		defer func() {
 			if p := recover(); p != nil {
-				done <- result{err: fmt.Errorf("internal error: %v", p)}
+				done <- result{err: errInternal}
 			}
 		}()
 		v, err := decide(ctx, stdin, found, event)
@@ -131,10 +132,27 @@ func runHook(args []string, stdout, stderr io.Writer) (code int) {
 		if r.err != nil {
 			return hookFailure(stdout, stderr, ad, event, failClosed, r.err)
 		}
+		r.v.Reason = hookReason(r.v.Reason)
 		return writeHookOutput(stdout, stderr, ad.render(event, r.v))
 	case <-ctx.Done():
 		return hookFailure(stdout, stderr, ad, event, failClosed, fmt.Errorf("no decision within %v", hookTimeout))
 	}
+}
+
+// errInternal is the error a panic reports. The panic value is dropped:
+// it can quote the event (a formatted message, a value a CEL function
+// failed on), and the harness shows the reason to the agent.
+var errInternal = errors.New("internal error")
+
+// hookReason is a verdict reason as the harness receives it: a custom
+// rule's message is policy text, which can name a credential or a path
+// under the home directory, so it is folded, redacted, and capped like
+// an error.
+func hookReason(reason string) string {
+	if reason == "" {
+		return ""
+	}
+	return output.Message(foldHome(reason))
 }
 
 // decideHook reads the event from stdin, loads the policy, and
@@ -290,7 +308,7 @@ func hookNeedsCatalog(eff *policy.Effective) (bool, error) {
 // harness is known, with exit 2 and the reason on stderr); otherwise it
 // exits 3 or 4 with the error on stderr and nothing on stdout.
 func hookFailure(stdout, stderr io.Writer, ad *hookAdapter, event string, failClosed bool, err error) int {
-	msg := redactHomeFromError(err)
+	msg := errorText(err)
 	if !failClosed {
 		writeString(stderr, "tripcord hook: "+msg+"\n")
 		return int(hookpolicy.FailureCode(err))

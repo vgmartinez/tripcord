@@ -34,7 +34,7 @@ func (s sha256Flags) Set(value string) error { return embedded.ParsePinSHA256(s,
 func runInit(args []string, stdout, stderr io.Writer) int {
 	const prog = "tripcord init"
 	fail := func(code exitcode.Code, err error) int {
-		writeString(stderr, prog+": "+redactHomeFromError(err)+"\n")
+		writeString(stderr, prog+": "+errorText(err)+"\n")
 		return int(code)
 	}
 	var (
@@ -92,7 +92,7 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 		switch {
 		case errors.As(err, &plan):
 			for _, f := range plan.Files {
-				writeString(stderr, prog+": "+f.Error()+"\n")
+				writeString(stderr, prog+": "+errorText(f)+"\n")
 			}
 			return fail(exitcode.Config, errors.New("nothing was written"))
 		case errors.Is(err, embedded.ErrUnsafePath), errors.Is(err, os.ErrNotExist):

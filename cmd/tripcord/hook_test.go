@@ -429,31 +429,35 @@ func TestHookMCPVulnsParity(t *testing.T) {
 	}
 }
 
+// panicCanary is a panic value quoting an event, which no output may
+// show.
+const panicCanary = "--token=PANICCANARY01 SECRET_KEY=PANICCANARY02"
+
 // TestHookPanic: a panic while deciding is an internal error, exit 4 or
-// a deny under --on-failure block, and no Go stack trace reaches the
-// harness.
+// a deny under --on-failure block, and no Go stack trace, panic value,
+// or environment reaches the harness.
 func TestHookPanic(t *testing.T) {
 	hookProject(t, hookTestPolicy)
 	prev := hookDecide
 	hookDecide = func(context.Context, io.Reader, hookAdapter, string) (hook.Verdict, error) {
-		panic("boom")
+		panic("boom: " + panicCanary)
 	}
 	t.Cleanup(func() { hookDecide = prev })
 	noStack := func(t *testing.T, out string) {
 		t.Helper()
-		if strings.Contains(out, "goroutine") || strings.Contains(out, ".go:") || strings.Contains(out, "panic") {
+		if strings.Contains(out, "goroutine") || strings.Contains(out, ".go:") || strings.Contains(out, "panic") || strings.Contains(out, "PANICCANARY") || strings.Contains(out, os.Getenv("HOME")) {
 			t.Errorf("output has a stack trace: %q", out)
 		}
 	}
 	code, stdout, stderr := runHookCLI(t, strings.NewReader("{}"), "--harness", "claude", "--event", hook.EventPreTool)
-	if code != int(exitcode.Internal) || stdout != "" || stderr != "tripcord hook: internal error: boom\n" {
+	if code != int(exitcode.Internal) || stdout != "" || stderr != "tripcord hook: internal error\n" {
 		t.Errorf("got exit %d stdout %q stderr %q", code, stdout, stderr)
 	}
 	noStack(t, stderr)
 	for _, h := range embedded.HookHarnesses {
 		t.Run(string(h), func(t *testing.T) {
 			code, stdout, stderr := runHookCLI(t, strings.NewReader("{}"), "--harness", string(h), "--event", hook.EventPreTool, "--on-failure", "block")
-			reason := "tripcord hook failed closed: internal error: boom"
+			reason := "tripcord hook failed closed: internal error"
 			if code != int(exitcode.Block) || stderr != reason+"\n" {
 				t.Fatalf("got exit %d stderr %q", code, stderr)
 			}

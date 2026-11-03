@@ -18,6 +18,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/vgmartinez/tripcord/internal/output"
 )
 
 // ErrNotInstalled reports that git could not be found or started.
@@ -208,10 +210,12 @@ func runOutput(cmd *exec.Cmd, args []string) ([]byte, error) {
 
 // Sanitize keeps a git diagnostic to one bounded line, for a caller
 // building its own ExitError around a command this package did not run
-// end to end (for example one using Command for streaming I/O).
+// end to end (for example one using Command for streaming I/O). It
+// redacts credentials (git quotes a remote URL with its userinfo)
+// before the cap, so a cut cannot leave a credential prefix behind.
 func Sanitize(s string) string {
 	s = strings.TrimSpace(strings.ReplaceAll(s, "\r", ""))
-	s = strings.ReplaceAll(s, "\n", "; ")
+	s = output.DefaultRedactor(strings.ReplaceAll(s, "\n", "; "))
 	const limit = 1024
 	if len(s) > limit {
 		s = s[:limit] + "..."

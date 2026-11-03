@@ -99,7 +99,16 @@ func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
 
-func run(args []string, stdout, stderr io.Writer) int {
+func run(args []string, stdout, stderr io.Writer) (code int) {
+	// A panic is an internal error, exit 4, as in hook mode: the Go
+	// runtime's own report would print the panic value, which can quote
+	// configuration, and a stack trace.
+	defer func() {
+		if p := recover(); p != nil {
+			writeString(stderr, "tripcord: "+errInternal.Error()+"\n")
+			code = int(exitcode.Internal)
+		}
+	}()
 	if len(args) == 0 {
 		return writeString(stdout, usage)
 	}
@@ -332,14 +341,15 @@ func (t scanTarget) internalError(stderr io.Writer, err error) int {
 }
 
 // redactError renders err the way configError and internalError do: the
-// user's home directory folded to "~", and, for a --staged scan, the
-// private staged tree's absolute path folded to ".".
+// user's home directory folded to "~", for a --staged scan the private
+// staged tree's absolute path folded to ".", then redacted and capped
+// like errorText.
 func (t scanTarget) redactError(err error) string {
-	msg := redactHomeFromError(err)
+	msg := foldHome(err.Error())
 	if t.redactRoot != "" {
 		msg = strings.ReplaceAll(msg, t.redactRoot, ".")
 	}
-	return msg
+	return output.Message(msg)
 }
 
 // scanTree scans t.root with opts, writes the findings, and returns the
@@ -1143,7 +1153,7 @@ func sanitizeGitStderr(stderr []byte) string {
 		msg = pathx.TildeHome(home, msg)
 	}
 	msg = strings.ReplaceAll(msg, "\n", "; ")
-	return truncateUTF8(msg, maxGitStderrBytes)
+	return truncateUTF8(output.DefaultRedactor(msg), maxGitStderrBytes)
 }
 
 // truncateUTF8 caps value at limit bytes, cutting on a UTF-8 rune
@@ -1314,16 +1324,19 @@ var loadRules = func(limits rules.Limits) (*rules.Env, *rules.Catalog, error) {
 	return env, catalog, nil
 }
 
-// redactHomeFromError rewrites the running user's home directory to "~"
-// in err's message, the same way sanitizeGitStderr already does for
-// git's own diagnostics. scanTarget's configError and internalError are
-// the only two paths every scan error passes through (--output's
-// output.PathError, --policy/--org-policy's policy.Error, and the scan
-// PATH argument's wrapped os.Stat/filepath.Abs failures among them), so
-// redacting here covers all of them without each caller needing to
-// remember to do it itself.
-func redactHomeFromError(err error) string {
-	msg := err.Error()
+// errorText is err's message as the CLI prints it: the running user's
+// home directory rewritten to "~", the same way sanitizeGitStderr does
+// for git's own diagnostics, then redacted and capped by output.Message.
+// An error can quote configuration, a hook event, or a URL (a CEL
+// error quotes the value it failed on), so every error the CLI writes
+// goes through here: scanTarget's configError and internalError, init,
+// preopen, pr-context, and hook.
+func errorText(err error) string {
+	return output.Message(foldHome(err.Error()))
+}
+
+// foldHome rewrites the running user's home directory in msg to "~".
+func foldHome(msg string) string {
 	home, homeErr := os.UserHomeDir()
 	if homeErr != nil || home == "" {
 		return msg

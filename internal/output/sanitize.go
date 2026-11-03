@@ -20,7 +20,19 @@ const (
 	// GitHubCommentLimit is the documented maximum length of a GitHub
 	// issue or pull request comment.
 	GitHubCommentLimit = 65536
+	// MaxMessageBytes is the maximum length of one CLI error or hook
+	// reason after redaction, including the truncation marker.
+	MaxMessageBytes = 4096
 )
+
+// Message redacts credentials in a CLI error or hook reason and caps it
+// at MaxMessageBytes. Unlike TerminalLine it keeps line breaks, so a
+// multi-line error such as a CEL syntax error's caret line stays
+// readable. Redaction runs before the cap, so a cut cannot leave a
+// credential prefix that no longer matches its pattern.
+func Message(value string) string {
+	return truncateSanitized(DefaultRedactor(value), MaxMessageBytes)
+}
 
 // escapeControls makes value safe to print inside one line. It escapes
 // backslash, every C0 and C1 control, DEL, ESC, the Unicode line and

@@ -54,7 +54,7 @@ func runPreopen(args []string, stdout, stderr io.Writer) int {
 	}
 	defer func() {
 		if err := ws.Close(); err != nil {
-			writeString(stderr, target.prog+": remove temporary clone: "+redactHomeFromError(err)+"\n")
+			writeString(stderr, target.prog+": remove temporary clone: "+errorText(err)+"\n")
 		}
 	}()
 	// The clone's own .tripcord policy must not grant it exceptions or
