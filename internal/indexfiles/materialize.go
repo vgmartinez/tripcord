@@ -13,14 +13,16 @@ import (
 
 // Materialize writes the index paths a repository scan would open into a
 // private tree. Gitlinks are not blobs. Files the index does not contain
-// are left missing.
-func Materialize(ctx context.Context, repo string) (*preopen.Workspace, []adapters.Diagnostic, error) {
+// are left missing. The returned sources map is Plan.Sources: it names,
+// for a logical path a scan would report, the other paths a finding
+// there can depend on (see Plan.Sources).
+func Materialize(ctx context.Context, repo string) (*preopen.Workspace, []adapters.Diagnostic, map[string][]string, error) {
 	objs, gitDir, err := preopen.ListIndex(ctx, repo)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if len(objs) == 0 {
-		return nil, nil, errEmptyIndex
+		return nil, nil, nil, errEmptyIndex
 	}
 	entries := make([]Entry, len(objs))
 	var blobs, links []string
@@ -36,11 +38,11 @@ func Materialize(ctx context.Context, repo string) (*preopen.Workspace, []adapte
 	}
 	sizes, err := preopen.BlobSizes(ctx, gitDir, unique(blobs))
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	linkSizes, err := preopen.BlobSizes(ctx, gitDir, unique(links))
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	var linkRead []string
 	for oid, size := range linkSizes {
@@ -50,7 +52,7 @@ func Materialize(ctx context.Context, repo string) (*preopen.Workspace, []adapte
 	}
 	linkBody, err := preopen.ReadBlobs(ctx, gitDir, linkRead)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	for i := range entries {
 		if s, ok := sizes[entries[i].OID]; ok && entries[i].Mode != "120000" {
@@ -73,11 +75,11 @@ func Materialize(ctx context.Context, repo string) (*preopen.Workspace, []adapte
 		return got[oid], nil
 	})
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	ws, err := preopen.NewStagedTree(objs, gitDir)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	put := make([]preopen.IndexObject, len(plan.Writes))
 	for i, w := range plan.Writes {
@@ -88,9 +90,9 @@ func Materialize(ctx context.Context, repo string) (*preopen.Workspace, []adapte
 	}
 	if err := ws.Put(ctx, put); err != nil {
 		_ = ws.Close()
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return ws, plan.Notes, nil
+	return ws, plan.Notes, plan.Sources, nil
 }
 
 // AddReferences writes index paths that rules follow from items already

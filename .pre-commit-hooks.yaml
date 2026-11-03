@@ -4,6 +4,11 @@
   entry: tripcord scan --staged
   pass_filenames: true
   require_serial: true
-  # Keep this in sync with repository paths adapters discover. The hook needs
-  # every config and policy edit, while --staged reports only passed paths.
-  files: '(?i)(^|/)(\.agents/|\.claude/|\.claude-plugin/|\.codex/|\.cursor/|\.gemini/|\.github/|\.opencode/|\.windsurf/|\.devin/|\.devcontainer/|\.vscode/|\.tripcord/|skills/|agents/|commands/|hooks/|AGENTS\.md$|CLAUDE\.md$|CLAUDE\.local\.md$|GEMINI\.md$|SKILL\.md$|agents\.override\.md$|\.cursorrules$|\.windsurfrules$|\.mcp\.json$|opencode\.jsonc?$|devcontainer\.json$|\.devcontainer\.json$|Dockerfile$)'
+  always_run: false
+  # Tripcord decides what counts as configuration, not a pre-commit files
+  # regex: a config file can be found only by its content (a plugin manifest
+  # reference) or by a symlink target, not by its own path or extension. The
+  # hook runs on every commit with whatever changed, and --staged reports a
+  # finding whenever any file in its source set (see docs/pre-commit.md) is
+  # among the passed paths, even when that set does not include the path
+  # pre-commit matched.

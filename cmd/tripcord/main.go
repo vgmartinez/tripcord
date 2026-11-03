@@ -16,6 +16,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strings"
 	"syscall"
 	"time"
@@ -158,7 +159,7 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 		}
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 		defer stop()
-		ws, notes, err := indexfiles.Materialize(ctx, root)
+		ws, notes, sources, err := indexfiles.Materialize(ctx, root)
 		if err != nil {
 			code := target.configError(stderr, fmt.Errorf("--staged: %w", err))
 			writeString(stderr, "tripcord scan: staged scan blocked the commit; bypass only with git commit --no-verify\n")
@@ -167,6 +168,7 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 		defer func() { _ = ws.Close() }()
 		target.root, target.policyRoot = ws.Tree(), ws.Tree()
 		target.stagedNotes = notes
+		target.stagedSources = sources
 		target.stageMore = func(items []model.ConfigItem) error {
 			if ctx.Err() != nil {
 				return ctx.Err()
@@ -199,6 +201,12 @@ type scanTarget struct {
 	policyRoot  string
 	stagedNotes []adapters.Diagnostic
 	stageMore   func([]model.ConfigItem) error
+	// stagedSources is indexfiles.Plan.Sources: it is applied to every
+	// discovered repository item's SourcePaths once discovery and hook
+	// script resolution have run, so the --staged filter can match a
+	// finding's symlink chain or plugin manifest group, not only its
+	// own Path. It is nil for a normal, non-staged scan.
+	stagedSources map[string][]string
 }
 
 func (t scanTarget) configError(stderr io.Writer, err error) int {
@@ -318,6 +326,9 @@ func scanTree(ctx context.Context, t scanTarget, opts scanOptions, stdout, stder
 			return t.internalError(stderr, fmt.Errorf("hook scripts: %w", err))
 		}
 	}
+	if opts.stagedFiles != nil {
+		applyStagedSources(items, t.stagedSources)
+	}
 	diagnostics = adapters.DedupeEscapingSymlinkDiagnostics(diagnostics)
 	if opts.since != "" {
 		changed, err := changedFiles(root, opts.since)
@@ -347,7 +358,7 @@ func scanTree(ctx context.Context, t scanTarget, opts scanOptions, stdout, stder
 	diagnostics = append(diagnostics, opaqueDiagnostics(result.Notices)...)
 	findings := make([]model.Finding, 0, len(result.Matches))
 	for _, match := range result.Matches {
-		if opts.stagedFiles != nil && !opts.stagedFiles[match.Item.Path] {
+		if opts.stagedFiles != nil && !stagedSourceMatches(match.Item, opts.stagedFiles) {
 			continue
 		}
 		if _, status := effective.Exception(match.Rule.ID, match.Item.Path, match.Item.SHA256, now()); status == policy.ExceptionActive {
@@ -514,6 +525,67 @@ func parseCommandFlags(cmd flagCommand, args []string, stdout io.Writer) (scanOp
 		return opts, errors.New("--config, --secrets, and --all are mutually exclusive")
 	}
 	return opts, nil
+}
+
+// applyStagedSources sets SourcePaths on every repository item in items
+// from sources (indexfiles.Plan.Sources, keyed by item.Path) and, for a
+// hook or env-setup item, from the scripts or checksum files a rule
+// reads from it: scriptcheck has already resolved both by the time this
+// runs. It must run after scriptcheck.Annotate, which sets
+// item.ChecksumFiles.
+func applyStagedSources(items []model.ConfigItem, sources map[string][]string) {
+	for i := range items {
+		item := &items[i]
+		if item.Scope != model.ScopeRepo {
+			continue
+		}
+		var extra []string
+		extra = append(extra, sources[item.Path]...)
+		if item.Kind == model.ConfigKindHook {
+			extra = append(extra, scriptcheck.Scripts(*item)...)
+		}
+		if item.Kind == model.ConfigKindEnvSetup {
+			for name := range item.ChecksumFiles {
+				extra = append(extra, name)
+			}
+		}
+		if len(extra) == 0 {
+			continue
+		}
+		item.SourcePaths = dedupeSortedPaths(extra)
+	}
+}
+
+// dedupeSortedPaths returns paths with duplicates removed, sorted.
+func dedupeSortedPaths(paths []string) []string {
+	seen := make(map[string]bool, len(paths))
+	out := make([]string, 0, len(paths))
+	for _, p := range paths {
+		if seen[p] {
+			continue
+		}
+		seen[p] = true
+		out = append(out, p)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// stagedSourceMatches reports whether item's own Path, or any path in
+// its SourcePaths (see model.ConfigItem.SourcePaths), is among staged,
+// the paths pre-commit passed. It is the --staged filter: a finding is
+// reported when any file whose staged content it depends on changed,
+// not only when its own location path did.
+func stagedSourceMatches(item model.ConfigItem, staged map[string]bool) bool {
+	if staged[item.Path] {
+		return true
+	}
+	for _, p := range item.SourcePaths {
+		if staged[p] {
+			return true
+		}
+	}
+	return false
 }
 
 func stagedPaths(paths []string) (map[string]bool, error) {

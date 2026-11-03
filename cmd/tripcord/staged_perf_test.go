@@ -40,7 +40,7 @@ func stagedBulk(t *testing.T, n, size int, budget time.Duration) {
 	stageBulkBlobs(t, repo, n, size)
 
 	start := time.Now()
-	ws, notes, err := indexfiles.Materialize(context.Background(), repo)
+	ws, notes, _, err := indexfiles.Materialize(context.Background(), repo)
 	materialize := time.Since(start)
 	if err != nil {
 		t.Fatal(err)

@@ -47,6 +47,13 @@ type Write struct {
 type Plan struct {
 	Writes []Write
 	Notes  []adapters.Diagnostic
+	// Sources maps a logical path (what an adapter reports as a
+	// ConfigItem.Path) to every other logical path whose staged content
+	// a finding at that path can depend on: the other side of its
+	// symlink chain, and, for a Claude plugin manifest and the hook or
+	// MCP files it names by path, every other member of that group. A
+	// path with no such dependency has no entry.
+	Sources map[string][]string
 }
 
 type walkerSpec struct {
@@ -86,6 +93,7 @@ func Choose(entries []Entry, read func(oid string) ([]byte, error)) (Plan, error
 	}
 	writes := map[string]Write{}
 	var notes []adapters.Diagnostic
+	uf := newUnionFind()
 	add := func(p string, content bool, sparse int64) {
 		e := byPath[p]
 		if e == nil || e.Mode == "160000" {
@@ -123,13 +131,13 @@ func Choose(entries []Entry, read func(oid string) ([]byte, error)) (Plan, error
 			return true
 		}
 		if spec.claude {
-			if why := consumeClaude(tree, files, byPath, read, add, &nfiles, &nbytes); stop(why) {
+			if why := consumeClaude(tree, files, byPath, read, add, uf, &nfiles, &nbytes); stop(why) {
 				continue
 			}
 			continue
 		}
 		for _, h := range files {
-			if why := consume(h, byPath, add, &nfiles, &nbytes); why != "" {
+			if why := consume(h, byPath, add, uf, &nfiles, &nbytes); why != "" {
 				stop(why)
 				break
 			}
@@ -141,11 +149,13 @@ func Choose(entries []Entry, read func(oid string) ([]byte, error)) (Plan, error
 		out = append(out, w)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
-	return Plan{Writes: out, Notes: notes}, nil
+	return Plan{Writes: out, Notes: notes, Sources: uf.groups()}, nil
 }
 
-func consume(h hit, byPath map[string]*Entry, add func(string, bool, int64), nfiles *int, nbytes *int64) string {
+func consume(h hit, byPath map[string]*Entry, add func(string, bool, int64), uf *unionFind, nfiles *int, nbytes *int64) string {
+	uf.union(h.logical, h.indexPath)
 	for _, link := range h.links {
+		uf.union(h.logical, link)
 		add(link, true, 0)
 	}
 	e := byPath[h.indexPath]
@@ -158,6 +168,54 @@ func consume(h hit, byPath map[string]*Entry, add func(string, bool, int64), nfi
 	}
 	add(h.indexPath, content, sparse)
 	return ""
+}
+
+// unionFind groups logical paths whose staged content are linked: the
+// two ends of a symlink chain, or a plugin manifest and the hook or MCP
+// files it names by path. groups returns, for every path in a group of
+// two or more, every other member of that group.
+type unionFind struct {
+	parent map[string]string
+}
+
+func newUnionFind() *unionFind { return &unionFind{parent: map[string]string{}} }
+
+func (u *unionFind) find(x string) string {
+	if _, ok := u.parent[x]; !ok {
+		u.parent[x] = x
+		return x
+	}
+	for u.parent[x] != x {
+		u.parent[x] = u.parent[u.parent[x]]
+		x = u.parent[x]
+	}
+	return x
+}
+
+func (u *unionFind) union(a, b string) {
+	ra, rb := u.find(a), u.find(b)
+	if ra != rb {
+		u.parent[ra] = rb
+	}
+}
+
+func (u *unionFind) groups() map[string][]string {
+	members := map[string][]string{}
+	for x := range u.parent {
+		root := u.find(x)
+		members[root] = append(members[root], x)
+	}
+	out := map[string][]string{}
+	for _, group := range members {
+		if len(group) < 2 {
+			continue
+		}
+		sort.Strings(group)
+		for _, x := range group {
+			out[x] = group
+		}
+	}
+	return out
 }
 
 func budget(size int64, nfiles *int, nbytes *int64) (keep, content bool, sparse int64, why string) {
@@ -176,7 +234,7 @@ func budget(size int64, nfiles *int, nbytes *int64) (keep, content bool, sparse 
 	return true, true, 0, ""
 }
 
-func consumeClaude(tree *fileTree, files []hit, byPath map[string]*Entry, read func(string) ([]byte, error), add func(string, bool, int64), nfiles *int, nbytes *int64) string {
+func consumeClaude(tree *fileTree, files []hit, byPath map[string]*Entry, read func(string) ([]byte, error), add func(string, bool, int64), uf *unionFind, nfiles *int, nbytes *int64) string {
 	roots := map[string]bool{}
 	var markets, rest []hit
 	for _, h := range files {
@@ -190,7 +248,7 @@ func consumeClaude(tree *fileTree, files []hit, byPath map[string]*Entry, read f
 		rest = append(rest, h)
 	}
 	for _, h := range markets {
-		if why := consume(h, byPath, add, nfiles, nbytes); why != "" {
+		if why := consume(h, byPath, add, uf, nfiles, nbytes); why != "" {
 			return why
 		}
 		raw := blob(byPath[h.indexPath], read)
@@ -205,7 +263,7 @@ func consumeClaude(tree *fileTree, files []hit, byPath map[string]*Entry, read f
 		if !claude.Reads(h.logical, roots) {
 			continue
 		}
-		if why := consume(h, byPath, add, nfiles, nbytes); why != "" {
+		if why := consume(h, byPath, add, uf, nfiles, nbytes); why != "" {
 			return why
 		}
 		if !claude.IsManifest(h.logical) {
@@ -220,7 +278,11 @@ func consumeClaude(tree *fileTree, files []hit, byPath map[string]*Entry, read f
 			if err != nil || resolved == nil || resolved.mode != "100644" {
 				continue
 			}
-			if why := consume(hit{logical: ref, indexPath: resolved.path, links: links}, byPath, add, nfiles, nbytes); why != "" {
+			// The manifest and every file it names by path form one
+			// source-set group: a finding at any of them can depend on
+			// the staged content of the others.
+			uf.union(h.logical, ref)
+			if why := consume(hit{logical: ref, indexPath: resolved.path, links: links}, byPath, add, uf, nfiles, nbytes); why != "" {
 				return why
 			}
 		}

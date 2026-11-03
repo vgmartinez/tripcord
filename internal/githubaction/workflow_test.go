@@ -412,15 +412,21 @@ func TestPreCommitHookContract(t *testing.T) {
 		"entry":          "tripcord scan --staged",
 		"pass_filenames": "true",
 		"require_serial": "true",
+		"always_run":     "false",
 	} {
 		got := fmt.Sprint(hook[name])
 		if got != want {
 			t.Errorf("hook %s = %q, want %q", name, got, want)
 		}
 	}
-	pattern := fmt.Sprint(hook["files"])
-	if _, err := regexp.Compile(pattern); err != nil {
-		t.Fatalf("files regex: %v", err)
+	// Tripcord, not a pre-commit files regex, decides what counts as
+	// configuration (a referenced or symlinked file can matter without
+	// its own path or extension looking like config). The hook must run
+	// on every commit, so it must not carry a files or types filter.
+	for _, key := range []string{"files", "types", "types_or"} {
+		if _, ok := hook[key]; ok {
+			t.Errorf("hook has %s = %v, want no file filter", key, hook[key])
+		}
 	}
 	docs, err := os.ReadFile(filepath.Join("..", "..", "docs", "pre-commit.md"))
 	if err != nil {
