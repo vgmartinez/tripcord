@@ -689,15 +689,25 @@ func redactColonAssignments(value string, removed *[]string) string {
 		if ok {
 			stop = colonValueStop(value, h.start, h.openQuote, h.closeQuote, h.sep)
 			if stop == "" {
-				if headerEnd, bodyEnd, isBlock := blockScalarSpan(value, h.valStart, lineIndent(value, h.start)); isBlock {
-					b.WriteString(value[pos:headerEnd])
-					pos = headerEnd
-					if bodyEnd > headerEnd {
-						*removed = append(*removed, value[headerEnd:bodyEnd])
-						b.WriteString(redactedBlockScalarBody(value[headerEnd:bodyEnd]))
-						pos = bodyEnd
+				// lineIndent scans backward to the start of the line, so it
+				// is only cheap to call for a genuine block scalar (rare,
+				// and inherently bounded by the nearest newline behind it).
+				// Calling it for every rejected candidate instead would
+				// make a long, newline-free command (one credential-named
+				// match after another, as in a repeated-flag command
+				// string) quadratic: each match would rescan everything
+				// before it looking for a "\n" that is never there.
+				if h.valStart < len(value) && (value[h.valStart] == '|' || value[h.valStart] == '>') {
+					if headerEnd, bodyEnd, isBlock := blockScalarSpan(value, h.valStart, lineIndent(value, h.start)); isBlock {
+						b.WriteString(value[pos:headerEnd])
+						pos = headerEnd
+						if bodyEnd > headerEnd {
+							*removed = append(*removed, value[headerEnd:bodyEnd])
+							b.WriteString(redactedBlockScalarBody(value[headerEnd:bodyEnd]))
+							pos = bodyEnd
+						}
+						continue
 					}
-					continue
 				}
 				if strings.Contains(h.sep, "\n") && startsAssignmentHead(value, h.valStart) {
 					// h's colon has nothing after it but a newline: its
@@ -799,7 +809,11 @@ func isBlockScalarIndicator(c byte) bool {
 
 // lineIndent returns the number of leading blanks on the line containing
 // pos. For a credential name's own position, colonValueStop has already
-// confirmed every byte back to the start of the line is a blank.
+// confirmed every byte back to the start of the line is a blank. It scans
+// backward to the previous newline, so call it only when pos is known to
+// start a genuine block scalar (redactColonAssignments checks that first):
+// calling it for every rejected candidate in a long, newline-free value
+// would make redaction of that value quadratic.
 func lineIndent(value string, pos int) int {
 	lineStart := strings.LastIndexByte(value[:pos], '\n') + 1
 	return pos - lineStart
