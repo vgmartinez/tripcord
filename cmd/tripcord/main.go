@@ -13,9 +13,11 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"time"
 	"unicode/utf8"
 
@@ -36,6 +38,7 @@ import (
 	"github.com/vgmartinez/tripcord/internal/output"
 	"github.com/vgmartinez/tripcord/internal/pathx"
 	"github.com/vgmartinez/tripcord/internal/policy"
+	"github.com/vgmartinez/tripcord/internal/preopen"
 	"github.com/vgmartinez/tripcord/internal/rules"
 	"github.com/vgmartinez/tripcord/internal/scriptcheck"
 )
@@ -57,6 +60,8 @@ Usage:
 scan performs static configuration scanning only. A PATH inside a Git
 repository scans that whole repository from its git root. Monorepo scoping
 is tracked in https://github.com/vgmartinez/tripcord/issues/59.
+--staged scans the Git index in a private temporary tree; remaining paths
+select which finding locations are reported.
 --scope selects repository
 (the default), user, managed, or all. The default does not read the home
 directory or system settings.
@@ -97,18 +102,20 @@ func run(args []string, stdout, stderr io.Writer) int {
 }
 
 type scanOptions struct {
-	config    bool
-	secrets   bool
-	all       bool
-	harnesses string
-	scope     string
-	format    string
-	output    string
-	since     string
-	failOn    string
-	policy    string
-	orgPolicy string
-	path      string
+	config      bool
+	secrets     bool
+	all         bool
+	harnesses   string
+	scope       string
+	format      string
+	output      string
+	since       string
+	failOn      string
+	policy      string
+	orgPolicy   string
+	path        string
+	staged      bool
+	stagedFiles map[string]bool
 }
 
 func runScan(args []string, stdout, stderr io.Writer) int {
@@ -128,7 +135,38 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 	}
 	root, err := scanRoot(opts.path)
 	if err != nil {
-		return target.configError(stderr, err)
+		code := target.configError(stderr, err)
+		if opts.staged {
+			writeString(stderr, "tripcord scan: staged scan blocked the commit; bypass only with git commit --no-verify\n")
+		}
+		return code
+	}
+	if opts.staged {
+		if !repoRoot(root) {
+			code := target.configError(stderr, errors.New("--staged requires a Git repository"))
+			writeString(stderr, "tripcord scan: staged scan blocked the commit; bypass only with git commit --no-verify\n")
+			return code
+		}
+		if opts.scope != "repo" || opts.since != "" || opts.policy != "" || opts.orgPolicy != "" {
+			code := target.configError(stderr, errors.New("--staged requires repo scope and index policy, and does not support --since, --policy, or --org-policy"))
+			writeString(stderr, "tripcord scan: staged scan blocked the commit; bypass only with git commit --no-verify\n")
+			return code
+		}
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
+		defer stop()
+		ws, err := preopen.FromIndex(ctx, root)
+		if err != nil {
+			code := target.configError(stderr, fmt.Errorf("--staged: %w", err))
+			writeString(stderr, "tripcord scan: staged scan blocked the commit; bypass only with git commit --no-verify\n")
+			return code
+		}
+		defer func() { _ = ws.Close() }()
+		target.root, target.policyRoot = ws.Tree(), ws.Tree()
+		code := scanTree(target, opts, stdout, stderr)
+		if code == int(exitcode.Config) || code == int(exitcode.Internal) {
+			writeString(stderr, "tripcord scan: staged scan blocked the commit; bypass only with git commit --no-verify\n")
+		}
+		return code
 	}
 	target.root, target.policyRoot = root, root
 	return scanTree(target, opts, stdout, stderr)
@@ -268,6 +306,9 @@ func scanTree(t scanTarget, opts scanOptions, stdout, stderr io.Writer) int {
 	diagnostics = append(diagnostics, opaqueDiagnostics(result.Notices)...)
 	findings := make([]model.Finding, 0, len(result.Matches))
 	for _, match := range result.Matches {
+		if opts.stagedFiles != nil && !opts.stagedFiles[match.Item.Path] {
+			continue
+		}
 		if _, status := effective.Exception(match.Rule.ID, match.Item.Path, match.Item.SHA256, now()); status == policy.ExceptionActive {
 			continue
 		}
@@ -377,6 +418,7 @@ func parseCommandFlags(cmd flagCommand, args []string, stdout io.Writer) (scanOp
 	flags.StringVar(&opts.failOn, "fail-on", "", "low, medium, high, or critical")
 	flags.StringVar(&opts.policy, "policy", "", "policy file")
 	flags.StringVar(&opts.orgPolicy, "org-policy", "", "organization policy file")
+	flags.BoolVar(&opts.staged, "staged", false, "scan Git's staged index; remaining paths select reported findings")
 	if err := flags.Parse(normalized); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			var buf bytes.Buffer
@@ -386,7 +428,7 @@ func parseCommandFlags(cmd flagCommand, args []string, stdout io.Writer) (scanOp
 			flags.SetOutput(&buf)
 			flags.PrintDefaults()
 			if cmd == scanCommand {
-				if _, werr := buf.WriteString("\nA PATH inside a Git repository scans that whole repository from its git root.\nMonorepo scoping is tracked in https://github.com/vgmartinez/tripcord/issues/59.\n"); werr != nil {
+				if _, werr := buf.WriteString("\nA PATH inside a Git repository scans that whole repository from its git root.\nMonorepo scoping is tracked in https://github.com/vgmartinez/tripcord/issues/59.\n--staged scans the Git index; remaining paths select reported finding locations.\n"); werr != nil {
 					return scanOptions{}, fmt.Errorf("%w: %w", errHelpWrite, werr)
 				}
 			}
@@ -411,6 +453,12 @@ func parseCommandFlags(cmd flagCommand, args []string, stdout io.Writer) (scanOp
 	switch {
 	case cmd == preopenCommand && flags.NArg() != 1:
 		return opts, errors.New("preopen takes exactly one git URL or local path")
+	case opts.staged:
+		opts.path = "."
+		opts.stagedFiles, err = stagedPaths(flags.Args())
+		if err != nil {
+			return opts, err
+		}
 	case flags.NArg() > 1:
 		return opts, errors.New("scan accepts at most one PATH")
 	case flags.NArg() == 1:
@@ -422,6 +470,21 @@ func parseCommandFlags(cmd flagCommand, args []string, stdout io.Writer) (scanOp
 		return opts, errors.New("--config, --secrets, and --all are mutually exclusive")
 	}
 	return opts, nil
+}
+
+func stagedPaths(paths []string) (map[string]bool, error) {
+	out := make(map[string]bool, len(paths))
+	for _, path := range paths {
+		if filepath.IsAbs(path) {
+			return nil, fmt.Errorf("--staged path %q must be relative", path)
+		}
+		clean := filepath.ToSlash(filepath.Clean(path))
+		if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") {
+			return nil, fmt.Errorf("--staged path %q escapes the repository", path)
+		}
+		out[clean] = true
+	}
+	return out, nil
 }
 
 // scanRoot is the directory to scan. A path inside a Git repository uses
@@ -456,6 +519,11 @@ func gitRoot(dir string) string {
 		}
 		dir = parent
 	}
+}
+
+func repoRoot(dir string) bool {
+	_, err := os.Stat(filepath.Join(dir, ".git"))
+	return err == nil
 }
 
 func normalizeScanArgs(args []string) ([]string, error) {

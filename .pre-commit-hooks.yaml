@@ -1,0 +1,9 @@
+- id: tripcord-config
+  name: tripcord staged configuration scan
+  language: golang
+  entry: tripcord scan --staged
+  pass_filenames: true
+  require_serial: true
+  # Keep this in sync with repository paths adapters discover. The hook needs
+  # every config and policy edit, while --staged reports only passed paths.
+  files: '(^|/)(\.agents/|\.claude/|\.codex/|\.cursor/|\.gemini/|\.github/|\.opencode/|\.windsurf/|\.devin/|\.devcontainer/|\.vscode/|\.tripcord/|AGENTS\.md$|CLAUDE\.md$|\.cursorrules$|\.windsurfrules$|\.mcp\.json$|opencode\.jsonc?$|devcontainer\.json$|Dockerfile$)'

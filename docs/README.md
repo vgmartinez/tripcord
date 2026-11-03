@@ -17,6 +17,7 @@ reports whether a pull request looks agent-authored.
 [preopen.md](preopen.md) documents `tripcord preopen`, which fetches a
 repository without running its hooks, filters, LFS, or submodules and then
 scans it.
+[pre-commit.md](pre-commit.md) documents the staged-index pre-commit hook.
 [github-action.md](github-action.md) documents the local composite action:
 it builds Tripcord from source, publishes annotations, SARIF, and an
 optional pull-request comment, and exposes `pr-context` outputs.

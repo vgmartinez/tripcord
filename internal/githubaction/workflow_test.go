@@ -393,6 +393,60 @@ func TestActionlintJobIsChecksumPinned(t *testing.T) {
 	}
 }
 
+func TestPreCommitHookContract(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", ".pre-commit-hooks.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var hooks []map[string]any
+	if err := yaml.Unmarshal(data, &hooks); err != nil {
+		t.Fatal(err)
+	}
+	if len(hooks) != 1 {
+		t.Fatalf("hooks = %d, want 1", len(hooks))
+	}
+	hook := hooks[0]
+	for name, want := range map[string]string{
+		"id":             "tripcord-config",
+		"language":       "golang",
+		"entry":          "tripcord scan --staged",
+		"pass_filenames": "true",
+		"require_serial": "true",
+	} {
+		got := fmt.Sprint(hook[name])
+		if got != want {
+			t.Errorf("hook %s = %q, want %q", name, got, want)
+		}
+	}
+	pattern := fmt.Sprint(hook["files"])
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		t.Fatalf("files regex: %v", err)
+	}
+	for _, path := range []string{
+		".claude/settings.json", ".mcp.json", ".cursor/hooks.json",
+		".github/hooks/session.json", ".tripcord/policy.yaml",
+		".vscode/tasks.json", ".agents/skills/check/SKILL.md", "AGENTS.md",
+		".cursorrules", ".windsurfrules", "devcontainer.json",
+	} {
+		if !re.MatchString(path) {
+			t.Errorf("files regex does not match adapter or policy path %q", path)
+		}
+	}
+	docs, err := os.ReadFile(filepath.Join("..", "..", "docs", "pre-commit.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pin := regexp.MustCompile(`rev: ([0-9a-f]{40}) # main@([0-9a-f]{7,40})`)
+	match := pin.FindStringSubmatch(string(docs))
+	if match == nil {
+		t.Fatal("docs pre-commit example does not pin rev to a full SHA with a main comment")
+	}
+	if !strings.HasPrefix(match[1], match[2]) {
+		t.Fatalf("docs pin %s does not match comment %s", match[1], match[2])
+	}
+}
+
 func checkReviewsScript(t *testing.T, script string) {
 	t.Helper()
 	for _, want := range []string{

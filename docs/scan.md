@@ -7,6 +7,14 @@ A directory that is not a Git repository can still be scanned. `--since` is
 the only mode that requires Git. To scan a repository before cloning it
 yourself, use [`tripcord preopen`](preopen.md).
 
+`--staged` instead reads the Git index into a private temporary tree. It never
+uses working-tree contents, so partially staged files use their staged version.
+All tracked index files are present for cross-file checks, policies, approval
+exceptions, links, and review data, but only findings located in the paths
+passed after `--staged` are reported. Staged deletions have no finding.
+Outside a repository, with an empty index, or after an incomplete or internal
+scan, it exits non-zero; a pre-commit hook therefore blocks the commit.
+
 ## Flags
 
 | Flag | Description |
@@ -20,6 +28,7 @@ yourself, use [`tripcord preopen`](preopen.md).
 | `--output <path\|->` | Write output to a new private (`0600`) local file or `-` for stdout (default). A symlink is rejected. The destination is replaced only after the result is complete. |
 | `--since <git-ref>` | Scan repository configuration files that differ between `<git-ref>` and `HEAD`. The ref must not start with `-`. Untracked files and uncommitted worktree edits are not included. Names with non-ASCII characters are included. Git is invoked with repository hooks, fsmonitor, textconv, external diff drivers, and rename detection disabled, with every network transport denied, and with lazy fetches from a partial clone's promisor remote disabled; it does not execute repository content or contact a network service, even when the repository's own configuration tries to allow one. |
 | `--fail-on low\|medium\|high\|critical` | Set this invocation's threshold. The threshold is inclusive. A locked policy ceiling can be tightened and cannot be loosened. |
+| `--staged [paths...]` | Scan the staged Git index rather than the working tree. Paths select reported finding locations; the index still supplies every tracked file needed for cross-file evaluation. |
 | `--policy <path>` | Use this repository policy file instead of `.tripcord/policy.yaml`. The file must exist; a missing explicit `--policy` path is an error, unlike the default `.tripcord/policy.yaml`, which is optional. |
 | `--org-policy <path>` | Add one required organization policy layer before the repository policy. |
 

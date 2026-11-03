@@ -137,6 +137,77 @@ func Fetch(ctx context.Context, target string) (ws *Workspace, err error) {
 	return created, nil
 }
 
+// FromIndex writes the repository's staged index into a private tree. It reads
+// blobs directly from Git's object database, so filters, hooks, and the work
+// tree are never consulted. Unmerged index entries are rejected: a hook must
+// not silently choose one side of a conflicted path.
+func FromIndex(ctx context.Context, repo string) (ws *Workspace, err error) {
+	if _, err := exec.LookPath("git"); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrGitMissing, err)
+	}
+	raw, err := gitrun.Run(ctx, repo, "ls-files", "--stage", "-z")
+	if err != nil {
+		return nil, err
+	}
+	entries, err := parseIndex(raw)
+	if err != nil {
+		return nil, err
+	}
+	dir, err := os.MkdirTemp("", "tripcord-staged-")
+	if err != nil {
+		return nil, err
+	}
+	created := &Workspace{dir: dir, tree: filepath.Join(dir, "tree")}
+	defer func() {
+		if err != nil {
+			_ = created.Close()
+		}
+	}()
+	if len(entries) == 0 {
+		return nil, errors.New("git index is empty")
+	}
+	if err := os.Mkdir(created.tree, 0o700); err != nil {
+		return nil, err
+	}
+	gitDirRaw, err := gitrun.Run(ctx, repo, "rev-parse", "--git-dir")
+	if err != nil {
+		return nil, err
+	}
+	gitDir := strings.TrimSpace(string(gitDirRaw))
+	if !filepath.IsAbs(gitDir) {
+		gitDir = filepath.Join(repo, gitDir)
+	}
+	if err := materializeEntries(ctx, gitDir, created.tree, entries); err != nil {
+		return nil, preferCancel(ctx, err)
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return created, nil
+}
+
+func parseIndex(raw []byte) ([]treeEntry, error) {
+	var entries []treeEntry
+	for _, rec := range bytes.Split(bytes.TrimSuffix(raw, []byte{0}), []byte{0}) {
+		if len(rec) == 0 {
+			continue
+		}
+		meta, path, ok := bytes.Cut(rec, []byte{'\t'})
+		if !ok {
+			return nil, fmt.Errorf("unexpected index record %q", rec)
+		}
+		fields := strings.Fields(string(meta))
+		if len(fields) != 3 {
+			return nil, fmt.Errorf("unexpected index record %q", rec)
+		}
+		if fields[2] != "0" {
+			return nil, fmt.Errorf("index has unmerged path %q", path)
+		}
+		entries = append(entries, treeEntry{mode: fields[0], kind: "blob", oid: fields[1], path: string(path)})
+	}
+	return entries, nil
+}
+
 // preferCancel reports ctx's error when the context is already done.
 // The tree error is returned only when the fetch was not interrupted.
 func preferCancel(ctx context.Context, err error) error {
@@ -262,6 +333,10 @@ func materialize(ctx context.Context, gitDir, tree string) error {
 	if err != nil {
 		return err
 	}
+	return materializeEntries(ctx, gitDir, tree, entries)
+}
+
+func materializeEntries(ctx context.Context, gitDir, tree string, entries []treeEntry) error {
 	if len(entries) > maxEntries {
 		return fmt.Errorf("tree has %d entries, more than the %d preopen writes", len(entries), maxEntries)
 	}
