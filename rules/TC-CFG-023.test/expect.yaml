@@ -32,3 +32,5 @@ positivos:
   claude-kali-gpt-git-commit: high
   cursor-multi-advisory: high
   claude-uvx-range-upper-first: high
+  claude-uvx-aws-serverless-vulnerable: high
+  claude-npx-mcphub-vulnerable: high

@@ -80,10 +80,17 @@ pack patch. Every other advisory ships in the monthly release.
 | TCA-2026-0006 | pypi `mcp-server-git` | <2025.12.18 | 2025.12.18 | moderate, reported high |
 | TCA-2026-0007 | pypi `mcp-server-git` | <2025.12.18 | 2025.12.18 | moderate, reported high |
 | TCA-2026-0008 | pypi `mcp-server-git` | <2026.1.14 | 2026.1.14 | moderate, reported high |
+| TCA-2026-0009 | pypi `awslabs.aws-serverless-mcp-server` | <0.2.1 | 0.2.1 | moderate, reported high |
+| TCA-2026-0010 | npm `@samanhappy/mcphub` | >=1.0.0, <1.1.8 | 1.1.8 | moderate, reported high |
 
 prefab-ui is a library. It matches only when the argv names it, for
 example `--with prefab-ui==0.20.2`. A transitive dependency of another
 package is not visible here.
+
+MCPHub is a self-hosted gateway, but its npm package exposes an executable
+and can be launched in a stdio MCP configuration with
+`npx @samanhappy/mcphub@1.1.7`; it is therefore in scope. A URL-only
+connection to a deployed MCPHub remains out of scope.
 
 The Kali-GPT git fixtures (no ref, `@v3.0.0`, and `@4df42a5`) are
 illustrative. The repository URL and the module signature come from the
