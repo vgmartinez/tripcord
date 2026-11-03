@@ -259,9 +259,8 @@ anyone looking them up by number:
 - **s1 granularity** is top-level payload field plus index
   (`field[n]`), not a deeper structural path into nested values; see
   "Secret discriminator" above.
-- **No `init` subcommand** exists in v0 to create the key explicitly;
-  `tripcord scan` keeps creating it on first use outside CI. A later
-  `init` command will create the key file as one of its steps.
+- **`tripcord init` does not create the key.** `tripcord scan` keeps
+  creating it on first use outside CI.
 - **A redacted value recorded more than once for the same occurrence**
   (for example, a hook's generic header-processing path and its
   header-specific path both recording the same removed value) no longer
@@ -366,9 +365,8 @@ format, diagnostic, error message, or log carries it, and Go's
 formatting of the key type prints a fixed placeholder (see
 `fpkey.Key.Format`/`String`/`GoString`/`MarshalJSON`). In v0 the key is
 a file or an environment variable. The OS keychain arrives with the v1
-store; a future `init` subcommand will create the key file
-explicitly, but until it lands, `tripcord scan` keeps creating it on
-first use outside CI as described above.
+store. `tripcord init` does not create the key file; `tripcord scan`
+creates it on first use outside CI as described above.
 
 **Windows** reports every file's mode as a fixed `0666`/`0777` rather
 than real Unix-style permissions, so the permission and ownership checks

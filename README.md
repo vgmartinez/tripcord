@@ -87,6 +87,7 @@ Implemented commands, from `tripcord --help`:
 tripcord help
 tripcord version
 tripcord scan [PATH] [flags]
+tripcord init [PATH] [--embed] [--harness h,...] [flags]
 ```
 
 `version` prints the link-time version, or `dev` when it was not set. `scan --help` prints the flags below.
@@ -94,6 +95,10 @@ tripcord scan [PATH] [flags]
 To scan staged coding-agent configuration before committing, install the
 [`tripcord-config` pre-commit hook](docs/pre-commit.md). It reads the Git
 index, not unstaged working-tree edits.
+
+### `tripcord init`
+
+`tripcord init` writes `.tripcord/policy.yaml`. `tripcord init --embed --version V --sha256 os-arch=HEX` also writes a pinned `.tripcord/bootstrap.sh`, `.github/workflows/tripcord.yml`, and the hook or setup wiring of each harness in `--harness` (default `claude,cursor,copilot,devin,codex`), merging into existing files. `--dry-run` prints a diff; `--force` resolves conflicts it can. The wiring calls `tripcord hook`, which is planned: do not release `--embed` before it. Details are in [docs/init.md](docs/init.md).
 
 ### `tripcord scan`
 
@@ -214,7 +219,7 @@ Planned. None of these are in this build:
 - Local forensics and blast radius.
 - Import from cloud agents.
 
-`preopen`, `pr-context`, `hook`, and a GitHub Action are planned; today the CLI implements `scan`.
+`preopen`, `pr-context`, `hook`, and a GitHub Action are planned; today the CLI implements `scan` and `init`.
 
 ## Contributing
 

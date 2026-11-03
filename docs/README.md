@@ -18,6 +18,10 @@ reports whether a pull request looks agent-authored.
 repository without running its hooks, filters, LFS, or submodules and then
 scans it.
 [pre-commit.md](pre-commit.md) documents the staged-index pre-commit hook.
+[init.md](init.md) documents `tripcord init`, which writes the policy
+file and, with `--embed`, the pinned bootstrap, the pull request
+workflow, and each harness's hook wiring. Embed is not releasable until
+hook mode lands.
 [github-action.md](github-action.md) documents the local composite action:
 it builds Tripcord from source, publishes annotations, SARIF, and an
 optional pull-request comment, and exposes `pr-context` outputs.
