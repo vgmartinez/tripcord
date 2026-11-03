@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -65,13 +66,14 @@ func TestEnvDropsInheritedGitSettings(t *testing.T) {
 	t.Setenv("GIT_CONFIG_VALUE_0", "/tmp/hooks")
 	t.Setenv("GIT_SSH_COMMAND", "sh -c id")
 	t.Setenv("GIT_DIR", "/tmp/not-the-repo")
+	t.Setenv("GIT_INDEX_FILE", "/tmp/stray-index.lock")
 	t.Setenv("SSH_ASKPASS", "/tmp/ask")
 	t.Setenv("GIT_CEILING_DIRECTORIES", "/tmp/ceiling")
 	env := Env()
 	for _, entry := range env {
 		key, _, _ := strings.Cut(entry, "=")
 		switch strings.ToUpper(key) {
-		case "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0", "GIT_SSH_COMMAND", "GIT_DIR", "SSH_ASKPASS":
+		case "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0", "GIT_SSH_COMMAND", "GIT_DIR", "GIT_INDEX_FILE", "SSH_ASKPASS":
 			t.Errorf("Env kept %s", key)
 		}
 	}
@@ -97,17 +99,36 @@ func TestEnvDropsInheritedGitSettings(t *testing.T) {
 	}
 }
 
-func TestEnvKeepsGitIndexFileAbsolute(t *testing.T) {
-	dir := t.TempDir()
-	abs := dir + "/index.lock"
-	t.Setenv("GIT_INDEX_FILE", abs)
-	env := Env()
-	if !containsEnv(env, "GIT_INDEX_FILE="+abs) {
-		t.Errorf("Env dropped or changed an already-absolute GIT_INDEX_FILE: %v", env)
+// TestRunIgnoresStrayGitIndexFile proves that an ordinary (non-indexed)
+// git call made through this package never sees a GIT_INDEX_FILE left
+// over in the process environment, even one pointing at a file that does
+// not exist: Env must drop it globally, so only RunIndexed/CommandIndexed
+// opt a specific call into seeing it (see IndexEnv).
+func TestRunIgnoresStrayGitIndexFile(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	repo := initRepo(t)
+	t.Setenv("GIT_INDEX_FILE", filepath.Join(t.TempDir(), "does-not-exist.lock"))
+	out, err := Run(context.Background(), repo, "rev-parse", "--is-inside-work-tree")
+	if err != nil {
+		t.Fatalf("Run with a stray GIT_INDEX_FILE failed: %v", err)
+	}
+	if strings.TrimSpace(string(out)) != "true" {
+		t.Fatalf("Run output = %q, want true", out)
 	}
 }
 
-func TestEnvResolvesRelativeGitIndexFile(t *testing.T) {
+func TestIndexEnvAddsGitIndexFile(t *testing.T) {
+	dir := t.TempDir()
+	abs := dir + "/index.lock"
+	env := IndexEnv(abs)
+	if !containsEnv(env, "GIT_INDEX_FILE="+abs) {
+		t.Errorf("IndexEnv did not set an already-absolute GIT_INDEX_FILE: %v", env)
+	}
+}
+
+func TestIndexEnvResolvesRelativePath(t *testing.T) {
 	dir := t.TempDir()
 	oldwd, err := os.Getwd()
 	if err != nil {
@@ -117,23 +138,50 @@ func TestEnvResolvesRelativeGitIndexFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chdir(oldwd) })
-	t.Setenv("GIT_INDEX_FILE", ".git/index.lock")
-	env := Env()
+	env := IndexEnv(".git/index.lock")
 	want := dir + "/.git/index.lock"
 	if !containsEnv(env, "GIT_INDEX_FILE="+want) {
-		t.Errorf("Env did not resolve a relative GIT_INDEX_FILE to %s: %v", want, env)
+		t.Errorf("IndexEnv did not resolve a relative path to %s: %v", want, env)
 	}
 }
 
-func TestEnvDropsEmptyGitIndexFile(t *testing.T) {
-	t.Setenv("GIT_INDEX_FILE", "")
-	env := Env()
-	for _, entry := range env {
+func TestIndexEnvEmptyMatchesEnv(t *testing.T) {
+	t.Setenv("GIT_INDEX_FILE", "/tmp/stray-index.lock")
+	indexed := IndexEnv("")
+	for _, entry := range indexed {
 		key, _, _ := strings.Cut(entry, "=")
 		if strings.ToUpper(key) == "GIT_INDEX_FILE" {
-			t.Errorf("Env set GIT_INDEX_FILE from an empty inherited value: %s", entry)
+			t.Errorf("IndexEnv(\"\") set GIT_INDEX_FILE: %s", entry)
 		}
 	}
+}
+
+func TestIndexEnvOverridesStrayGitIndexFile(t *testing.T) {
+	t.Setenv("GIT_INDEX_FILE", "/tmp/stray-index.lock")
+	dir := t.TempDir()
+	want := dir + "/real.lock"
+	env := IndexEnv(want)
+	if !containsEnv(env, "GIT_INDEX_FILE="+want) {
+		t.Errorf("IndexEnv did not override an inherited GIT_INDEX_FILE: %v", env)
+	}
+}
+
+func initRepo(t *testing.T) string {
+	t.Helper()
+	repo := t.TempDir()
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = repo
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL="+os.DevNull)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, out)
+		}
+	}
+	run("init", "--quiet")
+	run("config", "user.email", "test@example.com")
+	run("config", "user.name", "Test")
+	return repo
 }
 
 func TestRunIgnoresGlobalConfig(t *testing.T) {
