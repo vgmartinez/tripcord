@@ -326,8 +326,9 @@ jobs:
       security-events: write # upload the SARIF report
     uses: ./.github/workflows/tripcord-pr.yml # zizmor: ignore[self-repository] local reusable workflow
     with:
-      # GitHub-hosted RUNNER_TEMP, outside the checkout. The called workflow creates it.
-      path: /home/runner/work/_temp/tripcord-ci
+      path: .
+      fail-on: critical
+      assert-fixture: enabled
 
   local-action:
     name: local action
