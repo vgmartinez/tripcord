@@ -91,8 +91,8 @@ func TestDocumentedCallerPermissionsCoverJobs(t *testing.T) {
 				t.Fatalf("ci.yml caller if = %q, want pull_request", scalar(job.ifNode))
 			}
 			with := mapping(t, job.with)
-			if scalar(with["path"]) != "." {
-				t.Fatalf("ci.yml path = %q, want the checkout", scalar(with["path"]))
+			if scalar(with["path"]) != "tripcord-ci-fixture" {
+				t.Fatalf("ci.yml path = %q, want the planted fixture inside the checkout", scalar(with["path"]))
 			}
 			if scalar(with["fail-on"]) != "critical" {
 				t.Fatalf("ci.yml fail-on = %q, want critical", scalar(with["fail-on"]))
@@ -235,8 +235,8 @@ func checkOneJobWorkflow(t *testing.T, wf workflowFile, wantPerms map[string]str
 
 	pin := regexp.MustCompile(`^[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)+@[0-9a-f]{40}$`)
 	steps := seq(t, job["steps"])
-	if len(steps) != 6 {
-		t.Fatalf("scan has %d steps, want checkout, reviews, scan directory setup, fixture, action, and assertion", len(steps))
+	if len(steps) != 7 {
+		t.Fatalf("scan has %d steps, want checkout, reviews, scan directory setup, fixture, review selection, action, and assertion", len(steps))
 	}
 	checkoutStep := mapping(t, steps[0])
 	if scalar(checkoutStep["uses"]) != workflowCheckout {
@@ -276,7 +276,16 @@ func checkOneJobWorkflow(t *testing.T, wf workflowFile, wantPerms map[string]str
 		t.Fatal("fixture step does not create TC-CFG-001 only when requested")
 	}
 
-	actionStep := mapping(t, steps[4])
+	reviewFileStep := mapping(t, steps[4])
+	reviewFileRun := scalar(reviewFileStep["run"])
+	if scalar(reviewFileStep["id"]) != "review-file" ||
+		!strings.Contains(reviewFileRun, `"$TRIPCORD_ASSERT_FIXTURE" = "enabled"`) ||
+		!strings.Contains(reviewFileRun, `echo "reviews-file="`) ||
+		!strings.Contains(reviewFileRun, `echo "reviews-file=$TRIPCORD_REVIEWS_FILE"`) {
+		t.Fatal("review file selection does not omit reviews only for the fixture assertion")
+	}
+
+	actionStep := mapping(t, steps[5])
 	if scalar(actionStep["uses"]) != workflowAction {
 		t.Fatalf("action uses %q", scalar(actionStep["uses"]))
 	}
@@ -296,10 +305,10 @@ func checkOneJobWorkflow(t *testing.T, wf workflowFile, wantPerms map[string]str
 	if scalar(actionWith["github-token"]) != "${{ inputs.github-token != '' && inputs.github-token || github.token }}" {
 		t.Fatalf("github-token = %q", scalar(actionWith["github-token"]))
 	}
-	if scalar(actionWith["reviews-file"]) != "${{ steps.reviews.outputs.reviews-file }}" {
+	if scalar(actionWith["reviews-file"]) != "${{ steps.review-file.outputs.reviews-file }}" {
 		t.Fatalf("reviews-file = %q", scalar(actionWith["reviews-file"]))
 	}
-	assertStep := mapping(t, steps[5])
+	assertStep := mapping(t, steps[6])
 	assertRun := scalar(assertStep["run"])
 	if scalar(assertStep["if"]) != "inputs.assert-fixture == 'enabled'" ||
 		!strings.Contains(assertRun, "TC-CFG-001") ||
@@ -307,7 +316,7 @@ func checkOneJobWorkflow(t *testing.T, wf workflowFile, wantPerms map[string]str
 		t.Fatal("fixture assertion does not require TC-CFG-001 at the planted path in the SARIF")
 	}
 
-	for _, step := range []map[string]*yaml.Node{checkoutStep, reviewsStep, fixtureStep, actionStep, assertStep} {
+	for _, step := range []map[string]*yaml.Node{checkoutStep, reviewsStep, fixtureStep, reviewFileStep, actionStep, assertStep} {
 		if strings.Contains(scalar(step["run"]), "${{") {
 			t.Fatal("step interpolates an expression into run")
 		}

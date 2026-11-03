@@ -326,7 +326,7 @@ jobs:
       security-events: write # upload the SARIF report
     uses: ./.github/workflows/tripcord-pr.yml # zizmor: ignore[self-repository] local reusable workflow
     with:
-      path: .
+      path: tripcord-ci-fixture
       fail-on: critical
       assert-fixture: enabled
 
