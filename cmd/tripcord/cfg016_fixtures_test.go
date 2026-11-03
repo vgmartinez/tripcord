@@ -96,7 +96,7 @@ func forgeDigest(t *testing.T, dir string) {
 		t.Fatal(err)
 	}
 	before := sha256Hex(raw)
-	replaceInFile(embedded.BootstrapPath, `[ "$got" = "$want" ]`, `true`)(t, dir)
+	replaceInFile(embedded.BootstrapPath, `[ "$got" != "$want" ]`, `false`)(t, dir)
 	raw, err = os.ReadFile(bootstrap)
 	if err != nil {
 		t.Fatal(err)
@@ -197,7 +197,7 @@ var cfg016Fixtures = map[string]cfg016Fixture{
 		edit: edits(removeFile(embedded.BootstrapPath), removeFile(embedded.ManifestPath), removeFile(embedded.WorkflowPath))},
 	"embed-bootstrap-missing": {kind: "positivos", args: embedArgs("--harness", "claude"), edit: removeFile(embedded.BootstrapPath)},
 	"embed-bootstrap-changed": {kind: "positivos", args: embedArgs("--harness", "claude"),
-		edit: replaceInFile(embedded.BootstrapPath, `[ "$got" = "$want" ]`, `true`)},
+		edit: replaceInFile(embedded.BootstrapPath, `[ "$got" != "$want" ]`, `false`)},
 	"embed-bootstrap-digest-forged": {kind: "positivos", args: embedArgs("--harness", "claude"), edit: forgeDigest},
 	"embed-manifest-unreadable":     {kind: "positivos", args: embedArgs("--harness", "claude,cursor,copilot"), edit: writeFile(embedded.ManifestPath, "{\n")},
 	"embed-workflow-changed": {kind: "positivos", args: embedArgs("--harness", "claude"),

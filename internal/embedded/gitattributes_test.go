@@ -72,7 +72,7 @@ func TestCheckCRLFCheckout(t *testing.T) {
 	if got := check(t, dir); len(got) != 0 {
 		t.Fatalf("hits = %+v", got)
 	}
-	replace(t, dir, BootstrapPath, `[ "$got" = "$want" ]`, "true")
+	replace(t, dir, BootstrapPath, `[ "$got" != "$want" ]`, "false")
 	want := []guardHit{{model.SurfaceGeneric, BootstrapPath, subjectBootstrap, StateChanged}}
 	if got := check(t, dir); !slices.Equal(got, want) {
 		t.Fatalf("an edit under CRLF: hits = %+v\nwant %+v", got, want)

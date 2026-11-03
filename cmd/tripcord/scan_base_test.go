@@ -162,7 +162,7 @@ func TestScanSinceReportsRepin(t *testing.T) {
 func TestScanSinceReportsBootstrapTamper(t *testing.T) {
 	t.Run("edited", func(t *testing.T) {
 		repo := embeddedBase(t)
-		replaceInFile(embedded.BootstrapPath, `[ "$got" = "$want" ]`, "true")(t, repo)
+		replaceInFile(embedded.BootstrapPath, `[ "$got" != "$want" ]`, "false")(t, repo)
 		commitAll(t, repo)
 		code, got := guardFindings(t, repo, "--since", "HEAD~1")
 		if want := []guardFinding{{embedded.BootstrapPath, titleChanged}}; code != int(exitcode.Findings) || !slices.Equal(got, want) {

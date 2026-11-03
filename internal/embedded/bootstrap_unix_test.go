@@ -32,13 +32,14 @@ func sum(s string) string {
 
 type bootstrapEnv struct {
 	repo, cache, stubs, args string
+	fetched                  string
 	platform                 string
 	extraEnv                 []string
 }
 
 // newBootstrapEnv writes bootstrap.sh pinned to fakeBinary for this
-// platform, and npm and python3 stubs that fail like a host with no
-// network.
+// platform, and npm, pip, python3, curl, and wget stubs that record
+// that they ran: bootstrap.sh must never call any of them.
 func newBootstrapEnv(t *testing.T, pinned map[string]string) *bootstrapEnv {
 	t.Helper()
 	e := &bootstrapEnv{repo: t.TempDir(), cache: t.TempDir(), stubs: t.TempDir(), platform: hostPlatform(t)}
@@ -47,9 +48,20 @@ func newBootstrapEnv(t *testing.T, pinned map[string]string) *bootstrapEnv {
 		pinned = map[string]string{e.platform: sum(fakeBinary)}
 	}
 	write(t, e.repo, BootstrapPath, string(Bootstrap(Pin{Version: "0.1.0", SHA256: pinned})))
-	e.stub(t, "npm", "#!/bin/sh\nexit 1\n")
-	e.stub(t, "python3", "#!/bin/sh\nexit 1\n")
+	e.fetched = filepath.Join(t.TempDir(), "fetched")
+	for _, name := range []string{"npm", "pip", "pip3", "python3", "curl", "wget"} {
+		e.stub(t, name, "#!/bin/sh\necho "+name+" >>'"+e.fetched+"'\nexit 1\n")
+	}
 	return e
+}
+
+// assertNoFetch fails the test if bootstrap.sh ran a package manager or
+// a downloader.
+func (e *bootstrapEnv) assertNoFetch(t *testing.T) {
+	t.Helper()
+	if raw, err := os.ReadFile(e.fetched); err == nil {
+		t.Fatalf("bootstrap.sh ran %q", raw)
+	}
 }
 
 func (e *bootstrapEnv) stub(t *testing.T, name, script string) {
@@ -126,12 +138,12 @@ func TestBootstrapScriptHasNoUnpinnedFetch(t *testing.T) {
 			code.WriteString(line + "\n")
 		}
 	}
-	for _, banned := range []string{"eval", "curl", "wget", "latest", "| sh", "|sh"} {
+	for _, banned := range []string{"eval", "curl", "wget", "latest", "| sh", "|sh", "npm", "pip", "python", "TRIPCORD_INSTALL_SOURCES", "mktemp"} {
 		if strings.Contains(code.String(), banned) {
 			t.Errorf("bootstrap.sh contains %q", banned)
 		}
 	}
-	for _, want := range []string{"set -eu", `TRIPCORD_INSTALL_SOURCES="${TRIPCORD_INSTALL_SOURCES:-npm pypi cache}"`, "mktemp -d", "chmod 0700 \"$tmp\"", "TRIPCORD_VERSION='0.1.0'", `exec "$cached" hook "$@"`} {
+	for _, want := range []string{"set -eu", "TRIPCORD_VERSION='0.1.0'", `exec "$cached" hook "$@"`} {
 		if !strings.Contains(script, want) {
 			t.Errorf("bootstrap.sh lacks %q", want)
 		}
@@ -185,7 +197,7 @@ func TestBootstrapSessionStartUsesVerifiedCache(t *testing.T) {
 func TestBootstrapCursorSessionStartFailureKeepsJSON(t *testing.T) {
 	e := newBootstrapEnv(t, nil)
 	code, stdout, stderr := e.runSplit(t, "session-start", "--harness", "cursor")
-	if code == 0 || stdout != "{}\n" || !strings.Contains(stderr, "matching SHA-256") {
+	if code != 2 || stdout != "{}\n" || !strings.Contains(stderr, "is not in the cache") {
 		t.Fatalf("exit %d, stdout %q, stderr %q", code, stdout, stderr)
 	}
 }
@@ -206,130 +218,63 @@ func TestBootstrapHookExecsCachedBinary(t *testing.T) {
 	}
 }
 
-func TestBootstrapHookNeverInstalls(t *testing.T) {
-	for name, setup := range map[string]func(*testing.T, *bootstrapEnv){
-		"no cache":       func(*testing.T, *bootstrapEnv) {},
-		"tampered cache": func(t *testing.T, e *bootstrapEnv) { e.putCache(t, fakeBinary+"# tampered\n") },
-	} {
-		t.Run(name, func(t *testing.T) {
-			e := newBootstrapEnv(t, nil)
-			npmRan := filepath.Join(t.TempDir(), "npm-ran")
-			e.stub(t, "npm", "#!/bin/sh\ntouch '"+npmRan+"'\nexit 1\n")
-			setup(t, e)
-			code, stdout, stderr := e.runSplit(t, "hook", "--harness", "claude", "--event", HookEvent)
-			if code == 0 || stdout != "" || !strings.Contains(stderr, "bootstrap.sh install") || e.ran(t) != "" {
-				t.Fatalf("exit %d, stdout %q, stderr %q", code, stdout, stderr)
-			}
-			if _, err := os.Stat(npmRan); !errors.Is(err, os.ErrNotExist) {
-				t.Fatal("hook mode tried to install")
-			}
-		})
-	}
-}
-
-func TestBootstrapInstallSourcesOverride(t *testing.T) {
-	t.Run("cache only skips npm", func(t *testing.T) {
-		e := newBootstrapEnv(t, nil)
-		e.putCache(t, fakeBinary)
-		npmRan := filepath.Join(t.TempDir(), "npm-ran")
-		e.stub(t, "npm", "#!/bin/sh\ntouch '"+npmRan+"'\nexit 1\n")
-		e.extraEnv = []string{"TRIPCORD_INSTALL_SOURCES=cache"}
-		if code, out := e.run(t, "install"); code != 0 {
-			t.Fatalf("exit %d: %s", code, out)
-		}
-		if _, err := os.Stat(npmRan); !errors.Is(err, os.ErrNotExist) {
-			t.Fatal("npm ran although TRIPCORD_INSTALL_SOURCES=cache")
-		}
-	})
-	t.Run("npm only ignores the cache", func(t *testing.T) {
-		e := newBootstrapEnv(t, nil)
-		e.putCache(t, fakeBinary)
-		e.extraEnv = []string{"TRIPCORD_INSTALL_SOURCES=npm"}
-		if code, out := e.run(t, "install"); code == 0 || !strings.Contains(out, "tried: npm") || e.ran(t) != "" {
-			t.Fatalf("exit %d: %s", code, out)
-		}
-	})
-	t.Run("unknown source", func(t *testing.T) {
-		e := newBootstrapEnv(t, nil)
-		e.putCache(t, fakeBinary)
-		e.extraEnv = []string{"TRIPCORD_INSTALL_SOURCES=cache https://example.invalid"}
-		if code, out := e.run(t, "install"); code != 3 || !strings.Contains(out, "unknown install source") || e.ran(t) != "" {
-			t.Fatalf("exit %d: %s", code, out)
-		}
-	})
-}
-
 func TestBootstrapRejectsRelativeCacheRoot(t *testing.T) {
 	e := newBootstrapEnv(t, nil)
 	e.putCache(t, fakeBinary)
 	e.extraEnv = []string{"XDG_CACHE_HOME=relative/cache"}
-	if code, out := e.run(t, "install"); code != 3 || !strings.Contains(out, "absolute path") || e.ran(t) != "" {
+	if code, out := e.run(t, "install"); code != 2 || !strings.Contains(out, "absolute path") || e.ran(t) != "" {
 		t.Fatalf("exit %d: %s", code, out)
 	}
 }
 
+// TestBootstrapFailsClosed: every mode exits 2 with the reason on
+// stderr, runs no binary, and fetches nothing, when the cache holds no
+// binary, a tampered one, or a symlink, or the platform is not pinned.
 func TestBootstrapFailsClosed(t *testing.T) {
-	t.Run("no network and no cache", func(t *testing.T) {
-		e := newBootstrapEnv(t, nil)
-		if code, out := e.run(t, "install"); code == 0 || !strings.Contains(out, "matching SHA-256") || e.ran(t) != "" {
-			t.Fatalf("exit %d: %s", code, out)
+	other := "linux-arm64"
+	if hostPlatform(t) == other {
+		other = "linux-x64"
+	}
+	for _, tc := range []struct {
+		name   string
+		pinned map[string]string
+		setup  func(*testing.T, *bootstrapEnv)
+		reason string
+	}{
+		{"no binary", nil, func(*testing.T, *bootstrapEnv) {}, "is not in the cache at"},
+		{"tampered binary", nil, func(t *testing.T, e *bootstrapEnv) { e.putCache(t, fakeBinary+"# tampered\n") }, "not the pinned " + sum(fakeBinary) + "; it was not run"},
+		{"symlinked binary", nil, func(t *testing.T, e *bootstrapEnv) {
+			real := filepath.Join(t.TempDir(), "tripcord")
+			if err := os.WriteFile(real, []byte(fakeBinary), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.MkdirAll(filepath.Dir(e.cached()), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(real, e.cached()); err != nil {
+				t.Fatal(err)
+			}
+		}, "is not a regular file"},
+		{"platform not pinned", map[string]string{other: sum(fakeBinary)}, func(t *testing.T, e *bootstrapEnv) { e.putCache(t, fakeBinary) }, "no SHA-256 is pinned"},
+	} {
+		for _, args := range [][]string{{"install"}, {"session-start", "--harness", "claude"}, {"hook", "--harness", "claude", "--event", HookEvent, "--on-failure", "block"}} {
+			t.Run(tc.name+" "+args[0], func(t *testing.T) {
+				e := newBootstrapEnv(t, tc.pinned)
+				tc.setup(t, e)
+				code, stdout, stderr := e.runSplit(t, args...)
+				if code != 2 || stdout != "" || !strings.HasPrefix(stderr, "tripcord bootstrap: ") || !strings.Contains(stderr, tc.reason) || e.ran(t) != "" {
+					t.Fatalf("exit %d, stdout %q, stderr %q, want exit 2 and %q", code, stdout, stderr, tc.reason)
+				}
+				e.assertNoFetch(t)
+			})
 		}
-	})
-	t.Run("cache with a different binary", func(t *testing.T) {
-		e := newBootstrapEnv(t, nil)
-		e.putCache(t, fakeBinary+"# tampered\n")
-		if code, out := e.run(t, "install"); code == 0 || e.ran(t) != "" {
-			t.Fatalf("exit %d: %s", code, out)
-		}
-	})
-	t.Run("platform not pinned", func(t *testing.T) {
-		other := "linux-arm64"
-		if hostPlatform(t) == other {
-			other = "linux-x64"
-		}
-		e := newBootstrapEnv(t, map[string]string{other: sum(fakeBinary)})
-		e.putCache(t, fakeBinary)
-		if code, out := e.run(t, "install"); code != 3 || !strings.Contains(out, "no SHA-256 is pinned") || e.ran(t) != "" {
-			t.Fatalf("exit %d: %s", code, out)
-		}
-	})
+	}
 	t.Run("usage", func(t *testing.T) {
 		e := newBootstrapEnv(t, nil)
-		if code, out := e.run(t); code != 2 {
+		if code, out := e.run(t); code != 2 || !strings.Contains(out, "usage:") {
 			t.Fatalf("exit %d: %s", code, out)
 		}
 	})
-}
-
-// npmStub packs content as the platform package's bin/tripcord.
-func npmStub(content string) string {
-	return "#!/bin/sh\nset -eu\nmkdir -p package/bin\ncat >package/bin/tripcord <<'EOF'\n" + content + "EOF\ntar -czf pkg.tgz package\nrm -rf package\n"
-}
-
-func TestBootstrapInstallsFromNPM(t *testing.T) {
-	e := newBootstrapEnv(t, nil)
-	e.stub(t, "npm", npmStub(fakeBinary))
-	if code, out := e.run(t, "install"); code != 0 {
-		t.Fatalf("exit %d: %s", code, out)
-	}
-	if e.ran(t) == "" {
-		t.Fatal("installed binary did not run")
-	}
-	raw, err := os.ReadFile(e.cached())
-	if err != nil || string(raw) != fakeBinary {
-		t.Fatalf("cache = %q, %v", raw, err)
-	}
-}
-
-func TestBootstrapRejectsTamperedNPMPackage(t *testing.T) {
-	e := newBootstrapEnv(t, nil)
-	e.stub(t, "npm", npmStub(fakeBinary+"# tampered\n"))
-	if code, out := e.run(t, "install"); code == 0 || e.ran(t) != "" {
-		t.Fatalf("exit %d: %s", code, out)
-	}
-	if _, err := os.Stat(e.cached()); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("tampered binary was cached: %v", err)
-	}
 }
 
 func TestBootstrapRefusesSymlinks(t *testing.T) {

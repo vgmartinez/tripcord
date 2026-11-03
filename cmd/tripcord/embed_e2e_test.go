@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -186,5 +187,74 @@ func TestEmbedClaudeHookWithoutProjectDir(t *testing.T) {
 				t.Errorf("got exit %d stdout %q stderr %q, want exit %d and %q", code, stdout, stderr, tc.exit, tc.stdout)
 			}
 		})
+	}
+}
+
+// TestEmbedHookThroughBootstrap runs each harness's generated pre-tool
+// command, as that harness would, through bootstrap.sh to tripcord
+// hook: a verified binary decides, and a tampered or missing one blocks
+// with exit 2 and the reason on stderr.
+func TestEmbedHookThroughBootstrap(t *testing.T) {
+	e := newEmbedE2E(t)
+	real, err := os.ReadFile(e.bin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sub := filepath.Join(e.repo, "sub")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		harness           model.Harness
+		dir               string
+		env               []string
+		deny, allow       string
+		denyOut, allowOut string
+	}{
+		{model.HarnessClaude, sub, []string{"CLAUDE_PROJECT_DIR=" + e.repo}, "pre-tool-use-bash-deny.json", "pre-tool-use-bash-allow.json", claudeDeny(pipeReason), "{}\n"},
+		{model.HarnessCursor, sub, []string{"CURSOR_PROJECT_DIR=" + e.repo}, "pre-tool-use-shell-deny.json", "pre-tool-use-shell-allow.json", cursorDeny(pipeReason), `{"permission":"allow"}` + "\n"},
+		{model.HarnessCopilot, e.repo, nil, "pre-tool-use-bash-deny.json", "pre-tool-use-bash-allow.json", "", ""},
+	} {
+		command := e.hookCommand(t, tc.harness)
+		run := func(t *testing.T, fixture string) (int, string, string) {
+			t.Helper()
+			return e.runHookCommand(t, command, tc.dir, tc.env, adapterFixture(t, tc.harness, fixture))
+		}
+		t.Run(string(tc.harness)+"/verified", func(t *testing.T) {
+			e.fillCache(t, real)
+			if code, stdout, stderr := run(t, tc.deny); code != 2 || stdout != tc.denyOut || stderr != pipeReason+"\n" {
+				t.Errorf("deny: got exit %d stdout %q stderr %q", code, stdout, stderr)
+			}
+			if code, stdout, stderr := run(t, tc.allow); code != 0 || stdout != tc.allowOut || stderr != "" {
+				t.Errorf("allow: got exit %d stdout %q stderr %q", code, stdout, stderr)
+			}
+			writeTestFile(t, e.repo, embedded.PolicyPath, "version: 2\n")
+			defer writeTestFile(t, e.repo, embedded.PolicyPath, hookTestPolicy)
+			if code, _, stderr := run(t, tc.allow); code != 2 || !strings.HasPrefix(stderr, "tripcord hook failed closed: ") {
+				t.Errorf("invalid policy: got exit %d stderr %q, want the wiring's --on-failure block", code, stderr)
+			}
+		})
+		for _, bad := range []struct {
+			name   string
+			fill   func(t *testing.T)
+			reason string
+		}{
+			{"tampered", func(t *testing.T) { e.fillCache(t, append(slices.Clone(real), "\n# tampered\n"...)) }, "not the pinned"},
+			{"missing", func(t *testing.T) {
+				if err := os.Remove(e.cached()); err != nil && !errors.Is(err, os.ErrNotExist) {
+					t.Fatal(err)
+				}
+			}, "is not in the cache at"},
+		} {
+			t.Run(string(tc.harness)+"/"+bad.name, func(t *testing.T) {
+				bad.fill(t)
+				for _, fixture := range []string{tc.deny, tc.allow} {
+					code, stdout, stderr := run(t, fixture)
+					if code != 2 || stdout != "" || !strings.HasPrefix(stderr, "tripcord bootstrap: ") || !strings.Contains(stderr, bad.reason) {
+						t.Errorf("%s: got exit %d stdout %q stderr %q, want exit 2 and %q", fixture, code, stdout, stderr, bad.reason)
+					}
+				}
+			})
+		}
 	}
 }
