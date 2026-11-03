@@ -16,8 +16,11 @@ import (
 // are left missing. The returned sources map is Plan.Sources: it names,
 // for a logical path a scan would report, the other paths a finding
 // there can depend on (see Plan.Sources).
-func Materialize(ctx context.Context, repo string) (*preopen.Workspace, []adapters.Diagnostic, map[string][]string, error) {
-	objs, gitDir, err := preopen.ListIndex(ctx, repo)
+// indexFile, when set, is the index git is building for a commit
+// currently in a hook (see gitrun.IndexEnv), so the scan reads the
+// proposed commit's content rather than the stale on-disk .git/index.
+func Materialize(ctx context.Context, repo, indexFile string) (*preopen.Workspace, []adapters.Diagnostic, map[string][]string, error) {
+	objs, gitDir, err := preopen.ListIndex(ctx, repo, indexFile)
 	if err != nil {
 		return nil, nil, nil, err
 	}

@@ -40,6 +40,7 @@ import (
 	"github.com/vgmartinez/tripcord/internal/output"
 	"github.com/vgmartinez/tripcord/internal/pathx"
 	"github.com/vgmartinez/tripcord/internal/policy"
+	"github.com/vgmartinez/tripcord/internal/preopen"
 	"github.com/vgmartinez/tripcord/internal/rules"
 	"github.com/vgmartinez/tripcord/internal/scriptcheck"
 )
@@ -61,8 +62,11 @@ Usage:
 scan performs static configuration scanning only. A PATH inside a Git
 repository scans that whole repository from its git root. Monorepo scoping
 is tracked in https://github.com/vgmartinez/tripcord/issues/59.
---staged scans the Git index in a private temporary tree and requires the
-staged file paths. Those paths select which finding locations are reported.
+--staged scans the Git index in a private temporary tree. With no path
+arguments, it computes its own staged change set from the index (added,
+modified, deleted, type-changed, and mode-changed paths); explicit paths
+are also accepted, for direct or manual use. That change set selects which
+finding locations are reported.
 --scope selects repository
 (the default), user, managed, or all. The default does not read the home
 directory or system settings.
@@ -159,7 +163,24 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 		}
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 		defer stop()
-		ws, notes, sources, err := indexfiles.Materialize(ctx, root)
+		// GIT_INDEX_FILE, when set, is the lock or temporary index git
+		// built for the commit currently in this hook (plain, -a, a
+		// pathspec, --only, or --include): see gitrun.IndexEnv. It is
+		// read once, here, where --staged is already known to be a git
+		// hook invocation, and passed explicitly to every call that
+		// needs the proposed commit's content, rather than carried by
+		// gitrun.Env for every git invocation tripcord makes.
+		indexFile := os.Getenv("GIT_INDEX_FILE")
+		if opts.stagedFiles == nil {
+			changed, err := preopen.StagedChangeSet(ctx, root, indexFile)
+			if err != nil {
+				code := target.configError(stderr, fmt.Errorf("--staged: %w", err))
+				writeString(stderr, "tripcord scan: staged scan blocked the commit; bypass only with git commit --no-verify\n")
+				return code
+			}
+			opts.stagedFiles = changed
+		}
+		ws, notes, sources, err := indexfiles.Materialize(ctx, root, indexFile)
 		if err != nil {
 			code := target.configError(stderr, fmt.Errorf("--staged: %w", err))
 			writeString(stderr, "tripcord scan: staged scan blocked the commit; bypass only with git commit --no-verify\n")
@@ -489,7 +510,7 @@ func parseCommandFlags(cmd flagCommand, args []string, stdout io.Writer) (scanOp
 	flags.StringVar(&opts.failOn, "fail-on", "", "low, medium, high, or critical")
 	flags.StringVar(&opts.policy, "policy", "", "policy file")
 	flags.StringVar(&opts.orgPolicy, "org-policy", "", "organization policy file")
-	flags.BoolVar(&opts.staged, "staged", false, "scan Git's staged index; remaining paths are the staged files pre-commit passes")
+	flags.BoolVar(&opts.staged, "staged", false, "scan Git's staged index; with no paths, computes its own staged change set")
 	if err := flags.Parse(normalized); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			var buf bytes.Buffer
@@ -499,7 +520,7 @@ func parseCommandFlags(cmd flagCommand, args []string, stdout io.Writer) (scanOp
 			flags.SetOutput(&buf)
 			flags.PrintDefaults()
 			if cmd == scanCommand {
-				if _, werr := buf.WriteString("\nA PATH inside a Git repository scans that whole repository from its git root.\nMonorepo scoping is tracked in https://github.com/vgmartinez/tripcord/issues/59.\n--staged scans the Git index and needs the staged file paths.\n"); werr != nil {
+				if _, werr := buf.WriteString("\nA PATH inside a Git repository scans that whole repository from its git root.\nMonorepo scoping is tracked in https://github.com/vgmartinez/tripcord/issues/59.\n--staged scans the Git index. With no paths, it computes its own staged\nchange set; explicit paths are also accepted for direct use.\n"); werr != nil {
 					return scanOptions{}, fmt.Errorf("%w: %w", errHelpWrite, werr)
 				}
 			}
@@ -525,13 +546,16 @@ func parseCommandFlags(cmd flagCommand, args []string, stdout io.Writer) (scanOp
 	case cmd == preopenCommand && flags.NArg() != 1:
 		return opts, errors.New("preopen takes exactly one git URL or local path")
 	case opts.staged:
-		if flags.NArg() == 0 {
-			return opts, errors.New("--staged needs the staged file paths (pre-commit passes them)")
-		}
 		opts.path = "."
-		opts.stagedFiles, err = stagedPaths(flags.Args())
-		if err != nil {
-			return opts, err
+		if flags.NArg() > 0 {
+			// Explicit paths stay supported for direct, manual use: with
+			// none given, the scan computes its own staged change set
+			// (see preopen.StagedChangeSet), since a hook invoked with
+			// pass_filenames: false never names any.
+			opts.stagedFiles, err = stagedPaths(flags.Args())
+			if err != nil {
+				return opts, err
+			}
 		}
 	case flags.NArg() > 1:
 		return opts, errors.New("scan accepts at most one PATH")

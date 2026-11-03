@@ -169,11 +169,16 @@ func Fetch(ctx context.Context, target string) (ws *Workspace, err error) {
 // ListIndex reads the staged index. Blobs are not written. A gitlink is
 // kind "commit", the same empty directory a checkout leaves for an
 // uninitialized submodule. Unmerged paths are rejected.
-func ListIndex(ctx context.Context, repo string) (objs []IndexObject, gitDir string, err error) {
+// indexFile, when set, is the index git is building for a commit
+// currently in a hook (see gitrun.IndexEnv): ls-files then reads that
+// proposed commit's content instead of the stale on-disk .git/index. An
+// empty indexFile reads .git/index, as a direct, non-hook invocation
+// would.
+func ListIndex(ctx context.Context, repo, indexFile string) (objs []IndexObject, gitDir string, err error) {
 	if _, err := exec.LookPath("git"); err != nil {
 		return nil, "", fmt.Errorf("%w: %w", ErrGitMissing, err)
 	}
-	raw, err := gitrun.Run(ctx, repo, "ls-files", "--stage", "-z")
+	raw, err := gitrun.RunIndexed(ctx, repo, indexFile, "ls-files", "--stage", "-z")
 	if err != nil {
 		return nil, "", err
 	}
@@ -194,6 +199,84 @@ func ListIndex(ctx context.Context, repo string) (objs []IndexObject, gitDir str
 		objs[i] = IndexObject{Mode: e.mode, OID: e.oid, Path: e.path, Kind: e.kind}
 	}
 	return objs, gitDir, nil
+}
+
+// StagedChangeSet reports every repository-relative path that differs
+// between HEAD (or, on the first commit, the empty tree) and the index
+// at indexFile: added, modified, deleted, type-changed (for example a
+// symlink retargeted, or a file replaced by a symlink), and
+// mode-changed entries alike. It is how `tripcord scan --staged`
+// computes its own change set when pre-commit passes no paths
+// (pass_filenames: false, always_run: true): pre-commit's own file-type
+// filtering would otherwise skip a commit that only touches a symlink,
+// or never name a staged deletion at all.
+// indexFile, when set, is the index git is building for a commit
+// currently in a hook (see gitrun.IndexEnv); an empty indexFile reads
+// .git/index, as a direct, non-hook invocation would.
+func StagedChangeSet(ctx context.Context, repo, indexFile string) (map[string]bool, error) {
+	if _, err := exec.LookPath("git"); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrGitMissing, err)
+	}
+	treeish, err := diffBase(ctx, repo, indexFile)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := gitrun.RunIndexed(ctx, repo, indexFile, "diff-index", "--cached", "--name-status", "-z", "--no-renames", treeish)
+	if err != nil {
+		return nil, err
+	}
+	return parseNameStatus(raw)
+}
+
+// diffBase is the tree-ish StagedChangeSet diffs the index against: HEAD,
+// or, when the branch has no commit yet, the empty tree. mktree with no
+// input reads the empty tree's own OID back from git itself, rather than
+// a hardcoded constant, so it works the same under either hash algorithm
+// a repository might use. gitrun.Command already leaves a command's
+// stdin unset, which os/exec connects to the null device, giving mktree
+// no entries to read.
+func diffBase(ctx context.Context, repo, indexFile string) (string, error) {
+	if _, err := gitrun.RunIndexed(ctx, repo, indexFile, "rev-parse", "--verify", "--quiet", "HEAD"); err != nil {
+		var exitErr *gitrun.ExitError
+		if errors.As(err, &exitErr) {
+			raw, err := gitrun.Run(ctx, repo, "mktree", "--missing")
+			if err != nil {
+				return "", err
+			}
+			return strings.TrimSpace(string(raw)), nil
+		}
+		return "", err
+	}
+	return "HEAD", nil
+}
+
+// parseNameStatus parses `git diff-index --name-status -z --no-renames`
+// output into the set of changed paths: NUL-terminated status/path
+// pairs, one status letter per record since renames and copies are
+// disabled. The status letter itself (A, M, D, T, or a mode-only M) is
+// not needed: every category StagedChangeSet documents is reported by
+// its path alone.
+func parseNameStatus(raw []byte) (map[string]bool, error) {
+	out := map[string]bool{}
+	fields := bytes.Split(bytes.TrimSuffix(raw, []byte{0}), []byte{0})
+	for i := 0; i < len(fields); {
+		if len(fields[i]) == 0 {
+			i++
+			continue
+		}
+		status := fields[i]
+		i++
+		if i >= len(fields) {
+			return nil, fmt.Errorf("unexpected diff-index record %q: missing path", status)
+		}
+		path := fields[i]
+		i++
+		if len(path) == 0 {
+			return nil, fmt.Errorf("unexpected diff-index record %q: empty path", status)
+		}
+		out[string(path)] = true
+	}
+	return out, nil
 }
 
 // ReadBlobs returns raw object bytes for oids. The objects are not filters.

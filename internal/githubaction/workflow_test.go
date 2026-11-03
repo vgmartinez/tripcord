@@ -410,9 +410,9 @@ func TestPreCommitHookContract(t *testing.T) {
 		"id":             "tripcord-config",
 		"language":       "golang",
 		"entry":          "tripcord scan --staged",
-		"pass_filenames": "true",
+		"pass_filenames": "false",
 		"require_serial": "true",
-		"always_run":     "false",
+		"always_run":     "true",
 	} {
 		got := fmt.Sprint(hook[name])
 		if got != want {

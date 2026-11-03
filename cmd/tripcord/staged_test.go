@@ -351,11 +351,50 @@ func TestScanStagedSignalClosesTree(t *testing.T) {
 	}
 }
 
-func TestScanStagedNeedsPaths(t *testing.T) {
+// TestScanStagedNoPathsComputesItsOwnChangeSet covers the hook manifest
+// change (pass_filenames: false, always_run: true): with no path
+// arguments, `scan --staged` must compute the staged change set itself
+// from the index, rather than require pre-commit to pass any path, and
+// it must still catch a staged finding.
+func TestScanStagedNoPathsComputesItsOwnChangeSet(t *testing.T) {
 	bin := buildStagedBinary(t)
-	repo := stagedRepo(t)
-	if code, out := stagedScan(t, bin, repo); code != 3 || !strings.Contains(out, "--staged needs the staged file paths (pre-commit passes them)") {
-		t.Fatalf("no paths = %d\n%s", code, out)
+	t.Run("clean index reports nothing", func(t *testing.T) {
+		repo := stagedRepo(t)
+		if code, out := stagedScan(t, bin, repo); code != 0 {
+			t.Fatalf("no paths, clean index = %d, want 0\n%s", code, out)
+		}
+	})
+	t.Run("staged finding is reported without any path argument", func(t *testing.T) {
+		repo := stagedRepo(t)
+		stagedWrite(t, repo, ".claude/settings.json", stagedBad)
+		stagedGit(t, repo, "add", ".claude/settings.json")
+		if code, out := stagedScan(t, bin, repo); code != 1 || !strings.Contains(out, "TC-CFG-001") {
+			t.Fatalf("no paths, staged finding = %d, want 1\n%s", code, out)
+		}
+	})
+	t.Run("explicit paths are still accepted for direct use", func(t *testing.T) {
+		repo := stagedRepo(t)
+		stagedWrite(t, repo, ".claude/settings.json", stagedBad)
+		stagedGit(t, repo, "add", ".claude/settings.json")
+		if code, out := stagedScan(t, bin, repo, ".claude/settings.json"); code != 1 || !strings.Contains(out, "TC-CFG-001") {
+			t.Fatalf("explicit path = %d, want 1\n%s", code, out)
+		}
+	})
+}
+
+// TestScanStagedFirstCommitNoHead covers the first commit on a branch
+// with no HEAD yet: the self-computed staged change set must diff
+// against the empty tree instead of failing to resolve HEAD.
+func TestScanStagedFirstCommitNoHead(t *testing.T) {
+	bin := buildStagedBinary(t)
+	repo := t.TempDir()
+	stagedGit(t, repo, "init", "-q")
+	stagedGit(t, repo, "config", "user.name", "Tripcord Test")
+	stagedGit(t, repo, "config", "user.email", "test@example.invalid")
+	stagedWrite(t, repo, ".claude/settings.json", stagedBad)
+	stagedGit(t, repo, "add", ".claude/settings.json")
+	if code, out := stagedScan(t, bin, repo); code != 1 || !strings.Contains(out, "TC-CFG-001") {
+		t.Fatalf("first commit, no HEAD = %d, want 1\n%s", code, out)
 	}
 }
 
