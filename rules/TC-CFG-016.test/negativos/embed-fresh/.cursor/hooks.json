@@ -8,7 +8,7 @@
     ],
     "preToolUse": [
       {
-        "command": "bash \"${CURSOR_PROJECT_DIR}/.tripcord/bootstrap.sh\" hook --harness cursor --event pre-tool",
+        "command": "bash \"${CURSOR_PROJECT_DIR}/.tripcord/bootstrap.sh\" hook --harness cursor --event pre-tool --on-failure block",
         "failClosed": true
       }
     ]

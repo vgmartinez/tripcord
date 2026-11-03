@@ -28,7 +28,7 @@
       "harness": "claude",
       "path": ".claude/settings.json",
       "event": "PreToolUse",
-      "sha256": "0d1d134cd29111d375db76b463bd42963322ac36e2a5697f811e15a658a91af1"
+      "sha256": "7b26bc6d65b3c6705ec8aff6e78db7f36041f56ad9472ed3b5ad5f1b7f68cdf3"
     }
   ]
 }

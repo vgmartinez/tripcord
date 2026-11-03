@@ -115,9 +115,9 @@ By default (`--on-failure error`) it writes `tripcord hook: <error>` on
 stderr and nothing on stdout, and exits 3, or 4 for an internal error.
 With `--on-failure block` it fails closed instead: the tool call is
 denied in the harness's format with `tripcord hook failed closed:
-<error>` as the reason, and it exits 2. Fail-closed is set by the
-generated wiring: it is a flag, not a policy setting, because an
-invalid policy cannot be relied on to ask for it.
+<error>` as the reason, and it exits 2. The hooks `init --embed` writes
+pass `--on-failure block`. It is a flag, not a policy setting, because
+an invalid policy cannot be relied on to ask for it.
 
 ## Limits
 
@@ -158,8 +158,7 @@ hook` process per event exceeds 25 ms.
 ## With `init --embed`
 
 The hooks `init --embed` writes run `bash .tripcord/bootstrap.sh hook
---harness <h> --event pre-tool`, which runs this command from the
-verified binary. Fail-closed is set by the generated wiring; it does
-not pass `--on-failure block` yet, and `bootstrap.sh` has no published
-package to install from, so `init --embed` is not releasable yet. See
-[Init](init.md).
+--harness <h> --event pre-tool --on-failure block`, which runs this
+command from the verified binary, so a run that cannot decide denies
+the tool call. `bootstrap.sh` has no published package to install
+from, so `init --embed` is not releasable yet. See [Init](init.md).

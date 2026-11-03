@@ -12,7 +12,7 @@
     "preToolUse": [
       {
         "type": "command",
-        "bash": "bash .tripcord/bootstrap.sh hook --harness copilot --event pre-tool",
+        "bash": "bash .tripcord/bootstrap.sh hook --harness copilot --event pre-tool --on-failure block",
         "cwd": ".",
         "timeoutSec": 60
       }

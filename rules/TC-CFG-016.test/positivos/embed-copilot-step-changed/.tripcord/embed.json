@@ -33,7 +33,7 @@
       "harness": "copilot",
       "path": ".github/hooks/tripcord.json",
       "event": "preToolUse",
-      "sha256": "162e8cb9c8b2cda4fdecf270ed3040da649e788761d0feee700189c6aa5b6fe0"
+      "sha256": "866c9bd3649002c1256c7d2d641f131e405ad732309b96b77ec462fb96c7866a"
     }
   ]
 }

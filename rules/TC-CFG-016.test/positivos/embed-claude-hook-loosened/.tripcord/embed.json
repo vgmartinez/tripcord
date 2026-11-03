@@ -37,7 +37,7 @@
       "harness": "claude",
       "path": ".claude/settings.json",
       "event": "PreToolUse",
-      "sha256": "0d1d134cd29111d375db76b463bd42963322ac36e2a5697f811e15a658a91af1"
+      "sha256": "7b26bc6d65b3c6705ec8aff6e78db7f36041f56ad9472ed3b5ad5f1b7f68cdf3"
     },
     {
       "harness": "cursor",
@@ -49,7 +49,7 @@
       "harness": "cursor",
       "path": ".cursor/hooks.json",
       "event": "preToolUse",
-      "sha256": "099ab6e4a2a8732bdb2ce27626d4bc638f6b315e1c6455fe107da92581595edb"
+      "sha256": "95c73d22ad8031613847db070e09acc50f53feb7f8aa37eb91df44144f44c5da"
     },
     {
       "harness": "copilot",
@@ -61,7 +61,7 @@
       "harness": "copilot",
       "path": ".github/hooks/tripcord.json",
       "event": "preToolUse",
-      "sha256": "162e8cb9c8b2cda4fdecf270ed3040da649e788761d0feee700189c6aa5b6fe0"
+      "sha256": "866c9bd3649002c1256c7d2d641f131e405ad732309b96b77ec462fb96c7866a"
     }
   ]
 }

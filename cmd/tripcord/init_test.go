@@ -205,7 +205,7 @@ func TestInitWiringInvokesTripcordHook(t *testing.T) {
 		t.Fatalf("claude PreToolUse = %+v", pre)
 	}
 	h := pre[0].Hooks[0]
-	if h.Type != "command" || h.Command != `bash "${CLAUDE_PROJECT_DIR:-.}/.tripcord/bootstrap.sh" hook --harness claude --event pre-tool` || h.Args != nil || h.OnFailure != "block" {
+	if h.Type != "command" || h.Command != `bash "${CLAUDE_PROJECT_DIR:-.}/.tripcord/bootstrap.sh" hook --harness claude --event pre-tool --on-failure block` || h.Args != nil || h.OnFailure != "block" {
 		t.Fatalf("claude pre-tool hook = %+v", h)
 	}
 	start := claude.Hooks["SessionStart"]
@@ -222,7 +222,7 @@ func TestInitWiringInvokesTripcordHook(t *testing.T) {
 		} `json:"hooks"`
 	}
 	mustJSON(t, files[embedded.CursorHooksPath], &cursor)
-	if c := cursor.Hooks["preToolUse"]; cursor.Version != 1 || len(c) != 1 || c[0].Command != `bash "${CURSOR_PROJECT_DIR}/.tripcord/bootstrap.sh" hook --harness cursor --event pre-tool` || !c[0].FailClosed {
+	if c := cursor.Hooks["preToolUse"]; cursor.Version != 1 || len(c) != 1 || c[0].Command != `bash "${CURSOR_PROJECT_DIR}/.tripcord/bootstrap.sh" hook --harness cursor --event pre-tool --on-failure block` || !c[0].FailClosed {
 		t.Fatalf("cursor preToolUse = %+v", c)
 	}
 	if c := cursor.Hooks["sessionStart"]; len(c) != 1 || c[0].Command != `bash "${CURSOR_PROJECT_DIR}/.tripcord/bootstrap.sh" session-start --harness cursor` {
@@ -240,7 +240,7 @@ func TestInitWiringInvokesTripcordHook(t *testing.T) {
 	}
 	mustJSON(t, files[embedded.CopilotHooksPath], &copilot)
 	if c := copilot.Hooks["preToolUse"]; copilot.Version != 1 || len(c) != 1 || c[0].Type != "command" ||
-		c[0].Bash != "bash .tripcord/bootstrap.sh hook --harness copilot --event pre-tool" || c[0].Cwd != "." || c[0].TimeoutSec != 60 {
+		c[0].Bash != "bash .tripcord/bootstrap.sh hook --harness copilot --event pre-tool --on-failure block" || c[0].Cwd != "." || c[0].TimeoutSec != 60 {
 		t.Fatalf("copilot preToolUse = %+v", c)
 	}
 	if c := copilot.Hooks["sessionStart"]; len(c) != 1 || c[0].Bash != "bash .tripcord/bootstrap.sh session-start --harness copilot" || c[0].Cwd != "." || c[0].TimeoutSec != 300 {
@@ -248,7 +248,7 @@ func TestInitWiringInvokesTripcordHook(t *testing.T) {
 	}
 	for _, h := range embedded.HookHarnesses {
 		line := embedded.HookCommandLine(h)
-		if !strings.HasPrefix(line, "bash ") || !strings.Contains(line, embedded.BootstrapPath) || !strings.HasSuffix(line, " hook --harness "+string(h)+" --event pre-tool") {
+		if !strings.HasPrefix(line, "bash ") || !strings.Contains(line, embedded.BootstrapPath) || !strings.HasSuffix(line, " hook --harness "+string(h)+" --event pre-tool --on-failure block") {
 			t.Errorf("HookCommandLine(%s) = %q", h, line)
 		}
 	}
@@ -402,7 +402,7 @@ func TestInitConflictsNeedForce(t *testing.T) {
 	for name, tc := range map[string]struct{ path, content, keep string }{
 		"reformat":           {embedded.ClaudeSettingsPath, "{\"model\": \"opus\"}\n", `"model": "opus"`},
 		"install set":        {embedded.CursorEnvironmentPath, "{\n  \"install\": \"npm ci\"\n}\n", "bash .tripcord/bootstrap.sh install && npm ci"},
-		"edited hook":        {embedded.CopilotHooksPath, "{\n  \"version\": 1,\n  \"hooks\": {\n    \"preToolUse\": [\n      {\n        \"type\": \"command\",\n        \"bash\": \"tripcord hook --harness copilot --event pre-tool || true\"\n      }\n    ]\n  }\n}\n", "--event pre-tool\""},
+		"edited hook":        {embedded.CopilotHooksPath, "{\n  \"version\": 1,\n  \"hooks\": {\n    \"preToolUse\": [\n      {\n        \"type\": \"command\",\n        \"bash\": \"tripcord hook --harness copilot --event pre-tool || true\"\n      }\n    ]\n  }\n}\n", "--event pre-tool --on-failure block\""},
 		"disableAllHooks":    {embedded.ClaudeSettingsPath, "{\n  \"disableAllHooks\": true\n}\n", `"disableAllHooks": true`},
 		"own bootstrap":      {embedded.BootstrapPath, "#!/bin/sh\nexit 0\n", "TRIPCORD_VERSION='0.1.0'"},
 		"workflow differs":   {embedded.WorkflowPath, "name: mine\n", embedded.ReusableWorkflow},
