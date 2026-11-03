@@ -712,16 +712,21 @@ func outputDiagnostics(in []adapters.Diagnostic) []output.Diagnostic {
 	return out
 }
 
-// opaqueDiagnostics makes every object or array command argument that the
-// scanner cannot interpret visible without making the scan incomplete.
+// opaqueDiagnostics makes every map command argument the scanner cannot
+// interpret, and every list argument it coerces, visible without making the
+// scan incomplete.
 func opaqueDiagnostics(notices []rules.EvalNotice) []adapters.Diagnostic {
 	out := make([]adapters.Diagnostic, 0, len(notices))
 	for _, notice := range notices {
+		message := "opaque command value ignored"
+		if notice.Kind == rules.NoticeCoercedList {
+			message = "non-string arg coerced"
+		}
 		d := adapters.Diagnostic{
 			Harness:       notice.Harness,
 			Scope:         notice.Scope,
 			Path:          notice.Path,
-			Message:       "opaque command value ignored at JSON pointer " + notice.Pointer,
+			Message:       message + " at JSON pointer " + notice.Pointer,
 			Informational: true,
 		}
 		if !slices.Contains(out, d) {

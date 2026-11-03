@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/vgmartinez/tripcord/internal/model"
+	"github.com/vgmartinez/tripcord/internal/rules/argv"
 )
 
 // Input is the set of CEL variables for one config item or one event.
@@ -44,6 +45,9 @@ func ConfigInput(item model.ConfigItem, limits Limits) (*Input, error) {
 		}
 		payload = normalizeNumbers(payload)
 	}
+	if m, ok := payload.(map[string]any); ok {
+		normalizeArgValues(item, m)
+	}
 	task := any(map[string]any{})
 	if item.Kind == model.ConfigKindTask {
 		task = payload
@@ -54,6 +58,32 @@ func ConfigInput(item model.ConfigItem, limits Limits) (*Input, error) {
 		VarTask:    task,
 		VarEvent:   emptyEvent(),
 	}}, nil
+}
+
+// normalizeArgValues gives CEL the argv text that supported agents pass to
+// their child process. A list element follows JavaScript's recursive
+// Array#toString coercion; a map is deliberately replaced with an
+// unmatchable marker. The original payload remains on ConfigItem for output.
+func normalizeArgValues(item model.ConfigItem, payload map[string]any) {
+	if args, ok := payload["args"].([]any); ok {
+		for i, value := range args {
+			if text, kind := argv.Value(value, false); kind != argv.Invalid {
+				args[i] = text
+			}
+		}
+	}
+	if item.Kind != model.ConfigKindMCPServer || item.Harness != model.HarnessOpenCode {
+		return
+	}
+	command, ok := payload["command"].([]any)
+	if !ok {
+		return
+	}
+	for i, value := range command {
+		if text, kind := argv.Value(value, false); kind != argv.Invalid {
+			command[i] = text
+		}
+	}
 }
 
 // normalizeNumbers walks a decoded JSON tree and turns each json.Number

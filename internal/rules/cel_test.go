@@ -443,9 +443,9 @@ func TestHookCommands(t *testing.T) {
 	}
 }
 
-// TestHookArgsUnreadable checks that hook.argv preserves its scalar
-// arguments and substitutes an opaque marker for an object or array. Null,
-// or args that is not a list, stays fatal.
+// TestHookArgsUnreadable checks that hook.argv preserves scalar arguments,
+// makes an object opaque, and recursively coerces an array. Null, or args
+// that is not a list, stays fatal.
 func TestHookArgsUnreadable(t *testing.T) {
 	env := testEnv(t)
 	for _, payload := range []string{

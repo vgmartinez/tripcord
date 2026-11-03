@@ -1,0 +1,8 @@
+{
+  "mcp": {
+    "node": {
+      "type": "local",
+      "command": ["node", "-e", 1]
+    }
+  }
+}

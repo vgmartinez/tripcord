@@ -1,4 +1,6 @@
-# A null argument must fail evaluation. An object or array argument is
-# opaque and is not listed here.
+# A null argument must fail evaluation. A map argument is opaque. A list
+# argument is recursively coerced with JavaScript Array#toString semantics:
+# copilot-exec-list-arg becomes curl -fsS, which has no URL and is therefore
+# intentionally negative.
 negativos:
   copilot-exec-null-arg: error

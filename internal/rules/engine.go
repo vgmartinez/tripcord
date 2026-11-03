@@ -11,6 +11,7 @@ import (
 	"github.com/vgmartinez/tripcord/internal/advisory"
 	"github.com/vgmartinez/tripcord/internal/hiddenchar"
 	"github.com/vgmartinez/tripcord/internal/model"
+	"github.com/vgmartinez/tripcord/internal/rules/argv"
 	"github.com/vgmartinez/tripcord/internal/rules/mcppkg"
 )
 
@@ -196,7 +197,16 @@ type EvalNotice struct {
 	Scope   model.Scope
 	Path    string
 	Pointer string
+	Kind    NoticeKind
 }
+
+// NoticeKind describes an intentional normalization of an unreadable value.
+type NoticeKind string
+
+const (
+	NoticeOpaqueMap   NoticeKind = "opaque_map"
+	NoticeCoercedList NoticeKind = "coerced_list"
+)
 
 // ScanConfig evaluates every applicable rule against every item, in
 // item order and then rule order. A rule applies when the item's
@@ -219,14 +229,7 @@ func (e *Engine) ScanConfig(ctx context.Context, items []model.ConfigItem) Resul
 				Pointer: "/command",
 			})
 		}
-		for _, pointer := range opaqueArgPointers(item) {
-			res.Notices = append(res.Notices, EvalNotice{
-				Harness: item.Harness,
-				Scope:   item.Scope,
-				Path:    item.Path,
-				Pointer: pointer,
-			})
-		}
+		res.Notices = append(res.Notices, argNotices(item)...)
 		for _, r := range e.rules {
 			if !r.Applies(item) || (e.filter != nil && !e.filter(r, item)) {
 				continue
@@ -336,37 +339,43 @@ func opaqueCommand(item model.ConfigItem) bool {
 	}
 }
 
-// opaqueArgPointers reports object and array argument elements. Their scalar
-// siblings still participate in rule evaluation; the pointers make that
-// intentional loss visible in every report format.
-func opaqueArgPointers(item model.ConfigItem) []string {
+// argNotices reports map values excluded from matching and list values
+// recursively coerced with JavaScript Array#toString semantics. Scalar
+// siblings still participate in rule evaluation.
+func argNotices(item model.ConfigItem) []EvalNotice {
 	var payload map[string]any
 	if json.Unmarshal(item.Payload, &payload) != nil {
 		return nil
 	}
-	var pointers []string
+	var notices []EvalNotice
+	add := func(pointer string, value any) {
+		_, kind := argv.Value(value, false)
+		var noticeKind NoticeKind
+		switch kind {
+		case argv.OpaqueMap:
+			noticeKind = NoticeOpaqueMap
+		case argv.CoercedList:
+			noticeKind = NoticeCoercedList
+		default:
+			return
+		}
+		notices = append(notices, EvalNotice{
+			Harness: item.Harness,
+			Scope:   item.Scope,
+			Path:    item.Path,
+			Pointer: pointer,
+			Kind:    noticeKind,
+		})
+	}
 	if args, ok := payload["args"].([]any); ok {
 		for i, value := range args {
-			if isOpaqueValue(value) {
-				pointers = append(pointers, fmt.Sprintf("/args/%d", i))
-			}
+			add(fmt.Sprintf("/args/%d", i), value)
 		}
 	}
 	if command, ok := payload["command"].([]any); ok && mcppkg.AcceptsCommandArray(item.Harness) {
 		for i, value := range command {
-			if isOpaqueValue(value) {
-				pointers = append(pointers, fmt.Sprintf("/command/%d", i))
-			}
+			add(fmt.Sprintf("/command/%d", i), value)
 		}
 	}
-	return pointers
-}
-
-func isOpaqueValue(value any) bool {
-	switch value.(type) {
-	case map[string]any, []any:
-		return true
-	default:
-		return false
-	}
+	return notices
 }

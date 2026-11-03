@@ -98,6 +98,25 @@ func TestUnparsedAndOpaque(t *testing.T) {
 	}
 }
 
+func TestListArgumentsUseJavaScriptCoercion(t *testing.T) {
+	t.Parallel()
+	payload := map[string]any{
+		"command": "npx",
+		"args":    []any{"-y", []any{"figma-developer-mcp@0.6.2"}},
+	}
+	refs, _, err := ParsePayload(model.HarnessGemini, payload)
+	if err != nil || len(refs) != 1 || refs[0].Name != "figma-developer-mcp" {
+		t.Fatalf("list package = %+v, %v", refs, err)
+	}
+	refs, _, err = ParsePayload(model.HarnessGemini, map[string]any{
+		"command": "npx",
+		"args":    []any{[]any{"-y", "figma-developer-mcp@0.6.2"}},
+	})
+	if err != nil || len(refs) != 0 {
+		t.Fatalf("mixed list = %+v, %v", refs, err)
+	}
+}
+
 func TestCommandArrayIsArgvOnlyForOpenCode(t *testing.T) {
 	t.Parallel()
 	payload := map[string]any{"command": []any{"npx", "-y", "figma-developer-mcp@0.6.2"}}

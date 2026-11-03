@@ -18,6 +18,7 @@ import (
 
 	"github.com/vgmartinez/tripcord/internal/advisory"
 	"github.com/vgmartinez/tripcord/internal/model"
+	"github.com/vgmartinez/tripcord/internal/rules/argv"
 	"github.com/vgmartinez/tripcord/internal/rules/mcppkg"
 	"github.com/vgmartinez/tripcord/internal/rules/shellcmd"
 )
@@ -382,10 +383,11 @@ var instructionFirstMatchLine = cel.Function(instructionFirstMatchLineName,
 // command fields (model.HookCommandFields); a missing or non-string field is
 // skipped. hook.args(payload) returns args, and hook.argv(payload) returns
 // [exec or command] + args. Number and bool args become their text. An object
-// or array argument becomes a marker that does not match command values, so
-// the scalar parts of the entry remain visible. Any other unreadable args
-// value, including null or a non-list, is ErrHookArgs (see argvList). They let
-// a rule read every command field without restating the list in each clause.
+// map argument becomes a marker that does not match command values. A list
+// argument is recursively coerced like JavaScript Array#toString, so the
+// executable scalar parts remain visible. Any other unreadable args value,
+// including null or a non-list, is ErrHookArgs (see argvList). They let a rule
+// read every command field without restating the list in each clause.
 var hookCommands = cel.Function(hookCommandsName,
 	cel.Overload(overloadHookCommands, []*cel.Type{cel.DynType}, cel.ListType(cel.StringType),
 		cel.UnaryBinding(func(v ref.Val) ref.Val {
@@ -447,11 +449,12 @@ var hookArgs = cel.Function(hookArgsName,
 		})),
 )
 
-// argvList returns a hook's args as strings. A number or bool is passed
-// to the program as its text, so it is stringified. An object or array
-// element becomes opaqueArg. Null, or args that is not a list, is ErrHookArgs.
-// Neither becomes an empty argv, so a rule cannot pass over a hook it could
-// not read by pretending the arguments were absent.
+// argvList returns a hook's args as strings. Lists are recursively coerced
+// with JavaScript Array#toString semantics because supported JavaScript
+// harnesses pass that text to spawn. Maps remain opaque. Null, or args that
+// is not a list, is ErrHookArgs. Neither becomes an empty argv, so a rule
+// cannot pass over a hook it could not read by pretending the arguments were
+// absent.
 func argvList(v ref.Val) ([]string, error) {
 	list, ok := v.(traits.Lister)
 	if !ok {
@@ -460,27 +463,53 @@ func argvList(v ref.Val) ([]string, error) {
 	var out []string
 	i := 0
 	for it := list.Iterator(); it.HasNext() == types.True; i++ {
-		switch e := it.Next().(type) {
-		case types.String:
-			out = append(out, string(e))
-		case types.Bool:
-			out = append(out, strconv.FormatBool(bool(e)))
-		case types.Int:
-			out = append(out, strconv.FormatInt(int64(e), 10))
-		case types.Uint:
-			out = append(out, strconv.FormatUint(uint64(e), 10))
-		case types.Double:
-			out = append(out, strconv.FormatFloat(float64(e), 'f', -1, 64))
-		case traits.Lister, traits.Mapper:
-			out = append(out, opaqueArg)
-		default:
-			return nil, fmt.Errorf("%s: args element %d is %s: %w", hookArgvName, i, e.Type().TypeName(), ErrHookArgs)
+		s, kind := celArgValue(it.Next(), false)
+		if kind == argv.Invalid {
+			return nil, fmt.Errorf("%s: args element %d is unreadable: %w", hookArgvName, i, ErrHookArgs)
 		}
+		out = append(out, s)
 	}
 	return out, nil
 }
 
-const opaqueArg = "\x00tripcord-opaque-arg\x00"
+const opaqueArg = argv.Opaque
+
+func celArgValue(v ref.Val, insideList bool) (string, argv.Kind) {
+	switch value := v.(type) {
+	case types.Null:
+		if insideList {
+			return "", argv.CoercedList
+		}
+		return "", argv.Invalid
+	case types.String:
+		return string(value), argv.Scalar
+	case types.Bool:
+		return strconv.FormatBool(bool(value)), argv.Scalar
+	case types.Int:
+		return strconv.FormatInt(int64(value), 10), argv.Scalar
+	case types.Uint:
+		return strconv.FormatUint(uint64(value), 10), argv.Scalar
+	case types.Double:
+		return strconv.FormatFloat(float64(value), 'f', -1, 64), argv.Scalar
+	case traits.Mapper:
+		return opaqueArg, argv.OpaqueMap
+	case traits.Lister:
+		var parts []string
+		for it := value.Iterator(); it.HasNext() == types.True; {
+			s, kind := celArgValue(it.Next(), true)
+			if kind == argv.Invalid {
+				return "", argv.Invalid
+			}
+			if kind == argv.OpaqueMap {
+				return opaqueArg, argv.OpaqueMap
+			}
+			parts = append(parts, s)
+		}
+		return strings.Join(parts, ","), argv.CoercedList
+	default:
+		return "", argv.Invalid
+	}
+}
 
 func mapString(m traits.Mapper, key string) (string, bool) {
 	v, found := m.Find(types.String(key))
@@ -719,8 +748,9 @@ func ctxError(ctx context.Context) error {
 
 // mcp.packages(payload) lists the packages a known launcher would
 // install. mcp.vulns(payload) lists the embedded advisories those
-// packages match. Object and array argument elements are opaque. A
-// command array is argv only when the harness schema accepts one. Any
+// packages match. Map argument elements are opaque; list elements are
+// recursively coerced like JavaScript Array#toString. A command array is argv
+// only when the harness schema accepts one. Any
 // other argument that is not a string, number, or bool is ErrHookArgs.
 // With no advisory list, mcp.vulns is empty. The implementations are
 // supplied per evaluation so they see that harness.

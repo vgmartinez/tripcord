@@ -5,7 +5,6 @@
 package mcppkg
 
 import (
-	"encoding/json"
 	"errors"
 	"path"
 	"strconv"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/vgmartinez/tripcord/internal/advisory"
 	"github.com/vgmartinez/tripcord/internal/model"
+	"github.com/vgmartinez/tripcord/internal/rules/argv"
 	"github.com/vgmartinez/tripcord/internal/rules/shellcmd"
 )
 
@@ -20,8 +20,6 @@ import (
 // receive: null, or a value that is not a list. Callers wrap it so a scan
 // stays incomplete.
 var ErrArgs = errors.New("mcp args are not strings, numbers, or bools")
-
-const opaqueArg = "\x00tripcord-opaque-arg\x00"
 
 // AcceptsCommandArray reports whether harness executes an MCP command
 // array as argv. OpenCode's local server schema is the only one that
@@ -59,7 +57,7 @@ func ParsePayload(harness model.Harness, payload map[string]any) ([]advisory.Pac
 	if err != nil {
 		return nil, 0, err
 	}
-	var argv []string
+	var commandArgs []string
 	switch c := command.(type) {
 	case string:
 		if len(args) == 0 && strings.ContainsAny(c, " \t") {
@@ -67,31 +65,27 @@ func ParsePayload(harness model.Harness, payload map[string]any) ([]advisory.Pac
 			if !ok {
 				return nil, len(c) + 1, nil
 			}
-			argv = words
+			commandArgs = words
 		} else {
-			argv = append([]string{c}, args...)
+			commandArgs = append([]string{c}, args...)
 		}
 	case []any:
 		for _, el := range c {
-			if nonScalar(el) {
-				argv = append(argv, opaqueArg)
-				continue
-			}
-			s, ok := scalarString(el)
-			if !ok {
+			s, kind := argv.Value(el, false)
+			if kind == argv.Invalid {
 				return nil, 0, ErrArgs
 			}
-			argv = append(argv, s)
+			commandArgs = append(commandArgs, s)
 		}
-		argv = append(argv, args...)
+		commandArgs = append(commandArgs, args...)
 	default:
 		return nil, 0, ErrArgs
 	}
-	if len(argv) == 0 {
+	if len(commandArgs) == 0 {
 		return nil, 0, nil
 	}
-	refs, _ := Parse(argv)
-	return refs, workOf(argv), nil
+	refs, _ := Parse(commandArgs)
+	return refs, workOf(commandArgs), nil
 }
 
 func argStrings(v any) ([]string, error) {
@@ -104,12 +98,8 @@ func argStrings(v any) ([]string, error) {
 	}
 	out := make([]string, 0, len(list))
 	for i, el := range list {
-		if nonScalar(el) {
-			out = append(out, opaqueArg)
-			continue
-		}
-		s, ok := scalarString(el)
-		if !ok {
+		s, kind := argv.Value(el, false)
+		if kind == argv.Invalid {
 			return nil, fmtArg(i)
 		}
 		out = append(out, s)
@@ -117,36 +107,8 @@ func argStrings(v any) ([]string, error) {
 	return out, nil
 }
 
-func nonScalar(v any) bool {
-	switch v.(type) {
-	case map[string]any, []any:
-		return true
-	default:
-		return false
-	}
-}
-
 func fmtArg(i int) error {
 	return errors.Join(ErrArgs, errors.New("argument "+strconv.Itoa(i)))
-}
-
-func scalarString(v any) (string, bool) {
-	switch t := v.(type) {
-	case string:
-		return t, true
-	case bool:
-		return strconv.FormatBool(t), true
-	case float64:
-		return strconv.FormatFloat(t, 'f', -1, 64), true
-	case json.Number:
-		return t.String(), true
-	case int:
-		return strconv.Itoa(t), true
-	case int64:
-		return strconv.FormatInt(t, 10), true
-	default:
-		return "", false
-	}
 }
 
 func workOf(argv []string) int {
