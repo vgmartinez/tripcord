@@ -39,12 +39,15 @@ const (
 )
 
 // hookProject makes a project directory with policy as its
-// .tripcord/policy.yaml and runs the hook from it, the way each harness
+// .tripcord/policy.yaml at a Git root and runs the hook from it, the way each harness
 // does: Claude Code and Cursor set their project directory variable,
 // Copilot runs with the project as the working directory.
 func hookProject(t *testing.T, policyDoc string) string {
 	t.Helper()
 	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if policyDoc != "" {
 		if err := os.MkdirAll(filepath.Join(root, ".tripcord"), 0o755); err != nil {
 			t.Fatal(err)
@@ -284,24 +287,78 @@ func TestHookFlags(t *testing.T) {
 	}
 }
 
-// TestHookPolicyFromProjectDir: Claude Code and Cursor name the project
-// in their variable, so a hook run from a subdirectory still applies the
+// TestHookPolicyFromProjectDir: the policy is the one at the Git root at
+// or above the harness's project directory variable, or the working
+// directory without one, so a variable or working directory naming a
+// subdirectory, or a directory since removed, still applies the
 // project's policy.
 func TestHookPolicyFromProjectDir(t *testing.T) {
 	root := hookProject(t, hookTestPolicy)
-	sub := filepath.Join(root, "sub")
-	if err := os.Mkdir(sub, 0o755); err != nil {
+	sub := filepath.Join(root, "sub", "dir")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	t.Chdir(sub)
-	code, _, _ := runHookCLI(t, bytes.NewReader(adapterFixture(t, model.HarnessClaude, "pre-tool-use-bash-deny.json")), "--harness", "claude", "--event", hook.EventPreTool)
-	if code != int(exitcode.Block) {
-		t.Errorf("exit %d, want 2 from the project policy", code)
+	for _, tc := range []struct {
+		name       string
+		dir, wd    string
+		harness    model.Harness
+		event, fix string
+	}{
+		{"claude from a subdirectory", root, sub, model.HarnessClaude, hook.EventPreTool, "pre-tool-use-bash-deny.json"},
+		{"CLAUDE_PROJECT_DIR is a subdirectory", sub, root, model.HarnessClaude, hook.EventPreTool, "pre-tool-use-bash-deny.json"},
+		{"CLAUDE_PROJECT_DIR does not exist", filepath.Join(sub, "gone"), sub, model.HarnessClaude, hook.EventPreTool, "pre-tool-use-bash-deny.json"},
+		{"CURSOR_PROJECT_DIR is a subdirectory", sub, root, model.HarnessCursor, hook.EventBeforeShell, "before-shell-execution-deny.json"},
+		{"copilot from a subdirectory", root, sub, model.HarnessCopilot, hook.EventPreTool, "pre-tool-use-bash-deny.json"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("CLAUDE_PROJECT_DIR", tc.dir)
+			t.Setenv("CURSOR_PROJECT_DIR", tc.dir)
+			t.Chdir(tc.wd)
+			code, _, stderr := runHookCLI(t, bytes.NewReader(adapterFixture(t, tc.harness, tc.fix)), "--harness", string(tc.harness), "--event", tc.event)
+			if code != int(exitcode.Block) || !strings.Contains(stderr, "ACME-001") {
+				t.Errorf("exit %d stderr %q, want 2 from the project policy", code, stderr)
+			}
+		})
 	}
 	t.Setenv("CLAUDE_PROJECT_DIR", "relative")
 	code, _, stderr := runHookCLI(t, bytes.NewReader(adapterFixture(t, model.HarnessClaude, "pre-tool-use-bash-deny.json")), "--harness", "claude", "--event", hook.EventPreTool)
 	if code != int(exitcode.Config) || !strings.Contains(stderr, "not an absolute path") {
 		t.Errorf("relative CLAUDE_PROJECT_DIR: exit %d stderr %q", code, stderr)
+	}
+}
+
+// TestHookNoGitRepository: with no Git repository at or above the
+// project directory there is no policy to find, and the run fails
+// instead of allowing as if the project had none.
+func TestHookNoGitRepository(t *testing.T) {
+	dir := t.TempDir()
+	for _, tc := range []struct {
+		name    string
+		harness model.Harness
+		env     string
+		fixture string
+	}{
+		{"claude", model.HarnessClaude, "CLAUDE_PROJECT_DIR", "pre-tool-use-bash-allow.json"},
+		{"cursor", model.HarnessCursor, "CURSOR_PROJECT_DIR", "pre-tool-use-shell-allow.json"},
+		{"copilot", model.HarnessCopilot, "the working directory", "pre-tool-use-bash-allow.json"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("CLAUDE_PROJECT_DIR", dir)
+			t.Setenv("CURSOR_PROJECT_DIR", dir)
+			t.Chdir(dir)
+			if _, err := os.Stat("/.git"); err == nil {
+				t.Skip("/.git exists, so every directory is in a Git repository")
+			}
+			want := "no Git repository at or above " + dir + " (" + tc.env + ")"
+			code, stdout, stderr := runHookCLI(t, bytes.NewReader(adapterFixture(t, tc.harness, tc.fixture)), "--harness", string(tc.harness), "--event", hook.EventPreTool)
+			if code != int(exitcode.Config) || stdout != "" || !strings.Contains(stderr, want) {
+				t.Errorf("got exit %d stdout %q stderr %q, want exit 3 and %q", code, stdout, stderr, want)
+			}
+			code, _, stderr = runHookCLI(t, bytes.NewReader(adapterFixture(t, tc.harness, tc.fixture)), "--harness", string(tc.harness), "--event", hook.EventPreTool, "--on-failure", "block")
+			if code != int(exitcode.Block) || !strings.HasPrefix(stderr, "tripcord hook failed closed: ") || !strings.Contains(stderr, want) {
+				t.Errorf("--on-failure block: got exit %d stderr %q", code, stderr)
+			}
+		})
 	}
 }
 

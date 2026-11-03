@@ -176,16 +176,39 @@ func readHookStdin(r io.Reader) ([]byte, error) {
 	return data, nil
 }
 
+// hookProjectDir is the Git root at or above the harness's project
+// directory variable, or the working directory without one, whose
+// .tripcord/policy.yaml applies. The variable may name a subdirectory
+// of the repository, or a directory that no longer exists. With no Git
+// repository at or above it there is no project policy to apply, and
+// the run fails rather than allowing as if there were none.
 func hookProjectDir(ad hookAdapter) (string, error) {
+	start, from := "", "the working directory"
 	if ad.projectDirEnv != "" {
 		if dir := os.Getenv(ad.projectDirEnv); dir != "" {
 			if !filepath.IsAbs(dir) {
 				return "", hook.Inputf("%s %q is not an absolute path", ad.projectDirEnv, dir)
 			}
-			return dir, nil
+			start, from = dir, ad.projectDirEnv
 		}
 	}
-	return os.Getwd()
+	if start == "" {
+		wd, err := os.Getwd()
+		if err != nil {
+			return "", hook.Inputf("no project directory: %v", err)
+		}
+		start = wd
+	}
+	for dir := filepath.Clean(start); ; {
+		if _, err := os.Lstat(filepath.Join(dir, ".git")); err == nil {
+			return dir, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", hook.Inputf("no Git repository at or above %s (%s), so the project's .tripcord/policy.yaml cannot be found", start, from)
+		}
+		dir = parent
+	}
 }
 
 // loadHookPolicy loads the hook surface policy without compiling the
