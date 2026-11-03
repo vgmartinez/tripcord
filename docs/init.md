@@ -275,18 +275,30 @@ caught there as `repinned` or `changed`.
 
 ## Release gate
 
-`TestReleaseGateHookSubcommand` in `cmd/tripcord/init_test.go` runs only
-with `TRIPCORD_RELEASE_GATE=1`:
+Two tests run only with `TRIPCORD_RELEASE_GATE=1`:
 
 ```sh
 make release-gate
 ```
 
-It runs `tripcord` with the arguments each harness's wiring passes
-through `bootstrap.sh`, and fails, without skipping, if this build
-answers with an unknown command. Without the
-variable it logs that the gate was not requested and passes, so pull
-request CI stays green. There is no release workflow in this
+`TestReleaseGateHookSubcommand` (`cmd/tripcord/init_test.go`) runs
+`tripcord` with the arguments each harness's wiring passes through
+`bootstrap.sh`, and fails, without skipping, if this build answers with
+an unknown command.
+
+`TestReleaseGatePinnedActionHasEmbedCheck`
+(`cmd/tripcord/release_gate_test.go`) follows both pins to the
+composite action: the reusable workflow commit the generated
+`tripcord.yml` calls, and the action commit this tree's
+`tripcord-pr.yml` and `tripcord-pr-comment.yml` call. It fails unless
+the action at each pin has the `base` input and builds a Tripcord with
+the embed check (`internal/embedded`). Today both lead to
+`main@141db48`, which has neither; the re-pin after this change merges
+fixes it. It reads the pinned commits with `git show`, so the clone
+must have them (`fetch-depth: 0`).
+
+Without the variable both log that the gate was not requested and pass,
+so pull request CI stays green. There is no release workflow in this
 repository; run the target before tagging a release.
 `TestInitWiringInvokesTripcordHook` always runs and asserts the exact
 command each wiring file holds, `bash <project dir>/.tripcord/bootstrap.sh

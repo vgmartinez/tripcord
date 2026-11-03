@@ -20,9 +20,10 @@ fmt:
 	gofmt -s -w .
 
 # release-gate fails while a feature a release depends on is missing.
-# Today: init --embed wires `tripcord hook`, which this build lacks.
+# Today: init --embed wires `tripcord hook`, which this build lacks, and
+# the pinned action predates the embed check and its base input.
 release-gate:
-	TRIPCORD_RELEASE_GATE=1 go test ./cmd/tripcord -run '^TestReleaseGateHookSubcommand$$' -count=1 -v
+	TRIPCORD_RELEASE_GATE=1 go test ./cmd/tripcord -run '^TestReleaseGate' -count=1 -v
 
 # test-rule runs one rule's positivos/ and negativos/ fixtures.
 #   make test-rule ID=TC-CFG-001
