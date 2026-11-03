@@ -763,9 +763,9 @@ jobs:
 
   # init --embed writes a workflow and a shell script into other
   # repositories. Both must pass the linters this repository holds
-  # itself to. init --embed writes only at a repository root, so the
-  # output is generated in a fresh repository outside the checkout and
-  # copied in without its .git.
+  # itself to. init --embed writes only at a repository root (one with
+  # a .git), so the output is generated outside the checkout in a
+  # directory with an empty .git and copied in without it.
   embed-lint:
     name: init --embed output lint
     runs-on: ubuntu-latest
@@ -789,7 +789,7 @@ jobs:
         run: |
           set -euo pipefail
           out="${RUNNER_TEMP}/embed-out"
-          git init -q "$out"
+          mkdir -p "$out/.git"
           sum=0000000000000000000000000000000000000000000000000000000000000000
           go run ./cmd/tripcord init --embed --version 0.1.0 \
             --sha256 "darwin-arm64=${sum}" --sha256 "darwin-x64=${sum}" \
