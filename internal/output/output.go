@@ -90,10 +90,11 @@ type RuleText struct {
 // sanitizes the text again. Paths stay in their logical form, including
 // "~/" for user scope.
 type Diagnostic struct {
-	Harness string
-	Scope   string
-	Path    string
-	Message string
+	Harness       string
+	Scope         string
+	Path          string
+	Message       string
+	Informational bool
 }
 
 // Text is the single display line for a diagnostic.
@@ -365,10 +366,11 @@ func (s *sink) SetDiagnostics(diags []Diagnostic) error {
 	s.diags = make([]Diagnostic, len(diags))
 	for i, d := range diags {
 		s.diags[i] = Diagnostic{
-			Harness: s.options.Redactor(d.Harness),
-			Scope:   s.options.Redactor(d.Scope),
-			Path:    s.options.Redactor(d.Path),
-			Message: s.options.Redactor(d.Message),
+			Harness:       s.options.Redactor(d.Harness),
+			Scope:         s.options.Redactor(d.Scope),
+			Path:          s.options.Redactor(d.Path),
+			Message:       s.options.Redactor(d.Message),
+			Informational: d.Informational,
 		}
 	}
 	return nil

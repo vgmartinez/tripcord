@@ -134,13 +134,15 @@ fields (`command`, `exec`, `bash`, `powershell`, `commandWindows`,
 `command_windows`, `windows`, `linux`, `osx`), skipping missing and
 non-string ones. `hook.argv(payload)` returns `[exec or command] +
 args`, with number and bool args as their text, and `[]` when there are
-no `args`. An object or array argument makes that entry opaque: the
-rule does not match it and the scan does not become incomplete. When
-`args` is not a list, or holds null, it is an evaluation error ("hook
-args are not strings, numbers, or bools"), not an empty argv, so the
-scan reports that rule and file as incomplete and exits 3 instead of
-passing over the hook. Use them instead of restating the field list in
-every clause: a long expression is parsed again on every scan.
+no `args`. An object or array element is an opaque argument marker: it
+never matches a command value, but scalar siblings and the command
+still evaluate. Each opaque value emits a warning with its JSON pointer
+without making the scan incomplete. When `args` is not a list, or holds
+null, it is an evaluation error ("hook args are not strings, numbers,
+or bools"), not an empty argv, so the scan reports that rule and file
+as incomplete and exits 3 instead of passing over the hook. Use them
+instead of restating the field list in every clause: a long expression
+is parsed again on every scan.
 
 Reading a field that is missing makes the whole expression false, not
 an error. That fails open for negations and deny rules:

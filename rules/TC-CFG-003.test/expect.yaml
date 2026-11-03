@@ -1,3 +1,4 @@
-# An object or array argument is opaque: these fixtures must not match and
-# must not fail evaluation. Null and other unreadable arguments still do.
-negativos: {}
+# An object or array argument is opaque, but node -e remains an inline
+# interpreter launch and must still match.
+positivos:
+  claude-node-object-arg: high

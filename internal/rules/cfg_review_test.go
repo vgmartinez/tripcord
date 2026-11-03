@@ -367,7 +367,11 @@ func TestCFG003Shapes(t *testing.T) {
 	}
 	for _, payload := range match {
 		t.Run("match/"+mustJSON(t, payload), func(t *testing.T) {
-			res := scanOne(t, engine, item(model.HarnessClaude, ".mcp.json", model.ConfigKindMCPServer, mustJSON(t, payload)))
+			harness := model.HarnessClaude
+			if _, ok := payload["command"].([]any); ok {
+				harness = model.HarnessOpenCode
+			}
+			res := scanOne(t, engine, item(harness, ".mcp.json", model.ConfigKindMCPServer, mustJSON(t, payload)))
 			if len(res.Matches) != 1 || res.Matches[0].Severity != model.SeverityHigh {
 				t.Fatalf("matches = %d, want one high", len(res.Matches))
 			}
@@ -375,7 +379,11 @@ func TestCFG003Shapes(t *testing.T) {
 	}
 	for _, payload := range skip {
 		t.Run("skip/"+mustJSON(t, payload), func(t *testing.T) {
-			res := scanOne(t, engine, item(model.HarnessClaude, ".mcp.json", model.ConfigKindMCPServer, mustJSON(t, payload)))
+			harness := model.HarnessClaude
+			if _, ok := payload["command"].([]any); ok {
+				harness = model.HarnessOpenCode
+			}
+			res := scanOne(t, engine, item(harness, ".mcp.json", model.ConfigKindMCPServer, mustJSON(t, payload)))
 			if len(res.Matches) != 0 {
 				t.Fatalf("matched %s", mustJSON(t, payload))
 			}

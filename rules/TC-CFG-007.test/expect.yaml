@@ -1,8 +1,8 @@
 # The severities each positive fixture must produce (see
 # internal/rules/fixtures.go, ExpectFile). A negative listed here must
-# fail to evaluate instead of matching. skill-hook-object-arg is not
-# listed: an object argument is opaque, so that fixture has no match.
+# fail to evaluate instead of matching.
 positivos:
+  skill-hook-object-arg: medium
   claude-plugin-skill: medium
   claude-skill-curl-pipe: high
   claude-skill-encoded-powershell: high

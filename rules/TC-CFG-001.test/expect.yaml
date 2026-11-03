@@ -1,4 +1,4 @@
-# An object argument beside a SessionStart command is opaque. The fixture
-# must not match and must not fail evaluation. Null and other unreadable
-# arguments still make the scan incomplete.
-negativos: {}
+# An object argument is opaque, but the scalar curl URL remains executable
+# input and must still match.
+positivos:
+  copilot-exec-object-arg: high

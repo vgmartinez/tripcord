@@ -16,14 +16,11 @@ import (
 )
 
 // ErrArgs is returned when command or args is not text a program would
-// receive, other than an object or array: null, or a value that is not
-// a list. Callers wrap it so a scan stays incomplete.
+// receive: null, or a value that is not a list. Callers wrap it so a scan
+// stays incomplete.
 var ErrArgs = errors.New("mcp args are not strings, numbers, or bools")
 
-// ErrOpaque is returned when command or args contains an object or
-// array. The server entry is not launched from that value. Callers
-// treat the entry as no match rather than an incomplete scan.
-var ErrOpaque = errors.New("mcp args contain an object or array")
+const opaqueArg = "\x00tripcord-opaque-arg\x00"
 
 // ParsePayload reads payload.command and payload.args. work is the
 // number of argument bytes, charged as CEL cost. A command string with
@@ -54,21 +51,19 @@ func ParsePayload(payload map[string]any) ([]advisory.PackageRef, int, error) {
 			argv = append([]string{c}, args...)
 		}
 	case []any:
-		for i, el := range c {
+		for _, el := range c {
 			if nonScalar(el) {
-				return nil, 0, fmtOpaque(i)
+				argv = append(argv, opaqueArg)
+				continue
 			}
 			s, ok := scalarString(el)
 			if !ok {
-				return nil, 0, fmtArg(i)
+				return nil, 0, ErrArgs
 			}
 			argv = append(argv, s)
 		}
 		argv = append(argv, args...)
 	default:
-		if nonScalar(command) {
-			return nil, 0, ErrOpaque
-		}
 		return nil, 0, ErrArgs
 	}
 	if len(argv) == 0 {
@@ -82,9 +77,6 @@ func argStrings(v any) ([]string, error) {
 	if v == nil {
 		return nil, nil
 	}
-	if _, ok := v.(map[string]any); ok {
-		return nil, ErrOpaque
-	}
 	list, ok := v.([]any)
 	if !ok {
 		return nil, ErrArgs
@@ -92,7 +84,8 @@ func argStrings(v any) ([]string, error) {
 	out := make([]string, 0, len(list))
 	for i, el := range list {
 		if nonScalar(el) {
-			return nil, fmtOpaque(i)
+			out = append(out, opaqueArg)
+			continue
 		}
 		s, ok := scalarString(el)
 		if !ok {
@@ -114,10 +107,6 @@ func nonScalar(v any) bool {
 
 func fmtArg(i int) error {
 	return errors.Join(ErrArgs, errors.New("argument "+strconv.Itoa(i)))
-}
-
-func fmtOpaque(i int) error {
-	return errors.Join(ErrOpaque, errors.New("argument "+strconv.Itoa(i)))
 }
 
 func scalarString(v any) (string, bool) {

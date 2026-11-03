@@ -55,6 +55,7 @@ func (d findingDocument) MarshalJSON() ([]byte, error) {
 type diagnosticDocument struct {
 	Schema     string `json:"schema"`
 	Incomplete bool   `json:"incomplete"`
+	Level      string `json:"level"`
 	Harness    string `json:"harness"`
 	Scope      string `json:"scope,omitempty"`
 	Path       string `json:"path,omitempty"`
@@ -75,7 +76,8 @@ func renderJSONL(writer io.Writer, findings []model.Finding, diags []Diagnostic,
 	for _, d := range diags {
 		doc := diagnosticDocument{
 			Schema:     diagnosticSchema,
-			Incomplete: true,
+			Incomplete: !d.Informational,
+			Level:      diagnosticLevel(d),
 			Harness:    truncateSanitized(d.Harness, MaxFieldBytes),
 			Scope:      truncateSanitized(d.Scope, MaxFieldBytes),
 			Path:       truncateSanitized(d.Path, MaxFieldBytes),
@@ -163,9 +165,13 @@ func publishedFinding(finding model.Finding, root string) model.Finding {
 func renderText(writer io.Writer, findings []model.Finding, diags []Diagnostic, options Options) error {
 	var b strings.Builder
 	for _, d := range diags {
-		b.WriteString("diagnostic: " + present(d.Text()) + "\n")
+		prefix := "diagnostic: "
+		if d.Informational {
+			prefix = "warning: "
+		}
+		b.WriteString(prefix + present(d.Text()) + "\n")
 	}
-	if len(diags) > 0 {
+	if hasBlockingDiagnostic(diags) {
 		b.WriteString("scan incomplete\n")
 	}
 	for _, finding := range findings {
@@ -188,7 +194,7 @@ func renderText(writer io.Writer, findings []model.Finding, diags []Diagnostic, 
 		b.WriteString("\n")
 	}
 	summary := Summarize(findings)
-	fmt.Fprintf(&b, "%d finding(s): %d critical, %d high, %d medium, %d low\n", summary.Findings, summary.Critical, summary.High, summary.Medium, summary.Low)
+	fmt.Fprintf(&b, "%d finding(s): %d critical, %d high, %d medium, %d low; %d warning(s)\n", summary.Findings, summary.Critical, summary.High, summary.Medium, summary.Low, informationalDiagnostics(diags))
 	_, err := io.WriteString(writer, b.String())
 	return err
 }
@@ -196,7 +202,11 @@ func renderText(writer io.Writer, findings []model.Finding, diags []Diagnostic, 
 func renderGHA(writer io.Writer, findings []model.Finding, diags []Diagnostic, options Options) error {
 	var b strings.Builder
 	for _, d := range diags {
-		fmt.Fprintf(&b, "::error::%s\n", ghaData(d.Text()))
+		level := "error"
+		if d.Informational {
+			level = "warning"
+		}
+		fmt.Fprintf(&b, "::%s::%s\n", level, ghaData(d.Text()))
 	}
 	for _, finding := range findings {
 		command, err := ghaCommand(finding.Severity)
@@ -223,6 +233,32 @@ func renderGHA(writer io.Writer, findings []model.Finding, diags []Diagnostic, o
 	}
 	_, err := io.WriteString(writer, b.String())
 	return err
+}
+
+func diagnosticLevel(d Diagnostic) string {
+	if d.Informational {
+		return "warning"
+	}
+	return "error"
+}
+
+func hasBlockingDiagnostic(diags []Diagnostic) bool {
+	for _, d := range diags {
+		if !d.Informational {
+			return true
+		}
+	}
+	return false
+}
+
+func informationalDiagnostics(diags []Diagnostic) int {
+	count := 0
+	for _, d := range diags {
+		if d.Informational {
+			count++
+		}
+	}
+	return count
 }
 
 func ghaCommand(severity model.Severity) (string, error) {

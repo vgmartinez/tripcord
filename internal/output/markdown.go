@@ -25,7 +25,11 @@ func renderMarkdown(writer io.Writer, findings []model.Finding, diags []Diagnost
 	var head strings.Builder
 	fmt.Fprintf(&head, "## Tripcord findings\n\nTotal: %d. Critical: %d, high: %d, medium: %d, low: %d.\n", summary.Findings, summary.Critical, summary.High, summary.Medium, summary.Low)
 	if len(diags) > 0 {
-		head.WriteString("\n## Diagnostics\n\nThe scan is incomplete.\n\n")
+		if hasBlockingDiagnostic(diags) {
+			head.WriteString("\n## Diagnostics\n\nThe scan is incomplete.\n\n")
+		} else {
+			fmt.Fprintf(&head, "\n## Warnings\n\n%d warning(s); the scan completed.\n\n", informationalDiagnostics(diags))
+		}
 		for _, d := range diags {
 			fmt.Fprintf(&head, "- %s\n", inlineCode(d.Text()))
 		}

@@ -84,15 +84,15 @@ func TestUnparsedAndOpaque(t *testing.T) {
 		t.Fatalf("command string: %+v work %d %v", got, work, err)
 	}
 	_, _, err = ParsePayload(map[string]any{"command": "npx", "args": []any{"-y", map[string]any{"pkg": "x"}}})
-	if !errors.Is(err, ErrOpaque) {
+	if err != nil {
 		t.Fatalf("object arg err = %v", err)
 	}
 	_, _, err = ParsePayload(map[string]any{"command": "npx", "args": []any{"-y", []any{"pkg"}}})
-	if !errors.Is(err, ErrOpaque) {
+	if err != nil {
 		t.Fatalf("array arg err = %v", err)
 	}
 	_, _, err = ParsePayload(map[string]any{"command": "npx", "args": []any{"-y", nil}})
-	if !errors.Is(err, ErrArgs) || errors.Is(err, ErrOpaque) {
+	if !errors.Is(err, ErrArgs) {
 		t.Fatalf("null arg err = %v", err)
 	}
 }

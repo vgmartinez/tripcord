@@ -67,6 +67,61 @@ func TestDiagnosticsAreReportedAndRedacted(t *testing.T) {
 	}
 }
 
+func TestInformationalDiagnosticsAreWarnings(t *testing.T) {
+	t.Parallel()
+	diag := Diagnostic{
+		Harness:       "claude",
+		Scope:         "repo",
+		Path:          ".mcp.json",
+		Message:       "opaque command value ignored at JSON pointer /args/2",
+		Informational: true,
+	}
+	for _, format := range []Format{FormatJSON, FormatMD, FormatSARIF, FormatText, FormatGHA} {
+		t.Run(string(format), func(t *testing.T) {
+			t.Parallel()
+			var buf bytes.Buffer
+			sink, err := NewStdoutSink(format, &buf, Options{Redactor: DefaultRedactor})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := SetDiagnostics(sink, []Diagnostic{diag}); err != nil {
+				t.Fatal(err)
+			}
+			if err := sink.Flush(); err != nil {
+				t.Fatal(err)
+			}
+			got := buf.String()
+			if !strings.Contains(got, "/args/2") || strings.Contains(got, "scan incomplete") {
+				t.Fatalf("%s = %s", format, got)
+			}
+			switch format {
+			case FormatJSON:
+				if !strings.Contains(got, `"incomplete":false`) || !strings.Contains(got, `"level":"warning"`) {
+					t.Fatalf("json = %s", got)
+				}
+			case FormatMD:
+				if !strings.Contains(got, "## Warnings") || !strings.Contains(got, "1 warning(s)") {
+					t.Fatalf("markdown = %s", got)
+				}
+			case FormatSARIF:
+				if !strings.Contains(got, `"executionSuccessful": true`) || !strings.Contains(got, `"level": "note"`) {
+					t.Fatalf("sarif = %s", got)
+				}
+			case FormatText:
+				if !strings.Contains(got, "warning: ") || !strings.Contains(got, "1 warning(s)") {
+					t.Fatalf("text = %s", got)
+				}
+			case FormatGHA:
+				if !strings.Contains(got, "::warning::") {
+					t.Fatalf("gha = %s", got)
+				}
+			default:
+				t.Fatalf("unhandled format %s", format)
+			}
+		})
+	}
+}
+
 func TestConfigKeyDoesNotLeakAcrossFormats(t *testing.T) {
 	t.Parallel()
 	finding := findings()[0]

@@ -443,28 +443,28 @@ func TestHookCommands(t *testing.T) {
 	}
 }
 
-// TestHookArgsUnreadable checks that hook.argv does not become an empty
-// argv, and does not quote the args, when it cannot read them. An object
-// or array is opaque. Null, or args that is not a list, stays fatal.
+// TestHookArgsUnreadable checks that hook.argv preserves its scalar
+// arguments and substitutes an opaque marker for an object or array. Null,
+// or args that is not a list, stays fatal.
 func TestHookArgsUnreadable(t *testing.T) {
 	env := testEnv(t)
 	for _, payload := range []string{
-		`{"exec":"bash","args":{"argvsecret":1}}`,
 		`{"exec":"bash","args":["argvsecret.sh",{"a":1}]}`,
 		`{"exec":"bash","args":["argvsecret.sh",["b"]]}`,
 	} {
-		_, err := compileT(t, env, `hook.args(payload).size() == 0`).Eval(context.Background(), taskInput(t, env.Limits(), payload))
-		if !errors.Is(err, ErrOpaqueArgs) || errors.Is(err, ErrHookArgs) || !strings.Contains(err.Error(), "hook.argv: args") || strings.Contains(err.Error(), "argvsecret") {
-			t.Errorf("%s: err = %v", payload, err)
+		got, err := compileT(t, env, `hook.args(payload).exists(a, a == "argvsecret.sh")`).Eval(context.Background(), taskInput(t, env.Limits(), payload))
+		if err != nil || got != strings.Contains(payload, "argvsecret.sh") {
+			t.Errorf("%s: got %v, err = %v", payload, got, err)
 		}
 	}
 	for _, payload := range []string{
 		`{"exec":"bash","args":"argvsecret.sh"}`,
+		`{"exec":"bash","args":{"argvsecret":1}}`,
 		`{"exec":"bash","args":null}`,
 		`{"exec":"bash","args":["argvsecret.sh",null]}`,
 	} {
 		_, err := compileT(t, env, `hook.args(payload).size() == 0`).Eval(context.Background(), taskInput(t, env.Limits(), payload))
-		if !errors.Is(err, ErrHookArgs) || errors.Is(err, ErrOpaqueArgs) || !strings.Contains(err.Error(), "hook.argv: args") || strings.Contains(err.Error(), "argvsecret") {
+		if !errors.Is(err, ErrHookArgs) || !strings.Contains(err.Error(), "hook.argv: args") || strings.Contains(err.Error(), "argvsecret") {
 			t.Errorf("%s: err = %v", payload, err)
 		}
 	}
@@ -618,7 +618,7 @@ func TestMCPVulnsCostAndArgs(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = compileT(t, env, `mcp.vulns(payload).size() >= 0`).Eval(context.Background(), in)
-	if !errors.Is(err, ErrOpaqueArgs) || errors.Is(err, ErrHookArgs) {
-		t.Fatalf("args err = %v", err)
+	if err != nil {
+		t.Fatalf("object arg err = %v", err)
 	}
 }

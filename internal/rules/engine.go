@@ -186,6 +186,16 @@ func (e EvalError) Error() string {
 type Result struct {
 	Matches []Match
 	Errors  []EvalError
+	Notices []EvalNotice
+}
+
+// EvalNotice reports an opaque config value that was excluded from a rule
+// evaluation without making the scan incomplete.
+type EvalNotice struct {
+	Harness model.Harness
+	Scope   model.Scope
+	Path    string
+	Pointer string
 }
 
 // ScanConfig evaluates every applicable rule against every item, in
@@ -200,6 +210,23 @@ func (e *Engine) ScanConfig(ctx context.Context, items []model.ConfigItem) Resul
 	var res Result
 	for _, item := range items {
 		var in *Input
+		commandOpaque := opaqueCommand(item)
+		if commandOpaque {
+			res.Notices = append(res.Notices, EvalNotice{
+				Harness: item.Harness,
+				Scope:   item.Scope,
+				Path:    item.Path,
+				Pointer: "/command",
+			})
+		}
+		for _, pointer := range opaqueArgPointers(item) {
+			res.Notices = append(res.Notices, EvalNotice{
+				Harness: item.Harness,
+				Scope:   item.Scope,
+				Path:    item.Path,
+				Pointer: pointer,
+			})
+		}
 		for _, r := range e.rules {
 			if !r.Applies(item) || (e.filter != nil && !e.filter(r, item)) {
 				continue
@@ -213,6 +240,9 @@ func (e *Engine) ScanConfig(ctx context.Context, items []model.ConfigItem) Resul
 				in, err = ConfigInput(item, e.env.Limits())
 				if err != nil {
 					res.Errors = append(res.Errors, evalError("", item, err))
+					break
+				}
+				if commandOpaque {
 					break
 				}
 			}
@@ -248,9 +278,6 @@ func advisoryHits(in *Input, db *advisory.DB) ([]advisory.Hit, error) {
 	raw, _ := in.vars[VarPayload].(map[string]any)
 	refs, _, err := mcppkg.ParsePayload(raw)
 	if err != nil {
-		if errors.Is(err, mcppkg.ErrOpaque) {
-			return nil, fmt.Errorf("mcp: %w", ErrOpaqueArgs)
-		}
 		return nil, fmt.Errorf("mcp: %w", ErrHookArgs)
 	}
 	if db == nil {
@@ -274,15 +301,71 @@ func evalError(rule string, item model.ConfigItem, err error) EvalError {
 	return EvalError{Rule: rule, Harness: item.Harness, Scope: item.Scope, Path: item.Path, Err: err}
 }
 
-// stopForEval reports whether evaluation of this rule should stop for
-// item. An object or array argument is not a match and is not recorded.
-// Every other error is recorded and still stops the rule.
+// stopForEval reports whether evaluation of this rule should stop for item.
+// Every evaluation error is recorded and stops the rule.
 func stopForEval(res *Result, rule string, item model.ConfigItem, err error) bool {
 	if err == nil {
 		return false
 	}
-	if !errors.Is(err, ErrOpaqueArgs) {
-		res.Errors = append(res.Errors, evalError(rule, item, err))
-	}
+	res.Errors = append(res.Errors, evalError(rule, item, err))
 	return true
+}
+
+// opaqueCommand reports a command value the selected agent cannot execute.
+// OpenCode is the only supported schema that accepts command as an argv array.
+func opaqueCommand(item model.ConfigItem) bool {
+	if item.Kind != model.ConfigKindMCPServer {
+		return false
+	}
+	var payload map[string]any
+	if json.Unmarshal(item.Payload, &payload) != nil {
+		return false
+	}
+	command, found := payload["command"]
+	if !found || command == nil {
+		return false
+	}
+	switch command.(type) {
+	case string:
+		return false
+	case []any:
+		return item.Harness != model.HarnessOpenCode
+	default:
+		return true
+	}
+}
+
+// opaqueArgPointers reports object and array argument elements. Their scalar
+// siblings still participate in rule evaluation; the pointers make that
+// intentional loss visible in every report format.
+func opaqueArgPointers(item model.ConfigItem) []string {
+	var payload map[string]any
+	if json.Unmarshal(item.Payload, &payload) != nil {
+		return nil
+	}
+	var pointers []string
+	if args, ok := payload["args"].([]any); ok {
+		for i, value := range args {
+			if isOpaqueValue(value) {
+				pointers = append(pointers, fmt.Sprintf("/args/%d", i))
+			}
+		}
+	}
+	if command, ok := payload["command"].([]any); ok && item.Harness == model.HarnessOpenCode {
+		for i, value := range command {
+			if isOpaqueValue(value) {
+				pointers = append(pointers, fmt.Sprintf("/command/%d", i))
+			}
+		}
+	}
+	return pointers
+}
+
+func isOpaqueValue(value any) bool {
+	switch value.(type) {
+	case map[string]any, []any:
+		return true
+	default:
+		return false
+	}
 }
