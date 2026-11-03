@@ -261,6 +261,30 @@ jobs:
           annotations: true
           inputs: .github/workflows .github/actions
 
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read # checkout the workflows being linted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # v1.7.12. The tarball is pinned by its release checksum.
+      - name: actionlint
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="${RUNNER_TEMP}/actionlint.tar.gz"
+          curl -fsSL -o "$archive" https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  ${archive}" | sha256sum -c -
+          tar -xzf "$archive" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" -version
+          "$RUNNER_TEMP/actionlint"
+
   dco:
     name: DCO
     runs-on: ubuntu-latest
@@ -325,7 +349,6 @@ jobs:
     permissions:
       contents: read # checkout the repository being scanned
       pull-requests: read # read pull request reviews
-      security-events: write # upload the SARIF report
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -367,6 +390,7 @@ jobs:
         with:
           path: testdata/ci-caller
           reviews-file: ${{ steps.reviews.outputs.reviews-file }}
+          upload-sarif: "false"
 
       - name: Assert remote scan
         shell: bash

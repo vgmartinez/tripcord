@@ -298,9 +298,8 @@ func TestCICallerUsesPinnedRemoteAction(t *testing.T) {
 		t.Fatalf("caller if = %q, want pull_request", scalar(job["if"]))
 	}
 	wantPerms := map[string]string{
-		"contents":        "read",
-		"pull-requests":   "read",
-		"security-events": "write",
+		"contents":      "read",
+		"pull-requests": "read",
 	}
 	if got := permMap(t, job["permissions"]); !samePerms(got, wantPerms) {
 		t.Fatalf("caller permissions = %v, want %v", got, wantPerms)
@@ -336,6 +335,9 @@ func TestCICallerUsesPinnedRemoteAction(t *testing.T) {
 	if scalar(with["reviews-file"]) != "${{ steps.reviews.outputs.reviews-file }}" {
 		t.Fatalf("reviews-file = %q", scalar(with["reviews-file"]))
 	}
+	if scalar(with["upload-sarif"]) != "false" {
+		t.Fatalf("upload-sarif = %q, want false", scalar(with["upload-sarif"]))
+	}
 	run := scalar(assertStep["run"])
 	for _, want := range []string{
 		"outcome is not failure",
@@ -348,6 +350,46 @@ func TestCICallerUsesPinnedRemoteAction(t *testing.T) {
 		if !strings.Contains(run, want) {
 			t.Errorf("assertion missing %s", want)
 		}
+	}
+}
+
+func TestActionlintJobIsChecksumPinned(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", ".github", "workflows", "ci.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var root yaml.Node
+	if err := yaml.Unmarshal(data, &root); err != nil {
+		t.Fatal(err)
+	}
+	job := mapping(t, mapping(t, mapping(t, &root)["jobs"])["actionlint"])
+	if got := permMap(t, job["permissions"]); !samePerms(got, map[string]string{"contents": "read"}) {
+		t.Fatalf("actionlint permissions = %v, want contents: read", got)
+	}
+	steps := seq(t, job["steps"])
+	if len(steps) != 2 {
+		t.Fatalf("actionlint has %d steps, want checkout and the linter", len(steps))
+	}
+	checkout := mapping(t, steps[0])
+	if scalar(checkout["uses"]) != workflowCheckout {
+		t.Fatalf("checkout uses %q", scalar(checkout["uses"]))
+	}
+	if scalar(mapping(t, checkout["with"])["persist-credentials"]) != "false" {
+		t.Fatal("actionlint checkout persists credentials")
+	}
+	run := scalar(mapping(t, steps[1])["run"])
+	for _, want := range []string{
+		"https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz",
+		"8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8",
+		"sha256sum -c -",
+		"actionlint",
+	} {
+		if !strings.Contains(run, want) {
+			t.Errorf("actionlint step missing %s", want)
+		}
+	}
+	if strings.Contains(run, "${{") {
+		t.Fatal("actionlint step interpolates an expression into run")
 	}
 }
 
