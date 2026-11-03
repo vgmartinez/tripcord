@@ -25,9 +25,15 @@ const embedCheckMinimum = "8b33b1b5a69c686b611b43a475da9658fe44614d"
 
 // usesPin matches a uses ref of this repository's composite action or of
 // a reusable workflow, plus an optional "# main@<prefix>" comment. The
-// ref is whatever follows @, so the caller can tell a commit pin from a
-// branch or tag (@main, @v1) before applying the 40-character rule.
+// ref is whatever follows @. A branch or tag (@main, @v1, @v1.2.3,
+// @release) is still a pin and fails the 40-character check.
 var usesPin = regexp.MustCompile(regexp.QuoteMeta(project.Repository) + `/\.github/(?:actions/tripcord|workflows/tripcord-pr(?:-comment)?\.yml)@([^\s#]+)(?:\s+#\s*main@([0-9a-fA-F]+))?`)
+
+// runningInCI is the CI environment of the process that started the
+// test binary. Package initialization reads it before TestMain sets
+// CI=true and unsets GITHUB_ACTIONS, so a later os.Getenv("CI") is not
+// the environment the developer launched.
+var runningInCI = os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != ""
 
 type repoPin struct {
 	where, pin, comment string
@@ -39,10 +45,12 @@ type repoPin struct {
 // reusable workflow to anything other than a full 40-character sha that
 // is on main and whose tree contains the embed check. Every uses line
 // also needs a "# main@<short>" comment that is a prefix of that sha.
-// A branch or tag ref (@main, @v1) is not a commit pin. The sha-length
-// check always runs. Outside CI, a clone that does not have the history
-// skips the git checks. When CI or GITHUB_ACTIONS is set, a shallow
-// clone and a directory that is not a git checkout fail those checks.
+// A branch or tag ref (@main, @v1, @v1.2.3, @release) fails that
+// sha-length check. The sha-length check always runs. Outside CI, a
+// clone that does not have the history skips the git checks. When the
+// process was started with CI or GITHUB_ACTIONS set, a shallow clone
+// and a directory that is not a git checkout fail those checks.
+// runningInCI records that environment before TestMain overwrites it.
 // TestVetAndTestFetchesFullHistory keeps the vet and test job at
 // fetch-depth 0 so that checkout has the objects.
 func TestPinsHaveEmbedCheck(t *testing.T) {
@@ -95,30 +103,32 @@ func TestPinsHaveEmbedCheck(t *testing.T) {
 	}
 }
 
-// TestUsesPinIgnoresBranchAndTag checks that a docs or README ref of
-// @v1 or @main is not a commit pin, while a hexadecimal ref still has
-// to be a 40-character sha with a # main@ comment.
-func TestUsesPinIgnoresBranchAndTag(t *testing.T) {
+// TestUsesPinRejectsBranchAndTag checks that a docs or README ref of
+// @main, @v1, @v1.2.3, or @release fails the 40-character pin check,
+// and that a hexadecimal ref still has to be a full sha with a
+// # main@ comment.
+func TestUsesPinRejectsBranchAndTag(t *testing.T) {
 	repo := project.Repository
 	text := strings.Join([]string{
 		"uses: " + repo + "/.github/actions/tripcord@v1",
 		"uses: " + repo + "/.github/workflows/tripcord-pr.yml@main",
 		"uses: " + repo + "/.github/workflows/tripcord-pr-comment.yml@v1.2.3",
+		"uses: " + repo + "/.github/actions/tripcord@release",
 		"ref: main",
 		"uses: " + repo + "/.github/actions/tripcord@8b33b1b # main@8b33b1b",
 		"uses: " + repo + "/.github/actions/tripcord@" + embedCheckMinimum,
 		"uses: " + repo + "/.github/actions/tripcord@" + embedCheckMinimum + " # main@8b33b1b",
 	}, "\n")
 	pins := pinsIn(t, "sample", text)
-	if len(pins) != 3 {
-		t.Fatalf("pins = %+v, want the short sha, the bare sha, and the commented sha", pins)
+	if len(pins) != 7 {
+		t.Fatalf("pins = %+v, want the four refs, the short sha, the bare sha, and the commented sha", pins)
 	}
-	for _, p := range pins[:2] {
+	for _, p := range pins[:6] {
 		if err := pinFormatError(p); err == nil {
 			t.Errorf("%s pin %q with comment %q passed the format check", p.where, p.pin, p.comment)
 		}
 	}
-	if err := pinFormatError(pins[2]); err != nil {
+	if err := pinFormatError(pins[6]); err != nil {
 		t.Error(err)
 	}
 }
@@ -172,9 +182,11 @@ func TestVetAndTestFetchesFullHistory(t *testing.T) {
 
 // TestPinHistoryFailsShallowAndNonGitInCI checks that a shallow clone
 // and a directory that is not a git checkout fail the git half of
-// TestPinsHaveEmbedCheck when CI or GITHUB_ACTIONS is set, and skip
-// when both are unset. A non-shallow checkout that is missing the
-// recorded minimum still fails in CI.
+// TestPinsHaveEmbedCheck when the process started in CI, and skip
+// otherwise. It assigns runningInCI directly: TestMain has already set
+// CI=true, so t.Setenv cannot restore the launch environment. A
+// non-shallow checkout that is missing the recorded minimum still
+// fails when that flag is set.
 func TestPinHistoryFailsShallowAndNonGitInCI(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git is not installed")
@@ -183,8 +195,7 @@ func TestPinHistoryFailsShallowAndNonGitInCI(t *testing.T) {
 	shallow := shallowClone(t)
 	full := tempRepo(t)
 
-	t.Setenv("CI", "true")
-	t.Setenv("GITHUB_ACTIONS", "true")
+	setRunningInCI(t, true)
 	if reason, skip := pinHistoryProblem(nonGit); skip || !strings.Contains(reason, "not a git checkout") {
 		t.Fatalf("non-git checkout in CI: skip=%v reason=%q", skip, reason)
 	}
@@ -196,14 +207,40 @@ func TestPinHistoryFailsShallowAndNonGitInCI(t *testing.T) {
 		t.Fatalf("non-shallow CI checkout missing the minimum: skip=%v reason=%q", skip, reason)
 	}
 
-	t.Setenv("CI", "")
-	t.Setenv("GITHUB_ACTIONS", "")
+	setRunningInCI(t, false)
 	if reason, skip := pinHistoryProblem(nonGit); !skip {
 		t.Fatalf("non-git checkout outside CI: skip=%v reason=%q", skip, reason)
 	}
 	if reason, skip := pinHistoryProblem(shallow); !skip {
 		t.Fatalf("shallow clone outside CI: skip=%v reason=%q", skip, reason)
 	}
+}
+
+// TestCIFailOrSkipUsesInitEnv checks ciFailOrSkip under the environment
+// TestMain actually leaves behind. TestMain sets CI=true and unsets
+// GITHUB_ACTIONS before tests run. The decision has to follow
+// runningInCI, which was captured before that override.
+func TestCIFailOrSkipUsesInitEnv(t *testing.T) {
+	if os.Getenv("CI") != "true" {
+		t.Fatal("TestMain did not set CI=true")
+	}
+	if _, ok := os.LookupEnv("GITHUB_ACTIONS"); ok {
+		t.Fatal("TestMain left GITHUB_ACTIONS set")
+	}
+	reason, skip := ciFailOrSkip("not a git checkout")
+	if reason != "not a git checkout" {
+		t.Fatalf("reason = %q", reason)
+	}
+	if runningInCI == skip {
+		t.Fatalf("runningInCI=%v skip=%v; ciFailOrSkip followed TestMain's CI override", runningInCI, skip)
+	}
+}
+
+func setRunningInCI(t *testing.T, v bool) {
+	t.Helper()
+	prev := runningInCI
+	runningInCI = v
+	t.Cleanup(func() { runningInCI = prev })
 }
 
 func tempRepo(t *testing.T) string {
@@ -272,33 +309,9 @@ func pinsIn(t *testing.T, where, text string) []repoPin {
 	t.Helper()
 	var out []repoPin
 	for _, m := range usesPin.FindAllStringSubmatch(text, -1) {
-		if !isCommitPin(m[1]) {
-			continue
-		}
 		out = append(out, repoPin{where: where, pin: m[1], comment: m[2], needsComment: true})
 	}
 	return out
-}
-
-// isCommitPin reports whether ref is a commit pin rather than a branch
-// or tag. main and master are hexadecimal, so length alone cannot tell
-// them from a short sha. A version tag starts with v.
-func isCommitPin(ref string) bool {
-	switch ref {
-	case "main", "master", "HEAD":
-		return false
-	}
-	if ref == "" || ref[0] == 'v' || ref[0] == 'V' {
-		return false
-	}
-	for _, c := range ref {
-		switch {
-		case c >= '0' && c <= '9', c >= 'a' && c <= 'f', c >= 'A' && c <= 'F':
-		default:
-			return false
-		}
-	}
-	return true
 }
 
 func pinFormatError(p repoPin) error {
@@ -341,9 +354,10 @@ func commitPinSHA(s string) bool {
 
 // pinHistoryAvailable reports whether this clone can prove a pin is on
 // main. Outside CI it skips when git, the checkout, or the recorded
-// minimum is missing. When CI or GITHUB_ACTIONS is set, a shallow clone
-// and a directory that is not a git checkout fail, as does a non-shallow
-// checkout that is missing the minimum.
+// minimum is missing. When the process was started with CI or
+// GITHUB_ACTIONS set, a shallow clone and a directory that is not a git
+// checkout fail, as does a non-shallow checkout that is missing the
+// minimum. That flag is runningInCI, not the environment TestMain sets.
 func pinHistoryAvailable(t *testing.T, root string) bool {
 	t.Helper()
 	reason, skip := pinHistoryProblem(root)
@@ -358,8 +372,8 @@ func pinHistoryAvailable(t *testing.T, root string) bool {
 
 // pinHistoryProblem reports why root cannot prove a pin is on main.
 // skip is true when the caller should skip rather than fail. Outside CI
-// a shallow clone and a non-git checkout skip. When CI or GITHUB_ACTIONS
-// is set, both are failures.
+// a shallow clone and a non-git checkout skip. When the process was
+// started with CI or GITHUB_ACTIONS set, both are failures.
 func pinHistoryProblem(root string) (reason string, skip bool) {
 	if _, err := exec.LookPath("git"); err != nil {
 		return "git is not installed", true
@@ -384,10 +398,11 @@ func pinHistoryProblem(root string) (reason string, skip bool) {
 	return "", false
 }
 
-// ciFailOrSkip fails the history check when CI or GITHUB_ACTIONS is set
-// and skips it otherwise.
+// ciFailOrSkip fails the history check when the process was started with
+// CI or GITHUB_ACTIONS set, and skips it otherwise. It uses runningInCI
+// because TestMain overwrites those variables before tests run.
 func ciFailOrSkip(reason string) (string, bool) {
-	if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
+	if runningInCI {
 		return reason, false
 	}
 	return reason, true
