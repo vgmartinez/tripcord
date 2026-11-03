@@ -168,6 +168,18 @@ func TestRedactionCanaryScan(t *testing.T) {
 					jsonl = stdout.String()
 				}
 			}
+			for _, format := range []string{"md", "sarif"} {
+				artifact := filepath.Join(t.TempDir(), "report."+format)
+				var stdout, stderr bytes.Buffer
+				if code := run([]string{"scan", "--format", format, "--output", artifact, root}, &stdout, &stderr); code != int(exitcode.Findings) {
+					t.Fatalf("%s --output: exit %d, stderr %q", format, code, stderr.String())
+				}
+				written, err := os.ReadFile(artifact)
+				if err != nil {
+					t.Fatal(err)
+				}
+				assertNoCanary(t, format+" --output", stdout.String()+stderr.String()+string(written))
+			}
 			var fingerprints []string
 			hooks := 0
 			for line := range strings.SplitSeq(strings.TrimSpace(jsonl), "\n") {
@@ -480,6 +492,29 @@ func TestRedactionCanaryPanic(t *testing.T) {
 	}
 }
 
+// TestRedactionCanaryRedactFalse: privacy.redact: false is parsed and
+// merged, but no output reads it, so scan and the hook still redact.
+func TestRedactionCanaryRedactFalse(t *testing.T) {
+	const off = "version: 1\nmode: enforce\nprivacy:\n  redact: false\n"
+	root := canaryRepo(t, encodePlain)
+	writeTestFile(t, root, ".tripcord/policy.yaml", off)
+	for _, format := range []string{"json", "text", "md"} {
+		code, stdout, stderr := runCLI(t, "scan", "--format", format, root)
+		if code != int(exitcode.Findings) {
+			t.Fatalf("%s: exit %d stderr %q", format, code, stderr)
+		}
+		assertNoCanary(t, "redact: false scan "+format, stdout+stderr)
+	}
+	hookProject(t, strings.Replace(canaryMessagePolicy("enforce", encodePlain), "mode: enforce\n", "mode: enforce\nprivacy:\n  redact: false\n", 1))
+	for _, c := range redactionCanaries {
+		code, stdout, stderr := runHookCLI(t, strings.NewReader(hookCanaryInputs()[0].stdin(jsonString(c.text))), "--harness", "claude", "--event", hook.EventPreTool)
+		if code != int(exitcode.Block) {
+			t.Errorf("%s: exit %d stderr %q", c.class, code, stderr)
+		}
+		assertHookOutputClean(t, "redact: false hook", stdout, stderr)
+	}
+}
+
 // TestRedactionCanaryHome covers S5-S7: a home directory whose name is
 // a canary, with and without a trailing slash, never appears in scan
 // output for user-scope config, in a hook error for a project under
@@ -618,10 +653,15 @@ func TestRedactionCanaryCommands(t *testing.T) {
 			if err := os.WriteFile(event, []byte(body), 0o600); err != nil {
 				t.Fatal(err)
 			}
-			for _, format := range []string{"text", "json"} {
-				code, stdout, stderr := runCLI(t, "pr-context", "--format", format, "--repo", repo, "--event", event)
-				_ = code
-				assertNoCanary(t, c.class+" pr-context "+format, stdout+stderr)
+			for _, format := range []string{"text", "json", "gha"} {
+				outputFile := filepath.Join(t.TempDir(), "github_output")
+				t.Setenv("GITHUB_OUTPUT", outputFile)
+				_, stdout, stderr := runCLI(t, "pr-context", "--format", format, "--repo", repo, "--event", event)
+				written, err := os.ReadFile(outputFile)
+				if err != nil && !os.IsNotExist(err) {
+					t.Fatal(err)
+				}
+				assertNoCanary(t, c.class+" pr-context "+format, stdout+stderr+string(written))
 			}
 		}
 	})
