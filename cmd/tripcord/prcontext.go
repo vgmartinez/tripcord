@@ -287,6 +287,7 @@ func parsePrContextFlags(args []string, stdout io.Writer) (prContextOptions, err
 }
 
 func renderPrContext(format string, result prcontext.Result, outcome cfg014.Outcome) (string, error) {
+	result, outcome = publishedPrContext(result, outcome)
 	switch format {
 	case "text", "gha":
 		return prcontext.FormatText(result) + formatCfg014Text(outcome), nil
@@ -302,6 +303,43 @@ func renderPrContext(format string, result prcontext.Result, outcome cfg014.Outc
 	default:
 		panic("prcontext: unhandled format " + format)
 	}
+}
+
+// publishedPrContext returns copies of result and outcome with every
+// string that comes from the pull request (a branch name, a login, a
+// trailer, a warning quoting git, a changed path) folded, redacted, and
+// capped like an error. The agent ids and statuses are closed
+// vocabularies, and GITHUB_OUTPUT carries only those.
+func publishedPrContext(result prcontext.Result, outcome cfg014.Outcome) (prcontext.Result, cfg014.Outcome) {
+	text := func(s string) string { return output.Message(foldHome(s)) }
+	signals := make([]prcontext.Signal, len(result.Signals))
+	for i, s := range result.Signals {
+		s.Value, s.Source = text(s.Value), text(s.Source)
+		signals[i] = s
+	}
+	if result.Signals != nil {
+		result.Signals = signals
+	}
+	if result.Warnings != nil {
+		warnings := make([]string, len(result.Warnings))
+		for i, w := range result.Warnings {
+			warnings[i] = text(w)
+		}
+		result.Warnings = warnings
+	}
+	outcome.Reason = text(outcome.Reason)
+	if outcome.Paths != nil {
+		paths := make([]string, len(outcome.Paths))
+		for i, p := range outcome.Paths {
+			paths[i] = text(p)
+		}
+		outcome.Paths = paths
+	}
+	if outcome.Finding != nil {
+		finding := output.PublishFinding(*outcome.Finding, output.DefaultRedactor)
+		outcome.Finding = &finding
+	}
+	return result, outcome
 }
 
 func formatCfg014Text(outcome cfg014.Outcome) string {

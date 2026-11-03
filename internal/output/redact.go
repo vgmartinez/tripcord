@@ -861,6 +861,14 @@ func placeholderSecret(value string) bool {
 	}
 }
 
+// PublishFinding returns finding as a sink publishes it, for a caller
+// that renders a finding itself: every string except the closed
+// vocabularies and the fingerprint redacted with redact, then capped at
+// MaxFieldBytes.
+func PublishFinding(finding model.Finding, redact Redactor) model.Finding {
+	return capFinding(redactFinding(finding, redact))
+}
+
 // redactFinding returns a deep copy of finding with redact applied to every
 // string except the closed vocabularies and the validated fingerprint.
 func redactFinding(finding model.Finding, redact Redactor) model.Finding {
