@@ -11,10 +11,6 @@ pre-release v0 tree described in [Release notes](release-notes.md).
 
 ## Coming in v0
 
-- Hook mode wired by `init --embed`: the generated hooks pass
-  `--on-failure block`, and `bootstrap.sh` installs without an
-  unpublished package and fails closed. Until then `init --embed` is not
-  releasable ([init](init.md)).
 - A custom rule that asks for confirmation. `tripcord hook` already
   renders `ask` in each harness's format ([Hook](hook.md#output)).
 

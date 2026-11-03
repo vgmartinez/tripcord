@@ -25,9 +25,9 @@ wiki:
 	go run ./cmd/wikigen -out bin/wiki
 
 # release-gate fails while a feature a release depends on is missing.
-# Today: init --embed wires `tripcord hook`, which this build lacks.
-# The pinned-action check passes: both pins reach an action with the
-# base input and the embed check.
+# It checks that this build has the `tripcord hook` the init --embed
+# wiring runs, and that both pinned actions have the base input and the
+# embed check. Both pass on this tree.
 release-gate:
 	TRIPCORD_RELEASE_GATE=1 go test ./cmd/tripcord -run '^TestReleaseGate' -count=1 -v
 

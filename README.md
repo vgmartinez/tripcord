@@ -49,7 +49,7 @@ tripcord init .
 tripcord init . --embed --version <version> --sha256 linux-x64=<sha256> --dry-run
 ```
 
-`--version` and `--sha256` pin the binary the hooks may run; `--dry-run` prints the diff. The embedded hooks run [`tripcord hook`](https://github.com/vgmartinez/tripcord/wiki/Hook) from the verified binary. `--embed` is not ready to ship to users yet: the bootstrap has no published package to install. The generated hooks block a tool call when the hook fails, except when a Copilot hook times out, or on a Claude Code release that predates the hook `onFailure` field. See [Init](https://github.com/vgmartinez/tripcord/wiki/Init).
+`--embed` needs a Git repository. `--version` and `--sha256` pin the binary the hooks may run; `--dry-run` prints the diff. The embedded hooks run [`tripcord hook --on-failure block`](https://github.com/vgmartinez/tripcord/wiki/Hook) from the verified binary in the bootstrap's cache, which you fill with `go build -trimpath` of the pinned commit; the bootstrap never downloads anything. A hook that cannot decide, or finds no verified binary, blocks the tool call, except when a Copilot hook times out. See [Init](https://github.com/vgmartinez/tripcord/wiki/Init).
 
 **3. Run it on every pull request**, with the GitHub Action:
 

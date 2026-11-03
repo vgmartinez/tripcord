@@ -6,24 +6,26 @@ tripcord init [PATH] [--embed] [--harness h,...] [--version V --sha256 os-arch=H
 
 `init` writes Tripcord's files into the repository at `PATH` (default:
 the current directory). `PATH` must be the repository root: a
-subdirectory of a Git repository exits 3.
+subdirectory of a Git repository exits 3. With `--embed`, `PATH` must
+be a Git repository (it has a `.git` directory or file); anything else
+exits 3 and writes nothing, because the hooks find the policy at the
+Git root and would block every tool call without one.
 
-> **Not releasable yet.** `init --embed` wires each hook-capable harness
-> to run `bash .tripcord/bootstrap.sh hook --harness <h> --event
-> pre-tool`, which runs the verified binary's
-> [`tripcord hook`](hook.md). Each generated hook blocks the tool call
-> when the hook fails: the Claude Code hook has `onFailure: block`, the
-> Cursor hook `failClosed`, and Copilot blocks a `preToolUse` hook on
-> any non-zero exit or crash. Two gaps remain. A Copilot hook that times
-> out lets the call through; `tripcord hook` ends its own run after
-> 10 s, under the 60 s `timeoutSec` init sets. A Claude Code release
-> older than the `onFailure` field treats a failed hook as non-blocking.
-> Fail-closed inside `tripcord hook` (`--on-failure block`) is set by the
-> generated wiring, which does not pass it yet. The bootstrap's npm and
-> PyPI sources are not published, so only a binary already in its cache
-> can run. Do not cut a release that contains `init --embed` until the
-> wiring passes `--on-failure block` and the bootstrap no longer depends
-> on unpublished packages.
+> **Fail-closed, with two gaps.** `init --embed` wires each hook-capable
+> harness to run `bash .tripcord/bootstrap.sh hook --harness <h> --event
+> pre-tool --on-failure block`, which runs the verified binary's
+> [`tripcord hook`](hook.md). A run that cannot decide denies the call
+> (`--on-failure block`), and so does a bootstrap that finds no verified
+> binary (exit 2). The harnesses also block on a failed hook: the
+> Claude Code hook has `onFailure: block`, the Cursor hook `failClosed`,
+> and Copilot blocks a `preToolUse` hook on any non-zero exit or crash.
+> Two gaps remain. A Copilot hook that times out lets the call through;
+> `tripcord hook` ends its own run after 10 s, under the 60 s
+> `timeoutSec` init sets. A Claude Code release older than the
+> `onFailure` field still blocks on exit 2, which every failure the hook
+> reports returns, but not on another status, such as a crash or a
+> missing `bash`. There is no published release, so each machine fills
+> the bootstrap cache itself ([Bootstrap](#bootstrap)).
 >
 > The generated `.github/workflows/tripcord.yml` pins the reusable
 > workflow at `main@6a12795`. `tripcord-pr.yml` at that commit pins the
@@ -81,9 +83,9 @@ empty means all five.
 
 | `--harness` | Files |
 | --- | --- |
-| `claude` | `.claude/settings.json`: `hooks.SessionStart` runs `bash "${CLAUDE_PROJECT_DIR}/.tripcord/bootstrap.sh" session-start --harness claude`; `hooks.PreToolUse` runs `bash "${CLAUDE_PROJECT_DIR}/.tripcord/bootstrap.sh" hook --harness claude --event pre-tool` with `onFailure: block`. |
-| `cursor` | `.cursor/hooks.json`: `sessionStart` runs `bash "${CURSOR_PROJECT_DIR}/.tripcord/bootstrap.sh" session-start --harness cursor`; `preToolUse` runs `bash "${CURSOR_PROJECT_DIR}/.tripcord/bootstrap.sh" hook --harness cursor --event pre-tool` with `failClosed: true`. `.cursor/environment.json`: `install` runs `bash .tripcord/bootstrap.sh install`. |
-| `copilot` | `.github/hooks/tripcord.json`: `sessionStart` runs `bash .tripcord/bootstrap.sh session-start --harness copilot` (`timeoutSec: 300`); `preToolUse` runs `bash .tripcord/bootstrap.sh hook --harness copilot --event pre-tool` (`timeoutSec: 60`). Both set `cwd: "."`. `.github/workflows/copilot-setup-steps.yml`: a `Tripcord bootstrap` step. |
+| `claude` | `.claude/settings.json`: `hooks.SessionStart` runs `bash "${CLAUDE_PROJECT_DIR:-.}/.tripcord/bootstrap.sh" session-start --harness claude`; `hooks.PreToolUse` runs `bash "${CLAUDE_PROJECT_DIR:-.}/.tripcord/bootstrap.sh" hook --harness claude --event pre-tool --on-failure block` with `onFailure: block`. |
+| `cursor` | `.cursor/hooks.json`: `sessionStart` runs `bash "${CURSOR_PROJECT_DIR}/.tripcord/bootstrap.sh" session-start --harness cursor`; `preToolUse` runs `bash "${CURSOR_PROJECT_DIR}/.tripcord/bootstrap.sh" hook --harness cursor --event pre-tool --on-failure block` with `failClosed: true`. `.cursor/environment.json`: `install` runs `bash .tripcord/bootstrap.sh install`. |
+| `copilot` | `.github/hooks/tripcord.json`: `sessionStart` runs `bash .tripcord/bootstrap.sh session-start --harness copilot` (`timeoutSec: 300`); `preToolUse` runs `bash .tripcord/bootstrap.sh hook --harness copilot --event pre-tool --on-failure block` (`timeoutSec: 60`). Both set `cwd: "."`. `.github/workflows/copilot-setup-steps.yml`: a `Tripcord bootstrap` step. |
 | `devin` | `.devin/blueprint.yaml`: a `maintenance` entry named `tripcord`. |
 | `codex` | `AGENTS.md`: a note between `<!-- tripcord:begin -->` and `<!-- tripcord:end -->` asking the environment setup script to run the bootstrap. This covers Codex and Jules, which have no repository hooks. |
 
@@ -94,7 +96,7 @@ SHA-256 (see "Bootstrap"). The Claude Code pre-tool entry:
 
 ```json
 {"matcher": "*", "hooks": [{"type": "command",
-  "command": "bash \"${CLAUDE_PROJECT_DIR}/.tripcord/bootstrap.sh\" hook --harness claude --event pre-tool",
+  "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/.tripcord/bootstrap.sh\" hook --harness claude --event pre-tool --on-failure block",
   "onFailure": "block"}]}
 ```
 
@@ -102,14 +104,17 @@ Claude Code and Cursor expand their project-directory variable
 (`CLAUDE_PROJECT_DIR`, `CURSOR_PROJECT_DIR`), so the hook finds the
 script from any working directory. Copilot has no such variable; its
 `cwd` is relative to the repository root, so `cwd: "."` plus the
-relative script path is its equivalent.
+relative script path is its equivalent. The Copilot CLI also runs the
+hooks in `.claude/settings.json`, from the repository root and without
+`CLAUDE_PROJECT_DIR`, so the Claude Code hooks fall back to the working
+directory (`${CLAUDE_PROJECT_DIR:-.}`).
 
 Copilot's hook format has no fail-closed field, so none is written. A
 Copilot `preToolUse` hook that exits non-zero denies the tool call, but
 a hook that times out is let through: Copilot fails open on a hook
 timeout. init sets `timeoutSec` (60 for `preToolUse`, 300 for
-`sessionStart`, against Copilot's default of 30) so a cold start does
-not hit it; the pre-tool hook never installs, so it only verifies a
+`sessionStart`, against Copilot's default of 30) so a slow start does
+not hit it; the bootstrap never installs, so a hook only verifies a
 checksum and runs the binary.
 
 Running init again with a different `--harness` adds the new
@@ -179,48 +184,56 @@ failures exit 3 as without `--dry-run`.
 ```text
 bash .tripcord/bootstrap.sh install
 bash .tripcord/bootstrap.sh session-start [--harness claude|cursor|copilot]
-bash .tripcord/bootstrap.sh hook --harness <h> --event <e>
+bash .tripcord/bootstrap.sh hook --harness <h> --event <e> [--on-failure block|error]
 ```
 
-`install` and `session-start` install the pinned release and then run
-`tripcord scan --config` on the repository. `hook` never installs: it
-checks the cached binary against the pinned SHA-256 and `exec`s it by
-absolute path as `tripcord hook --harness <h> --event <e>`. Without a
-verified cached binary it exits 1 and asks for `bootstrap.sh install`;
-the harness then blocks the tool call where it fails closed.
+The bootstrap never downloads or installs anything. Every mode checks
+the binary at
+`${XDG_CACHE_HOME:-$HOME/.cache}/tripcord/<version>/<os-arch>/tripcord`
+against the SHA-256 pinned for the running platform and runs it by
+absolute path. `install` and `session-start` then run `tripcord scan
+--config` on the repository; `hook` `exec`s `tripcord hook` with its
+arguments.
 
-- The install sources default to `npm pypi cache`, tried in that
-  order: `npm pack @tripcord/cli-<os>-<arch>@<version>
-  --ignore-scripts`, then `pip download tripcord==<version> --no-deps
-  --only-binary=:all:`, then a binary already in the cache at
-  `${XDG_CACHE_HOME:-$HOME/.cache}/tripcord/<version>/<os-arch>/tripcord`.
-  Set `TRIPCORD_INSTALL_SOURCES` in the environment to a
-  space-separated subset, in any order, to change that for one run
-  (for example `TRIPCORD_INSTALL_SOURCES=cache` on an offline runner).
-  Any other word exits 3.
-- Every candidate, cached or downloaded, is checked against the pinned
-  SHA-256 for the running platform before it is used. A mismatch is
-  discarded. The source setting only chooses where to look; it cannot
-  make an unverified binary run.
-- There is no fallback to latest, to another version, or to
-  `curl | sh`. An unpinned platform exits 3; no network and no valid
-  cache, or a bad checksum, exits 1. Any other mode exits 2.
-- The cache directory must be an absolute path; a relative
-  `XDG_CACHE_HOME` exits 3.
-- Downloads go to a `mktemp -d` directory with mode `0700`, removed on
-  exit. The verified binary is moved into the cache atomically.
-- The script changes no `PATH`: it writes nothing to `GITHUB_PATH` or
-  `CLAUDE_ENV_FILE`.
+There is no published release, so fill the cache with a build of the
+commit the pin was made from, on each machine the agents run on:
+
+```sh
+git checkout <pinned commit>
+cache="${XDG_CACHE_HOME:-$HOME/.cache}/tripcord/<version>/<os-arch>"
+mkdir -p "$cache"
+CGO_ENABLED=0 go build -trimpath -o "$cache/tripcord" ./cmd/tripcord
+sha256sum "$cache/tripcord"
+```
+
+The last line prints the value for `--sha256 <os-arch>=`. A
+`-trimpath` build of the same commit with the same Go toolchain gives
+the same bytes on every machine of a platform, so one pin covers them.
+
+It fails closed. Each of these exits 2 with `tripcord bootstrap:
+<reason>` on stderr and runs nothing:
+
+- no binary in the cache (the reason names the path to fill);
+- a binary with another SHA-256 (the reason names both digests);
+- a binary that is a symlink or not a regular file;
+- no SHA-256 pinned for the platform, or an unsupported OS or
+  architecture;
+- no `sha256sum` or `shasum`;
+- a relative `XDG_CACHE_HOME`, or a symlinked `.tripcord` or
+  `bootstrap.sh`;
+- a usage error.
+
+Exit 2 is what every harness blocks on, so a hook that cannot run a
+verified `tripcord` blocks the tool call. There is no fallback to
+latest, to another version, to a package registry, or to `curl | sh`.
+The script changes no `PATH`: it writes nothing to `GITHUB_PATH` or
+`CLAUDE_ENV_FILE`.
 
 Output: diagnostics and the scan report go to stderr. stdout carries
 only what the harness parses: `{}` for a Cursor `session-start`, even
 when the bootstrap fails, and the binary's own output in `hook` mode.
 Claude Code and Copilot read nothing from a session-start hook's
 stdout.
-
-The npm and PyPI packages are pending the distribution pipeline and are
-not published. Until they are, only a cached binary can satisfy the
-bootstrap, and on a machine without one it fails closed.
 
 The script is POSIX `sh`, quotes every expansion, and uses no `eval`.
 CI runs shellcheck on it (`init --embed output lint` in
@@ -365,15 +378,17 @@ so pull request CI stays green. There is no release workflow in this
 repository; run the target before tagging a release.
 `TestInitWiringInvokesTripcordHook` always runs and asserts the exact
 command each wiring file holds, `bash <project dir>/.tripcord/bootstrap.sh
-hook --harness <h> --event pre-tool`, and the fail-closed and timeout
-fields.
+hook --harness <h> --event pre-tool --on-failure block`, and the
+fail-closed and timeout fields. `TestEmbedHookThroughBootstrap` runs
+each of those commands through `bootstrap.sh` to a fresh build of
+`tripcord`, verified, tampered, and missing.
 
 ## Exit codes
 
 | Code | Meaning |
 | --- | --- |
 | 0 | Files written, unchanged, or a dry run. |
-| 3 | Invalid flags, a missing or malformed pin, a `PATH` that is not a repository root, a symlink or non-regular target, or a file that cannot be merged. Nothing was written. |
+| 3 | Invalid flags, a missing or malformed pin, a `PATH` that is not a repository root (with `--embed`, not a Git repository), a symlink or non-regular target, or a file that cannot be merged. Nothing was written. |
 | 4 | Internal error, including a failure while writing. |
 
 `init` does not create the fingerprint key; `tripcord scan` still

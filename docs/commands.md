@@ -67,9 +67,11 @@ or setup wiring of each harness in `--harness` (default
 `--dry-run` prints a diff; `--force` resolves conflicts it can. Every
 hook runs `.tripcord/bootstrap.sh`, which runs the checksum-verified
 binary by absolute path, never a `tripcord` from `PATH`. Its `hook` mode
-runs `tripcord hook`. `--embed` is not releasable yet: the bootstrap has
-no published package to install, and a Copilot hook that times out lets
-the call through ([init](init.md)). TC-CFG-016 reports an embed that is missing, edited, or,
+runs `tripcord hook --on-failure block`. The bootstrap never downloads:
+it runs only the pinned binary from its cache, and exits 2, which
+blocks the call, without one. `--embed` needs a Git repository. A
+Copilot hook that times out lets the call through
+([init](init.md)). TC-CFG-016 reports an embed that is missing, edited, or,
 against a pull request's base, removed or re-pinned. Details are in
 [init](init.md).
 

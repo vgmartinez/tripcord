@@ -36,7 +36,9 @@ of the project. The project is the Git root (the nearest directory with
 a `.git`) at or above `CLAUDE_PROJECT_DIR` for Claude Code or
 `CURSOR_PROJECT_DIR` for Cursor, which must be absolute, or at or above
 the working directory when the variable is unset and for Copilot. The
-variable may name a subdirectory or a directory that does not exist. With
+variable may name a subdirectory or a directory that does not exist,
+and symlinks in it are resolved first, so a link into a subdirectory of
+the repository finds the repository's policy. With
 no Git repository at or above it there is no project policy to apply, so
 the run fails (see [Failures](#failures)) instead of allowing.
 
@@ -160,5 +162,6 @@ hook` process per event exceeds 25 ms.
 The hooks `init --embed` writes run `bash .tripcord/bootstrap.sh hook
 --harness <h> --event pre-tool --on-failure block`, which runs this
 command from the verified binary, so a run that cannot decide denies
-the tool call. `bootstrap.sh` has no published package to install
-from, so `init --embed` is not releasable yet. See [Init](init.md).
+the tool call. Without a verified binary in its cache, `bootstrap.sh`
+exits 2 with the reason, which blocks the call too. See
+[Init](init.md#bootstrap).

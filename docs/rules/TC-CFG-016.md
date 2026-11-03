@@ -108,10 +108,9 @@ Because `bootstrap.sh` is compared with the script re-rendered from
 the recorded pin, an edit to it is reported whether or not the
 manifest's digest was edited to match: `changed` when it was not,
 `stale` when it was. Tamper cases covered by tests include replacing
-the checksum comparison with `true`, the scan with `exit 0`, the whole
-script with `curl | sh`, pointing npm at another registry, limiting
-the sources to the cache, swapping a checksum, and swapping the
-version.
+the checksum comparison with `false`, the scan with `exit 0`, the whole
+script with `curl | sh`, adding a package download, moving the cache,
+swapping a checksum, and swapping the version.
 
 A symlinked `.tripcord` directory or `bootstrap.sh` is reported as
 changed even when its target holds the right bytes: the hooks run the

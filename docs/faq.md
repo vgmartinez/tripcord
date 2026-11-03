@@ -14,9 +14,9 @@ no checkout, filter, LFS, hook, or submodule runs
 Not yet. Build from source or use `go install`
 ([Getting started](getting-started.md#build)). The
 [GitHub Action](github-action.md) builds tripcord from source at a pinned
-commit. The bootstrap `init --embed` writes looks for npm and PyPI
-packages that are not published, so today only a cached binary satisfies
-it ([init](init.md#bootstrap)).
+commit. The bootstrap `init --embed` writes runs only a binary you
+build into its cache from the pinned commit
+([init](init.md#bootstrap)).
 
 ## Why did the scan exit 3?
 
@@ -83,13 +83,14 @@ Check out with `fetch-depth: 0`
 
 ## Does `init --embed` work today?
 
-It writes every file, and `scan` checks the embed (TC-CFG-016). The
-pre-tool hooks it wires run [`tripcord hook`](hook.md) through the
-verified bootstrap, and each generated hook blocks the tool call when
-the hook fails, except a Copilot hook that times out or a Claude Code
-release that predates `onFailure`. The bootstrap has no published
-package to install from, so do not ship `--embed` to users yet
-([init](init.md)).
+Yes, in a Git repository. It writes every file, and `scan` checks the
+embed (TC-CFG-016). The pre-tool hooks it wires run
+[`tripcord hook --on-failure block`](hook.md) through the verified
+bootstrap, which runs only the pinned binary from its cache: build it
+there with `go build -trimpath` of the pinned commit
+([init](init.md#bootstrap)). A hook that cannot decide, or finds no
+verified binary, blocks the tool call, except a Copilot hook that times
+out ([init](init.md)).
 
 ## Does tripcord cover agent workflows triggered by issue comments?
 
