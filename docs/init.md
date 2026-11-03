@@ -56,6 +56,15 @@ Files written for every selection:
 | `.tripcord/bootstrap.sh` | Pinned installer (mode `0755`). See "Bootstrap". |
 | `.tripcord/embed.json` | Manifest: the pinned version and checksums, the harnesses selected at init time, the SHA-256 of `bootstrap.sh`, `tripcord.yml`, and the generated `copilot-setup-steps.yml` step, and the SHA-256 of every hook entry init wrote. |
 | `.github/workflows/tripcord.yml` | Pull request scan. See "Workflow". |
+| `.gitattributes` | `text eol=lf` for `bootstrap.sh`, `embed.json`, `tripcord.yml`, and `.github/hooks/tripcord.json`, under a `# Tripcord embed` comment. Lines already there are kept; missing ones are appended, in the file's own line ending. |
+
+`bash` cannot run a `bootstrap.sh` with CRLF line endings, and the scan
+hashes these files, so the `.gitattributes` lines keep a Windows
+checkout with `core.autocrlf=true` from converting them. The scan also
+hashes the files with CRLF normalized to LF, so a checkout that was
+already converted is not reported as edited, and init treats a
+Tripcord-owned file that differs only by CRLF as its own and rewrites
+it with LF.
 
 Files written per harness. `--harness` takes a comma-separated subset;
 empty means all five.
@@ -236,9 +245,15 @@ findings.
 The scan checks the embed when `.tripcord/bootstrap.sh` or
 `.tripcord/embed.json` exists, and also when only a leftover piece
 does: `.github/workflows/tripcord.yml`, or a hook that runs
-`.tripcord/bootstrap.sh`. It compares each hook harness recorded in the
+`.tripcord/bootstrap.sh hook` (the guard; a `session-start` hook alone
+is not a leftover). A leftover reports only what it implies: the
+missing `bootstrap.sh` and `embed.json`, plus the hooks of the harness
+whose hook was left, or the workflow when the workflow was left.
+Otherwise it compares each hook harness recorded in the
 manifest (all three when the manifest is missing or unreadable) with
-what init writes. `bootstrap.sh` and `tripcord.yml` are compared with
+what init writes. A `.tripcord` directory or `bootstrap.sh` that is a
+symlink is reported as changed, and `bootstrap.sh` refuses to run
+through one. `bootstrap.sh` and `tripcord.yml` are compared with
 what init renders again from the version and checksums recorded in
 the manifest, not only with the recorded digests, so editing the
 script and the manifest's digest together still reports.
@@ -265,7 +280,15 @@ has one, and reports, high:
 - **removed**: the base had the file or a Tripcord hook and the change
   removes it, including removing the embed entirely;
 - **dropped**: the change drops a harness from the manifest;
-- **repinned**: the change changes the pinned version or a checksum.
+- **repinned**: the change changes the pinned version or a checksum;
+- **weakened**: the change weakens `.tripcord/policy.yaml` (see
+  [scan.md](scan.md)).
+
+A committed `.claude/settings.local.json` or
+`.github/copilot/settings.local.json` that sets `disableAllHooks: true`
+(**local-disabled**), or that defines hooks for an event the embed
+wires without Tripcord's entry (**local-override**), is reported too;
+see [TC-CFG-016](rules/TC-CFG-016.md).
 
 The composite action passes `--base` with the pull request's base
 commit (its `base` input), so the reusable workflow reports these on

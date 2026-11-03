@@ -52,7 +52,9 @@ signals are skipped and only the pull request login and branch remain.
 is set, every scan runs with `--base`, so a pull request that removes
 or re-pins a Tripcord embed, or drops a harness from it, fails
 [TC-CFG-016](rules/TC-CFG-016.md) even when the head tree has no embed
-left to check. The base commit must be in the checkout
+left to check. The scan also uses the base's repository policy, not
+the head's, ignores `.tripcord/policy.local.yaml`, and reports a head
+policy that weakens the base's. The base commit must be in the checkout
 (`fetch-depth: 0`); if it is not, the action logs an error and the scan
 exits 3, which fails the job. A `path` that is not inside a Git
 repository has no history to compare, so the action logs a notice and

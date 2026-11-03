@@ -4,7 +4,7 @@
 | --- | --- |
 | Severity | high |
 | Harnesses | Claude Code, GitHub Copilot, Gemini CLI; Cursor and the embed's own files for the embed case only |
-| Files | `.claude/settings.json`, `.github/copilot/settings.json`, `.github/hooks/*.json`, `.gemini/settings.json`, `.cursor/hooks.json`; for the embed, `.tripcord/bootstrap.sh`, `.tripcord/embed.json`, `.github/workflows/tripcord.yml`, `.github/workflows/copilot-setup-steps.yml` (any depth, repository scope) |
+| Files | `.claude/settings.json`, `.github/copilot/settings.json`, `.github/hooks/*.json`, `.gemini/settings.json`, `.cursor/hooks.json`; for the embed, `.tripcord/bootstrap.sh`, `.tripcord/embed.json`, `.github/workflows/tripcord.yml`, `.github/workflows/copilot-setup-steps.yml`; tracked `.claude/settings.local.json` and `.github/copilot/settings.local.json`; `.tripcord/policy.yaml` with a base (any depth, repository scope) |
 | Rule | [`rules/TC-CFG-016.yaml`](../../rules/TC-CFG-016.yaml) |
 
 ## What it detects
@@ -59,8 +59,9 @@ Not reported:
 - `disableAllHooks: false`, or `hooksConfig.enabled: true`.
 - Gemini CLI's `hooksConfig.disabled` naming specific hooks, without
   `enabled: false`.
-- `settings.local.json` (Claude Code, Copilot), which is personal and
-  is not part of this rule's files.
+- A `settings.local.json` (Claude Code, Copilot) git does not track. It
+  is personal. A tracked one is checked as described under "Local
+  settings" below.
 
 ## Embedded repositories
 
@@ -69,9 +70,14 @@ A repository is embedded when it has `.tripcord/bootstrap.sh` or
 `tripcord init` writes, is not an embed. A repository that has lost
 both files is still checked when a leftover piece only `init --embed`
 writes is there: `.github/workflows/tripcord.yml`, or a hook that runs
-`.tripcord/bootstrap.sh`. A hook that runs `tripcord` some other way
-(for example `/usr/local/bin/tripcord hook ...`) is manual wiring, not
-an embed, and does not make the repository embedded.
+`.tripcord/bootstrap.sh hook` (a string command, or an argv array whose
+`bootstrap.sh` item is followed by `hook`). A `session-start` hook
+alone is not a leftover. A leftover reports only what it implies: the
+missing `bootstrap.sh` and `embed.json`, plus that harness's hooks for
+a hook leftover, or the workflow for a workflow leftover. A hook that
+runs `tripcord` some other way (for example `/usr/local/bin/tripcord
+hook ...`) is manual wiring, not an embed, and does not make the
+repository embedded.
 
 The check covers:
 
@@ -93,7 +99,7 @@ title and fix for its state:
 | State | Title | Meaning |
 | --- | --- | --- |
 | missing | Tripcord embed is missing part of its guard | The file, hook, or step is not there. |
-| changed | Tripcord guard was edited | It differs from what init writes for the recorded pin and from the recorded digest. |
+| changed | Tripcord guard was edited | It differs from what init writes for the recorded pin and from the recorded digest, or `.tripcord` or `bootstrap.sh` is a symlink. |
 | stale | Tripcord guard was written by an older Tripcord | It matches the digest `embed.json` records, but not what this build writes. Rerun `tripcord init --embed --force` with the same pins. |
 | unreadable | Tripcord guard file cannot be read | The file cannot be read or parsed, or is a symlink out of the repository. |
 
@@ -106,6 +112,16 @@ script with `curl | sh`, pointing npm at another registry, limiting
 the sources to the cache, swapping a checksum, and swapping the
 version.
 
+A symlinked `.tripcord` directory or `bootstrap.sh` is reported as
+changed even when its target holds the right bytes: the hooks run the
+path, and the target can change without a reviewed edit to the
+repository. `bootstrap.sh` also refuses to run through one.
+
+Files are hashed with CRLF normalized to LF, so a Windows checkout
+with `core.autocrlf=true` is not reported as edited. `init --embed`
+also writes `.gitattributes` lines (`text eol=lf`) that stop that
+conversion, because `bash` cannot run a CRLF `bootstrap.sh`.
+
 ### Pull requests
 
 With a base revision (`tripcord scan --since <rev>` or `--base <rev>`;
@@ -117,6 +133,42 @@ also compares the head with the base when the base is embedded:
 | removed | This change removes Tripcord's guard | The base had the file or a Tripcord hook and the change removes it, including removing the whole embed. |
 | dropped | This change drops a harness from the Tripcord embed | A harness the base manifest records is gone from the head's. Its hooks are still checked. |
 | repinned | This change re-pins Tripcord | The version or a checksum changed. A consistent re-pin of `bootstrap.sh` and `embed.json` is the one edit the head alone cannot tell from a release update, so it needs review. |
+| weakened | This change weakens the Tripcord policy | The head's `.tripcord/policy.yaml` (with what it `extends`) reports or fails on less than the base's: a weaker `mode`, a higher `fail-on`, a dropped harness or rule, a lower severity override, a new exception, or a removed custom rule or lock. One item per aspect, at `.tripcord/policy.yaml`. |
+
+With a base, the scan loads the repository policy from the base, as
+`pr-context` does, and does not read `.tripcord/policy.local.yaml`, so
+a pull request cannot relax the scan of itself. `weakened` applies
+whether or not the repository is embedded. An explicit `--policy` file
+is used as given.
+
+### Local settings
+
+Claude Code applies `.claude/settings.local.json` over
+`.claude/settings.json`
+([Claude Code settings](https://code.claude.com/docs/en/settings)).
+Copilot CLI documents `.github/copilot/settings.local.json` as
+"Personal overrides (add this to .gitignore)" that use "the same schema
+as the repository configuration file" and take precedence over it, and
+it also reads `.claude/settings.json` and `.claude/settings.local.json`
+for a shared subset that includes `disableAllHooks` and `hooks`
+([Copilot CLI config directory reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-config-dir-reference)).
+Its hooks reference loads inline hooks from either settings file, and
+runs every source's entries for an event
+([Copilot hooks reference](https://docs.github.com/en/copilot/reference/hooks-reference)).
+
+A `settings.local.json` git tracks is shared configuration, not
+personal. In an embedded repository, and in any scan with a base, the
+rule reports a tracked one, high:
+
+| State | Title | Meaning |
+| --- | --- | --- |
+| local-disabled | Committed settings.local.json turns off every hook | It sets `disableAllHooks: true`. |
+| local-override | Committed settings.local.json replaces Tripcord's hook | It defines hooks for an event the embed wires without Tripcord's entry (embedded repositories only). |
+
+Both harnesses merge hooks across files, so `local-override` is
+conservative: it reports a local file that would take over the event
+if a harness replaced rather than merged it. An untracked
+`settings.local.json`, or one that does not parse, is not reported.
 
 The `disableAllHooks` advice in the rule's fix applies to the first
 clause only; each embed state carries its own fix.
@@ -184,6 +236,8 @@ published release before approving.
 ## References
 
 - [Claude Code hooks](https://code.claude.com/docs/en/hooks)
+- [Claude Code settings](https://code.claude.com/docs/en/settings)
+- [Copilot CLI config directory reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-config-dir-reference)
 - [Copilot hooks reference](https://docs.github.com/en/copilot/reference/hooks-reference)
 - [Gemini CLI documentation](https://geminicli.com/docs/)
 - [Cursor hooks](https://cursor.com/docs/hooks)

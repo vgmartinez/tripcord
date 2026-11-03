@@ -19,12 +19,13 @@
 #
 # The other clauses are the Tripcord embed (issue #39). When the
 # repository holds a Tripcord embed (.tripcord/bootstrap.sh or
-# .tripcord/embed.json), or a leftover piece of one (a hook entry that
-# names tripcord, .github/workflows/tripcord.yml, or the Copilot hooks
-# file), internal/embedded checks every file and hook
+# .tripcord/embed.json), internal/embedded checks every file and hook
 # `tripcord init --embed` writes and reports each one that is not
-# intact as a permissions item with setting tripcordGuard. Its state
-# picks the clause:
+# intact as a permissions item with setting tripcordGuard. A leftover
+# piece of an embed without either file (a hook entry that runs
+# .tripcord/bootstrap.sh hook, or .github/workflows/tripcord.yml) is
+# checked for what it implies only: the two missing files plus that
+# harness's hooks, or the workflow. Its state picks the clause:
 #
 #   missing     the file, hook, or Copilot setup step is not there.
 #   changed     it differs both from what init renders for the pin
@@ -32,6 +33,8 @@
 #               records. bootstrap.sh and tripcord.yml are re-rendered
 #               from the pin, so an embed.json whose digests were edited
 #               to match a tampered bootstrap.sh still reports changed.
+#               A symlinked .tripcord or bootstrap.sh is changed too.
+#               Files are hashed with CRLF normalized to LF.
 #   stale       it matches the SHA-256 embed.json records but not what
 #               this build of init renders: an older Tripcord wrote it.
 #   unreadable  the file cannot be read or does not parse.
