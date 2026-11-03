@@ -124,7 +124,7 @@ func TestCheckMixedCRLineIsChanged(t *testing.T) {
 		write(t, dir, rel, strings.Replace(string(raw), old, replacement, 1))
 	}
 	replaceInFile(GitattributesPath, "/"+BootstrapPath+" text eol=lf\n", "/"+BootstrapPath+" -text\n")
-	replaceInFile(BootstrapPath, `"$cached" scan --config "$repo_root" >&2`+"\n", `"$cached" scan --config "$repo_root" >&2`+"\r\n")
+	replaceInFile(BootstrapPath, `"$copy" scan --config "$repo_root" >&2`+"\n", `"$copy" scan --config "$repo_root" >&2`+"\r\n")
 	want := []guardHit{
 		{model.SurfaceGeneric, BootstrapPath, subjectBootstrap, StateChanged},
 		{model.SurfaceGeneric, GitattributesPath, subjectGitattributes, StateChanged},

@@ -25,7 +25,7 @@ const titleGitattributesChanged = titleChanged
 func crGitattributesOverride(t *testing.T, dir string) {
 	t.Helper()
 	replaceInFile(embedded.GitattributesPath, "/"+embedded.BootstrapPath+" text eol=lf\n", "/"+embedded.BootstrapPath+" -text\n")(t, dir)
-	replaceInFile(embedded.BootstrapPath, `"$cached" scan --config "$repo_root" >&2`+"\n", `"$cached" scan --config "$repo_root" >&2`+"\r\n")(t, dir)
+	replaceInFile(embedded.BootstrapPath, `"$copy" scan --config "$repo_root" >&2`+"\n", `"$copy" scan --config "$repo_root" >&2`+"\r\n")(t, dir)
 }
 
 // TestScanDetectsGitattributesTextOverride is the reviewer's B2 repro

