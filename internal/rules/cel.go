@@ -63,16 +63,22 @@ type Limits struct {
 }
 
 // Hook path limits. The spec's hook latency target is p95 under 25 ms
-// for the whole hook. The input cap and the cost limit are what keep a
-// hook inside it: HookMaxInputBytes keeps the longest uninterruptible
-// builtin call, a regular expression over the whole input, to a few
-// milliseconds, and HookCostLimit bounds the steps. The timeout and the
+// for the whole hook, which typical events (a command, a path) meet by
+// far. HookMaxInputBytes equals the hook's stdin cap (hook.MaxStdinBytes)
+// so a legitimately large command, such as a long heredoc, is decided
+// rather than failed closed. At that size the longest uninterruptible
+// builtin call, a regular expression over the whole input, takes a few
+// hundred milliseconds, inside the hook's own deadline. HookCostLimit
+// bounds the steps: it fits one shell.risks or shell.locations pass over
+// a command at the cap (one unit a byte) and the rest of the rule, about
+// 0.6 s for a heredoc of short shell lines on an idle machine, so
+// HookEvalTimeout leaves room for a loaded one. The timeout and the
 // budget are only safety nets, so CPU load cannot change a decision.
 const (
-	HookCostLimit     = 2_000_000
+	HookCostLimit     = 6_000_000
 	HookBudget        = 5 * time.Second
-	HookEvalTimeout   = time.Second
-	HookMaxInputBytes = 64 << 10
+	HookEvalTimeout   = 3 * time.Second
+	HookMaxInputBytes = 4 << 20
 )
 
 // DefaultLimits returns the limits for scans: the loader, the engine,

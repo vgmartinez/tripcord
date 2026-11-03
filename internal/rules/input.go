@@ -180,11 +180,16 @@ func configVars(id string, item model.ConfigItem) map[string]any {
 
 // EventInput binds event to the tripcord.event/v1 JSON form of ev, so
 // rules use the wire names (event.kind, event.tool, event.command).
+// The size checked against MaxInputBytes is without HTML escaping,
+// which would count each <, >, and & in a command six times.
 func EventInput(ev model.Event, limits Limits) (*Input, error) {
-	raw, err := json.Marshal(ev)
-	if err != nil {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(ev); err != nil {
 		return nil, fmt.Errorf("event %s: %w", ev.ID, err)
 	}
+	raw := bytes.TrimSuffix(buf.Bytes(), []byte("\n"))
 	if len(raw) > limits.MaxInputBytes {
 		return nil, fmt.Errorf("event %s: %d bytes: %w", ev.ID, len(raw), ErrInputLimit)
 	}

@@ -35,10 +35,11 @@ const (
 	EventBeforeRead = "before-read"
 )
 
-// MaxStdinBytes caps the hook JSON read from stdin. It is larger than
-// rules.HookMaxInputBytes because a harness sends the whole tool input,
-// such as the content of a file being written or read, and the adapter
-// keeps only the fields rules see.
+// MaxStdinBytes caps the hook JSON read from stdin. It equals
+// rules.HookMaxInputBytes, the cap on the normalized event, so any input
+// under it can be decided; the adapter keeps only the fields rules see,
+// so the event is rarely larger than the input. Over it, the run fails
+// and follows --on-failure.
 const MaxStdinBytes = 4 << 20
 
 // Timeout bounds one hook run from start to verdict. It is shorter than

@@ -1,6 +1,7 @@
 package model
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -96,7 +97,10 @@ type Event struct {
 	RawRef      string          `json:"raw_ref,omitempty"`
 }
 
-// MarshalJSON emits empty arrays for nil slices so a value matches the schema.
+// MarshalJSON emits empty arrays for nil slices so a value matches the
+// schema. It does not HTML-escape: an encoder that does escapes the
+// result itself, and one that does not, such as the rules' event input
+// whose size is capped, sees each <, >, and & as one byte.
 func (e Event) MarshalJSON() ([]byte, error) {
 	if e.Paths == nil {
 		e.Paths = []string{}
@@ -108,7 +112,13 @@ func (e Event) MarshalJSON() ([]byte, error) {
 		e.Credentials = []CredentialRef{}
 	}
 	type alias Event
-	return json.Marshal(alias(e))
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(alias(e)); err != nil {
+		return nil, err
+	}
+	return bytes.TrimSuffix(buf.Bytes(), []byte("\n")), nil
 }
 
 // Validate checks the fields the event schema requires: schema, id, ts,

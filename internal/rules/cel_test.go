@@ -158,7 +158,7 @@ func TestHookLimits(t *testing.T) {
 	if l.CostLimit == 0 || l.CostLimit > DefaultLimits().CostLimit || l.EvalTimeout < time.Second || l.Budget < l.EvalTimeout {
 		t.Fatalf("hook limits %+v", l)
 	}
-	if l.MaxInputBytes >= DefaultLimits().MaxInputBytes || l.MaxInputBytes != HookMaxInputBytes {
+	if l.MaxInputBytes != HookMaxInputBytes || HookMaxInputBytes != 4<<20 {
 		t.Fatalf("hook input cap %d", l.MaxInputBytes)
 	}
 	if d := DefaultLimits(); d.Budget != 0 || d.EvalTimeout < time.Second {
@@ -168,11 +168,10 @@ func TestHookLimits(t *testing.T) {
 
 // TestHookWorstCaseRegex bounds the uninterruptible case: one matches()
 // over an input at the hook cap. The timeout cannot stop it, so the cap
-// must. It measures about 4 ms; the bound is loose for slow CI
-// machines, the point being that it stays well under the 45 ms a
-// 900 KB input took. The fastest of five runs is compared, so a run
-// descheduled by a loaded machine does not fail the test, while a
-// regex that is really slow still does.
+// must keep it under the per-evaluation timeout, far inside the hook's
+// deadline. At the 4 MiB cap it measures about 230 ms. The fastest of
+// five runs is compared, so a run descheduled by a loaded machine does
+// not fail the test, while a regex that is really slow still does.
 func TestHookWorstCaseRegex(t *testing.T) {
 	env, err := NewEnv(HookLimits())
 	if err != nil {
@@ -191,12 +190,16 @@ func TestHookWorstCaseRegex(t *testing.T) {
 		_, _ = x.Eval(context.Background(), in)
 		fastest = min(fastest, time.Since(start))
 	}
-	if fastest > 20*time.Millisecond*timingScale {
+	if fastest > HookEvalTimeout*timingScale {
 		t.Fatalf("worst-case regex at the hook cap took %v (fastest of 5 runs)", fastest)
 	}
 	ev.Command = strings.Repeat("a", HookMaxInputBytes)
 	if _, err := EventInput(ev, env.Limits()); !errors.Is(err, ErrInputLimit) {
 		t.Fatalf("err = %v, want ErrInputLimit", err)
+	}
+	ev.Command = strings.Repeat("<&>", (HookMaxInputBytes-200)/3)
+	if _, err := EventInput(ev, env.Limits()); err != nil {
+		t.Fatalf("HTML characters counted escaped: %v", err)
 	}
 }
 
