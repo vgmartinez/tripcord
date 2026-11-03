@@ -35,3 +35,4 @@ positivos:
   claude-uvx-aws-serverless-vulnerable: high
   claude-npx-mcphub-vulnerable: high
   claude-npx-mcphub-introduced: high
+  claude-npx-mcphub-0.12.17: high

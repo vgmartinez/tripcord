@@ -195,20 +195,21 @@
     {
       "id": "TCA-2026-0010",
       "aliases": ["CVE-2026-120323", "GHSA-c48q-fjwh-j7gg"],
-      "summary": "@samanhappy/mcphub from 1.0.0 before 1.1.8 discloses information through passthroughHeaders",
+      "summary": "@samanhappy/mcphub from 0.9.10 through 1.1.7 discloses information through passthroughHeaders",
       "severity": "moderate",
       "affected": [
         {
           "ecosystem": "npm",
           "name": "@samanhappy/mcphub",
-          "ranges": [{"introduced": "1.0.0", "fixed": "1.1.8"}]
+          "ranges": [{"introduced": "0.9.10", "fixed": "1.1.8"}]
         }
       ],
       "refs": [
         "https://osv.dev/vulnerability/CVE-2026-120323",
         "https://github.com/advisories/GHSA-c48q-fjwh-j7gg",
         "https://nvd.nist.gov/vuln/detail/CVE-2026-120323",
-        "https://github.com/samanhappy/mcphub/releases/tag/v1.1.8"
+        "https://github.com/samanhappy/mcphub/releases/tag/v1.1.8",
+        "https://github.com/samanhappy/mcphub/commit/66b6053f7fd97c1870eb801c5467e3833f090172"
       ],
       "added": "tripcord/core@2026.11",
       "reviewed": "2026-11-03"
