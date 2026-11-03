@@ -571,11 +571,10 @@ func parseCommandFlags(cmd flagCommand, args []string, stdout io.Writer) (scanOp
 }
 
 // applyStagedSources sets SourcePaths on every repository item in items
-// from sources (indexfiles.Plan.Sources, keyed by item.Path) and, for a
-// hook or env-setup item, from the scripts or checksum files a rule
-// reads from it: scriptcheck has already resolved both by the time this
-// runs. It must run after scriptcheck.Annotate, which sets
-// item.ChecksumFiles.
+// from sources (indexfiles.Plan.Sources, keyed by item.Path) and from the
+// scripts or checksum files a rule reads from it (see
+// scriptcheck.ItemReferencedPaths, which names a referenced path whether
+// or not it resolved, so a staged deletion of one still matches).
 func applyStagedSources(items []model.ConfigItem, sources map[string][]string) {
 	for i := range items {
 		item := &items[i]
@@ -584,14 +583,7 @@ func applyStagedSources(items []model.ConfigItem, sources map[string][]string) {
 		}
 		var extra []string
 		extra = append(extra, sources[item.Path]...)
-		if item.Kind == model.ConfigKindHook {
-			extra = append(extra, scriptcheck.Scripts(*item)...)
-		}
-		if item.Kind == model.ConfigKindEnvSetup {
-			for name := range item.ChecksumFiles {
-				extra = append(extra, name)
-			}
-		}
+		extra = append(extra, scriptcheck.ItemReferencedPaths(*item)...)
 		if len(extra) == 0 {
 			continue
 		}

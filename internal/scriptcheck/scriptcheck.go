@@ -121,29 +121,60 @@ func outsideClass(resolved string) string {
 func ReferencedPaths(items []model.ConfigItem) []string {
 	var out []string
 	seen := map[string]bool{}
-	add := func(rel string) {
-		rel = path.Clean(rel)
-		if rel == "." || rel == ".." || strings.HasPrefix(rel, "../") || path.IsAbs(rel) || seen[rel] {
-			return
-		}
-		seen[rel] = true
-		out = append(out, rel)
-	}
 	for _, item := range items {
 		if item.Scope != model.ScopeRepo {
 			continue
 		}
-		for _, rel := range Scripts(item) {
-			add(rel)
+		for _, rel := range ItemReferencedPaths(item) {
+			if seen[rel] {
+				continue
+			}
+			seen[rel] = true
+			out = append(out, rel)
 		}
-		if item.Kind != model.ConfigKindEnvSetup {
-			continue
+	}
+	return out
+}
+
+// ItemReferencedPaths returns item's own repository-relative hook
+// scripts and checksum files, named whether or not the index contains
+// them: a staged deletion of one of these paths can still change a
+// rule's verdict (TC-CFG-006 on a deleted hook script, TC-CFG-009 on a
+// deleted sums file), so a --staged scan's SourcePaths must include it
+// even though scriptcheck.Annotate's ChecksumFiles and ScriptLocations,
+// which only record a path that resolved, would not.
+func ItemReferencedPaths(item model.ConfigItem) []string {
+	if item.Scope != model.ScopeRepo {
+		return nil
+	}
+	var out []string
+	add := func(rel string) {
+		cleaned, ok := cleanRepoRelative(rel)
+		if !ok {
+			return
 		}
+		out = append(out, cleaned)
+	}
+	for _, rel := range Scripts(item) {
+		add(rel)
+	}
+	if item.Kind == model.ConfigKindEnvSetup {
 		for _, name := range checksumNames(decode(item)) {
 			add(name)
 		}
 	}
 	return out
+}
+
+// cleanRepoRelative cleans a referenced path the way ReferencedPaths and
+// ItemReferencedPaths have always required: relative, inside the
+// repository, and non-empty once cleaned.
+func cleanRepoRelative(rel string) (string, bool) {
+	cleaned := path.Clean(rel)
+	if cleaned == "." || cleaned == ".." || strings.HasPrefix(cleaned, "../") || path.IsAbs(cleaned) {
+		return "", false
+	}
+	return cleaned, true
 }
 
 // Scripts returns the repository-relative paths of the project scripts
