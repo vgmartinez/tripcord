@@ -24,7 +24,7 @@ concurrency:
 jobs:
   sync:
     name: render and push the wiki
-    if: github.ref == 'refs/heads/main'
+    if: github.repository == 'vgmartinez/tripcord' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -62,7 +62,10 @@ jobs:
 
           err="$RUNNER_TEMP/ls-remote.err"
           if ! refs=$(git ls-remote "$wiki_url" 2>"$err"); then
-            if grep -qiE 'repository not found|not found$|does not appear to be a git repository' "$err"; then
+            # GitHub prints "Repository not found" when the wiki does not
+            # exist. Any other failure, including one that merely ends in
+            # "not found", fails the job.
+            if grep -F -q 'Repository not found' "$err"; then
               echo "::notice title=wiki sync::The wiki repository does not exist. Create the first wiki page on GitHub, then rerun this workflow."
               exit 0
             fi
