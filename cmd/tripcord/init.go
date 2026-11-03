@@ -106,10 +106,11 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 	}
 	// The diff quotes the existing files around each change, and a
 	// harness settings file can hold credentials (an env block, an MCP
-	// server's token), so it is redacted like any other output.
+	// server's token), so it is redacted and each line capped like any
+	// other output.
 	if dryRun {
 		for _, c := range changes {
-			if code := writeString(stdout, output.RedactJSONText(embedded.UnifiedDiff(c))); code != int(exitcode.OK) {
+			if code := writeString(stdout, output.PreviewLines(embedded.UnifiedDiff(c))); code != int(exitcode.OK) {
 				return code
 			}
 		}

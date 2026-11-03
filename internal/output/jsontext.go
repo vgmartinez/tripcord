@@ -35,3 +35,33 @@ func RedactJSONText(text string) string {
 	})
 	return DefaultRedactor(text)
 }
+
+// PreviewLines is RedactJSONText for a multi-line preview of files, such
+// as init's --dry-run diff. Each line is capped at MaxFieldBytes, so a
+// long minified line is not an unbounded excerpt, and a line with a
+// control, bidi, or invalid byte is escaped so it prints as one inert
+// line. A line without one is shown as written: escaping it would double
+// the backslashes of a JSON escape such as \\n.
+func PreviewLines(text string) string {
+	lines := strings.SplitAfter(RedactJSONText(text), "\n")
+	for i, line := range lines {
+		body, nl := strings.CutSuffix(line, "\n")
+		if hasEscapedRune(body) {
+			body = escapeControlsKeepBackslash(body)
+		}
+		lines[i] = truncateSanitized(body, MaxFieldBytes)
+		if nl {
+			lines[i] += "\n"
+		}
+	}
+	return strings.Join(lines, "")
+}
+
+func hasEscapedRune(s string) bool {
+	for i := range s {
+		if s[i] != '\\' && willBeEscaped(s[i:]) {
+			return true
+		}
+	}
+	return false
+}

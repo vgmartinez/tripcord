@@ -34,3 +34,23 @@ func TestRedactJSONText(t *testing.T) {
 		}
 	}
 }
+
+func TestPreviewLines(t *testing.T) {
+	t.Parallel()
+	long := `+  "a": "` + strings.Repeat("x", 3*MaxFieldBytes) + `"`
+	in := " {\n" + long + "\n-  \"b\": \"curl --token=PREVIEW01\x1b[2J\"\n }"
+	out := PreviewLines(in)
+	lines := strings.Split(out, "\n")
+	if len(lines) != 4 || lines[0] != " {" || lines[3] != " }" {
+		t.Fatalf("PreviewLines(%q) = %q", in, out)
+	}
+	if len(lines[1]) > MaxFieldBytes || !strings.HasPrefix(lines[1], `+  "a": "xxx`) {
+		t.Errorf("long line = %d bytes %q", len(lines[1]), lines[1][:40])
+	}
+	if strings.Contains(out, "PREVIEW01") || strings.Contains(out, "\x1b") {
+		t.Errorf("line 3 = %q", lines[2])
+	}
+	if keep := `   "dir": "C:\\dir\\new \"x\""`; PreviewLines(keep) != keep {
+		t.Errorf("PreviewLines(%q) = %q, want it unchanged", keep, PreviewLines(keep))
+	}
+}
