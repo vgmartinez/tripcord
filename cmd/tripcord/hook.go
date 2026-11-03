@@ -102,8 +102,9 @@ func runHook(args []string, stdout, stderr io.Writer) int {
 		err error
 	}
 	done := make(chan result, 1)
+	stdin := hookStdin
 	go func() {
-		v, err := decideHook(ctx, ad, event)
+		v, err := decideHook(ctx, stdin, ad, event)
 		done <- result{v, err}
 	}()
 	select {
@@ -117,9 +118,10 @@ func runHook(args []string, stdout, stderr io.Writer) int {
 	}
 }
 
-// decideHook reads the event, loads the policy, and evaluates it.
-func decideHook(ctx context.Context, ad hookAdapter, event string) (hook.Verdict, error) {
-	data, err := readHookStdin(hookStdin)
+// decideHook reads the event from stdin, loads the policy, and
+// evaluates it.
+func decideHook(ctx context.Context, stdin io.Reader, ad hookAdapter, event string) (hook.Verdict, error) {
+	data, err := readHookStdin(stdin)
 	if err != nil {
 		return hook.Verdict{}, err
 	}
