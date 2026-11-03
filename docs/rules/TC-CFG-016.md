@@ -3,8 +3,8 @@
 | | |
 | --- | --- |
 | Severity | high |
-| Harnesses | Claude Code, GitHub Copilot, Gemini CLI; Cursor for the embed case only |
-| Files | `.claude/settings.json`, `.github/copilot/settings.json`, `.github/hooks/*.json`, `.gemini/settings.json`, `.cursor/hooks.json` (any depth, repository scope) |
+| Harnesses | Claude Code, GitHub Copilot, Gemini CLI; Cursor and the embed's own files for the embed case only |
+| Files | `.claude/settings.json`, `.github/copilot/settings.json`, `.github/hooks/*.json`, `.gemini/settings.json`, `.cursor/hooks.json`; for the embed, `.tripcord/bootstrap.sh`, `.tripcord/embed.json`, `.github/workflows/tripcord.yml`, `.github/workflows/copilot-setup-steps.yml` (any depth, repository scope) |
 | Rule | [`rules/TC-CFG-016.yaml`](../../rules/TC-CFG-016.yaml) |
 
 ## What it detects
@@ -17,8 +17,9 @@ regardless of which specific hook is the guard, including the one
 The rule reports two things:
 
 1. A shared setting that turns every hook off (the table below).
-2. A Tripcord embed whose own hook wiring is missing or no longer calls
-   tripcord (see "Embedded repositories" below).
+2. A Tripcord embed whose guard is missing, edited, or unreadable, or,
+   in a pull request, removed or weakened (see "Embedded repositories"
+   below).
 
 | Harness | Setting |
 | --- | --- |
@@ -65,32 +66,60 @@ Not reported:
 
 A repository is embedded when it has `.tripcord/bootstrap.sh` or
 `.tripcord/embed.json`. A `.tripcord/policy.yaml` alone, which plain
-`tripcord init` writes, is not an embed.
+`tripcord init` writes, is not an embed. A repository that has lost
+both files is still checked when a leftover piece only `init --embed`
+writes is there: `.github/workflows/tripcord.yml`, or a hook that runs
+`.tripcord/bootstrap.sh`. A hook that runs `tripcord` some other way
+(for example `/usr/local/bin/tripcord hook ...`) is manual wiring, not
+an embed, and does not make the repository embedded.
 
-For an embedded repository, the scan checks the hooks `init --embed`
-writes for each hook-capable harness the manifest records as selected
-at init time. With no manifest, or one that cannot be read, it checks
-all three.
+The check covers:
 
-| Harness | Wiring file | Hooks |
+| Subject | File | Compared with |
 | --- | --- | --- |
-| Claude Code | `.claude/settings.json` | `SessionStart`, `PreToolUse` |
-| Cursor | `.cursor/hooks.json` | `sessionStart`, `preToolUse` |
-| GitHub Copilot | `.github/hooks/tripcord.json` | `sessionStart`, `preToolUse` |
+| Bootstrap | `.tripcord/bootstrap.sh` | What init renders for the version and checksums in `embed.json`, then the digest `embed.json` records |
+| Manifest | `.tripcord/embed.json` | It must parse, with a valid pin |
+| Workflow | `.github/workflows/tripcord.yml` | What init renders, then the recorded digest |
+| Copilot setup step | `.github/workflows/copilot-setup-steps.yml` | The `Tripcord bootstrap` step init writes, then the recorded digest (only when Copilot is wired) |
+| Claude Code hooks | `.claude/settings.json` | `SessionStart`, `PreToolUse` |
+| Cursor hooks | `.cursor/hooks.json` | `sessionStart`, `preToolUse` |
+| GitHub Copilot hooks | `.github/hooks/tripcord.json` | `sessionStart`, `preToolUse` |
 
-Each hook is compared, by the SHA-256 of its canonical JSON, with the
-entry this build of init writes. Reported, high, titled "Tripcord embed
-is missing its own hook", at the wiring file:
+Hooks are checked for each hook-capable harness the manifest records
+as selected at init time; with no manifest, or one that cannot be
+read, all three. Each item is reported, high, at its file, with a
+title and fix for its state:
 
-- the wiring file is missing, or the event has no Tripcord entry;
-- the event's entry was edited so it no longer matches (for example,
-  it runs another command, or `onFailure: block` was removed);
-- the manifest records a digest that differs from this build's entry;
-- the wiring file cannot be read or parsed, or is a symlink out of the
-  repository.
+| State | Title | Meaning |
+| --- | --- | --- |
+| missing | Tripcord embed is missing part of its guard | The file, hook, or step is not there. |
+| changed | Tripcord guard was edited | It differs from what init writes for the recorded pin and from the recorded digest. |
+| stale | Tripcord guard was written by an older Tripcord | It matches the digest `embed.json` records, but not what this build writes. Rerun `tripcord init --embed --force` with the same pins. |
+| unreadable | Tripcord guard file cannot be read | The file cannot be read or parsed, or is a symlink out of the repository. |
 
-A wiring file that also sets `disableAllHooks: true` is reported by
-the first clause as well.
+Because `bootstrap.sh` is compared with the script re-rendered from
+the recorded pin, an edit to it is reported whether or not the
+manifest's digest was edited to match: `changed` when it was not,
+`stale` when it was. Tamper cases covered by tests include replacing
+the checksum comparison with `true`, the scan with `exit 0`, the whole
+script with `curl | sh`, pointing npm at another registry, limiting
+the sources to the cache, swapping a checksum, and swapping the
+version.
+
+### Pull requests
+
+With a base revision (`tripcord scan --since <rev>` or `--base <rev>`;
+the composite action passes the pull request's base commit), the scan
+also compares the head with the base when the base is embedded:
+
+| State | Title | Meaning |
+| --- | --- | --- |
+| removed | This change removes Tripcord's guard | The base had the file or a Tripcord hook and the change removes it, including removing the whole embed. |
+| dropped | This change drops a harness from the Tripcord embed | A harness the base manifest records is gone from the head's. Its hooks are still checked. |
+| repinned | This change re-pins Tripcord | The version or a checksum changed. A consistent re-pin of `bootstrap.sh` and `embed.json` is the one edit the head alone cannot tell from a release update, so it needs review. |
+
+The `disableAllHooks` advice in the rule's fix applies to the first
+clause only; each embed state carries its own fix.
 
 Codex, Jules, and Devin have no repository hooks; their wiring
 (`AGENTS.md`, `.devin/blueprint.yaml`) is not checked.
@@ -100,26 +129,18 @@ reported.
 
 ## Limits
 
-- This rule only reads a config value that is present and set to the
-  disabling value. It cannot tell whether a hook that used to be
-  present, Tripcord's own or any other, was since removed: that needs a
-  base tree to diff against, and a single scan of one tree does not
-  have one. A future rule or pr-context integration that diffs a
-  pull request's base and head could cover deletion directly; this
-  rule covers only the config precondition that defeats hooks
-  wholesale, which is detectable, and useful, on a single tree today.
-- The embed check reads one tree. A pull request that removes the
-  embed (`.tripcord/bootstrap.sh` and `.tripcord/embed.json`) together
-  with the hooks leaves nothing to compare against; detecting that
-  needs the base tree, which stays with TC-CFG-014 and `pr-context`.
-- Removing a harness from `.tripcord/embed.json` stops its check. The
-  manifest is part of the same tree a pull request can edit.
-- The bootstrap script's own content is not hashed or checked here.
-- The hook `init --embed` wires, `tripcord hook`, is not in this build
-  (hook mode is the next change; see [init.md](../init.md)). The
-  `disableAllHooks` finding stands on its own merits regardless: it
-  also weakens whatever other hook-based checks the harness or its
-  plugins run.
+- The disable-all clause only reads a config value that is present and
+  set to the disabling value. It cannot tell which other hook a
+  partial disable targets.
+- Without a base revision the embed check reads one tree. A change
+  that removes the embed and every leftover piece, or re-pins
+  `bootstrap.sh` and `embed.json` consistently, is only reported with
+  `--since` or `--base`. A `--staged` pre-commit scan has no base.
+- The hook `init --embed` wires runs `tripcord hook`, which is not in
+  this build (hook mode is the next change; see
+  [init.md](../init.md)). The `disableAllHooks` finding stands on its
+  own merits regardless: it also weakens whatever other hook-based
+  checks the harness or its plugins run.
 
 ## Examples
 
@@ -152,10 +173,13 @@ would otherwise run. To pause a single hook, remove that hook's own
 entry, or use the harness's managed-hooks allow list, instead of a
 blanket switch.
 
-For a missing or edited Tripcord hook, run `tripcord init --embed`
-again with the same pins to restore it (`--force` replaces an edited
-entry). If a harness is no longer used, remove it from
-`.tripcord/embed.json`'s `harnesses`.
+For a missing, edited, or stale Tripcord guard, run `tripcord init
+--embed --force` with the version and checksums recorded in
+`.tripcord/embed.json` to restore it. If a harness is no longer used,
+remove it from `.tripcord/embed.json`'s `harnesses` in a reviewed
+change. For a pull request that removes the guard or re-pins Tripcord,
+restore the base's files, or check that the new pin matches a
+published release before approving.
 
 ## References
 

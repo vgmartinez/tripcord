@@ -98,7 +98,7 @@ index, not unstaged working-tree edits.
 
 ### `tripcord init`
 
-`tripcord init` writes `.tripcord/policy.yaml`. `tripcord init --embed --version V --sha256 os-arch=HEX` also writes a pinned `.tripcord/bootstrap.sh`, `.github/workflows/tripcord.yml`, and the hook or setup wiring of each harness in `--harness` (default `claude,cursor,copilot,devin,codex`), merging into existing files. `--dry-run` prints a diff; `--force` resolves conflicts it can. The wiring calls `tripcord hook`, which is planned: do not release `--embed` before it. Details are in [docs/init.md](docs/init.md).
+`tripcord init` writes `.tripcord/policy.yaml`. `tripcord init --embed --version V --sha256 os-arch=HEX` also writes a pinned `.tripcord/bootstrap.sh`, `.github/workflows/tripcord.yml`, and the hook or setup wiring of each harness in `--harness` (default `claude,cursor,copilot,devin,codex`), merging into existing files. `--dry-run` prints a diff; `--force` resolves conflicts it can. Every hook runs `.tripcord/bootstrap.sh`, which runs the checksum-verified binary by absolute path, never a `tripcord` from `PATH`. Its `hook` mode runs `tripcord hook`, which is planned: do not release `--embed` before it. TC-CFG-016 reports an embed that is missing, edited, or, against a pull request's base, removed or re-pinned. Details are in [docs/init.md](docs/init.md).
 
 ### `tripcord scan`
 
@@ -112,7 +112,8 @@ index, not unstaged working-tree edits.
 | `--scope repo\|user\|managed\|all` | `repo` (default) does not read the home directory or system settings. `user` and `managed` read those locations and skip the repository. `all` reads every scope. |
 | `--format text\|json\|jsonl\|sarif\|md\|gha` | Default `text`. `json` and `jsonl` both write one `tripcord.finding/v1` document per line. `sarif` is SARIF 2.1.0. `md` is Markdown. `gha` is GitHub Actions workflow commands. Help text lists `text`, `json`, `sarif`, `md`, and `gha`; `jsonl` is accepted as well. |
 | `--output path\|-` | Write to a new private (`0600`) local file, or `-` for stdout (default). A symlink is rejected. The destination is replaced only after the result is complete. |
-| `--since git-ref` | Repository files that differ between the ref and `HEAD`. The ref must not start with `-`. Untracked files and uncommitted edits are not included. Requires Git. |
+| `--since git-ref` | Repository files that differ between the ref and `HEAD`. The ref must not start with `-`. Untracked files and uncommitted edits are not included. Requires Git. Implies `--base` with the same ref. |
+| `--base git-ref` | Also compare a Tripcord embed with the ref's and report one the change removes, re-pins, or drops a harness from (TC-CFG-016). Requires Git. Must equal `--since` when both are given; not allowed with `--staged`. |
 | `--fail-on low\|medium\|high\|critical` | Inclusive threshold for this invocation. A locked policy ceiling can be tightened and cannot be loosened. |
 | `--policy path` | Repository policy file. The path must exist. The default `.tripcord/policy.yaml` is optional. |
 | `--org-policy path` | One organization policy layer, loaded before the repository policy. |

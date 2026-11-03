@@ -47,6 +47,17 @@ checkout of the repository being scanned needs `fetch-depth: 0`. A
 shallow clone usually does not contain `base`, so commit and note
 signals are skipped and only the pull request login and branch remain.
 
+`base` defaults to the pull request's base commit
+(`github.event.pull_request.base.sha`, empty on other events). When it
+is set, every scan runs with `--base`, so a pull request that removes
+or re-pins a Tripcord embed, or drops a harness from it, fails
+[TC-CFG-016](rules/TC-CFG-016.md) even when the head tree has no embed
+left to check. The base commit must be in the checkout
+(`fetch-depth: 0`); if it is not, the action logs an error and the scan
+exits 3, which fails the job. Set `base: ""` to scan the head alone.
+The reusable workflows leave `base` at its default; they reach it once
+their action pin is bumped past this change.
+
 Publishing runs when the scan recorded an exit code. A pull request
 whose head repository differs from its base repository skips both the
 SARIF upload and the comment and emits a warning. A missing SARIF file,
