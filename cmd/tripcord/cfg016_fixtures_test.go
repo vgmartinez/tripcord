@@ -13,6 +13,7 @@ import (
 
 	"github.com/vgmartinez/tripcord/internal/embedded"
 	"github.com/vgmartinez/tripcord/internal/model"
+	"github.com/vgmartinez/tripcord/internal/policy"
 )
 
 const cfg016FixtureDir = "../../rules/TC-CFG-016.test"
@@ -343,5 +344,42 @@ func TestCFG016OtherRuleFixturesHaveNoGuardItems(t *testing.T) {
 	}
 	if checked == 0 {
 		t.Fatal("no fixtures found")
+	}
+}
+
+// TestCFG016PolicyFixtureMatchesScan keeps base-policy-weakened.json
+// equal to the items scan --since reports when a change sets the policy
+// init writes to audit. UPDATE_GOLDEN=1 rewrites it.
+func TestCFG016PolicyFixtureMatchesScan(t *testing.T) {
+	env, catalog, err := loadRules(scanLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	load := func(content string) *policy.Effective {
+		dir := t.TempDir()
+		writeTestFile(t, dir, policy.RepoFile, content)
+		e, err := policy.Load(policy.Options{RepoRoot: dir, Surface: policy.SurfaceScan, Env: env, Catalog: catalog, SkipLocal: true, ManagedPolicy: filepath.Join(dir, "no-managed-policy")})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return e
+	}
+	const head = "version: 1\nmode: audit\nfail-on: high\n"
+	items, err := embedded.PolicyWeakened(policy.Weakened(load(string(embedded.DefaultPolicy())), load(head), catalog), []byte(head))
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.MarshalIndent(items, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(cfg016FixtureDir, "positivos", "base-policy-weakened.json")
+	if os.Getenv("UPDATE_GOLDEN") == "1" {
+		if err := os.WriteFile(path, append(raw, '\n'), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := readFixtureFile(t, path)[""]; got != string(raw)+"\n" {
+		t.Fatalf("%s differs from scan output; rerun with UPDATE_GOLDEN=1", path)
 	}
 }

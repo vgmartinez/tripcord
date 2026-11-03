@@ -38,6 +38,9 @@ const (
 	// checksum. Re-pinning bootstrap.sh and embed.json together is the
 	// one bootstrap edit the single-revision check cannot see.
 	StateRepinned = "repinned"
+	// StateWeakened: this change weakens the repository policy
+	// relative to the base (aspect names how).
+	StateWeakened = "weakened"
 	// StateLocalDisabled: a settings.local.json the repository tracks
 	// sets disableAllHooks. The harness applies it over the shared
 	// settings, so committing it turns every hook off for everyone.
@@ -71,6 +74,7 @@ const (
 	subjectHarnesses = "manifest-harnesses"
 	subjectPin       = "manifest-pin"
 	subjectLocal     = "local-settings"
+	subjectPolicy    = "policy"
 )
 
 // CheckOptions selects what Check compares.
@@ -315,6 +319,20 @@ func Check(root string, opts CheckOptions) ([]model.ConfigItem, error) {
 	// the base was embedded, so base mode always checks them.
 	if (active || opts.Base != nil) && opts.Tracked != nil {
 		c.localSettings(r, opts.Tracked, active)
+	}
+	return c.items, c.err
+}
+
+// PolicyWeakened returns one TC-CFG-016 item for each aspect in which
+// a change weakens the repository policy (policy.Weakened), on
+// .tripcord/policy.yaml. raw is that file's content in the change.
+func PolicyWeakened(aspects []string, raw []byte) ([]model.ConfigItem, error) {
+	c := &checker{}
+	for _, a := range aspects {
+		c.add(model.SurfaceGeneric, PolicyPath, subjectPolicy+":"+a, "", StateWeakened, raw, map[string]string{"aspect": a})
+	}
+	for i := range c.items {
+		c.items[i].SourcePaths = []string{PolicyPath}
 	}
 	return c.items, c.err
 }

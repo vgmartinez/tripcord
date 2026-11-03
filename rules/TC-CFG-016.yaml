@@ -47,6 +47,15 @@
 #               consistent re-pin of embed.json and bootstrap.sh is the
 #               one bootstrap edit the head tree alone cannot tell from
 #               a release update, so it needs review.
+#   weakened    the change's .tripcord/policy.yaml (and what it extends)
+#               reports or fails on less than the base's: a weaker mode,
+#               a higher fail-on, a dropped harness or rule, a lower
+#               severity override, a new exception, or a removed custom
+#               rule or lock. With a base, scan loads the repository
+#               policy from the base, as pr-context does, and never
+#               reads policy.local.yaml, so the change cannot relax the
+#               scan of itself. This one applies whether or not the
+#               repository is embedded.
 #
 # settings.local.json is personal, the same exclusion TC-CFG-004 and
 # TC-CFG-005 make for Claude Code, so the disableAllHooks clause skips
@@ -78,6 +87,7 @@ files:
   - "**/.github/workflows/copilot-setup-steps.yml"
   - "**/.claude/settings.local.json"
   - "**/.github/copilot/settings.local.json"
+  - "**/.tripcord/policy.yaml"
 when: |
   config.kind == "permissions" && config.scope == "repo" && has(payload.setting)
 severity_when:
@@ -124,6 +134,11 @@ severity_when:
     when: |
       has(payload.setting) && payload.setting == "tripcordGuard" && has(payload.state) && payload.state == "repinned"
     fix: "Check that the new version and every --sha256 match a published Tripcord release, then approve. A re-pin rewrites the binary every hook runs, so it needs the same review as a dependency update."
+  - severity: high
+    title: "This change weakens the Tripcord policy"
+    when: |
+      has(payload.setting) && payload.setting == "tripcordGuard" && has(payload.state) && payload.state == "weakened"
+    fix: "Keep the base branch's mode, fail-on, harnesses, rules.include, severity overrides, exceptions, custom rules, and locks in .tripcord/policy.yaml and what it extends. This scan used the base's policy, not the change's; relaxing it needs its own reviewed change with a code owner's approval."
   - severity: high
     title: "Committed settings.local.json turns off every hook"
     when: |

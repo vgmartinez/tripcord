@@ -28,3 +28,4 @@ positivos:
   local-copilot-disable-all-hooks.json: high
   local-claude-hooks-override.json: high
   base-local-disable-all-hooks.json: high
+  base-policy-weakened.json: high

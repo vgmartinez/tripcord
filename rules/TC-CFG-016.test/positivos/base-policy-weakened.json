@@ -1,0 +1,16 @@
+[
+  {
+    "harness": "generic",
+    "scope": "repo",
+    "path": ".tripcord/policy.yaml",
+    "sha256": "add4178741a643d91ba8123173e602c22f31e4514d0ab27bea77b29d9abba9ae",
+    "kind": "permissions",
+    "payload": {
+      "aspect": "mode",
+      "key": "[\"tripcordGuard\",\"policy:mode\"]",
+      "setting": "tripcordGuard",
+      "state": "weakened",
+      "subject": "policy:mode"
+    }
+  }
+]

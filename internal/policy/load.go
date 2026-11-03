@@ -92,6 +92,10 @@ type Options struct {
 	Catalog RuleCatalog
 	// Resolver resolves pack references in extends. Nil rejects them.
 	Resolver Resolver
+	// SkipLocal does not read LocalFile. A scan that compares a change
+	// with its base never reads it: it is per checkout, and a change
+	// could add one.
+	SkipLocal bool
 }
 
 // Load reads the org, repo, and local policy files, resolves extends,
@@ -144,7 +148,7 @@ func LoadLayers(opts Options) ([]Layer, error) {
 		return nil, err
 	}
 
-	if opts.RepoPolicy != "" {
+	if opts.RepoPolicy != "" || opts.SkipLocal {
 		return l.layers, nil
 	}
 	local := filepath.Join(opts.RepoRoot, filepath.FromSlash(LocalFile))

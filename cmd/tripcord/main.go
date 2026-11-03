@@ -12,6 +12,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -327,13 +328,62 @@ func scanTree(ctx context.Context, t scanTarget, opts scanOptions, stdout, stder
 	if err != nil {
 		return t.internalError(stderr, err)
 	}
+	var changed map[string]bool
+	if opts.since != "" {
+		changed, err = changedFiles(root, opts.since)
+		if err != nil {
+			var invoke *gitInvokeError
+			if errors.As(err, &invoke) && invoke.missing {
+				return t.internalError(stderr, err)
+			}
+			return t.configError(stderr, err)
+		}
+	}
+	var baseSHA string
+	if ref := cmp.Or(opts.base, opts.since); ref != "" {
+		if baseSHA, err = resolveBase(ctx, root, ref); err != nil {
+			return t.configError(stderr, err)
+		}
+	}
 	policyOpts := policy.Options{RepoRoot: t.policyRoot, RepoPolicy: opts.policy, Surface: policy.SurfaceScan, Env: env, Catalog: catalog}
 	if opts.orgPolicy != "" {
 		policyOpts.OrgPolicy = []string{opts.orgPolicy}
 	}
+	// Compared with a base, the repository policy is the base's, as in
+	// pr-context: the change under review must not set its own mode,
+	// fail-on, rules, or exceptions. policy.local.yaml is never read.
+	// The change's own policy is loaded only to report how it weakens
+	// the base's (TC-CFG-016).
+	var headPolicy *policy.Effective
+	if baseSHA != "" && opts.policy == "" {
+		headOpts := policyOpts
+		headOpts.SkipLocal = true
+		if headPolicy, err = policy.Load(headOpts); err != nil {
+			return t.configError(stderr, err)
+		}
+		dir, err := os.MkdirTemp("", "tripcord-base-policy-")
+		if err != nil {
+			return t.internalError(stderr, err)
+		}
+		defer func() { _ = os.RemoveAll(dir) }()
+		if err := materializeBasePolicy(ctx, root, baseSHA, dir); err != nil {
+			return t.configError(stderr, err)
+		}
+		policyOpts.RepoRoot, policyOpts.SkipLocal = dir, true
+	}
 	effective, err := policy.Load(policyOpts)
 	if err != nil {
 		return t.configError(stderr, err)
+	}
+	var weakened []model.ConfigItem
+	if headPolicy != nil {
+		raw, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(policy.RepoFile)))
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return t.configError(stderr, err)
+		}
+		if weakened, err = embedded.PolicyWeakened(policy.Weakened(effective, headPolicy, catalog), raw); err != nil {
+			return t.internalError(stderr, err)
+		}
 	}
 	if opts.failOn != "" {
 		sev, err := model.ParseSeverity(opts.failOn)
@@ -421,17 +471,6 @@ func scanTree(ctx context.Context, t scanTarget, opts scanOptions, stdout, stder
 	if ctx.Err() != nil {
 		return int(exitcode.Config)
 	}
-	var changed map[string]bool
-	if opts.since != "" {
-		changed, err = changedFiles(root, opts.since)
-		if err != nil {
-			var invoke *gitInvokeError
-			if errors.As(err, &invoke) && invoke.missing {
-				return t.internalError(stderr, err)
-			}
-			return t.configError(stderr, err)
-		}
-	}
 	if repoScope {
 		if err := scriptcheck.Annotate(root, items); err != nil {
 			return t.internalError(stderr, fmt.Errorf("hook scripts: %w", err))
@@ -440,12 +479,8 @@ func scanTree(ctx context.Context, t scanTarget, opts scanOptions, stdout, stder
 		if t.indexTree {
 			check.Tracked = func(string) bool { return true }
 		}
-		if ref := cmp.Or(opts.base, opts.since); ref != "" {
-			read, err := baseReader(ctx, root, ref)
-			if err != nil {
-				return t.configError(stderr, err)
-			}
-			check.Base = read
+		if baseSHA != "" {
+			check.Base = baseReader(ctx, root, baseSHA)
 		}
 		guards, err := embedded.Check(root, check)
 		if err != nil {
@@ -465,6 +500,7 @@ func scanTree(ctx context.Context, t scanTarget, opts scanOptions, stdout, stder
 			return d.Scope == model.ScopeRepo && d.Path != "" && !changed[d.Path]
 		})
 	}
+	items = append(items, weakened...)
 	engine := rules.NewEngine(env, catalog.Rules(), rules.WithFilter(effective.RuleFilter()))
 	if ctx.Err() != nil {
 		return int(exitcode.Config)
@@ -796,25 +832,29 @@ func normalizeScanArgs(args []string) ([]string, error) {
 	return append(append(flags, "--"), positionals...), nil
 }
 
-// baseReader resolves ref to a commit of root and returns a reader of
-// its files for embedded.Check. A path the commit does not have is
-// fs.ErrNotExist.
-func baseReader(ctx context.Context, root, ref string) (func(string) ([]byte, error), error) {
+// resolveBase resolves ref to the full SHA of a commit of root.
+func resolveBase(ctx context.Context, root, ref string) (string, error) {
 	out, err := gitrun.Run(ctx, root, "--no-pager", "--no-optional-locks", "rev-parse", "--verify", "--quiet", "--end-of-options", ref+"^{commit}")
 	if err != nil {
-		return nil, fmt.Errorf("base %q is not a commit of this repository", ref)
+		return "", fmt.Errorf("base %q is not a commit of this repository", ref)
 	}
 	sha := strings.TrimSpace(string(out))
 	if !fullSHA(sha) {
-		return nil, fmt.Errorf("base %q did not resolve to a commit", ref)
+		return "", fmt.Errorf("base %q did not resolve to a commit", ref)
 	}
+	return sha, nil
+}
+
+// baseReader reads files of commit sha of root for embedded.Check. A
+// path the commit does not have is fs.ErrNotExist.
+func baseReader(ctx context.Context, root, sha string) func(string) ([]byte, error) {
 	return func(rel string) ([]byte, error) {
 		data, err := gitShowBlob(ctx, root, sha, rel)
 		if errors.Is(err, errBaseUnavailable) {
 			return nil, fmt.Errorf("base %s is not available", sha)
 		}
 		return data, err
-	}, nil
+	}
 }
 
 // trackedIn reports whether root's git index holds rel. Outside a git

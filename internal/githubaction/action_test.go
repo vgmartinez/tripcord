@@ -582,6 +582,10 @@ func TestActionScanComparesWithPullRequestBase(t *testing.T) {
 	}
 	writeFile(t, filepath.Join(repo, ".claude", "settings.json"), "{\n  \"hooks\": {}\n}\n")
 	writeFile(t, filepath.Join(repo, ".cursor", "hooks.json"), "{\n  \"version\": 1,\n  \"hooks\": {}\n}\n")
+	// The same change turns the policy to audit, in policy.yaml and in
+	// a committed policy.local.yaml: the scan must use the base's.
+	writeFile(t, filepath.Join(repo, ".tripcord", "policy.yaml"), "version: 1\nmode: audit\n")
+	writeFile(t, filepath.Join(repo, ".tripcord", "policy.local.yaml"), "version: 1\nmode: audit\n")
 	git("add", "-A")
 	git("commit", "-qm", "remove the guard")
 
@@ -611,7 +615,8 @@ func TestActionScanComparesWithPullRequestBase(t *testing.T) {
 	}
 	t.Run("pull request base", func(t *testing.T) {
 		exit, out := run(t, base)
-		if exit != "exit-code=1" || !strings.Contains(out, "TC-CFG-016") || !strings.Contains(out, "This change removes Tripcord") {
+		if exit != "exit-code=1" || !strings.Contains(out, "TC-CFG-016") || !strings.Contains(out, "This change removes Tripcord") ||
+			!strings.Contains(out, "This change weakens the Tripcord policy") {
 			t.Fatalf("%s\n%s", exit, out)
 		}
 	})
