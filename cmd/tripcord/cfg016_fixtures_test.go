@@ -36,6 +36,18 @@ type cfg016Fixture struct {
 	edit        func(t *testing.T, dir string)
 	againstBase bool
 	tracked     bool
+	// crlfTolerant compares content CRLF-normalized the way the embed
+	// checker's own digest does, rather than byte-for-byte. Some of
+	// this fixture's own files are covered by its committed
+	// .gitattributes `text eol=lf` lines, so a fresh git checkout (CI,
+	// a clean clone) renormalizes them to LF regardless of what bytes
+	// this test, or a prior UPDATE_GOLDEN run, wrote to disk; a local
+	// working tree that only ever ran `git add`, never a checkout,
+	// keeps the stale CRLF bytes instead. Comparing raw bytes is
+	// therefore checkout-history-dependent. The actual CRLF-bytes
+	// behavior is pinned independently, without going through git at
+	// all, by TestCheckCRLFCheckout in internal/embedded.
+	crlfTolerant bool
 }
 
 func (fx cfg016Fixture) items() bool { return fx.againstBase || fx.tracked }
@@ -209,7 +221,7 @@ var cfg016Fixtures = map[string]cfg016Fixture{
 	// every line, so lf normalizes it), not about the guard on
 	// .gitattributes itself (see embed-gitattributes-removed and
 	// embed-gitattributes-weakened).
-	"embed-crlf-checkout": {kind: "negativos", args: embedArgs("--harness", "claude"), edit: edits(
+	"embed-crlf-checkout": {kind: "negativos", args: embedArgs("--harness", "claude"), crlfTolerant: true, edit: edits(
 		crlf(embedded.BootstrapPath), crlf(embedded.ManifestPath), crlf(embedded.WorkflowPath), crlf(embedded.ClaudeSettingsPath))},
 	"embed-gitattributes-removed": {kind: "positivos", args: embedArgs("--harness", "claude"), edit: removeFile(embedded.GitattributesPath)},
 	"embed-gitattributes-weakened": {kind: "positivos", args: embedArgs("--harness", "claude"),
@@ -298,8 +310,14 @@ func TestCFG016FixturesMatchInit(t *testing.T) {
 				}
 			}
 			got := read(t, committed)
+			equal := func(a, b string) bool { return a == b }
+			if fx.crlfTolerant {
+				equal = func(a, b string) bool {
+					return string(embedded.NormalizeCRLF([]byte(a))) == string(embedded.NormalizeCRLF([]byte(b)))
+				}
+			}
 			for _, rel := range slices.Sorted(maps.Keys(want)) {
-				if got[rel] != want[rel] {
+				if !equal(got[rel], want[rel]) {
 					t.Errorf("%s/%s differs from init output; rerun with UPDATE_GOLDEN=1", committed, rel)
 				}
 			}

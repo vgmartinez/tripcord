@@ -52,6 +52,14 @@ func lf(b []byte) []byte {
 	return bytes.ReplaceAll(b, []byte("\r\n"), []byte("\n"))
 }
 
+// NormalizeCRLF is lf, exported for tests that compare content a real
+// checkout may have renormalized (for example a committed fixture
+// whose own .gitattributes declares `text eol=lf` for the path: git
+// checks it out as LF no matter what bytes the test wrote, so a
+// byte-for-byte compare against freshly generated CRLF content must
+// normalize both sides the same way the digest check does).
+func NormalizeCRLF(b []byte) []byte { return lf(b) }
+
 // allCRLF reports whether b has at least one line ending and every one
 // is CRLF.
 func allCRLF(b []byte) bool {
