@@ -252,6 +252,12 @@ func resolveExisting(dir string) string {
 // rule that reuses a pack rule id; with any of those, or when the load
 // without it fails, the policy is loaded again with the catalog so the
 // result is the one scan gets.
+// loadHookPolicy does not warn when the loaded policy's privacy.redact
+// is false (contrast runScan's warnRedactFalse): each `tripcord hook`
+// run is a fresh process deciding one tool call (see docs/hook.md), so
+// any warning here would be "once per tool call", exactly what the
+// warning is meant to avoid. The setting still has no effect; see
+// docs/privacy.md.
 func loadHookPolicy(root string, limits rules.Limits) (*policy.Effective, error) {
 	advisories, err := rules.CoreAdvisories()
 	if err != nil {

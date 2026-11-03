@@ -535,6 +535,66 @@ func TestRedactionCanaryUnknownCommand(t *testing.T) {
 	}
 }
 
+// TestPrivacyRedactFalseWarns: privacy.redact: false has no effect
+// (TestRedactionCanaryRedactFalse already covers that scan and the
+// hook still redact), but scan and init each warn about it once, on
+// stderr, naming the file that set it; the hook never does, since
+// each of its runs decides one tool call.
+func TestPrivacyRedactFalseWarns(t *testing.T) {
+	const policyDoc = "version: 1\nmode: enforce\nprivacy:\n  redact: false\n"
+	t.Run("scan", func(t *testing.T) {
+		root := hookProject(t, policyDoc)
+		code, stdout, stderr := runCLI(t, "scan", "--format", "json", root)
+		if code != int(exitcode.OK) && code != int(exitcode.Findings) {
+			t.Fatalf("exit %d stderr %q", code, stderr)
+		}
+		policyPath := filepath.Join(root, ".tripcord", "policy.yaml")
+		want := "tripcord scan: privacy.redact is false in " + policyPath
+		if !strings.Contains(stderr, want) {
+			t.Errorf("stderr = %q, want to contain %q", stderr, want)
+		}
+		if n := strings.Count(stderr, "privacy.redact is false"); n != 1 {
+			t.Errorf("stderr has the warning %d times, want 1: %q", n, stderr)
+		}
+		if strings.Contains(stdout, "privacy.redact") {
+			t.Errorf("stdout carries the warning: %q", stdout)
+		}
+	})
+	t.Run("init preserves and warns about an existing policy", func(t *testing.T) {
+		root := hookProject(t, policyDoc)
+		code, stdout, stderr := runCLI(t, "init", root)
+		if code != int(exitcode.OK) {
+			t.Fatalf("exit %d stderr %q", code, stderr)
+		}
+		policyPath := filepath.Join(root, embedded.PolicyPath)
+		want := "tripcord init: privacy.redact is false in " + policyPath
+		if !strings.Contains(stderr, want) {
+			t.Errorf("stderr = %q, want to contain %q", stderr, want)
+		}
+		if strings.Contains(stdout, "privacy.redact") {
+			t.Errorf("stdout carries the warning: %q", stdout)
+		}
+		if raw, err := os.ReadFile(policyPath); err != nil || string(raw) != policyDoc {
+			t.Errorf("policy.yaml changed: %q, %v", raw, err)
+		}
+	})
+	t.Run("init writing the default policy does not warn", func(t *testing.T) {
+		dir := outsideGit(t)
+		code, stdout, stderr := runCLI(t, "init", dir)
+		if code != int(exitcode.OK) || strings.Contains(stdout+stderr, "privacy.redact") {
+			t.Errorf("exit %d stdout %q stderr %q", code, stdout, stderr)
+		}
+	})
+	t.Run("hook never warns", func(t *testing.T) {
+		hookProject(t, policyDoc)
+		stdin := `{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"echo hi"}}`
+		_, stdout, stderr := runHookCLI(t, strings.NewReader(stdin), "--harness", "claude", "--event", hook.EventPreTool)
+		if strings.Contains(stdout+stderr, "privacy.redact") {
+			t.Errorf("hook mentions privacy.redact: stdout %q stderr %q", stdout, stderr)
+		}
+	})
+}
+
 // TestRedactionCanaryHome covers S5-S7: a home directory whose name is
 // a canary, with and without a trailing slash, never appears in scan
 // output for user-scope config, in a hook error for a project under

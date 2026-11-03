@@ -93,10 +93,23 @@ content.
 
 ## `privacy.redact`
 
-`privacy.redact` in a policy file is parsed (`policy.Privacy.Redact`)
-and merged into `policy.Effective.Redact` with its provenance, default
-`true`. Nothing reads it: `redact: false` disables no redaction
-anywhere. Every surface above redacts whatever the policy says.
+`privacy.redact` is reserved, and always on in v0: every surface above
+redacts regardless of what a policy sets. The key is still parsed
+(`policy.Privacy.Redact`) and merged into `policy.Effective.Redact`
+with its provenance, default `true`, so a v1 that honors it does not
+need a new key and a policy already carrying `redact: false` for that
+future release does not fail validation now.
+
+`scan` and `init` each warn once, to stderr and never to stdout, when
+the policy they load (or, for `init`, the `.tripcord/policy.yaml` they
+read or write) sets `redact: false`: `privacy.redact is false in
+<file>, but v0 always redacts; the key is reserved for a later release
+and has no effect`. `<file>` is the repo or org policy file that set
+it (`policy.Effective.Provenance["privacy.redact"].Source` for `scan`).
+`tripcord hook` does not warn: each run is a fresh process deciding one
+tool call, so any warning there would be once per tool call, not once
+per run, and stdout there is a harness's own structured output, which
+the warning must never join (`warnRedactFalse` in `cmd/tripcord`).
 
 ## Known limits
 

@@ -13,6 +13,7 @@ import (
 	"github.com/vgmartinez/tripcord/internal/exitcode"
 	"github.com/vgmartinez/tripcord/internal/model"
 	"github.com/vgmartinez/tripcord/internal/output"
+	"github.com/vgmartinez/tripcord/internal/policy"
 )
 
 const initUsage = `tripcord init [PATH] [--embed] [--harness h,...] [--version V --sha256 os-arch=HEX ...] [--force] [--dry-run]
@@ -102,6 +103,20 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 			return fail(exitcode.Config, fmt.Errorf("%w; nothing was written", err))
 		default:
 			return fail(exitcode.Internal, err)
+		}
+	}
+	// privacy.redact: false has no effect in v0 (see warnRedactFalse):
+	// warn once, whether the setting is already on disk (init only
+	// preserves an existing policy.yaml, never merges its content) or
+	// about to be written by this run.
+	for _, c := range changes {
+		if c.Path != embedded.PolicyPath {
+			continue
+		}
+		if f, perr := policy.Parse(c.New); perr == nil && f.Privacy != nil && f.Privacy.Redact != nil && !*f.Privacy.Redact {
+			if code := warnRedactFalse(stderr, prog, filepath.Join(dir, filepath.FromSlash(c.Path))); code != int(exitcode.OK) {
+				return code
+			}
 		}
 	}
 	// The diff quotes the existing files around each change, and a

@@ -457,6 +457,11 @@ func scanTree(ctx context.Context, t scanTarget, opts scanOptions, stdout, stder
 	if err != nil {
 		return t.configError(stderr, err)
 	}
+	if !effective.Redact {
+		if code := warnRedactFalse(stderr, t.prog, effective.Provenance["privacy.redact"].Source); code != int(exitcode.OK) {
+			return code
+		}
+	}
 	var weakened []model.ConfigItem
 	if headPolicy != nil {
 		raw, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(policy.RepoFile)))
@@ -1339,6 +1344,18 @@ var loadRules = func(limits rules.Limits) (*rules.Env, *rules.Catalog, error) {
 // preopen, pr-context, and hook.
 func errorText(err error) string {
 	return output.Message(foldHome(err.Error()))
+}
+
+// warnRedactFalse writes, once per run and only to stderr, never
+// stdout (a harness may parse hook stdout as its own output; scan and
+// init have no such reader), the notice that a policy layer's
+// privacy.redact: false has no effect: it is kept as a reserved key
+// (see docs/privacy.md) and every surface still redacts regardless of
+// it in v0. source names the file that set it, so the person who wrote
+// it, or whoever owns the org policy that did, can find it.
+func warnRedactFalse(stderr io.Writer, prog, source string) int {
+	return writeString(stderr, prog+": privacy.redact is false in "+output.Message(foldHome(source))+
+		", but v0 always redacts; the key is reserved for a later release and has no effect\n")
 }
 
 // foldHome rewrites the running user's home directory in msg to "~".
