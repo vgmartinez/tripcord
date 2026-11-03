@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -79,9 +80,17 @@ func ConfigArgs() []string {
 // above a directory; it does not select config, hooks, or a different
 // repository. Tests set it so a temp directory inside a checkout is not
 // read as that checkout.
+// GIT_INDEX_FILE is kept, resolved to an absolute path against the
+// current working directory. Git sets this during a commit hook (plain,
+// -a, a pathspec, --only, or --include) to the lock file or temporary
+// index that holds the proposed commit's content, which is not the same
+// as .git/index until the hook succeeds. Dropping it would make every
+// index read (for example ls-files --stage) see the stale on-disk index
+// instead of what is actually about to be committed.
 func Env() []string {
 	ceiling := os.Getenv("GIT_CEILING_DIRECTORIES")
-	env := make([]string, 0, len(os.Environ())+9)
+	indexFile := os.Getenv("GIT_INDEX_FILE")
+	env := make([]string, 0, len(os.Environ())+10)
 	for _, entry := range os.Environ() {
 		key, _, _ := strings.Cut(entry, "=")
 		upper := strings.ToUpper(key)
@@ -101,6 +110,11 @@ func Env() []string {
 	)
 	if ceiling != "" {
 		env = append(env, "GIT_CEILING_DIRECTORIES="+ceiling)
+	}
+	if indexFile != "" {
+		if abs, err := filepath.Abs(indexFile); err == nil {
+			env = append(env, "GIT_INDEX_FILE="+abs)
+		}
 	}
 	return env
 }

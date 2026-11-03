@@ -97,6 +97,45 @@ func TestEnvDropsInheritedGitSettings(t *testing.T) {
 	}
 }
 
+func TestEnvKeepsGitIndexFileAbsolute(t *testing.T) {
+	dir := t.TempDir()
+	abs := dir + "/index.lock"
+	t.Setenv("GIT_INDEX_FILE", abs)
+	env := Env()
+	if !containsEnv(env, "GIT_INDEX_FILE="+abs) {
+		t.Errorf("Env dropped or changed an already-absolute GIT_INDEX_FILE: %v", env)
+	}
+}
+
+func TestEnvResolvesRelativeGitIndexFile(t *testing.T) {
+	dir := t.TempDir()
+	oldwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldwd) })
+	t.Setenv("GIT_INDEX_FILE", ".git/index.lock")
+	env := Env()
+	want := dir + "/.git/index.lock"
+	if !containsEnv(env, "GIT_INDEX_FILE="+want) {
+		t.Errorf("Env did not resolve a relative GIT_INDEX_FILE to %s: %v", want, env)
+	}
+}
+
+func TestEnvDropsEmptyGitIndexFile(t *testing.T) {
+	t.Setenv("GIT_INDEX_FILE", "")
+	env := Env()
+	for _, entry := range env {
+		key, _, _ := strings.Cut(entry, "=")
+		if strings.ToUpper(key) == "GIT_INDEX_FILE" {
+			t.Errorf("Env set GIT_INDEX_FILE from an empty inherited value: %s", entry)
+		}
+	}
+}
+
 func TestRunIgnoresGlobalConfig(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git is not installed")

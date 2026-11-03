@@ -100,6 +100,159 @@ func TestStagedPreCommitHookBlocksGitCommit(t *testing.T) {
 	}
 }
 
+// writeStagedHook installs a native git pre-commit hook that scans
+// paths. It models pre-commit's pass_filenames invocation without going
+// through the pre-commit framework, so these tests exercise git's real
+// GIT_INDEX_FILE handling for each commit form.
+func writeStagedHook(t *testing.T, repo, bin string, paths ...string) {
+	t.Helper()
+	hook := filepath.Join(repo, ".git", "hooks", "pre-commit")
+	quoted := make([]string, len(paths))
+	for i, p := range paths {
+		quoted[i] = shellQuote(p)
+	}
+	script := "#!/bin/sh\nexec " + shellQuote(bin) + " scan --staged " + strings.Join(quoted, " ") + "\n"
+	if err := os.WriteFile(hook, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func gitCommit(t *testing.T, repo string, args ...string) (int, string) {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"commit"}, args...)...)
+	cmd.Dir = repo
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		return 0, string(out)
+	}
+	if exit, ok := err.(*exec.ExitError); ok {
+		return exit.ExitCode(), string(out)
+	}
+	t.Fatal(err)
+	return -1, ""
+}
+
+// TestStagedPreCommitHookCommitDashABlocksWorktreeEdit reproduces the
+// false negative from a stale GIT_INDEX_FILE: a worktree edit made bad
+// after the last commit, with nothing separately staged, must still be
+// scanned and blocked by `git commit -a`. Without honoring
+// GIT_INDEX_FILE, ls-files reads the stale on-disk index (still the old,
+// good content) and the hook passes a bad commit.
+func TestStagedPreCommitHookCommitDashABlocksWorktreeEdit(t *testing.T) {
+	bin := buildStagedBinary(t)
+	repo := stagedRepo(t)
+	stagedWrite(t, repo, ".claude/settings.json", `{}`)
+	stagedGit(t, repo, "add", ".claude/settings.json")
+	stagedGit(t, repo, "commit", "-qm", "good settings")
+	writeStagedHook(t, repo, bin, ".claude/settings.json")
+
+	stagedWrite(t, repo, ".claude/settings.json", stagedBad)
+	code, out := gitCommit(t, repo, "-am", "bad")
+	if code == 0 {
+		t.Fatalf("git commit -a succeeded despite a bad worktree edit:\n%s", out)
+	}
+	if !strings.Contains(out, "TC-CFG-001") {
+		t.Fatalf("hook output does not contain finding:\n%s", out)
+	}
+}
+
+// TestStagedPreCommitHookCommitDashAAllowsFix reproduces the false
+// positive side of the same bug: an old bad version is staged, then the
+// worktree is fixed and the fix is committed with -a. -a stages the fix
+// before the hook runs, but a stale GIT_INDEX_FILE read would still see
+// the old bad content staged earlier and block a clean commit.
+func TestStagedPreCommitHookCommitDashAAllowsFix(t *testing.T) {
+	bin := buildStagedBinary(t)
+	repo := stagedRepo(t)
+	stagedWrite(t, repo, ".claude/settings.json", `{}`)
+	stagedGit(t, repo, "add", ".claude/settings.json")
+	stagedGit(t, repo, "commit", "-qm", "good settings")
+	writeStagedHook(t, repo, bin, ".claude/settings.json")
+
+	stagedWrite(t, repo, ".claude/settings.json", stagedBad)
+	stagedGit(t, repo, "add", ".claude/settings.json")
+	stagedWrite(t, repo, ".claude/settings.json", `{"hooks":{}}`)
+	code, out := gitCommit(t, repo, "-am", "fix")
+	if code != 0 {
+		t.Fatalf("git commit -a of a fix was blocked by a stale staged version:\n%s", out)
+	}
+}
+
+// TestStagedPreCommitHookCommitPathExcludesOtherStagedFiles proves that
+// committing with an explicit pathspec builds a temporary index limited
+// to the named paths (git's default --only behavior), and that the hook
+// sees exactly that: a bad change staged outside the given pathspec must
+// not block, and the same bad change named by the pathspec must block.
+func TestStagedPreCommitHookCommitPathExcludesOtherStagedFiles(t *testing.T) {
+	bin := buildStagedBinary(t)
+	repo := stagedRepo(t)
+	stagedWrite(t, repo, ".claude/settings.json", `{}`)
+	stagedWrite(t, repo, "other.txt", "x\n")
+	stagedGit(t, repo, "add", ".")
+	stagedGit(t, repo, "commit", "-qm", "good settings")
+	writeStagedHook(t, repo, bin, ".claude/settings.json")
+
+	stagedWrite(t, repo, ".claude/settings.json", stagedBad)
+	stagedWrite(t, repo, "other.txt", "y\n")
+	stagedGit(t, repo, "add", ".claude/settings.json", "other.txt")
+
+	if code, out := gitCommit(t, repo, "other.txt", "-m", "unrelated"); code != 0 {
+		t.Fatalf("git commit other.txt was blocked by a bad change staged for a different path:\n%s", out)
+	}
+	if code, out := gitCommit(t, repo, ".claude/settings.json", "-m", "bad"); code == 0 {
+		t.Fatalf("git commit .claude/settings.json succeeded despite its own staged finding:\n%s", out)
+	} else if !strings.Contains(out, "TC-CFG-001") {
+		t.Fatalf("hook output does not contain finding:\n%s", out)
+	}
+}
+
+// TestStagedPreCommitHookCommitOnlyExcludesOtherStagedFiles exercises
+// --only explicitly: a bad change staged for another path must not leak
+// into a commit restricted to a clean path.
+func TestStagedPreCommitHookCommitOnlyExcludesOtherStagedFiles(t *testing.T) {
+	bin := buildStagedBinary(t)
+	repo := stagedRepo(t)
+	stagedWrite(t, repo, ".claude/settings.json", `{}`)
+	stagedWrite(t, repo, "other.txt", "x\n")
+	stagedGit(t, repo, "add", ".")
+	stagedGit(t, repo, "commit", "-qm", "good settings")
+	writeStagedHook(t, repo, bin, ".claude/settings.json", "other.txt")
+
+	stagedWrite(t, repo, ".claude/settings.json", stagedBad)
+	stagedWrite(t, repo, "other.txt", "y\n")
+	stagedGit(t, repo, "add", ".claude/settings.json", "other.txt")
+
+	if code, out := gitCommit(t, repo, "--only", "other.txt", "-m", "unrelated"); code != 0 {
+		t.Fatalf("git commit --only other.txt was blocked by a bad change staged for a different path:\n%s", out)
+	}
+}
+
+// TestStagedPreCommitHookCommitIncludeAddsWorktreeContent exercises
+// --include: it adds the named path's current worktree content to
+// whatever is already staged, so the temporary index the hook must see
+// reflects that newly included content, not the last staged or
+// committed version.
+func TestStagedPreCommitHookCommitIncludeAddsWorktreeContent(t *testing.T) {
+	bin := buildStagedBinary(t)
+	repo := stagedRepo(t)
+	stagedWrite(t, repo, ".claude/settings.json", `{}`)
+	stagedWrite(t, repo, "other.txt", "x\n")
+	stagedGit(t, repo, "add", ".")
+	stagedGit(t, repo, "commit", "-qm", "good settings")
+	writeStagedHook(t, repo, bin, ".claude/settings.json")
+
+	stagedWrite(t, repo, "other.txt", "y\n")
+	stagedGit(t, repo, "add", "other.txt")
+	stagedWrite(t, repo, ".claude/settings.json", stagedBad)
+	code, out := gitCommit(t, repo, "--include", ".claude/settings.json", "-m", "bad")
+	if code == 0 {
+		t.Fatalf("git commit --include succeeded despite a bad included worktree edit:\n%s", out)
+	}
+	if !strings.Contains(out, "TC-CFG-001") {
+		t.Fatalf("hook output does not contain finding:\n%s", out)
+	}
+}
+
 func TestScanStagedGitlink(t *testing.T) {
 	bin := buildStagedBinary(t)
 	repo := stagedRepo(t)
