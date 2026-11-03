@@ -95,7 +95,8 @@
     },
     "redactions": {
       "type": "integer",
-      "minimum": 0
+      "minimum": 0,
+      "description": "Count of values this event's own producer redacted before rules saw it. In v0 this is always 0: every event rules evaluate is unredacted CEL input, built straight from the harness's hook payload, and is never itself written to any output; see docs/privacy.md."
     },
     "raw_ref": {
       "type": "string"

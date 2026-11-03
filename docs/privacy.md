@@ -78,7 +78,7 @@ then a cut at 1024 bytes (`MaxFieldBytes`).
 | Git notes report (`refs/notes/ai` signals in `pr-context`) | tripcord only reads notes; tool ids are kept only when `validTool` accepts them (64 bytes at most), then `publishedPrContext` | 64 |
 | `bootstrap.sh` errors on stderr | `fail` prints fixed text with the home directory folded to `~` (`fold_home`); no event, environment value, or command is printed | fixed text and a path |
 | `--verbose` / `--debug` logs | none: v0 has neither flag | - |
-| Events | never emitted: an event exists only as the CEL input of the hook's rules (`rules.EventInput`) | - |
+| Events | never emitted: an event exists only as the CEL input of the hook's rules (`rules.EventInput`); its `redactions` field is always `0` in v0, since the event is that unredacted CEL input and is never itself written to any output (see the schema's `redactions` description) | - |
 
 ## What is persisted
 
