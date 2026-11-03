@@ -847,9 +847,11 @@ func scanRoot(scanPath string) (string, error) {
 	return absolute, nil
 }
 
+// gitRoot is the nearest directory at or above dir that is a
+// repository root (see repoRoot), or "" when there is none.
 func gitRoot(dir string) string {
 	for {
-		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+		if repoRoot(dir) {
 			return dir
 		}
 		parent := filepath.Dir(dir)
@@ -860,9 +862,14 @@ func gitRoot(dir string) string {
 	}
 }
 
+// repoRoot reports whether dir has a .git that is a directory or a
+// regular file (a worktree's "gitdir:" file), after following symlinks.
+// init, scan, and hook all use it, so a .git they disagree on, such as
+// a dangling symlink or a FIFO, cannot make init wire a repository the
+// hook then fails to find.
 func repoRoot(dir string) bool {
-	_, err := os.Stat(filepath.Join(dir, ".git"))
-	return err == nil
+	info, err := os.Stat(filepath.Join(dir, ".git"))
+	return err == nil && (info.IsDir() || info.Mode().IsRegular())
 }
 
 func normalizeScanArgs(args []string) ([]string, error) {

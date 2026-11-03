@@ -200,7 +200,7 @@ func hookProjectDir(ad hookAdapter) (string, error) {
 		start = wd
 	}
 	for dir := resolveExisting(filepath.Clean(start)); ; {
-		if _, err := os.Lstat(filepath.Join(dir, ".git")); err == nil {
+		if repoRoot(dir) {
 			return dir, nil
 		}
 		parent := filepath.Dir(dir)
