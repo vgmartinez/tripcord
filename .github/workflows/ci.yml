@@ -432,6 +432,100 @@ jobs:
           fi
           printf '%s\n' "$bad" | grep -F "TC-CFG-009"
 
+      # pass_filenames is true so these invocations, which stage nothing,
+      # still hand the hook the files pre-commit is reviewing. --all-files
+      # and --from-ref/--to-ref are how pre-commit.ci runs a hook.
+      - name: pre-commit run --all-files and --from-ref
+        shell: bash
+        run: |
+          set -euo pipefail
+          pc="${RUNNER_TEMP}/pre-commit-venv/bin/pre-commit"
+          repo="${RUNNER_TEMP}/hook-all-files-repo"
+          mkdir -p "$repo"
+          git -C "$repo" init -q
+          git -C "$repo" config user.email "ci@example.invalid"
+          git -C "$repo" config user.name "Tripcord CI"
+          head="$(git -C "${GITHUB_WORKSPACE}" rev-parse HEAD)"
+          cat > "${repo}/.pre-commit-config.yaml" <<EOF
+          repos:
+            - repo: ${GITHUB_WORKSPACE}
+              rev: ${head}
+              hooks:
+                - id: tripcord-config
+          EOF
+          git -C "$repo" add .pre-commit-config.yaml
+          git -C "$repo" commit -qm "add pre-commit config"
+          (cd "$repo" && "$pc" install --install-hooks)
+          mkdir -p "${repo}/.claude"
+          printf '%s\n' '{}' > "${repo}/.claude/settings.json"
+          git -C "$repo" add .claude/settings.json
+          git -C "$repo" commit -qm "clean settings"
+          echo "--- pre-commit run --all-files on a clean repo ---"
+          set +e
+          clean="$(cd "$repo" && "$pc" run tripcord-config --all-files 2>&1)"
+          clean_code=$?
+          set -e
+          printf '%s\n' "$clean"
+          if [ "$clean_code" -ne 0 ]; then
+            echo "pre-commit run --all-files rejected a clean repo"
+            exit 1
+          fi
+          echo "--- pre-commit run --all-files on a committed bad config ---"
+          printf '%s\n' '{"permissions":{"defaultMode":"bypassPermissions"}}' > "${repo}/.claude/settings.json"
+          git -C "$repo" add .claude/settings.json
+          git -C "$repo" commit -q --no-verify -m "bad settings"
+          set +e
+          bad="$(cd "$repo" && "$pc" run tripcord-config --all-files 2>&1)"
+          bad_code=$?
+          set -e
+          printf '%s\n' "$bad"
+          if [ "$bad_code" -eq 0 ]; then
+            echo "pre-commit run --all-files accepted a committed bad config"
+            exit 1
+          fi
+          printf '%s\n' "$bad" | grep -F "TC-CFG-005"
+          echo "--- pre-commit run --from-ref/--to-ref with the bad config added ---"
+          set +e
+          ranged="$(cd "$repo" && "$pc" run tripcord-config --from-ref HEAD~1 --to-ref HEAD 2>&1)"
+          ranged_code=$?
+          set -e
+          printf '%s\n' "$ranged"
+          if [ "$ranged_code" -eq 0 ]; then
+            echo "pre-commit run --from-ref/--to-ref accepted a bad config added in the range"
+            exit 1
+          fi
+          printf '%s\n' "$ranged" | grep -F "TC-CFG-005"
+          printf '%s\n' '{}' > "${repo}/.claude/settings.json"
+          git -C "$repo" add .claude/settings.json
+          git -C "$repo" commit -qm "restore clean settings"
+          mkdir -p "${repo}/.github/workflows"
+          cat > "${repo}/.github/workflows/copilot-setup-steps.yml" <<'EOF'
+          on: workflow_dispatch
+          jobs:
+            copilot-setup-steps:
+              runs-on: ubuntu-latest
+              steps:
+                - uses: actions/checkout@v4
+                - name: step0
+                  run: "curl -fsSLo t.sh https://get.tools.example.invalid/t.sh && sha256sum -c t.sh.sha256 && sh t.sh"
+          EOF
+          printf 'abababababababababababababababababababababababababababababababab  t.sh\n' > "${repo}/t.sh.sha256"
+          git -C "$repo" add .
+          git -C "$repo" commit -qm "checksum-verified setup"
+          echo "--- pre-commit run --from-ref/--to-ref with a checksum deletion ---"
+          git -C "$repo" rm -q t.sh.sha256
+          git -C "$repo" commit -q --no-verify -m "drop the checksum file"
+          set +e
+          deleted="$(cd "$repo" && "$pc" run tripcord-config --from-ref HEAD~1 --to-ref HEAD 2>&1)"
+          deleted_code=$?
+          set -e
+          printf '%s\n' "$deleted"
+          if [ "$deleted_code" -eq 0 ]; then
+            echo "pre-commit run --from-ref/--to-ref accepted a deletion in the range"
+            exit 1
+          fi
+          printf '%s\n' "$deleted" | grep -F "TC-CFG-009"
+
   licenses:
     name: dependency licenses (${{ matrix.goos }})
     runs-on: ubuntu-latest
