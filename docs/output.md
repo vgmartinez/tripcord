@@ -5,6 +5,8 @@ title, fix, excerpt, and path are attacker-controlled. Each sink redacts,
 publishes only the path `locate` allows, and escapes control and bidi
 characters for its format. The fingerprint field is copied as stored.
 Rendering never recomputes it and never writes back into the finding.
+[privacy.md](privacy.md) lists every surface tripcord emits and its
+redaction point and cap.
 
 ## Paths
 

@@ -180,6 +180,13 @@ Prints a unified diff of every file init would create or change, then
 `dry run, nothing written` on stderr, and writes nothing. Merge
 failures exit 3 as without `--dry-run`.
 
+The diff quotes the existing files, which can hold credentials (an `env`
+block, an MCP server's token), so it is redacted like any other output:
+each JSON string is decoded, redacted, and re-encoded when it held a
+credential, and each line is capped at 1024 bytes. A line with a control,
+bidi, or invalid byte is escaped. The diff is a preview and does not
+always apply as a patch. See [privacy.md](privacy.md).
+
 ## Bootstrap
 
 ```text

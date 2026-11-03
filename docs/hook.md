@@ -98,7 +98,9 @@ both.
 
 The reason names the rules that decided, for example `tripcord blocked
 this tool call: ACME-001 (high): piping a download into a shell is not
-allowed`. It never includes the command or the input.
+allowed`. It never includes the command or the input. A custom rule's
+`message`, and every error below, is redacted, has the home directory
+shown as `~`, and is cut at 4096 bytes; see [privacy.md](privacy.md).
 
 ## Failures
 
@@ -112,7 +114,7 @@ A run that cannot decide is one of:
 - an evaluation error, an exhausted CEL budget, or a normalized event
   over its cap;
 - an internal error, including a panic, which is reported as
-  `internal error: <value>` without a stack trace;
+  `internal error`, without the panic value or a stack trace;
 - no decision within the deadline.
 
 By default (`--on-failure error`) it writes `tripcord hook: <error>` on

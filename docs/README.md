@@ -75,7 +75,8 @@ output. [Commands](commands.md) lists every command, flag, and exit code.
   [Commands](commands.md), [FAQ and troubleshooting](faq.md).
 - Commands: [`scan`](scan.md), [`init` and `init --embed`](init.md),
   [`preopen`](preopen.md), [`pr-context`](pr-context.md),
-  [fingerprints](fingerprint.md), [output and sinks](output.md).
+  [fingerprints](fingerprint.md), [output and sinks](output.md),
+  [privacy and redaction](privacy.md).
 - CI and hooks: [GitHub Action](github-action.md),
   [pre-commit](pre-commit.md).
 - Configuration: [Policy](policy.md),

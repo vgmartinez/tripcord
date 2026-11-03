@@ -1,0 +1,120 @@
+# Privacy and redaction
+
+Everything tripcord prints or writes goes through one redactor,
+`output.DefaultRedactor` in `internal/output/redact.go`, and a length
+cap. Config text, hook events, policy text, and errors can all hold
+credentials, and an attacker can choose them. This page lists every
+surface v0 emits, where each one is redacted, and how long an excerpt
+can be.
+
+## What the redactor claims
+
+`DefaultRedactor` replaces each of these with `[REDACTED]`, in this
+order:
+
+| Class | Example | Code |
+| --- | --- | --- |
+| `Authorization:` header value | `-H "Authorization: Bearer X"` | `authorizationPattern` |
+| Secret flag value, after `=` or whitespace (S1) | `--token=X`, `--api-key X` | `RedactSecretFlags` |
+| `-u` / `--user` value of the form `user:pass` (S2) | `curl -u admin:X` | `RedactUserFlags` |
+| A tool's own short password or token flag (S2) | `sshpass -p X`, `redis-cli -a X`, `mysql -pX`, `docker login -p X`, `openssl -k X`, `vercel -t X` | `RedactToolFlags` |
+| A quoted value, as a whole (S3) | `--password "a b X"` | all flag and assignment classes |
+| URL userinfo, percent-encoded too (S4) | `https://u:X@host`, `https://u:p%40X@host` | `RedactURLUserinfo` |
+| MCP argv with the value in the next element (S4) | `["--token", "X"]` | `RedactToolArgv` (source side) |
+| Token shapes | private key blocks, `AKIA…`, AWS secret keys, `ghp_…`, `github_pat_…`, `glpat-…`, `sk-…`, `sk_live_…`, `xox?-…`, `xapp-…`, `npm_…`, `hf_…`, `ya29.…`, `AIza…`, JWTs, `bearer X`, Slack webhook URLs | `secretPatterns` |
+| An assignment to a credential name, `=` or `:` | `SECRET_KEY=X`, `api_key: X` | `RedactAssignments`, `CredentialName` |
+
+A shell line continuation (`\` and a newline) between a flag, a header,
+or `bearer` and its value is skipped, as the shell deletes it.
+
+The home directory classes (S5 to S7) are not redactor patterns but path
+folding: the running user's home directory is shown as `~` in every
+error (`foldHome` in `cmd/tripcord`, matched case-insensitively on
+Windows, with or without a trailing separator), user-scope locations are
+shown under `~/`, and a managed policy permission error, which names the
+resolved file behind a symlink, is folded the same way.
+
+Adapters also redact at the source (`kit.Source.Sanitize`, and
+`output.RedactCommand` in the Claude adapter), so findings, evidence
+keys, and fingerprints are built from sanitized text. An entry that
+lost a value to redaction carries a `sig:` discriminator, so two
+different secrets in the same place keep distinct fingerprints
+(`fingerprintMode` `s1` or `k1`; see [fingerprint.md](fingerprint.md)).
+Every sink then redacts again.
+
+## Output inventory
+
+Caps are in bytes and include the truncation marker. "Message" is
+`output.Message`: the redactor, then a cut at 4096 bytes on a UTF-8
+boundary, line breaks kept. "Field" is the redactor, the sink's escaping,
+then a cut at 1024 bytes (`MaxFieldBytes`).
+
+| Surface | Redaction point | Cap |
+| --- | --- | --- |
+| `scan --format text` | `output.sink.Write` (`redactFinding`, every finding string), `sink.SetDiagnostics`; `renderText` escapes each field with `present` | field |
+| `scan --format json` / `jsonl` | `redactFinding`; `renderJSONL` applies `capFinding` to every finding string and caps each diagnostic field | field |
+| `scan --format sarif`: result `message.text` | `redactFinding`; `sarifText` (escapes controls and `[` `]`) | field per part |
+| `scan --format sarif`: `properties.tripcord`, `partialFingerprints` | `redactFinding`; scope and path from the capped location; fingerprint is a hash | field |
+| `scan --format sarif`: rule text, notifications | catalog text through `sarifText`; diagnostics through `sink.SetDiagnostics` and `sarifText` | field |
+| `scan --format gha` annotations | `redactFinding`; `ghaData` and `ghaProperty` encode `%`, CR, LF (and `:` `,` in properties), then `truncateGHA` | field |
+| `scan --format md` (the PR comment body) | `redactFinding`; `markdownValue`, `inlineCode`, `fencedCode` escape controls and break `@` mentions | field, and 60000 for the comment (`MaxMarkdownBytes`) |
+| PR comment artifact (the action's `--format md --output` file, posted by `github-script`) | the same Markdown sink, written by `publishSink` | as Markdown |
+| Code scanning upload (the action's `--format sarif --output` file) | the same SARIF sink | as SARIF |
+| Job summary | none: v0 never writes `GITHUB_STEP_SUMMARY` | - |
+| `scan` diagnostics on stderr | `output.TerminalLine` (redactor, then one escaped line) | field |
+| `scan` and other CLI errors on stderr | `errorText` = `output.Message(foldHome(err))`; `scanTarget.redactError` also replaces a `--staged` temporary tree path with `.`; Git stderr through `sanitizeGitStderr` and `gitrun.Sanitize` (redactor before the cut) | message (Git stderr 1024 before it) |
+| `tripcord hook`, Claude Code: stdout `permissionDecisionReason` / `systemMessage`, stderr reason | `hookReason` (`output.Message(foldHome(reason))`) for a decision; `hookFailure` (`errorText`) for a failure | message |
+| `tripcord hook`, Cursor: stdout `user_message` / `agent_message`, stderr reason | the same | message |
+| `tripcord hook`, Copilot: stderr reason or warning | the same | message |
+| Deny reason from a custom rule `message` | `hookReason`. `message` is static policy text: v0 has no interpolation of event fields | message |
+| Echoed command, `tool_input`, or path | none echoed: no hook output carries the event, its command, `tool_input`, or paths. An input error names the field (`hook_event_name is not PreToolUse`), not its value | - |
+| Policy or CEL error (syntax, type check, evaluation, such as a `matches` error that quotes the event value) | `hookFailure` / `errorText` | message |
+| Exit-4 panic (`hook`, and every other command through `run`) | the panic value is dropped: `tripcord: internal error` or `tripcord hook: internal error` (`tripcord hook failed closed: internal error` under `--on-failure block`). No stack, no event, no environment | fixed text |
+| `init` progress and errors | `errorText` | message |
+| `init --dry-run` diff | `output.PreviewLines`: each JSON string decoded, redacted, and re-encoded (`RedactJSONText`), then the redactor over the text; each line escaped when it holds a control, bidi, or invalid byte | field per line |
+| `preopen` (scan output and errors) | the scan sinks; the target URL and Git stderr through `errorText` and `gitrun.Sanitize` | as scan, message |
+| pre-commit (`scan --staged`) | the scan sinks and errors above | as scan |
+| `pr-context` text, json, gha, and `GITHUB_OUTPUT` | `publishedPrContext`: every signal value and source, warning, outcome reason and path through `output.Message(foldHome())`, the TC-CFG-014 finding through `output.PublishFinding`; `GITHUB_OUTPUT` carries only `is_agent` and validated agent ids | message, field |
+| Git notes report (`refs/notes/ai` signals in `pr-context`) | tripcord only reads notes; tool ids are kept only when `validTool` accepts them (64 bytes at most), then `publishedPrContext` | 64 |
+| `bootstrap.sh` errors on stderr | `fail` prints fixed text with the home directory folded to `~` (`fold_home`); no event, environment value, or command is printed | fixed text and a path |
+| `--verbose` / `--debug` logs | none: v0 has neither flag | - |
+| Events | never emitted: an event exists only as the CEL input of the hook's rules (`rules.EventInput`) | - |
+
+## What is persisted
+
+Nothing from an event or an excerpt. `scan` writes only the report it
+was asked for (stdout or `--output`) and, outside CI, the per-machine
+fingerprint key (`~/.tripcord/fingerprint.key`). `scan --staged`
+removes its temporary tree, and `preopen` its clone. The hook writes
+nothing; `bootstrap.sh` runs a private copy of the binary from the
+cache's `.run` directory and removes it. `init` writes only its wiring
+and merges into existing settings files, keeping the user's own
+content.
+
+## `privacy.redact`
+
+`privacy.redact` in a policy file is parsed (`policy.Privacy.Redact`)
+and merged into `policy.Effective.Redact` with its provenance, default
+`true`. Nothing reads it: `redact: false` disables no redaction
+anywhere. Every surface above redacts whatever the policy says.
+
+## Known limits
+
+- A token shape split by a raw newline is not reassembled: each half is
+  shown if it no longer matches the shape on its own.
+- Base64 and URL-encoded forms of a credential are not decoded, except
+  percent-encoded URL userinfo.
+- A credential with no credential name, flag, or known shape, such as a
+  bare positional argument, is not recognized.
+
+## Tests
+
+`cmd/tripcord/redaction_canary_test.go` is the gate: one canary per
+class above, written plainly, fully `\u`-escaped, and split by a JSON
+escape, in config files, in the command, path, and URL of every hook
+harness, in custom rule messages and policy errors, and in a panic. No
+canary may appear in any output format, every finding's fingerprint
+must, and `redact: false` changes nothing.
+`cmd/tripcord/redaction_persist_unix_test.go` checks that scan, the hook
+through `bootstrap.sh`, and init leave no canary in the repository,
+`HOME`, the cache, or `TMPDIR`, and an empty `.run` directory.
