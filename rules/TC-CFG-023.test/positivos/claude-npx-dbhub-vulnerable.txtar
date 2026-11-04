@@ -1,0 +1,9 @@
+-- .mcp.json --
+{
+  "mcpServers": {
+    "dbhub": {
+      "command": "npx",
+      "args": ["-y", "@bytebase/dbhub@0.22.5"]
+    }
+  }
+}

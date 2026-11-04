@@ -36,3 +36,5 @@ positivos:
   claude-npx-mcphub-vulnerable: high
   claude-npx-mcphub-introduced: high
   claude-npx-mcphub-0.12.17: high
+  claude-npx-ckan-vulnerable: high
+  claude-npx-dbhub-vulnerable: high

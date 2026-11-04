@@ -9,7 +9,7 @@ import (
 func TestSeedList(t *testing.T) {
 	t.Parallel()
 	db := loadSeed(t)
-	if db.Count() != 10 || db.LatestReview() != "2026-11-03" {
+	if db.Count() != 12 || db.LatestReview() != "2026-11-04" {
 		t.Fatalf("count %d reviewed %s", db.Count(), db.LatestReview())
 	}
 	hits, err := db.Match([]PackageRef{{

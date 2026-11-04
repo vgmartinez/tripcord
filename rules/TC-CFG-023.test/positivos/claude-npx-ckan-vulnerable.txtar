@@ -1,0 +1,9 @@
+-- .mcp.json --
+{
+  "mcpServers": {
+    "ckan": {
+      "command": "npx",
+      "args": ["-y", "@aborruso/ckan-mcp-server@0.4.108"]
+    }
+  }
+}
