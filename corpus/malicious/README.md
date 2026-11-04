@@ -11,6 +11,7 @@ rule ids the archive expects, less the misses listed in `GAPS`.
 ```
 corpus/malicious/
   GAPS                   known misses, one per line
+  mutations.golden       every generated variant and its content hash
   <source>/<seed>.txtar  one seed
 ```
 
@@ -66,6 +67,11 @@ Variants are generated in the test and not committed. One table stays
 the only source, invisible characters stay readable as `\u` escapes in
 Go, and nothing drifts from the seeds. The test writes the variants to a
 temporary directory and runs the same lint on them.
+
+`mutations.golden` lists every variant id with the sha256 of its
+generated archive. A variant that stops applying, appears, or changes
+its output fails the test until the golden is regenerated with
+`go test ./cmd/tripcord -run TestMaliciousCorpus -update`.
 
 ## GAPS
 
