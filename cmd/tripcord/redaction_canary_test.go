@@ -54,6 +54,12 @@ var redactionCanaries = []redactionCanary{
 	{class: "JWT shape", text: "echo eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.CNRYJWTS7Q2Wabcdef", secret: "CNRYJWTS7Q2W"},
 	{class: "private key", text: "echo '-----BEGIN RSA PRIVATE KEY-----\nMIIBCNRYPKEY7Q2W\n-----END RSA PRIVATE KEY-----'", secret: "CNRYPKEY7Q2W"},
 	{class: "line continuation", text: "curl --token \\\n  CNRYLCNT7Q2W https://h.invalid/d", secret: "CNRYLCNT7Q2W"},
+	{class: "YAML glued value sk:", text: "cat <<'EOF' > c.yaml\napi_key:\n  sk:CNRYYGSK7Q2W\nEOF", secret: "CNRYYGSK7Q2W"},
+	{class: "YAML glued value admin:", text: "cat <<'EOF' > c.yaml\npassword:\n  admin:CNRYYGAD7Q2W\nEOF", secret: "CNRYYGAD7Q2W"},
+	{class: "YAML glued value a_b:", text: "cat <<'EOF' > c.yaml\nsecret:\n  a_b:CNRYYGAB7Q2W\nEOF", secret: "CNRYYGAB7Q2W"},
+	{class: "YAML double-quoted key block scalar", text: "cat <<'EOF' > c.yaml\n\"api_key\": |\n  CNRYYQDB7Q2W\nEOF", secret: "CNRYYQDB7Q2W"},
+	{class: "YAML single-quoted key block scalar", text: "cat <<'EOF' > c.yaml\n'api_key': |\n  CNRYYQSB7Q2W\nEOF", secret: "CNRYYQSB7Q2W"},
+	{class: "YAML nested quoted key", text: "cat <<'EOF' > c.yaml\ntoken:\n  \"pw\": CNRYYNQK7Q2W\nEOF", secret: "CNRYYNQK7Q2W"},
 }
 
 // canaryEncoding is how a canary is written inside a JSON string:

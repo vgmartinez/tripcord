@@ -686,40 +686,38 @@ func redactColonAssignments(value string, removed *[]string) string {
 			spans, spansFound = findLiteralSpans(value), true
 		}
 		ok = ok && !spans.contains(h.start)
+		if ok {
+			// A block scalar ("api_key: |") or a nested mapping
+			// ("token:\n  pw: x") is the key's value even when the key is
+			// quoted ("'api_key': |"), so both are checked before
+			// colonValueStop's mapping stops apply. Each test is
+			// strict before it asks lines for the key's column, so a
+			// near miss ("api_key: |x") costs no line lookup.
+			blockStart, isBlock := blockScalarHeader(value, h.valStart, lines)
+			if !isBlock {
+				blockStart, isBlock = nestedMappingStart(value, h)
+			}
+			if isBlock {
+				bodyEnd := blockBodyEnd(value, blockStart, lines.column(h.start))
+				if bodyEnd > blockStart {
+					b.WriteString(value[pos:blockStart])
+					*removed = append(*removed, value[blockStart:bodyEnd])
+					b.WriteString(redactedBlockScalarBody(value[blockStart:bodyEnd]))
+					pos = bodyEnd
+					continue
+				}
+				// An empty block scalar, or a "nested" key that is a
+				// sibling at the key's own indentation ("token:\npw: x"):
+				// h has no value; the loop goes on to that next key.
+				end := max(blockStart, h.valStart)
+				b.WriteString(value[pos:end])
+				pos = end
+				continue
+			}
+		}
 		stop := ""
 		if ok {
 			stop = colonValueStop(value, h.start, h.openQuote, h.closeQuote, h.sep)
-			if stop == "" {
-				// blockScalarHeader is strict before lines is asked for the
-				// key's column, so a near miss ("api_key: |x") costs no
-				// line lookup, and lines answers in amortized constant time.
-				if headerEnd, isBlock := blockScalarHeader(value, h.valStart, lines); isBlock {
-					bodyEnd := blockBodyEnd(value, headerEnd, lines.column(h.start))
-					b.WriteString(value[pos:headerEnd])
-					pos = headerEnd
-					if bodyEnd > headerEnd {
-						*removed = append(*removed, value[headerEnd:bodyEnd])
-						b.WriteString(redactedBlockScalarBody(value[headerEnd:bodyEnd]))
-						pos = bodyEnd
-					}
-					continue
-				}
-				if strings.Contains(h.sep, "\n") && startsAssignmentHead(value, h.valStart) {
-					// h's colon has nothing after it but a newline: its
-					// "value" is a nested, more-indented key
-					// ("token:\n  password: ..."), not a scalar of its
-					// own. Leave it unredacted (it is a name, not a
-					// secret) and let the loop find that nested key
-					// itself, instead of colonValue running past it: an
-					// unquoted value runs through a "|" or ">" on its
-					// own line, which would otherwise consume that
-					// key's own block scalar indicator (blockScalarSpan,
-					// above) and leave its body unredacted.
-					b.WriteString(value[pos:h.valStart])
-					pos = h.valStart
-					continue
-				}
-			}
 		}
 		body := ""
 		if ok {
@@ -925,36 +923,53 @@ func imageTag(value string) bool {
 	return true
 }
 
-// startsAssignmentHead reports whether pos starts another "name:" head:
-// a name (optionally quoted), optionally followed by blanks, then ":".
-// It excludes a URL scheme ("https://..."), whose own ":" is not a
-// mapping key. redactColonAssignments uses it, only when the previous
-// key's colon is followed by nothing but a newline, to tell a key with
-// no scalar value of its own, holding a nested, more-indented key
-// ("token:\n  password: ..."), from a key whose value is a plain scalar
-// wrapped onto the next line ("token:\n  opaque-value"): only the
-// former's "value" is itself a key head.
-func startsAssignmentHead(value string, pos int) bool {
+// nestedMappingStart reports whether h, a key whose colon is followed by
+// nothing but a newline, holds a nested mapping ("token:\n  pw: x",
+// "token:\n  \"pw\": x") rather than a plain scalar wrapped onto the
+// next line ("token:\n  opaque-value", "api_key:\n  sk:X"). start is the
+// offset of the line holding the nested key, where the mapping starts.
+// A nested key is a name, optionally quoted, optional blanks, and a ":"
+// followed by a blank, a line break, or the end of value, as in YAML: a
+// glued "sk:X" or a URL ("https://...") is a scalar, not a key.
+func nestedMappingStart(value string, h assignmentHead) (start int, ok bool) {
+	nl := strings.LastIndexByte(h.sep, '\n')
+	if nl < 0 {
+		return 0, false
+	}
+	pos := h.valStart
 	if pos < len(value) && (value[pos] == '"' || value[pos] == '\'') {
 		quote := value[pos]
-		end := strings.IndexByte(value[pos+1:], quote)
-		if end < 0 {
-			return false
+		pos++
+		for pos < len(value) && value[pos] != quote && value[pos] != '\n' {
+			pos++
 		}
-		pos += end + 2
+		if pos == len(value) || value[pos] != quote {
+			return 0, false
+		}
+		pos++
 	} else {
-		start := pos
+		nameStart := pos
 		for pos < len(value) && isNameByte(value[pos]) {
 			pos++
 		}
-		if pos == start {
-			return false
+		if pos == nameStart {
+			return 0, false
 		}
 	}
 	for pos < len(value) && (value[pos] == ' ' || value[pos] == '\t') {
 		pos++
 	}
-	return pos < len(value) && value[pos] == ':' && !strings.HasPrefix(value[pos:], "://")
+	if pos == len(value) || value[pos] != ':' {
+		return 0, false
+	}
+	if pos++; pos < len(value) {
+		switch value[pos] {
+		case ' ', '\t', '\r', '\n':
+		default:
+			return 0, false
+		}
+	}
+	return h.valStart - len(h.sep) + nl + 1, true
 }
 
 // colonValue returns the "key: value" value at the start of rest: a

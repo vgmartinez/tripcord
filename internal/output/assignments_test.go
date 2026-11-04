@@ -95,18 +95,23 @@ func TestRedactAssignmentsKeepsSpaceBeforeOperator(t *testing.T) {
 func TestColonAssignmentsRedactYAMLBlockScalars(t *testing.T) {
 	t.Parallel()
 	for in, want := range map[string]string{
-		"api_key: |\n  BLOCKA\n":                                      "api_key: |\n  [REDACTED]\n",
-		"api_key: >-\n  BLOCKB\nnext: ok\n":                           "api_key: >-\n  [REDACTED]\nnext: ok\n",
-		"api_key: |2\n  BLOCKC\n":                                     "api_key: |2\n  [REDACTED]\n",
-		"api_key: |-\n  BLOCKD\n":                                     "api_key: |-\n  [REDACTED]\n",
-		"api_key: |2-\n  BLOCKE\n":                                    "api_key: |2-\n  [REDACTED]\n",
-		"api_key: >+\n  BLOCKF\nnext: ok\n":                           "api_key: >+\n  [REDACTED]\nnext: ok\n",
-		"api_key: | # comment\n  BLOCKG\n":                            "api_key: | # comment\n  [REDACTED]\n",
-		"env:\n  TOKEN: |\n    MULTI1\n    MULTI2\n":                  "env:\n  TOKEN: |\n    [REDACTED]\n",
-		"password: |\n  BLOCKH\nother: 1\n":                           "password: |\n  [REDACTED]\nother: 1\n",
-		"api_key: |\nb: 2\n":                                          "api_key: |\nb: 2\n",
-		"token:\n  password: |\n    BLOCKI\n  other: 1\n":             "token:\n  password: |\n    [REDACTED]\n  other: 1\n",
-		"token:\n  secret:\n    api_key: |\n      BLOCKJ\n    d: 1\n": "token:\n  secret:\n    api_key: |\n      [REDACTED]\n    d: 1\n",
+		"api_key: |\n  BLOCKA\n":                                    "api_key: |\n  [REDACTED]\n",
+		"api_key: >-\n  BLOCKB\nnext: ok\n":                         "api_key: >-\n  [REDACTED]\nnext: ok\n",
+		"api_key: |2\n  BLOCKC\n":                                   "api_key: |2\n  [REDACTED]\n",
+		"api_key: |-\n  BLOCKD\n":                                   "api_key: |-\n  [REDACTED]\n",
+		"api_key: |2-\n  BLOCKE\n":                                  "api_key: |2-\n  [REDACTED]\n",
+		"api_key: >+\n  BLOCKF\nnext: ok\n":                         "api_key: >+\n  [REDACTED]\nnext: ok\n",
+		"api_key: | # comment\n  BLOCKG\n":                          "api_key: | # comment\n  [REDACTED]\n",
+		"env:\n  TOKEN: |\n    MULTI1\n    MULTI2\n":                "env:\n  TOKEN: |\n    [REDACTED]\n",
+		"password: |\n  BLOCKH\nother: 1\n":                         "password: |\n  [REDACTED]\nother: 1\n",
+		"api_key: |\nb: 2\n":                                        "api_key: |\nb: 2\n",
+		"config:\n  password: |\n    BLOCKI\n  other: 1\n":          "config:\n  password: |\n    [REDACTED]\n  other: 1\n",
+		"config:\n  db:\n    api_key: |\n      BLOCKJ\n    d: 1\n":  "config:\n  db:\n    api_key: |\n      [REDACTED]\n    d: 1\n",
+		"token:\n  password: |\n    BLOCKK\n  other: 1\nnext: ok\n": "token:\n  [REDACTED]\nnext: ok\n",
+		`"api_key": |` + "\n  BLOCKL\n":                             `"api_key": |` + "\n  [REDACTED]\n",
+		`'api_key': |` + "\n  BLOCKM\n":                             `'api_key': |` + "\n  [REDACTED]\n",
+		"- api_key: |\n    BLOCKN\n- b: 2\n":                        "- api_key: |\n    [REDACTED]\n- b: 2\n",
+		"api_key: |x":                                               "api_key: |x",
 	} {
 		if got := DefaultRedactor(in); got != want {
 			t.Errorf("DefaultRedactor(%q) = %q, want %q", in, got, want)
@@ -117,22 +122,35 @@ func TestColonAssignmentsRedactYAMLBlockScalars(t *testing.T) {
 	}
 }
 
-// A credential-named key whose colon is followed only by a newline has
-// no scalar value of its own when the next, more-indented line is
-// itself a key ("token:\n  password: ...": a nested mapping). It is
-// left unredacted (it is a name, not a secret) so the loop finds that
-// nested key itself. A key whose value is a plain scalar wrapped onto
-// the next line, including one that starts with a URL scheme, is still
-// captured as that key's own value.
+// A credential-named key whose colon is followed only by a newline holds
+// a nested mapping when the next, more-indented line is itself a key: a
+// name, optionally quoted, then a ":" followed by a blank, a line break,
+// or the end of input. That mapping is the key's value and is redacted
+// whole, whatever its own keys are named. A plain scalar wrapped onto
+// the next line, including a glued "name:value" or a URL, is still that
+// key's own value, as it was before block scalars were handled. A key
+// at the outer key's own indentation is a sibling, found on its own.
 func TestColonAssignmentsNestedMappingKeyHasNoOwnValue(t *testing.T) {
 	t.Parallel()
 	for in, want := range map[string]string{
 		"token:\n  secret_value\nnext: ok\n":             "token:\n  [REDACTED]\nnext: ok\n",
 		"token:\n  https://example.com/path\nnext: ok\n": "token:\n  [REDACTED]\nnext: ok\n",
-		"token:\n  password: secret_value\nnext: ok\n":   "token:\n  password: [REDACTED]\nnext: ok\n",
+		"token:\n  password: secret_value\nnext: ok\n":   "token:\n  [REDACTED]\nnext: ok\n",
+		"api_key:\n  sk:NESTA\n":                         "api_key:\n  [REDACTED]\n",
+		"password:\n  admin:NESTB\n":                     "password:\n  [REDACTED]\n",
+		"secret:\n  a_b:NESTC\n":                         "secret:\n  [REDACTED]\n",
+		"token:\n  \"pw\": NESTD\nnext: ok\n":            "token:\n  [REDACTED]\nnext: ok\n",
+		"token:\n  'pw':\n    NESTE\nnext: ok\n":         "token:\n  [REDACTED]\nnext: ok\n",
+		"token:\n  user: NESTF\n  other: NESTG\n":        "token:\n  [REDACTED]\n",
+		"token:\n  user:":                                "token:\n  [REDACTED]",
+		"token:\npassword: NESTH\n":                      "token:\npassword: [REDACTED]\n",
+		"- token:\n    a: NESTI\n  b: ok\n":              "- token:\n    [REDACTED]\n  b: ok\n",
 	} {
 		if got := DefaultRedactor(in); got != want {
 			t.Errorf("DefaultRedactor(%q) = %q, want %q", in, got, want)
+		}
+		if got, _ := RedactAssignments(in); got != want {
+			t.Errorf("RedactAssignments(%q) = %q, want %q", in, got, want)
 		}
 	}
 }
