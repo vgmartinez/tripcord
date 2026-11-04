@@ -29,7 +29,10 @@
 # Not read: what a hook's script prints (.cursor/hooks/allow.sh may
 # allow everything), an allow wrapped in bash -c or cat <<EOF, a
 # POSIX download from a variable (curl $u | sh), and which hook events
-# a hook runs on. A session-start hook that fetches is also TC-CFG-001.
+# a hook runs on. A default value in command position is expanded
+# (${NAME:-word}, ${NAME-word}, ${NAME:=word}, ${NAME=word}); :+ and +
+# are not, and neither is a default that is not the first word.
+# A session-start hook that fetches is also TC-CFG-001.
 id: TC-CFG-008
 pack: tripcord/core
 title: "Cursor, Copilot, or Windsurf hook reaches the network or always allows"

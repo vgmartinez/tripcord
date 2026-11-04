@@ -28,7 +28,10 @@
 // that contains a backtick is read both ways, since a hook command does
 // not say which shell runs it.
 //
-// Static limits: variables are not expanded, so $URL is not a fetch
+// Static limits: variables are not expanded, except a default value in
+// command position (${NAME:-word}, ${NAME-word}, ${NAME:=word}, or
+// ${NAME=word}, where NAME matches [A-Za-z_][A-Za-z0-9_]* and word is a
+// literal with no $, backtick, or nested braces). $URL is not a fetch
 // target outside Invoke-Expression and $(echo cur)l is not curl. nohup,
 // xargs, env -S, busybox, and start /b are not unwrapped. A script a
 // hook calls is not read.
@@ -170,6 +173,9 @@ func (s *scanner) line(src string, depth int, ps bool) (decodes bool) {
 		s.unpinned = true
 	}
 	cmds := split(toks)
+	for i := range cmds {
+		cmds[i].words = withDefaultCommand(cmds[i].words)
+	}
 	fetched := make([]bool, len(cmds))
 	for i, c := range cmds {
 		before := s.fetch
@@ -191,6 +197,66 @@ func (s *scanner) line(src string, depth int, ps bool) (decodes bool) {
 		start = end
 	}
 	return decodes
+}
+
+// withDefaultCommand replaces the first word when it is exactly
+// ${NAME:-word}, ${NAME-word}, ${NAME:=word}, or ${NAME=word}. Later
+// words, including a default after sudo or an assignment, stay as
+// written. :+ and + are not expanded, and the replacement is one word.
+func withDefaultCommand(words []string) []string {
+	if len(words) == 0 {
+		return words
+	}
+	word, ok := defaultCommandWord(words[0])
+	if !ok {
+		return words
+	}
+	out := slices.Clone(words)
+	out[0] = word
+	return out
+}
+
+// defaultCommandWord accepts only the four default forms. NAME is
+// [A-Za-z_][A-Za-z0-9_]*. word may be empty and may not contain $, a
+// backtick, or a brace.
+func defaultCommandWord(word string) (string, bool) {
+	if len(word) < 3 || word[0] != '$' || word[1] != '{' || word[len(word)-1] != '}' {
+		return "", false
+	}
+	inner := word[2 : len(word)-1]
+	i := 0
+	if i >= len(inner) || !isNameStart(inner[i]) {
+		return "", false
+	}
+	i++
+	for i < len(inner) && isNameCont(inner[i]) {
+		i++
+	}
+	if i >= len(inner) {
+		return "", false
+	}
+	op := 0
+	switch {
+	case strings.HasPrefix(inner[i:], ":-"), strings.HasPrefix(inner[i:], ":="):
+		op = 2
+	case inner[i] == '-', inner[i] == '=':
+		op = 1
+	default:
+		return "", false
+	}
+	lit := inner[i+op:]
+	if strings.ContainsAny(lit, "$`{}") {
+		return "", false
+	}
+	return lit, true
+}
+
+func isNameStart(c byte) bool {
+	return c == '_' || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
+}
+
+func isNameCont(c byte) bool {
+	return isNameStart(c) || (c >= '0' && c <= '9')
 }
 
 // statement reads one statement for Invoke-Expression: it is a Pipe when
@@ -340,6 +406,7 @@ func downloader(words []string) bool {
 // command reads one simple command. followed is set when another
 // command comes after it on the same line.
 func (s *scanner) command(words []string, depth int, followed bool) {
+	words = withDefaultCommand(words)
 	w := unwrap(words)
 	if len(w) == 0 {
 		return

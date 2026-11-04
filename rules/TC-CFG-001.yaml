@@ -42,9 +42,12 @@
 #
 # npx and bunx of a bare name (npx tsc) are read as a local or
 # devDependency binary: the expression cannot read package.json.
-# Not read: $VAR as a fetch target outside Invoke-Expression, $(echo
-# cur)l, nohup, xargs, env -S, busybox, and start /b wrappers, and the
-# script a hook calls.
+# Not read, except a default value in command position (${NAME:-word},
+# ${NAME-word}, ${NAME:=word}, ${NAME=word}; NAME matches
+# [A-Za-z_][A-Za-z0-9_]* and word is a literal with no $, backtick, or
+# nested braces): $VAR as a fetch target outside Invoke-Expression,
+# $(echo cur)l, nohup, xargs, env -S, busybox, and start /b wrappers,
+# and the script a hook calls. :+ and + are not expanded.
 id: TC-CFG-001
 pack: tripcord/core
 title: "SessionStart or Setup hook in shared config downloads or runs code from the network"
