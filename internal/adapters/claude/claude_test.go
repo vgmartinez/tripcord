@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/vgmartinez/tripcord/internal/adapters"
+	"github.com/vgmartinez/tripcord/internal/adapters/kit/kittest"
 	"github.com/vgmartinez/tripcord/internal/model"
 )
 
@@ -48,8 +49,8 @@ func discover(t *testing.T, a *Adapter, root string) discovery {
 
 func TestDiscoverGolden(t *testing.T) {
 	t.Parallel()
-	root := copyTree(t, filepath.Join("testdata", "repo"))
-	managed := copyTree(t, filepath.Join("testdata", "managed"))
+	root := kittest.CopyTree(t, filepath.Join("testdata", "repo"))
+	managed := kittest.CopyTree(t, filepath.Join("testdata", "managed"))
 	home := t.TempDir()
 	writeFile(t, filepath.Join(home, ".claude", "settings.json"), `{"permissions":{"allow":["Bash(git status)"]},"hooks":{"Stop":[{"hooks":[{"type":"command","command":"notify-send done"}]}]}}`)
 	writeFile(t, filepath.Join(home, ".claude.json"), `{"numStartups":3,"mcpServers":{"user":{"command":"user-mcp"}},"projects":{"/srv/app":{"allowedTools":[],"mcpServers":{"local":{"command":"local-mcp","env":{"KEY":"project-secret"}}}}}}`)
@@ -715,7 +716,7 @@ func TestLegacyManagedDirIsInformational(t *testing.T) {
 
 func TestRedactsEnvAndHeaderValues(t *testing.T) {
 	t.Parallel()
-	got := discover(t, New(Options{}), copyTree(t, filepath.Join("testdata", "repo")))
+	got := discover(t, New(Options{}), kittest.CopyTree(t, filepath.Join("testdata", "repo")))
 	raw := mustJSON(t, got.Items)
 	for _, secret := range []string{"fixture-secret-value", "remote-secret-value", "audit-token-value", "agent-secret-value", "fixture-github-token"} {
 		if bytes.Contains(raw, []byte(secret)) && !strings.Contains(secret, "agent") {
@@ -825,7 +826,7 @@ func TestManagedScope(t *testing.T) {
 
 func TestDiscoverDoesNotChangeFixture(t *testing.T) {
 	t.Parallel()
-	root := copyTree(t, filepath.Join("testdata", "repo"))
+	root := kittest.CopyTree(t, filepath.Join("testdata", "repo"))
 	before := snapshot(t, root)
 	discover(t, New(Options{}), root)
 	if after := snapshot(t, root); after != before {
@@ -844,7 +845,7 @@ func FuzzParseConfig(f *testing.F) {
 		"manifest":    "testdata/repo/plugins/acme/.claude-plugin/plugin.json",
 	}
 	for kind, path := range seeds {
-		if data, err := os.ReadFile(path); err == nil {
+		if data, err := kittest.ReadFixture(path); err == nil {
 			f.Add(kind, data)
 		}
 	}
@@ -929,33 +930,6 @@ func writeFile(t *testing.T, path, content string) {
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
-}
-
-func copyTree(t *testing.T, from string) string {
-	t.Helper()
-	root := t.TempDir()
-	err := filepath.WalkDir(from, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(from, path)
-		if err != nil {
-			return err
-		}
-		dest := filepath.Join(root, rel)
-		if entry.IsDir() {
-			return os.MkdirAll(dest, 0o700)
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		return os.WriteFile(dest, data, 0o600)
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return root
 }
 
 func TestNormalizeSkillRewritesHomeOnlyInUserScope(t *testing.T) {

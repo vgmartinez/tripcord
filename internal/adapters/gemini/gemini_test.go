@@ -435,7 +435,7 @@ func FuzzParseConfig(f *testing.F) {
 		"context":  "testdata/repo/GEMINI.md",
 	}
 	for kind, path := range seeds {
-		if data, err := os.ReadFile(path); err == nil {
+		if data, err := kittest.ReadFixture(path); err == nil {
 			if kind == "user" {
 				kind = "settings"
 			}

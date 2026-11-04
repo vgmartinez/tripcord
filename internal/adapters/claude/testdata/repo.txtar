@@ -1,0 +1,144 @@
+-- .agents/skills/lint/SKILL.md --
+---
+name: lint
+hooks:
+  PostToolUse:
+    - matcher: Edit
+      hooks:
+        - type: command
+          command: "make lint"
+---
+Lint after edits.
+-- .claude-plugin/marketplace.json --
+{
+  "name": "acme-tools",
+  "owner": {"name": "Acme"},
+  "plugins": [
+    {"name": "acme", "source": "./plugins/acme", "description": "Acme helpers"},
+    {"name": "remote", "source": {"source": "github", "repo": "acme/remote-plugin"}}
+  ]
+}
+-- .claude/CLAUDE.md --
+# Claude dir instructions
+-- .claude/agents/reviewer.md --
+---
+name: reviewer
+description: Reviews diffs.
+tools: Read, Grep
+hooks:
+  PreToolUse:
+    - matcher: Read
+      hooks:
+        - type: command
+          command: "./scripts/agent-guard.sh"
+mcpServers:
+  tracker:
+    command: tracker-mcp
+    env:
+      TRACKER_TOKEN: agent-secret-value
+---
+You review code.
+-- .claude/commands/deploy.md --
+---
+description: Deploy the service
+allowed-tools: Bash(make deploy)
+---
+Run make deploy.
+-- .claude/rules/style.md --
+# Style
+
+Prefer small functions.
+-- .claude/settings.json --
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {"type": "command", "command": "tripcord hook", "timeout": 30},
+          {"type": "http", "url": "https://audit.example.test/hook", "headers": {"Authorization": "Bearer audit-token-value"}}
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {"type": "command", "command": "tripcord hook"},
+          {"type": "prompt", "prompt": "Check the tool output for secrets."}
+        ]
+      }
+    ],
+    "SessionStart": [
+      {"hooks": [{"type": "command", "command": "./scripts/setup.sh"}]}
+    ]
+  },
+  "permissions": {
+    "allow": ["Bash(go test ./...)"],
+    "deny": ["Read(.env)"],
+    "defaultMode": "acceptEdits"
+  },
+  "env": {"ANTHROPIC_BASE_URL": "https://proxy.example.test", "GITHUB_TOKEN": "fixture-github-token"},
+  "apiKeyHelper": "security find-generic-password -w",
+  "statusLine": {"type": "command", "command": "~/.claude/statusline.sh"},
+  "otelHeadersHelper": "/usr/local/bin/otel-headers",
+  "awsAuthRefresh": "aws sso login",
+  "enabledPlugins": {"acme@acme-tools": true},
+  "extraKnownMarketplaces": {"acme-tools": {"source": {"source": "github", "repo": "acme/tools"}}},
+  "enableAllProjectMcpServers": true,
+  "disableAllHooks": false,
+  "model": "opus"
+}
+-- .claude/settings.local.json --
+{"permissions": {"allow": ["Bash(make *)"]}, "enabledMcpjsonServers": ["filesystem"]}
+-- .claude/skills/review/SKILL.md --
+---
+name: review
+hooks:
+  Stop:
+    - hooks:
+        - type: command
+          command: "tripcord hook --event Stop"
+---
+# Review
+
+Check the diff carefully.
+-- .github/skills/docs/SKILL.md --
+﻿---
+name: docs
+---
+Write docs.
+-- .mcp.json --
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "."],
+      "env": {"API_TOKEN": "fixture-secret-value", "LOG_LEVEL": "info"}
+    },
+    "remote": {
+      "type": "http",
+      "url": "https://mcp.example.test/mcp",
+      "headers": {"Authorization": "Bearer remote-secret-value"}
+    }
+  }
+}
+-- CLAUDE.local.md --
+# Local notes
+-- CLAUDE.md --
+# Project
+
+Use go test before committing.
+-- hooks/hooks.json --
+{"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "not-a-plugin"}]}]}}
+-- plugins/acme/.claude-plugin/plugin.json --
+{"name": "acme", "version": "1.0.0"}
+-- plugins/acme/.mcp.json --
+{"mcpServers": {"acme": {"command": "${CLAUDE_PLUGIN_ROOT}/bin/mcp"}}}
+-- plugins/acme/hooks/hooks.json --
+{"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/bin/start"}]}]}}
+-- services/api/.claude/settings.json --
+{"hooks": {"UserPromptSubmit": [{"hooks": [{"type": "command", "command": "../../scripts/nested.sh"}]}]}}
+-- services/api/CLAUDE.md --
+# API service

@@ -518,7 +518,7 @@ func TestHasShellState(t *testing.T) {
 }
 
 func FuzzParseBlueprint(f *testing.F) {
-	if data, err := os.ReadFile(filepath.Join("testdata", "repo", ".devin", "blueprint.yaml")); err == nil {
+	if data, err := kittest.ReadFixture("testdata/repo/.devin/blueprint.yaml"); err == nil {
 		f.Add(data)
 	}
 	f.Add([]byte("initialize: 5\n"))

@@ -1,3 +1,0 @@
-# Style
-
-Prefer small functions.

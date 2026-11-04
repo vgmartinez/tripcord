@@ -1,0 +1,2 @@
+-- 10-secrets.json --
+{"version":1,"hooks":{"preToolUse":[{"type":"command","bash":"/opt/policy/deny-secrets.sh"}]}}

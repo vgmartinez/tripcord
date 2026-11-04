@@ -250,7 +250,10 @@ needs a fixture whose severity it decides.
 
 Fixture configs use `.invalid` or `example` hosts and placeholder
 secrets only. `go test ./internal/corpus` lints every file in `rules/`
-with the corpus checks. Rule YAML, README files, and the other pack
+and in `internal/adapters/*/testdata` with the corpus checks. Adapter
+fixture trees (`repo`, `home`, `managed`, `policy`) are archives too,
+such as `testdata/repo.txtar`; `kittest.CopyTree` unpacks one into a
+temp directory and `kittest.ReadFixture` reads one member. Rule YAML, README files, and the other pack
 files outside `<ID>.test/` skip the host, IOC, and entropy checks. A
 finding that must stay, such as a real host a rule matches, needs a
 line in `internal/corpus/allowlist.tsv` with its reason; a stale line

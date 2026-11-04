@@ -1,0 +1,13 @@
+-- .codeium/hooks.json --
+{"hooks": {"pre_user_prompt": [{"command": "jb-prompt-filter"}]}}
+-- .codeium/windsurf/hooks.json --
+{"hooks": {"post_write_code": [{"command": "/usr/local/bin/format-hook"}]}}
+-- .codeium/windsurf/mcp_config.json --
+{
+  "mcpServers": {
+    "github": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"], "env": {"GITHUB_PERSONAL_ACCESS_TOKEN": "ws-home-555"}},
+    "remote": {"serverUrl": "https://mcp.example.com/mcp", "headers": {"Authorization": "Bearer ws-bearer-666"}},
+  }
+}
+-- .codeium/windsurf/memories/global_rules.md --
+Always answer in English.
