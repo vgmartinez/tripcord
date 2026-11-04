@@ -21,8 +21,10 @@ const (
 	// RuleID is the reserved id. It is not listed in rules/REGISTRY
 	// because that file gains a line only when rules/<ID>.yaml exists.
 	RuleID = "TC-CFG-014"
-	// maxPaths is the most agent-config paths one finding will cite.
-	// A larger set is incomplete rather than a finding that drops paths.
+	// maxPaths is the most agent-config paths one finding cites.
+	// A larger set is still a match. The finding cites the first
+	// maxPaths paths, and the reason lists those paths and then
+	// "and N more".
 	maxPaths = 64
 )
 
@@ -71,7 +73,9 @@ type Input struct {
 }
 
 // Outcome is one evaluation. Finding is set only for StatusMatch.
-// Reason is the incomplete diagnostic, or empty when the status is clear.
+// Reason is the incomplete diagnostic, or, for a match that cites only
+// the first maxPaths paths, those paths followed by "and N more".
+// It is empty when the status is clear and when every hit is cited.
 type Outcome struct {
 	Status  Status
 	Finding *model.Finding
@@ -87,11 +91,14 @@ type Outcome struct {
 // login is not the pull request author's. Review state is compared
 // case-insensitively. A qualifying review counts even when
 // Reviews.Available is false, because a single exposed approval is
-// positive evidence. Anything else, when a classified path changed and
-// the reviews array is missing, is incomplete. A symlink or gitlink
+// positive evidence. Anything else, when maxPaths or fewer classified
+// paths changed and the reviews array is missing, is incomplete. A symlink or gitlink
 // added or modified at a covered directory counts as a hit. A covered
 // directory that is already a symlink is resolved in the changed paths;
-// a target that cannot be resolved is incomplete.
+// a target that cannot be resolved is incomplete. More than maxPaths
+// classified paths, with no human approval, is a match: the finding
+// cites the first maxPaths paths in path order, and Reason lists those
+// paths and then "and N more".
 func Evaluate(in Input) Outcome {
 	if !in.Agent {
 		return Outcome{Status: StatusClear}
@@ -117,11 +124,15 @@ func Evaluate(in Input) Outcome {
 		return Outcome{Status: StatusClear}
 	}
 	if len(hits) > maxPaths {
-		return Outcome{Status: StatusIncomplete, Reason: fmt.Sprintf("more than %d agent-config paths changed", maxPaths)}
+		return matchOutcome(hits[:maxPaths], capReason(hits[:maxPaths], len(hits)-maxPaths))
 	}
 	if !in.Reviews.Available {
 		return Outcome{Status: StatusIncomplete, Reason: "review data is not available"}
 	}
+	return matchOutcome(hits, "")
+}
+
+func matchOutcome(hits []classified, reason string) Outcome {
 	finding, err := findingFor(hits)
 	if err != nil {
 		return Outcome{Status: StatusIncomplete, Reason: err.Error()}
@@ -130,7 +141,21 @@ func Evaluate(in Input) Outcome {
 	for i, hit := range hits {
 		paths[i] = hit.path
 	}
-	return Outcome{Status: StatusMatch, Finding: &finding, Paths: paths}
+	return Outcome{Status: StatusMatch, Finding: &finding, Reason: reason, Paths: paths}
+}
+
+// capReason lists the cited paths and then how many classified paths
+// were left out. N is the omitted count, not a second copy of the cap.
+func capReason(cited []classified, omitted int) string {
+	var b strings.Builder
+	for i, hit := range cited {
+		if i > 0 {
+			b.WriteByte('\n')
+		}
+		b.WriteString(hit.path)
+	}
+	fmt.Fprintf(&b, "\nand %d more", omitted)
+	return b.String()
 }
 
 type classified struct {

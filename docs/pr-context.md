@@ -296,8 +296,11 @@ makes no API call. Fetching the pages belongs in a later workflow.
 A single `review` object is not the whole set: it
 can clear the rule when that one review is a qualifying approval, and
 otherwise the rule is incomplete rather than a pass. A pull request
-event that omits reviews is incomplete when a classified path changed,
-unless `--reviews-file` was passed.
+event that omits reviews is incomplete when 64 or fewer classified
+paths changed, unless `--reviews-file` was passed. More than 64
+classified paths, with no human approval, is a match: the text report
+lists the first 64 paths and a line `and N more`. A human approval of
+the head clears the rule at any size.
 An in-scope pull request that does not change a classified path is
 clear, and so is a pull request that is neither agent-authored nor from
 a bot. A missing base is incomplete only for an in-scope pull request.

@@ -358,9 +358,6 @@ func TestCICallerUsesPinnedRemoteAction(t *testing.T) {
 		"TC-CFG-001",
 		"testdata/ci-caller/",
 		"0|1",
-		"path_cap_match",
-		"path_cap_warn",
-		"TRIPCORD_PR_STDERR",
 		"no is_agent output",
 	} {
 		if !strings.Contains(run, want) {

@@ -946,12 +946,9 @@ jobs:
           TRIPCORD_EXIT: ${{ steps.tripcord.outputs.scan-exit-code }}
           TRIPCORD_SARIF: ${{ steps.tripcord.outputs.sarif }}
           TRIPCORD_PR_EXIT: ${{ steps.tripcord.outputs.pr-context-exit-code }}
-          TRIPCORD_PR_STDERR: ${{ steps.tripcord.outputs.pr-context-stderr }}
           TRIPCORD_IS_AGENT: ${{ steps.tripcord.outputs.is_agent }}
         run: |
           set -euo pipefail
-          # shellcheck source=../actions/tripcord/pathcap.sh
-          . .github/actions/tripcord/pathcap.sh
           echo "assertion outcome=${TRIPCORD_OUTCOME}"
           echo "assertion scan-exit-code=${TRIPCORD_EXIT}"
           echo "assertion pr-context-exit-code=${TRIPCORD_PR_EXIT}"
@@ -969,15 +966,6 @@ jobs:
           case "$TRIPCORD_PR_EXIT" in
             0|1)
               echo "assertion passed: pr-context exit is ${TRIPCORD_PR_EXIT}"
-              ;;
-            3)
-              if path_cap_match "$TRIPCORD_PR_STDERR"; then
-                path_cap_warn
-                echo "assertion passed: pr-context exit 3 is the TC-CFG-014 path cap"
-              else
-                echo "assertion failed: pr-context exit 3 is not the TC-CFG-014 path cap" >&2
-                exit 1
-              fi
               ;;
             *)
               echo "assertion failed: pr-context exit ${TRIPCORD_PR_EXIT} is not 0 or 1" >&2
@@ -1078,24 +1066,9 @@ jobs:
           test "$TRIPCORD_TC_CFG_014" = "match"
           grep -F '::error::tripcord pr-context denied the pull request under TC-CFG-014' .github/actions/tripcord/action.yml
 
-      - name: Write TC-CFG-014 path-cap and other exit-3 stubs
+      - name: Write a TC-CFG-014 exit-3 stub
         shell: bash
         run: |
-          set -euo pipefail
-          . .github/actions/tripcord/pathcap.sh
-          printf '%s\n' "$path_cap_stderr" > "${RUNNER_TEMP}/tripcord-pathcap-line"
-          cat > "${RUNNER_TEMP}/tripcord-pathcap" <<'EOF'
-          #!/usr/bin/env bash
-          case "$1" in
-            scan) exit 0 ;;
-            pr-context)
-              cat "${RUNNER_TEMP}/tripcord-pathcap-line" >&2
-              exit 3
-              ;;
-            *) exit 2 ;;
-          esac
-          EOF
-          chmod +x "${RUNNER_TEMP}/tripcord-pathcap"
           cat > "${RUNNER_TEMP}/tripcord-incomplete" <<'EOF'
           #!/usr/bin/env bash
           case "$1" in
@@ -1110,25 +1083,8 @@ jobs:
           chmod +x "${RUNNER_TEMP}/tripcord-incomplete"
           printf '[]\n' > "${RUNNER_TEMP}/tripcord-reviews.json"
 
-      - id: tripcord-pathcap
-        name: TC-CFG-014 path cap warns and continues
-        uses: ./.github/actions/tripcord # zizmor: ignore[self-repository] test this checkout's path-cap handling
-        with:
-          binary: ${{ runner.temp }}/tripcord-pathcap
-          path: ${{ runner.temp }}/tripcord-ci
-          reviews-file: ${{ runner.temp }}/tripcord-reviews.json
-          upload-sarif: "false"
-          comment: "false"
-
-      - name: Assert TC-CFG-014 path cap
-        shell: bash
-        env:
-          TRIPCORD_OUTCOME: ${{ steps.tripcord-pathcap.outcome }}
-        run: |
-          test "$TRIPCORD_OUTCOME" = "success"
-
       - id: tripcord-incomplete
-        name: Another TC-CFG-014 exit 3 still fails
+        name: TC-CFG-014 exit 3 still fails
         continue-on-error: true
         uses: ./.github/actions/tripcord # zizmor: ignore[self-repository] test this checkout's exit-3 handling
         with:
@@ -1138,7 +1094,7 @@ jobs:
           upload-sarif: "false"
           comment: "false"
 
-      - name: Assert other TC-CFG-014 exit 3 fails
+      - name: Assert TC-CFG-014 exit 3 fails
         shell: bash
         env:
           TRIPCORD_OUTCOME: ${{ steps.tripcord-incomplete.outcome }}

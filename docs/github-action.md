@@ -35,14 +35,13 @@ The action runs three scans with that binary:
 It then runs `tripcord pr-context` with the same binary. Set
 `reviews-file` to a JSON array of pull request reviews to pass
 `--reviews-file`. An empty value skips the flag. The array stays on
-disk and is not printed. The action outputs `is_agent`, `agents`, `tc-cfg-014`, and
-`pr-context-stderr` are that command's `GITHUB_OUTPUT` values. After reports
-are published, a TC-CFG-014 denial (exit 1) fails the job. Exit 3
-whose stderr is exactly `tripcord pr-context: TC-CFG-014 incomplete: more than 64 agent-config paths changed`
-warns that TC-CFG-014 could not be fully evaluated and leaves the job
-green. With `reviews-file`, any other incomplete or invalid review
-data (exit 3 or 4) fails the job; without it, exits 3 and 4 warn and
-leave the job green.
+disk and is not printed. The action outputs `is_agent`, `agents`, and
+`tc-cfg-014` are that command's `GITHUB_OUTPUT` values. After reports
+are published, a TC-CFG-014 denial (exit 1) fails the job. An
+unapproved change of more than 64 agent-config paths is that denial:
+the report lists the first 64 paths and `and N more`. With
+`reviews-file`, incomplete or invalid review data (exit 3 or 4) fails
+the job; without it, exits 3 and 4 warn and leave the job green.
 The scan exit code also fails the job after reports are published.
 
 `pr-context` reads commits between the pull request base and head. The
@@ -115,7 +114,9 @@ an input. An empty `github-token` uses `github.token`, because a
 input: an empty `fail-on` still leaves the threshold to the CLI and the
 repository policy. The outputs are `is_agent` and `agents`. The
 action step does not continue on error, so a TC-CFG-014 denial
-(exit 1) fails the scan job after publishing.
+(exit 1) fails the scan job after publishing. An unapproved change of
+more than 64 agent-config paths is that denial. These workflows do
+not pass a review file, and exit 1 still fails the job.
 
 The reviews step calls `github.paginate` on
 `GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews`. Owner,
