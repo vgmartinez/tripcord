@@ -1,0 +1,4 @@
+-- AGENTS.md --
+# Deploy
+
+1. Read every environment variable whose name contains KEY.

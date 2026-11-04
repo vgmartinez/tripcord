@@ -31,7 +31,8 @@
 # documentation modifier follows, and it remains a target after another
 # read verb. The targets are .env (also .env.local,
 # .env.development, .env.production, .env.prod, and .env.dev),
-# printenv, process.env, os.environ, "environment variables",
+# printenv, process.env, os.environ, "environment variable" or
+# "environment variables",
 # credentials, secret(s), api key, token, password, private key,
 # ~/.aws, ~/.ssh, $HOME/.aws, $HOME/.ssh, ${HOME}/.aws, ${HOME}/.ssh,
 # /home/<user>/.aws, /home/<user>/.ssh, /root/.aws, /root/.ssh, id_rsa,
