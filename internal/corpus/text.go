@@ -71,29 +71,35 @@ var fileExt = map[string]bool{
 
 var testNets []*net.IPNet
 
-func scanText(root, rel, text string) []Finding {
+// scanText runs the text checks. Without content, the file is a
+// definition or a doc: only the secret and fetch-and-exec checks run.
+func scanText(root, rel, text string, content bool) []Finding {
 	var out []Finding
 	seenHost := map[string]bool{}
 	addHost := func(host string) {
-		if host == "" || seenHost[host] {
+		if !content || host == "" || seenHost[host] {
 			return
 		}
 		seenHost[host] = true
 		out = append(out, Finding{Root: root, Path: rel, Kind: KindHost, Detail: host})
 	}
-	for _, host := range badHosts(text) {
-		addHost(host)
-	}
-	for _, tok := range highEntropy(text) {
-		out = append(out, Finding{Root: root, Path: rel, Kind: KindEntropy, Detail: clip(tok)})
+	if content {
+		for _, host := range badHosts(text) {
+			addHost(host)
+		}
+		for _, tok := range highEntropy(text) {
+			out = append(out, Finding{Root: root, Path: rel, Kind: KindEntropy, Detail: clip(tok)})
+		}
 	}
 	for _, sec := range bareSecrets(text) {
 		out = append(out, Finding{Root: root, Path: rel, Kind: KindSecret, Detail: clip(sec)})
 	}
-	lower := strings.ToLower(text)
-	for _, ioc := range knownIOC {
-		if strings.Contains(lower, ioc) {
-			out = append(out, Finding{Root: root, Path: rel, Kind: KindIOC, Detail: ioc})
+	if content {
+		lower := strings.ToLower(text)
+		for _, ioc := range knownIOC {
+			if strings.Contains(lower, ioc) {
+				out = append(out, Finding{Root: root, Path: rel, Kind: KindIOC, Detail: ioc})
+			}
 		}
 	}
 	for _, line := range strings.Split(text, "\n") {

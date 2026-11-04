@@ -1,0 +1,118 @@
+# Corpus lint findings that stay in rules/ fixtures. One line per finding:
+# path (from the module root), check, detail, and reason, tab-separated.
+# TestFixtureTrees fails on a finding with no line here and on a line
+# that matches no finding, and allowlistCeiling in corpus_test.go must
+# equal the line count, so the list only shrinks. Secret and
+# fetch-exec findings can never be listed; ParseAllowlist rejects them.
+#
+# rule-dependent: the rule needs this value. TC-CFG-009, 012, 015 and
+#   023 match on real hosts; TC-CFG-001 and 008 test loopback
+#   127.0.0.1 and ::1; TC-CFG-016 hashes the embed's bootstrap.sh;
+#   TC-CFG-015 lists pastebin.com; TC-CFG-009 pins a 40-hex commit;
+#   TC-CFG-001 nests bash -c past eight levels, which is the size.
+# cosmetic, see #43 item 116: a real host or shebang the rule does not
+#   need. Rewriting it changes goldens, so it waits for that item.
+rules/TC-CFG-001.test/negativos/claude-benign-session-hooks.txtar	host	json.schemastore.org	cosmetic, see #43 item 116
+rules/TC-CFG-001.test/negativos/claude-loopback-no-pipe.txtar	host	127.0.0.1	rule-dependent
+rules/TC-CFG-001.test/negativos/claude-loopback-no-pipe.txtar	host	::1	rule-dependent
+rules/TC-CFG-001.test/negativos/claude-pwsh-local-variable-iex.txtar	host	127.0.0.1	rule-dependent
+rules/TC-CFG-001.test/negativos/cursor-loopback-ipv6.txtar	host	::1	rule-dependent
+rules/TC-CFG-001.test/positivos/claude-loopback-ipv6-pipe-sh.txtar	host	::1	rule-dependent
+rules/TC-CFG-001.test/positivos/claude-ncat.txtar	host	10.1.2.3	cosmetic, see #43 item 116
+rules/TC-CFG-001.test/positivos/claude-sessionstart-curl-pipe.txtar	host	json.schemastore.org	cosmetic, see #43 item 116
+rules/TC-CFG-001.test/positivos/cursor-nested-bash-c.txtar	size	39593 bytes	rule-dependent
+rules/TC-CFG-003.test/negativos/normal-binaries.txtar	host	ghcr.io	cosmetic, see #43 item 116
+rules/TC-CFG-003.test/negativos/opencode-module-flag.txtar	host	opencode.ai	cosmetic, see #43 item 116
+rules/TC-CFG-004.test/negativos/narrow-allows.txtar	host	json.schemastore.org	cosmetic, see #43 item 116
+rules/TC-CFG-004.test/positivos/bash-star.txtar	host	json.schemastore.org	cosmetic, see #43 item 116
+rules/TC-CFG-004.test/positivos/read-star-among-narrow.txtar	host	pkg.go.dev	cosmetic, see #43 item 116
+rules/TC-CFG-005.test/positivos/claude-bypass-permissions.txtar	host	json.schemastore.org	cosmetic, see #43 item 116
+rules/TC-CFG-006.test/negativos/claude-dotdot-stays-inside.txtar	shebang	.claude/scripts/stop.sh	cosmetic, see #43 item 116
+rules/TC-CFG-006.test/negativos/claude-personal-settings-local.txtar	shebang	.claude/hooks/stop.sh	cosmetic, see #43 item 116
+rules/TC-CFG-006.test/negativos/claude-project-dir-scripts.txtar	shebang	.claude/hooks/format.sh	cosmetic, see #43 item 116
+rules/TC-CFG-006.test/negativos/claude-project-dir-scripts.txtar	shebang	.claude/hooks/guard.sh	cosmetic, see #43 item 116
+rules/TC-CFG-006.test/negativos/claude-symlink-inside.txtar	shebang	scripts/real.sh	cosmetic, see #43 item 116
+rules/TC-CFG-006.test/negativos/codex-relative.txtar	shebang	scripts/stop.sh	cosmetic, see #43 item 116
+rules/TC-CFG-006.test/negativos/copilot-relative.txtar	shebang	scripts/hooks/guard.sh	cosmetic, see #43 item 116
+rules/TC-CFG-006.test/negativos/cursor-relative.txtar	shebang	.cursor/hooks/audit.sh	cosmetic, see #43 item 116
+rules/TC-CFG-006.test/negativos/gemini-project-dir.txtar	shebang	.gemini/hooks/guard.sh	cosmetic, see #43 item 116
+rules/TC-CFG-006.test/negativos/not-checked-backslash-path.txtar	shebang	scripts/hooks/guard.sh	cosmetic, see #43 item 116
+rules/TC-CFG-006.test/negativos/present-copilot-cwd.txtar	shebang	tools/check.sh	cosmetic, see #43 item 116
+rules/TC-CFG-006.test/negativos/present-nested-package.txtar	shebang	packages/web/scripts/lint-staged.sh	cosmetic, see #43 item 116
+rules/TC-CFG-006.test/negativos/present-pwd-script.txtar	shebang	scripts/format.sh	cosmetic, see #43 item 116
+rules/TC-CFG-006.test/negativos/shared-skill-relative.txtar	shebang	scripts/deploy-notify.sh	cosmetic, see #43 item 116
+rules/TC-CFG-006.test/positivos/copilot-powershell-unc.txtar	shebang	scripts/hooks/guard.sh	cosmetic, see #43 item 116
+rules/TC-CFG-006.test/positivos/missing-copilot-cwd.txtar	shebang	check.sh	cosmetic, see #43 item 116
+rules/TC-CFG-006.test/positivos/missing-nested-package.txtar	shebang	scripts/lint-staged.sh	cosmetic, see #43 item 116
+rules/TC-CFG-007.test/positivos/claude-plugin-skill.txtar	shebang	tools/acme/scripts/notify.sh	cosmetic, see #43 item 116
+rules/TC-CFG-007.test/positivos/skill-hook-object-arg.txtar	shebang	scripts/fmt.sh	cosmetic, see #43 item 116
+rules/TC-CFG-008.test/negativos/cursor-loopback-collector.txtar	host	127.0.0.1	rule-dependent
+rules/TC-CFG-008.test/positivos/copilot-powershell-unc.txtar	shebang	scripts/hooks/guard.sh	cosmetic, see #43 item 116
+rules/TC-CFG-009.test/negativos/copilot-commit-pinned-url.txtar	entropy	com/acme/tools/0123456789abcdef0123456789abcdef01234567/install	rule-dependent
+rules/TC-CFG-009.test/negativos/copilot-commit-pinned-url.txtar	host	raw.githubusercontent.com	rule-dependent
+rules/TC-CFG-009.test/negativos/copilot-host-case.txtar	host	raw.githubusercontent.com	rule-dependent
+rules/TC-CFG-009.test/negativos/devcontainer-oci-feature.txtar	host	ghcr.io	rule-dependent
+rules/TC-CFG-009.test/negativos/devcontainer-pinned-feature-tarball.txtar	host	github.com	rule-dependent
+rules/TC-CFG-009.test/negativos/devcontainer-pinned-postcreate.txtar	host	cdn.jsdelivr.net	rule-dependent
+rules/TC-CFG-009.test/negativos/devin-commit-pinned-url.txtar	entropy	com/acme/tools/0123456789abcdef0123456789abcdef01234567/install	rule-dependent
+rules/TC-CFG-009.test/negativos/devin-commit-pinned-url.txtar	host	raw.githubusercontent.com	rule-dependent
+rules/TC-CFG-009.test/positivos/copilot-branch-url-pipe.txtar	host	raw.githubusercontent.com	rule-dependent
+rules/TC-CFG-009.test/positivos/copilot-release-asset-sha.txtar	host	github.com	rule-dependent
+rules/TC-CFG-009.test/positivos/copilot-trailing-dot-host.txtar	host	raw.githubusercontent.com	rule-dependent
+rules/TC-CFG-009.test/positivos/copilot-traversal-dot-dotdot.txtar	host	raw.githubusercontent.com	rule-dependent
+rules/TC-CFG-009.test/positivos/copilot-traversal-encoded-mixed.txtar	host	raw.githubusercontent.com	rule-dependent
+rules/TC-CFG-009.test/positivos/copilot-traversal-encoded-upper.txtar	host	raw.githubusercontent.com	rule-dependent
+rules/TC-CFG-009.test/positivos/copilot-traversal-encoded.txtar	host	raw.githubusercontent.com	rule-dependent
+rules/TC-CFG-009.test/positivos/copilot-traversal-github-raw.txtar	host	github.com	rule-dependent
+rules/TC-CFG-009.test/positivos/copilot-traversal-other-repo.txtar	host	raw.githubusercontent.com	rule-dependent
+rules/TC-CFG-009.test/positivos/copilot-traversal-to-branch.txtar	host	raw.githubusercontent.com	rule-dependent
+rules/TC-CFG-009.test/positivos/copilot-userinfo-host.txtar	host	raw.githubusercontent.com	rule-dependent
+rules/TC-CFG-009.test/positivos/cursor-traversal-wget.txtar	host	raw.githubusercontent.com	rule-dependent
+rules/TC-CFG-009.test/positivos/devcontainer-postcreate-curl-pipe.txtar	host	mcr.microsoft.com	rule-dependent
+rules/TC-CFG-010.test/positivos/claude-marketplace.txtar	host	github.com	cosmetic, see #43 item 116
+rules/TC-CFG-010.test/positivos/opencode-npm-plugin.txtar	host	opencode.ai	cosmetic, see #43 item 116
+rules/TC-CFG-012.test/negativos/agents-curl-auth-header-github.txtar	host	api.github.com	rule-dependent
+rules/TC-CFG-012.test/positivos/agents-curl-url-cat-dotenv.txtar	host	evil	rule-dependent
+rules/TC-CFG-015.test/negativos/github-pages-host.txtar	host	github.io	rule-dependent
+rules/TC-CFG-015.test/negativos/narrow-safe-domain.txtar	host	docs.anthropic.com	rule-dependent
+rules/TC-CFG-015.test/negativos/narrow-safe-domain.txtar	host	pkg.go.dev	rule-dependent
+rules/TC-CFG-015.test/negativos/personal-settings-local.txtar	host	docs.anthropic.com	rule-dependent
+rules/TC-CFG-015.test/negativos/personal-settings-local.txtar	host	huggingface.co	rule-dependent
+rules/TC-CFG-015.test/negativos/sandbox-package-registries.txtar	host	github.com	rule-dependent
+rules/TC-CFG-015.test/negativos/sandbox-package-registries.txtar	host	pypi.org	rule-dependent
+rules/TC-CFG-015.test/negativos/sandbox-package-registries.txtar	host	registry.npmjs.org	rule-dependent
+rules/TC-CFG-015.test/negativos/unlisted-user-content-host.txtar	host	raw.githubusercontent.com	rule-dependent
+rules/TC-CFG-015.test/positivos/case-and-spacing.txtar	host	huggingface.co	rule-dependent
+rules/TC-CFG-015.test/positivos/gist-raw.txtar	host	gist.githubusercontent.com	rule-dependent
+rules/TC-CFG-015.test/positivos/huggingface-bare.txtar	host	huggingface.co	rule-dependent
+rules/TC-CFG-015.test/positivos/npm-registry.txtar	host	registry.npmjs.org	rule-dependent
+rules/TC-CFG-015.test/positivos/pastebin-wildcard-subdomain.txtar	host	pastebin.com	rule-dependent
+rules/TC-CFG-015.test/positivos/pastebin-wildcard-subdomain.txtar	ioc	pastebin.com	rule-dependent
+rules/TC-CFG-015.test/positivos/sandbox-hf.txtar	host	hf.co	rule-dependent
+rules/TC-CFG-015.test/positivos/sandbox-hf.txtar	host	huggingface.co	rule-dependent
+rules/TC-CFG-016.test/negativos/embed-claude-only.txtar	shebang	.tripcord/bootstrap.sh	rule-dependent
+rules/TC-CFG-016.test/negativos/embed-crlf-checkout.txtar	shebang	.tripcord/bootstrap.sh	rule-dependent
+rules/TC-CFG-016.test/negativos/embed-fresh.txtar	shebang	.tripcord/bootstrap.sh	rule-dependent
+rules/TC-CFG-016.test/negativos/init-policy-only.txtar	shebang	scripts/lint.sh	cosmetic, see #43 item 116
+rules/TC-CFG-016.test/negativos/no-embed.txtar	shebang	scripts/lint.sh	cosmetic, see #43 item 116
+rules/TC-CFG-016.test/positivos/embed-bootstrap-changed.txtar	shebang	.tripcord/bootstrap.sh	rule-dependent
+rules/TC-CFG-016.test/positivos/embed-bootstrap-digest-forged.txtar	shebang	.tripcord/bootstrap.sh	rule-dependent
+rules/TC-CFG-016.test/positivos/embed-claude-disable-all-hooks.txtar	shebang	.tripcord/bootstrap.sh	rule-dependent
+rules/TC-CFG-016.test/positivos/embed-claude-hook-loosened.txtar	shebang	.tripcord/bootstrap.sh	rule-dependent
+rules/TC-CFG-016.test/positivos/embed-claude-not-tripcord.txtar	shebang	.tripcord/bootstrap.sh	rule-dependent
+rules/TC-CFG-016.test/positivos/embed-claude-only-wiring-removed.txtar	shebang	.tripcord/bootstrap.sh	rule-dependent
+rules/TC-CFG-016.test/positivos/embed-claude-wiring-removed.txtar	shebang	.tripcord/bootstrap.sh	rule-dependent
+rules/TC-CFG-016.test/positivos/embed-copilot-not-tripcord.txtar	shebang	.tripcord/bootstrap.sh	rule-dependent
+rules/TC-CFG-016.test/positivos/embed-copilot-step-changed.txtar	shebang	.tripcord/bootstrap.sh	rule-dependent
+rules/TC-CFG-016.test/positivos/embed-copilot-wiring-removed.txtar	shebang	.tripcord/bootstrap.sh	rule-dependent
+rules/TC-CFG-016.test/positivos/embed-cursor-not-tripcord.txtar	shebang	.tripcord/bootstrap.sh	rule-dependent
+rules/TC-CFG-016.test/positivos/embed-cursor-wiring-removed.txtar	shebang	.tripcord/bootstrap.sh	rule-dependent
+rules/TC-CFG-016.test/positivos/embed-gitattributes-removed.txtar	shebang	.tripcord/bootstrap.sh	rule-dependent
+rules/TC-CFG-016.test/positivos/embed-gitattributes-weakened.txtar	shebang	.tripcord/bootstrap.sh	rule-dependent
+rules/TC-CFG-016.test/positivos/embed-manifest-unreadable.txtar	shebang	.tripcord/bootstrap.sh	rule-dependent
+rules/TC-CFG-016.test/positivos/embed-workflow-changed.txtar	shebang	.tripcord/bootstrap.sh	rule-dependent
+rules/TC-CFG-023.test/negativos/claude-uvx-aws-serverless-fixed.txtar	host	awslabs.aws	rule-dependent
+rules/TC-CFG-023.test/positivos/claude-kali-gpt-git-commit.txtar	host	github.com	rule-dependent
+rules/TC-CFG-023.test/positivos/claude-kali-gpt-git-tag.txtar	host	github.com	rule-dependent
+rules/TC-CFG-023.test/positivos/claude-kali-gpt-git-unpinned.txtar	host	github.com	rule-dependent
+rules/TC-CFG-023.test/positivos/claude-uvx-aws-serverless-vulnerable.txtar	host	awslabs.aws	rule-dependent

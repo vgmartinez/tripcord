@@ -1,12 +1,13 @@
-// Package corpus lints fixture trees. Check walks the roots it is given;
-// the corpus test passes corpus/ only. A later test can pass rules/ and
-// adapter testdata the same way.
+// Package corpus lints fixture trees. Check walks the roots it is given.
+// The corpus test passes corpus/, which must be clean, and the rules/
+// fixture tree, whose remaining findings are listed in allowlist.tsv.
 package corpus
 
 import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -30,8 +31,13 @@ const (
 	KindFetch   = "fetch-exec"
 )
 
-// maxFileBytes is the largest fixture file Check reads.
+// maxFileBytes is the largest fixture file that passes the size check.
 const maxFileBytes = 16 << 10
+
+// maxScanBytes is the largest file whose content Check reads. A file
+// over maxFileBytes is still read up to here, so a size finding never
+// hides what the file holds.
+const maxScanBytes = 1 << 20
 
 // Finding is one lint failure. Path is slash-separated and relative to Root.
 type Finding struct {
@@ -41,12 +47,43 @@ type Finding struct {
 	Detail string
 }
 
-// Check walks each root and returns every violation. roots are independent
-// trees, not a single repository. A missing root is an error. Violations
-// are not.
+// Root is one tree for CheckRoots. Defs, when set, reports whether the
+// file at rel, slash-separated, is a definition or a doc rather than
+// fixture content. Such a file gets every check except the host, IOC,
+// and entropy checks: a rule names real hosts and long patterns on
+// purpose.
+type Root struct {
+	Dir  string
+	Defs func(rel string) bool
+}
+
+// PackDefs is Root.Defs for a rule pack such as rules/: every file
+// outside an <ID>.test/ directory (rule YAML, pack.yaml, REGISTRY,
+// ADVISORIES.json, README.md, embed.go), and any README file.
+func PackDefs(rel string) bool {
+	first, _, _ := strings.Cut(rel, "/")
+	if !strings.HasSuffix(first, ".test") || first == rel {
+		return true
+	}
+	return strings.HasPrefix(path.Base(rel), "README")
+}
+
+// Check walks each root as fixture content throughout. See CheckRoots.
 func Check(roots ...string) ([]Finding, error) {
+	rs := make([]Root, len(roots))
+	for i, r := range roots {
+		rs[i] = Root{Dir: r}
+	}
+	return CheckRoots(rs...)
+}
+
+// CheckRoots walks each root and returns every violation. roots are
+// independent trees, not a single repository. A missing root is an
+// error. Violations are not.
+func CheckRoots(roots ...Root) ([]Finding, error) {
 	var out []Finding
-	for _, root := range roots {
+	for _, r := range roots {
+		root := r.Dir
 		abs, err := filepath.Abs(root)
 		if err != nil {
 			return nil, err
@@ -74,7 +111,8 @@ func Check(roots ...string) ([]Finding, error) {
 			if err != nil {
 				return err
 			}
-			out = append(out, inspect(root, rel, info, p)...)
+			content := r.Defs == nil || !r.Defs(rel)
+			out = append(out, inspect(root, rel, info, p, content)...)
 			if info.IsDir() && info.Mode()&os.ModeSymlink != 0 {
 				return fs.SkipDir
 			}
@@ -99,7 +137,7 @@ func Check(roots ...string) ([]Finding, error) {
 	return out, nil
 }
 
-func inspect(root, rel string, info fs.FileInfo, p string) []Finding {
+func inspect(root, rel string, info fs.FileInfo, p string, content bool) []Finding {
 	mode := info.Mode()
 	if mode&os.ModeSymlink != 0 {
 		return []Finding{{Root: root, Path: rel, Kind: KindSymlink, Detail: "symlink"}}
@@ -119,6 +157,8 @@ func inspect(root, rel string, info fs.FileInfo, p string) []Finding {
 	}
 	if info.Size() > maxFileBytes {
 		out = append(out, Finding{Root: root, Path: rel, Kind: KindSize, Detail: fmt.Sprintf("%d bytes", info.Size())})
+	}
+	if info.Size() > maxScanBytes {
 		return out
 	}
 	data, err := os.ReadFile(p)
@@ -126,16 +166,16 @@ func inspect(root, rel string, info fs.FileInfo, p string) []Finding {
 		out = append(out, Finding{Root: root, Path: rel, Kind: KindSpecial, Detail: err.Error()})
 		return out
 	}
-	out = append(out, scanBytes(root, rel, data)...)
+	out = append(out, scanBytes(root, rel, data, content)...)
 	return out
 }
 
-func scanBytes(root, rel string, data []byte) []Finding {
+func scanBytes(root, rel string, data []byte, content bool) []Finding {
 	var out []Finding
 	if bytesHasShebang(data) {
 		out = append(out, Finding{Root: root, Path: rel, Kind: KindShebang, Detail: "first line"})
 	}
-	out = append(out, scanText(root, rel, string(data))...)
+	out = append(out, scanText(root, rel, string(data), content)...)
 	arc := txtar.Parse(data)
 	seen := map[string]struct{}{}
 	for _, f := range arc.Files {

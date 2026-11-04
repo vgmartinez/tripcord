@@ -249,7 +249,12 @@ clause in turn and fails when the fixtures still pass, so every clause
 needs a fixture whose severity it decides.
 
 Fixture configs use `.invalid` or `example` hosts and placeholder
-secrets only.
+secrets only. `go test ./internal/corpus` lints every file in `rules/`
+with the corpus checks. Rule YAML, README files, and the other pack
+files outside `<ID>.test/` skip the host, IOC, and entropy checks. A
+finding that must stay, such as a real host a rule matches, needs a
+line in `internal/corpus/allowlist.tsv` with its reason; a stale line
+fails too, and a secret or fetch-and-exec finding can never be listed.
 
 Run one rule:
 
