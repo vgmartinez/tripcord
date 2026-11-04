@@ -19,31 +19,36 @@ var fixtureSecrets = []string{"ws-tok-111", "ws-q-222", "ws-key-333", "ws-q-444"
 
 func TestDiscoverGolden(t *testing.T) {
 	t.Parallel()
-	root := kittest.CopyTree(t, filepath.Join("testdata", "repo"))
-	home := kittest.CopyTree(t, filepath.Join("testdata", "home"))
-	managed := kittest.CopyTree(t, filepath.Join("testdata", "managed"))
-	a := New(Options{IncludeUser: true, IncludeManaged: true, HomeDir: home, ManagedDir: managed, Getenv: kittest.Env()})
-	got := kittest.Discover(t, a, root)
-	kittest.AssertGolden(t, "discover.golden", kittest.GoldenJSON(t, got, map[string]string{filepath.ToSlash(managed): fixtureManagedDir}))
-	raw := string(kittest.GoldenJSON(t, got, nil))
-	for _, leak := range append([]string{home}, fixtureSecrets...) {
-		if strings.Contains(raw, leak) {
-			t.Fatalf("discovery leaks %q", leak)
-		}
-	}
-	for _, item := range got.Items {
-		if strings.EqualFold(filepath.Base(item.Path), "AGENTS.md") {
-			t.Fatalf("windsurf reported %s, which the generic adapter owns", item.Path)
-		}
-	}
-	if len(got.Find("web/.windsurf/hooks.json", model.ConfigKindHook)) != 1 {
-		t.Fatal("nested .windsurf/hooks.json not read")
-	}
-	if len(got.Find("~/.codeium/windsurf/memories/global_rules.md", model.ConfigKindInstructions)) != 1 {
-		t.Fatal("global rules were not read")
-	}
-	if len(got.Find(".windsurf/global_rules.md", model.ConfigKindInstructions)) != 1 {
-		t.Fatal("repository global rules were not read")
+	for _, version := range kittest.Versions(t) {
+		t.Run(version, func(t *testing.T) {
+			t.Parallel()
+			root := kittest.CopyTree(t, kittest.Tree(version, "repo"))
+			home := kittest.CopyTree(t, kittest.Tree(version, "home"))
+			managed := kittest.CopyTree(t, kittest.Tree(version, "managed"))
+			a := New(Options{IncludeUser: true, IncludeManaged: true, HomeDir: home, ManagedDir: managed, Getenv: kittest.Env()})
+			got := kittest.Discover(t, a, root)
+			kittest.AssertGolden(t, filepath.Join(version, "discover.golden"), kittest.GoldenJSON(t, got, map[string]string{filepath.ToSlash(managed): fixtureManagedDir}))
+			raw := string(kittest.GoldenJSON(t, got, nil))
+			for _, leak := range append([]string{home}, fixtureSecrets...) {
+				if strings.Contains(raw, leak) {
+					t.Fatalf("discovery leaks %q", leak)
+				}
+			}
+			for _, item := range got.Items {
+				if strings.EqualFold(filepath.Base(item.Path), "AGENTS.md") {
+					t.Fatalf("windsurf reported %s, which the generic adapter owns", item.Path)
+				}
+			}
+			if len(got.Find("web/.windsurf/hooks.json", model.ConfigKindHook)) != 1 {
+				t.Fatal("nested .windsurf/hooks.json not read")
+			}
+			if len(got.Find("~/.codeium/windsurf/memories/global_rules.md", model.ConfigKindInstructions)) != 1 {
+				t.Fatal("global rules were not read")
+			}
+			if len(got.Find(".windsurf/global_rules.md", model.ConfigKindInstructions)) != 1 {
+				t.Fatal("repository global rules were not read")
+			}
+		})
 	}
 }
 
@@ -344,7 +349,7 @@ func TestDefaultManagedDir(t *testing.T) {
 func TestFingerprintsIgnoreMachinePaths(t *testing.T) {
 	t.Parallel()
 	run := func() []string {
-		root := kittest.CopyTree(t, filepath.Join("testdata", "repo"))
+		root := kittest.CopyTree(t, kittest.Tree(kittest.Baseline("windsurf"), "repo"))
 		home := t.TempDir()
 		h := filepath.ToSlash(home)
 		kittest.WriteFile(t, filepath.Join(home, ".codeium", "windsurf", "mcp_config.json"), `{"mcpServers":{"a":{"command":"`+h+`/bin/mcp","args":["--token","x"]}}}`)
@@ -367,8 +372,8 @@ func TestFingerprintsIgnoreMachinePaths(t *testing.T) {
 
 func TestRepoScanDoesNotReadHome(t *testing.T) {
 	t.Parallel()
-	home := kittest.CopyTree(t, filepath.Join("testdata", "home"))
-	managed := kittest.CopyTree(t, filepath.Join("testdata", "managed"))
+	home := kittest.CopyTree(t, kittest.Tree(kittest.Baseline("windsurf"), "home"))
+	managed := kittest.CopyTree(t, kittest.Tree(kittest.Baseline("windsurf"), "managed"))
 	got := kittest.Discover(t, New(Options{HomeDir: home, ManagedDir: managed}), t.TempDir())
 	if len(got.Items) != 0 || len(got.Diagnostics) != 0 {
 		t.Fatalf("repository-only scan read user or managed files: %+v", got)
@@ -390,9 +395,9 @@ func TestDetect(t *testing.T) {
 
 func FuzzParseConfig(f *testing.F) {
 	seeds := map[string]string{
-		"hooks": "testdata/repo/.windsurf/hooks.json",
-		"mcp":   "testdata/home/.codeium/windsurf/mcp_config.json",
-		"rule":  "testdata/repo/.windsurf/rules/backend/db.md",
+		"hooks": "testdata/windsurf-baseline/repo/.windsurf/hooks.json",
+		"mcp":   "testdata/windsurf-baseline/home/.codeium/windsurf/mcp_config.json",
+		"rule":  "testdata/windsurf-baseline/repo/.windsurf/rules/backend/db.md",
 	}
 	for kind, path := range seeds {
 		if data, err := kittest.ReadFixture(path); err == nil {

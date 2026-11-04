@@ -15,22 +15,27 @@ const fixtureManagedDir = "/etc/cursor"
 
 func TestDiscoverGolden(t *testing.T) {
 	t.Parallel()
-	root := kittest.CopyTree(t, filepath.Join("testdata", "repo"))
-	home := kittest.CopyTree(t, filepath.Join("testdata", "home"))
-	managed := kittest.CopyTree(t, filepath.Join("testdata", "managed"))
-	got := kittest.Discover(t, New(Options{IncludeUser: true, IncludeManaged: true, HomeDir: home, ManagedDir: managed}), root)
-	kittest.AssertGolden(t, "discover.golden", kittest.GoldenJSON(t, got, map[string]string{filepath.ToSlash(managed): fixtureManagedDir}))
-	raw := string(kittest.GoldenJSON(t, got, nil))
-	for _, leak := range []string{home, "abc123", "t-123", "k-999", "xyz", "ref=main"} {
-		if strings.Contains(raw, leak) {
-			t.Fatalf("discovery leaks %q", leak)
-		}
-	}
-	for _, item := range got.Items {
-		switch strings.ToLower(item.Path) {
-		case "agents.md", ".claude/settings.json":
-			t.Fatalf("cursor reported %s, which another adapter owns", item.Path)
-		}
+	for _, version := range kittest.Versions(t) {
+		t.Run(version, func(t *testing.T) {
+			t.Parallel()
+			root := kittest.CopyTree(t, kittest.Tree(version, "repo"))
+			home := kittest.CopyTree(t, kittest.Tree(version, "home"))
+			managed := kittest.CopyTree(t, kittest.Tree(version, "managed"))
+			got := kittest.Discover(t, New(Options{IncludeUser: true, IncludeManaged: true, HomeDir: home, ManagedDir: managed}), root)
+			kittest.AssertGolden(t, filepath.Join(version, "discover.golden"), kittest.GoldenJSON(t, got, map[string]string{filepath.ToSlash(managed): fixtureManagedDir}))
+			raw := string(kittest.GoldenJSON(t, got, nil))
+			for _, leak := range []string{home, "abc123", "t-123", "k-999", "xyz", "ref=main"} {
+				if strings.Contains(raw, leak) {
+					t.Fatalf("discovery leaks %q", leak)
+				}
+			}
+			for _, item := range got.Items {
+				switch strings.ToLower(item.Path) {
+				case "agents.md", ".claude/settings.json":
+					t.Fatalf("cursor reported %s, which another adapter owns", item.Path)
+				}
+			}
+		})
 	}
 }
 
@@ -205,7 +210,7 @@ func TestFingerprintsIgnoreMachinePaths(t *testing.T) {
 
 func TestRepoScanDoesNotReadHome(t *testing.T) {
 	t.Parallel()
-	home := kittest.CopyTree(t, filepath.Join("testdata", "home"))
+	home := kittest.CopyTree(t, kittest.Tree(kittest.Baseline("cursor"), "home"))
 	got := kittest.Discover(t, New(Options{HomeDir: home, ManagedDir: home}), t.TempDir())
 	if len(got.Items) != 0 || len(got.Diagnostics) != 0 {
 		t.Fatalf("repository-only scan read user or managed files: %+v", got)
@@ -227,10 +232,10 @@ func TestDetect(t *testing.T) {
 
 func FuzzParseConfig(f *testing.F) {
 	seeds := map[string]string{
-		"hooks":       "testdata/repo/.cursor/hooks.json",
-		"mcp":         "testdata/repo/.cursor/mcp.json",
-		"environment": "testdata/repo/.cursor/environment.json",
-		"rule":        "testdata/repo/.cursor/rules/frontend/react.mdc",
+		"hooks":       "testdata/cursor-baseline/repo/.cursor/hooks.json",
+		"mcp":         "testdata/cursor-baseline/repo/.cursor/mcp.json",
+		"environment": "testdata/cursor-baseline/repo/.cursor/environment.json",
+		"rule":        "testdata/cursor-baseline/repo/.cursor/rules/frontend/react.mdc",
 	}
 	for kind, path := range seeds {
 		if data, err := kittest.ReadFixture(path); err == nil {

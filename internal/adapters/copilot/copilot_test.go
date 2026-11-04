@@ -16,30 +16,35 @@ const fixturePolicyDir = "/etc/github-copilot/policy.d"
 
 func TestDiscoverGolden(t *testing.T) {
 	t.Parallel()
-	root := kittest.CopyTree(t, filepath.Join("testdata", "repo"))
-	home := kittest.CopyTree(t, filepath.Join("testdata", "home"))
-	policy := kittest.CopyTree(t, filepath.Join("testdata", "policy"))
-	got := kittest.Discover(t, New(Options{IncludeUser: true, IncludeManaged: true, HomeDir: home, PolicyDir: policy, Getenv: kittest.Env()}), root)
-	kittest.AssertGolden(t, "discover.golden", kittest.GoldenJSON(t, got, map[string]string{filepath.ToSlash(policy): fixturePolicyDir}))
-	raw := string(kittest.GoldenJSON(t, got, nil))
-	for _, leak := range []string{home, "s3cr3t", "Bearer abc", "tok-1", "ghp_example", "channel=beta"} {
-		if strings.Contains(raw, leak) {
-			t.Fatalf("discovery leaks %q", leak)
-		}
-	}
-	for _, item := range got.Items {
-		switch {
-		case strings.EqualFold(item.Path, "AGENTS.md"), item.Path == ".mcp.json":
-			t.Fatalf("copilot reported %s, which another adapter owns", item.Path)
-		case strings.HasPrefix(item.Path, "services/"):
-			t.Fatalf("copilot reported a nested .github file Copilot does not load: %s", item.Path)
-		}
+	for _, version := range kittest.Versions(t) {
+		t.Run(version, func(t *testing.T) {
+			t.Parallel()
+			root := kittest.CopyTree(t, kittest.Tree(version, "repo"))
+			home := kittest.CopyTree(t, kittest.Tree(version, "home"))
+			policy := kittest.CopyTree(t, kittest.Tree(version, "policy"))
+			got := kittest.Discover(t, New(Options{IncludeUser: true, IncludeManaged: true, HomeDir: home, PolicyDir: policy, Getenv: kittest.Env()}), root)
+			kittest.AssertGolden(t, filepath.Join(version, "discover.golden"), kittest.GoldenJSON(t, got, map[string]string{filepath.ToSlash(policy): fixturePolicyDir}))
+			raw := string(kittest.GoldenJSON(t, got, nil))
+			for _, leak := range []string{home, "s3cr3t", "Bearer abc", "tok-1", "ghp_example", "channel=beta"} {
+				if strings.Contains(raw, leak) {
+					t.Fatalf("discovery leaks %q", leak)
+				}
+			}
+			for _, item := range got.Items {
+				switch {
+				case strings.EqualFold(item.Path, "AGENTS.md"), item.Path == ".mcp.json":
+					t.Fatalf("copilot reported %s, which another adapter owns", item.Path)
+				case strings.HasPrefix(item.Path, "services/"):
+					t.Fatalf("copilot reported a nested .github file Copilot does not load: %s", item.Path)
+				}
+			}
+		})
 	}
 }
 
 func TestDisableAllHooksMarksHooks(t *testing.T) {
 	t.Parallel()
-	root := kittest.CopyTree(t, filepath.Join("testdata", "repo"))
+	root := kittest.CopyTree(t, kittest.Tree(kittest.Baseline("copilot"), "repo"))
 	got := kittest.Discover(t, New(Options{}), root)
 	hooks := got.Find(".github/hooks/disabled.json", model.ConfigKindHook)
 	if len(hooks) != 1 || kittest.Payload(t, hooks[0])["hooks_disabled"] != true {
@@ -54,7 +59,7 @@ func TestDisableAllHooksMarksHooks(t *testing.T) {
 
 func TestSetupStepsJobOnly(t *testing.T) {
 	t.Parallel()
-	root := kittest.CopyTree(t, filepath.Join("testdata", "repo"))
+	root := kittest.CopyTree(t, kittest.Tree(kittest.Baseline("copilot"), "repo"))
 	got := kittest.Discover(t, New(Options{}), root)
 	var steps, jobs int
 	for _, item := range got.Find(".github/workflows/copilot-setup-steps.yml", model.ConfigKindEnvSetup) {
@@ -449,8 +454,8 @@ func TestFingerprintsIgnoreMachinePaths(t *testing.T) {
 
 func TestRepoScanDoesNotReadHome(t *testing.T) {
 	t.Parallel()
-	home := kittest.CopyTree(t, filepath.Join("testdata", "home"))
-	policy := kittest.CopyTree(t, filepath.Join("testdata", "policy"))
+	home := kittest.CopyTree(t, kittest.Tree(kittest.Baseline("copilot"), "home"))
+	policy := kittest.CopyTree(t, kittest.Tree(kittest.Baseline("copilot"), "policy"))
 	got := kittest.Discover(t, New(Options{HomeDir: home, PolicyDir: policy}), t.TempDir())
 	if len(got.Items) != 0 || len(got.Diagnostics) != 0 {
 		t.Fatalf("repository-only scan read user or managed files: %+v", got)
@@ -473,11 +478,11 @@ func TestDetect(t *testing.T) {
 
 func FuzzParseConfig(f *testing.F) {
 	seeds := map[string]string{
-		"hooks":    "testdata/repo/.github/hooks/guard.json",
-		"settings": "testdata/repo/.github/copilot/settings.json",
-		"agent":    "testdata/repo/.github/agents/formatter.agent.md",
-		"setup":    "testdata/repo/.github/workflows/copilot-setup-steps.yml",
-		"mcp":      "testdata/home/.copilot/mcp-config.json",
+		"hooks":    "testdata/copilot-baseline/repo/.github/hooks/guard.json",
+		"settings": "testdata/copilot-baseline/repo/.github/copilot/settings.json",
+		"agent":    "testdata/copilot-baseline/repo/.github/agents/formatter.agent.md",
+		"setup":    "testdata/copilot-baseline/repo/.github/workflows/copilot-setup-steps.yml",
+		"mcp":      "testdata/copilot-baseline/home/.copilot/mcp-config.json",
 	}
 	for kind, path := range seeds {
 		if data, err := kittest.ReadFixture(path); err == nil {

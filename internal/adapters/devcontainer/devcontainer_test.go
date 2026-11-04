@@ -20,22 +20,27 @@ var fixtureSecrets = []string{"dc-dock-111", "dc-tok-222", "dc-q-333", "dc-env-4
 
 func TestDiscoverGolden(t *testing.T) {
 	t.Parallel()
-	root := kittest.CopyTree(t, filepath.Join("testdata", "repo"))
-	got := kittest.Discover(t, New(Options{}), root)
-	kittest.AssertGolden(t, "discover.golden", kittest.GoldenJSON(t, got, nil))
-	raw := string(kittest.GoldenJSON(t, got, nil))
-	for _, leak := range fixtureSecrets {
-		if strings.Contains(raw, leak) {
-			t.Fatalf("discovery leaks %q", leak)
-		}
-	}
-	for _, item := range got.Items {
-		if strings.Contains(item.Path, "nested") || strings.HasPrefix(item.Path, "sub/") {
-			t.Fatalf("reported %s, which the tooling does not offer", item.Path)
-		}
-	}
-	if len(got.Find(".devcontainer/gpu/devcontainer.json", model.ConfigKindEnvSetup)) != 2 || len(got.Find(".devcontainer.json", model.ConfigKindEnvSetup)) != 2 {
-		t.Fatalf("items = %+v", got.Items)
+	for _, version := range kittest.Versions(t) {
+		t.Run(version, func(t *testing.T) {
+			t.Parallel()
+			root := kittest.CopyTree(t, kittest.Tree(version, "repo"))
+			got := kittest.Discover(t, New(Options{}), root)
+			kittest.AssertGolden(t, filepath.Join(version, "discover.golden"), kittest.GoldenJSON(t, got, nil))
+			raw := string(kittest.GoldenJSON(t, got, nil))
+			for _, leak := range fixtureSecrets {
+				if strings.Contains(raw, leak) {
+					t.Fatalf("discovery leaks %q", leak)
+				}
+			}
+			for _, item := range got.Items {
+				if strings.Contains(item.Path, "nested") || strings.HasPrefix(item.Path, "sub/") {
+					t.Fatalf("reported %s, which the tooling does not offer", item.Path)
+				}
+			}
+			if len(got.Find(".devcontainer/gpu/devcontainer.json", model.ConfigKindEnvSetup)) != 2 || len(got.Find(".devcontainer.json", model.ConfigKindEnvSetup)) != 2 {
+				t.Fatalf("items = %+v", got.Items)
+			}
+		})
 	}
 }
 
@@ -333,7 +338,7 @@ func TestCaseInsensitivePaths(t *testing.T) {
 
 func TestSkipRepo(t *testing.T) {
 	t.Parallel()
-	root := kittest.CopyTree(t, filepath.Join("testdata", "repo"))
+	root := kittest.CopyTree(t, kittest.Tree(kittest.Baseline("devcontainer"), "repo"))
 	a := New(Options{SkipRepo: true})
 	got := kittest.Discover(t, a, root)
 	if a.Detect(root) || len(got.Items) != 0 || len(got.Diagnostics) != 0 {
@@ -355,7 +360,7 @@ func TestDetect(t *testing.T) {
 }
 
 func FuzzParseConfig(f *testing.F) {
-	for _, path := range []string{"testdata/repo/.devcontainer/devcontainer.json", "testdata/repo/.devcontainer/gpu/devcontainer.json"} {
+	for _, path := range []string{"testdata/devcontainer-baseline/repo/.devcontainer/devcontainer.json", "testdata/devcontainer-baseline/repo/.devcontainer/gpu/devcontainer.json"} {
 		if data, err := kittest.ReadFixture(path); err == nil {
 			f.Add(data)
 		}
