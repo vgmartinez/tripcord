@@ -933,7 +933,7 @@ jobs:
       - name: Tripcord
         id: tripcord
         continue-on-error: true
-        uses: vgmartinez/tripcord/.github/actions/tripcord@8b33b1b5a69c686b611b43a475da9658fe44614d # main@8b33b1b # zizmor: ignore[ref-version-mismatch]
+        uses: vgmartinez/tripcord/.github/actions/tripcord@0a81d674703bb88ad4aaff1c1dc709d884cc7c67 # main@0a81d67 # zizmor: ignore[ref-version-mismatch]
         with:
           path: testdata/ci-caller
           reviews-file: ${{ steps.reviews.outputs.reviews-file }}

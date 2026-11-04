@@ -299,8 +299,9 @@ func TestCICallerUsesPinnedRemoteAction(t *testing.T) {
 			t.Fatalf("ci.yml still contains %s", gone)
 		}
 	}
-	if !strings.Contains(text, workflowActionPin) {
-		t.Fatalf("caller is not pinned to %q", workflowActionPin)
+	const callerActionPin = "vgmartinez/tripcord/.github/actions/tripcord@0a81d674703bb88ad4aaff1c1dc709d884cc7c67 # main@0a81d67"
+	if !strings.Contains(text, callerActionPin) {
+		t.Fatalf("caller is not pinned to %q", callerActionPin)
 	}
 	var root yaml.Node
 	if err := yaml.Unmarshal(data, &root); err != nil {
@@ -335,7 +336,7 @@ func TestCICallerUsesPinnedRemoteAction(t *testing.T) {
 	if !sawReviews || actionStep == nil || assertStep == nil {
 		t.Fatal("caller is missing reviews, the remote action, or the assertion")
 	}
-	if scalar(actionStep["uses"]) != workflowAction {
+	if scalar(actionStep["uses"]) != "vgmartinez/tripcord/.github/actions/tripcord@0a81d674703bb88ad4aaff1c1dc709d884cc7c67" {
 		t.Fatalf("caller uses %q", scalar(actionStep["uses"]))
 	}
 	if scalar(actionStep["continue-on-error"]) != "true" {
