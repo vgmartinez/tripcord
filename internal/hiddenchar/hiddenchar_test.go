@@ -92,6 +92,37 @@ func TestInstructionPath(t *testing.T) {
 	}
 }
 
+func TestInstructionFileRequiresRepoScope(t *testing.T) {
+	if !InstructionFile(model.ScopeRepo, model.ConfigKindInstructions, "CLAUDE.md") {
+		t.Error("repo CLAUDE.md")
+	}
+	if !InstructionFile(model.ScopeRepo, model.ConfigKindSkill, ".claude/skills/x/SKILL.md") {
+		t.Error("repo skill")
+	}
+	if !InstructionFile(model.ScopeRepo, model.ConfigKindSkill, ".agents/skills/x/SKILL.md") {
+		t.Error("repo agents skill")
+	}
+	quiet := []struct {
+		scope model.Scope
+		kind  model.ConfigKind
+		path  string
+	}{
+		{model.ScopeUser, model.ConfigKindSkill, "~/.claude/skills/x/SKILL.md"},
+		{model.ScopeUser, model.ConfigKindSkill, "~/.agents/skills/x/SKILL.md"},
+		{model.ScopeUser, model.ConfigKindInstructions, "~/.claude/CLAUDE.md"},
+		{model.ScopeUser, model.ConfigKindInstructions, "~/.gemini/GEMINI.md"},
+		{model.ScopeUser, model.ConfigKindInstructions, "~/.codex/AGENTS.md"},
+		{model.ScopeManaged, model.ConfigKindInstructions, "CLAUDE.md"},
+		{model.ScopeRepo, model.ConfigKindHook, "AGENTS.md"},
+		{model.ScopeRepo, model.ConfigKindSkill, "docs/SKILL.md"},
+	}
+	for _, tc := range quiet {
+		if InstructionFile(tc.scope, tc.kind, tc.path) {
+			t.Errorf("InstructionFile(%s, %s, %q) = true", tc.scope, tc.kind, tc.path)
+		}
+	}
+}
+
 func TestExcerpt(t *testing.T) {
 	cases := map[string]string{
 		"a\u202Eb":                     "1 hidden code point: U+202E (bidi control) at line 1, column 2",

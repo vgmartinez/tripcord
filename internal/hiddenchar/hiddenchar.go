@@ -217,10 +217,15 @@ func skillInstructionPath(p string) bool {
 	return false
 }
 
-// InstructionFile reports whether a markdown item of kind at rel is a
-// file TC-CFG-011 reads, so an invalid UTF-8 diagnostic follows the
-// rule. A skill counts only when InstructionPath does.
-func InstructionFile(kind model.ConfigKind, rel string) bool {
+// InstructionFile reports whether a markdown item of this scope and
+// kind at rel is a file TC-CFG-011 reads, so an invalid UTF-8
+// diagnostic follows the rule. The rule requires repository scope, so
+// a user or managed file is not one, even when its path matches. A
+// skill counts only when InstructionPath does.
+func InstructionFile(scope model.Scope, kind model.ConfigKind, rel string) bool {
+	if scope != model.ScopeRepo {
+		return false
+	}
 	switch kind {
 	case model.ConfigKindInstructions, model.ConfigKindSkill:
 		return InstructionPath(rel)

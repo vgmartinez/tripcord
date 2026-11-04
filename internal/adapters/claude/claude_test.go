@@ -1109,3 +1109,26 @@ func TestMarkdownHiddenChars(t *testing.T) {
 		t.Fatalf("diagnostics = %v", got.Diagnostics)
 	}
 }
+
+// TestUserScopeInvalidUTF8IsQuiet checks that the same bytes at user
+// scope are not a diagnostic: TC-CFG-011 reads repository files only.
+func TestUserScopeInvalidUTF8IsQuiet(t *testing.T) {
+	t.Parallel()
+	raw := []byte("a\xffb")
+	cases := []struct {
+		kind model.ConfigKind
+		role string
+		path string
+	}{
+		{model.ConfigKindInstructions, "claude", "~/.claude/CLAUDE.md"},
+		{model.ConfigKindSkill, "skill", "~/.claude/skills/x/SKILL.md"},
+		{model.ConfigKindSkill, "skill", "~/.agents/skills/x/SKILL.md"},
+	}
+	for _, tc := range cases {
+		c := newCollector(nil)
+		newSrc(c, model.ScopeUser, tc.path, raw).markdown(tc.kind, tc.role, raw)
+		if len(c.diags) != 0 {
+			t.Errorf("%s: diagnostics = %+v", tc.path, c.diags)
+		}
+	}
+}

@@ -634,8 +634,9 @@ func TestMarkdownLooseFrontmatter(t *testing.T) {
 
 // TestMarkdownHiddenChars checks that hidden code points are located in
 // the whole raw file, frontmatter included, and that invalid UTF-8 is a
-// diagnostic for a file TC-CFG-011 reads, including a skill under one of
-// its three directories, and not for a skill outside them.
+// diagnostic for a repository file TC-CFG-011 reads, including a skill
+// under one of its three directories, and not for a skill outside them
+// or for the same paths at user scope.
 func TestMarkdownHiddenChars(t *testing.T) {
 	t.Parallel()
 	c := NewCollector(model.HarnessCursor, "Cursor")
@@ -653,6 +654,9 @@ func TestMarkdownHiddenChars(t *testing.T) {
 	c.Source(model.ScopeRepo, "AGENTS.md", nil).Markdown(model.ConfigKindInstructions, "agents", []byte("a\xff\u2066b"), LooseFrontmatter)
 	c.Source(model.ScopeRepo, "skills/x/SKILL.md", nil).Markdown(model.ConfigKindSkill, "skill", []byte("a\xffb"), LooseFrontmatter)
 	c.Source(model.ScopeRepo, ".claude/skills/fmt/SKILL.md", nil).Markdown(model.ConfigKindSkill, "skill", []byte("a\xffb"), LooseFrontmatter)
+	c.Source(model.ScopeUser, "~/.claude/CLAUDE.md", nil).Markdown(model.ConfigKindInstructions, "claude", []byte("a\xffb"), LooseFrontmatter)
+	c.Source(model.ScopeUser, "~/.claude/skills/x/SKILL.md", nil).Markdown(model.ConfigKindSkill, "skill", []byte("a\xffb"), LooseFrontmatter)
+	c.Source(model.ScopeUser, "~/.agents/skills/x/SKILL.md", nil).Markdown(model.ConfigKindSkill, "skill", []byte("a\xffb"), LooseFrontmatter)
 	diags := c.Diagnostics()
 	if len(diags) != 2 || diags[0].Path != "AGENTS.md" || diags[1].Path != ".claude/skills/fmt/SKILL.md" || !strings.Contains(diags[0].Message, InvalidUTF8) || !strings.Contains(diags[1].Message, InvalidUTF8) {
 		t.Fatalf("diags = %v", diags)
