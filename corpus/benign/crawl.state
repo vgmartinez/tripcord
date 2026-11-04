@@ -7,4 +7,4 @@ cursor	0	desc	1	no
 devcontainer	1	desc	2	no
 gemini	1	desc	2	no
 mcp	0	desc	7	no
-vscode	0	asc	1	no
+vscode	0	asc	2	no
