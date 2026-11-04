@@ -674,6 +674,7 @@ func redactColonAssignments(value string, removed *[]string) string {
 	spansFound := false
 	imageRefs := findContainerImageSpans(value)
 	lines := newLineIndex(value)
+	commentGaps := newCommentGapIndex(value)
 	pos := 0
 	for {
 		h, found := nextAssignmentHead(value, scan, pos, ':')
@@ -694,14 +695,16 @@ func redactColonAssignments(value string, removed *[]string) string {
 			// strict before it asks lines for the key's column, so a
 			// near miss ("api_key: |x") costs no line lookup.
 			blockStart, isBlock := blockScalarHeader(value, h.valStart, lines)
+			bodyStart := blockStart
 			if !isBlock {
 				blockStart, isBlock = nestedMappingStart(value, h)
+				bodyStart = blockStart
 			}
 			if !isBlock {
-				blockStart, isBlock = commentGapStart(value, h, lines)
+				blockStart, bodyStart, isBlock = commentGapStart(value, h, lines, commentGaps)
 			}
 			if isBlock {
-				bodyEnd := blockBodyEnd(value, blockStart, lines.column(h.start))
+				bodyEnd := blockBodyEnd(value, bodyStart, lines.column(h.start))
 				if bodyEnd > blockStart {
 					b.WriteString(value[pos:blockStart])
 					*removed = append(*removed, value[blockStart:bodyEnd])
@@ -983,57 +986,92 @@ func nestedMappingStart(value string, h assignmentHead) (start int, ok bool) {
 // commentGapStart reports whether h's value is more-indented content
 // after a YAML comment, which colonValue cannot see because it stops at
 // the first newline: "token: # c\n  X" and "token:\n  # c\n  X".
-// bodyStart is the first line of that content. A "#" with nothing
-// indented after it is the value itself ("token: #secret"), so this
-// returns false and colonValue redacts it. The check reads forward only
-// (lineIndex.lineEnd), so a long line of "token: #x" candidates stays
-// linear.
-func commentGapStart(value string, h assignmentHead, lines *lineIndex) (bodyStart int, ok bool) {
+// redactStart is h's value start, including every header or gap comment;
+// bodyStart is the first line of content whose indentation decides where
+// the value ends. A "#" with nothing indented after it is the value itself
+// ("token: #secret"), so this returns false and colonValue redacts it.
+func commentGapStart(value string, h assignmentHead, lines *lineIndex, gaps *commentGapIndex) (redactStart, bodyStart int, ok bool) {
 	i := h.valStart
 	for i < len(value) && (value[i] == ' ' || value[i] == '\t') {
 		i++
 	}
 	if i >= len(value) || value[i] != '#' {
-		return 0, false
+		return 0, 0, false
 	}
-	i = lines.lineEnd(i)
-	if i >= len(value) || value[i] != '\n' {
-		return 0, false
+	bodyStart = gaps.afterRun(i)
+	if bodyStart >= len(value) {
+		return 0, 0, false
 	}
 	keyIndent := lines.column(h.start)
-	for {
-		i++
-		if i >= len(value) {
-			return 0, false
+	first := bodyStart
+	for first < len(value) && (value[first] == ' ' || value[first] == '\t') {
+		first++
+	}
+	if first == len(value) || first-bodyStart <= keyIndent {
+		return 0, 0, false
+	}
+	return h.valStart, bodyStart, true
+}
+
+// commentGapIndex caches where each run of comment and blank lines ends.
+// It is separate from lineIndex: a later header can occur before that
+// run's cached end, so sharing a single forward line-end cache lets that
+// later header mistake a later line for the end of its own line. Heads
+// are scanned in source order, so a later head inside the most recent
+// run reuses its endpoint. That keeps "# token: #\n" repeated N times
+// linear: the first candidate scans the run and the rest look it up.
+type commentGapIndex struct {
+	value string
+	runs  []commentGapRun
+}
+
+func newCommentGapIndex(value string) *commentGapIndex {
+	return &commentGapIndex{value: value}
+}
+
+// afterRun returns the first non-comment, nonblank line after the
+// comment starting at start, or len(value) when there is none.
+func (c *commentGapIndex) afterRun(start int) int {
+	if n := len(c.runs); n > 0 {
+		last := c.runs[n-1]
+		if start >= last.start && start < last.end {
+			return last.end
 		}
+	}
+	i := start
+	for i < len(c.value) {
 		line := i
-		for i < len(value) && (value[i] == ' ' || value[i] == '\t') {
+		for i < len(c.value) && (c.value[i] == ' ' || c.value[i] == '\t') {
 			i++
 		}
-		if i >= len(value) {
-			return 0, false
-		}
-		switch value[i] {
-		case '\n':
-			continue
-		case '\r':
-			if i+1 < len(value) && value[i+1] == '\n' {
-				i++
+		switch {
+		case i == len(c.value):
+			c.cache(start, i)
+			return i
+		case c.value[i] == '#':
+			if end := strings.IndexByte(c.value[i:], '\n'); end >= 0 {
+				i += end + 1
 				continue
 			}
-			return 0, false
-		case '#':
-			i = lines.lineEnd(i)
-			if i >= len(value) || value[i] != '\n' {
-				return 0, false
-			}
-			continue
+			c.cache(start, len(c.value))
+			return len(c.value)
+		case c.value[i] == '\n':
+			i++
+		case c.value[i] == '\r' && i+1 < len(c.value) && c.value[i+1] == '\n':
+			i += 2
+		default:
+			c.cache(start, line)
+			return line
 		}
-		if i-line <= keyIndent {
-			return 0, false
-		}
-		return line, true
 	}
+	c.cache(start, len(c.value))
+	return len(c.value)
+}
+
+type commentGapRun struct{ start, end int }
+
+func (c *commentGapIndex) cache(start, end int) {
+	c.runs = append(c.runs, commentGapRun{start: start, end: end})
 }
 
 // colonValue returns the "key: value" value at the start of rest: a

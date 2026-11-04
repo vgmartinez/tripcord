@@ -49,6 +49,7 @@ func TestBlockScalarCandidatesScaleLinearly(t *testing.T) {
 		"folded value":          "api_key: >x ",
 		"comment without break": "api_key: | #c ",
 		"comment value miss":    "token: #x ",
+		"comment key run":       "# token: #\n",
 	}
 	for name, unit := range units {
 		small := fastestRedaction(strings.Repeat(unit, (64<<10)/len(unit)))

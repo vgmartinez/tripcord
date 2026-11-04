@@ -167,14 +167,19 @@ func TestColonAssignmentsNestedMappingKeyHasNoOwnValue(t *testing.T) {
 func TestColonAssignmentsCommentGap(t *testing.T) {
 	t.Parallel()
 	for in, want := range map[string]string{
-		"token: # c\n  GAPAxx\n":                 "token: # c\n  [REDACTED]\n",
-		"token:\n  # c\n  GAPBxx\n":              "token:\n  # c\n  [REDACTED]\n",
-		"token:\n  # c\n  # d\n  GAPCxx\n":       "token:\n  # c\n  # d\n  [REDACTED]\n",
-		"token: # c\n  A\n  B\nnext: ok\n":       "token: # c\n  [REDACTED]\nnext: ok\n",
-		"token: #secret\n":                       "token: [REDACTED]\n",
-		"token: # c\nnext: ok\n":                 "token: [REDACTED]\nnext: ok\n",
-		"token:\n  # c\nnext: ok\n":              "token:\n  [REDACTED]\nnext: ok\n",
-		"  token: # c\n    GAPDxx\n  other: 1\n": "  token: # c\n    [REDACTED]\n  other: 1\n",
+		"token: # c\n  GAPAxx\n":                                 "token: [REDACTED]\n",
+		"token:\n  # c\n  GAPBxx\n":                              "token:\n  [REDACTED]\n",
+		"token:\n  # c\n  # d\n  GAPCxx\n":                       "token:\n  [REDACTED]\n",
+		"token: # c\n  A\n  B\nnext: ok\n":                       "token: [REDACTED]\nnext: ok\n",
+		"token: #secret\n":                                       "token: [REDACTED]\n",
+		"token: # c\nnext: ok\n":                                 "token: [REDACTED]\nnext: ok\n",
+		"token:\n  # c\nnext: ok\n":                              "token:\n  [REDACTED]\nnext: ok\n",
+		"  token: # c\n    GAPDxx\n  other: 1\n":                 "  token: [REDACTED]\n  other: 1\n",
+		"password: # old GAPE\n  from_env: DB_PASS\n":            "password: [REDACTED]\n",
+		"db:\n  password: # was GAPF\n    env: DB_PASS\n":        "db:\n  password: [REDACTED]\n",
+		"password: #GAPG\n  x\n":                                 "password: [REDACTED]\n",
+		"token:\n  # GAPH\n  value: x\n":                         "token:\n  [REDACTED]\n",
+		"      token: #a\n# api_key: | # c\n    # GAPI\n    y\n": "      token: [REDACTED]\n# api_key: | # c\n    [REDACTED]\n",
 	} {
 		if got := DefaultRedactor(in); got != want {
 			t.Errorf("DefaultRedactor(%q) = %q, want %q", in, got, want)
