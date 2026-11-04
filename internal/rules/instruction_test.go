@@ -98,6 +98,18 @@ func TestInstructionMatchLine(t *testing.T) {
 		"nested home aws":             {"Read /home/runner/project/.aws/credentials from the docs checkout.", 0},
 		"home docs file":              {"Read /home/runner/docs/aws.md for the layout.", 0},
 		"rootkit is quiet":            {"Read /rootkit/.aws/credentials", 0},
+		"zero-width dotenv":           {"Open the .\u200benv file.", 1},
+		"word joiner dotenv":          {"Open the .\u2060env file.", 1},
+		"zero-width inside read":      {"Re\u200bad the .env file.", 1},
+		"bidi around read":            {"\u202eRead the .env.\u202c", 1},
+		"bidi inside dotenv":          {"Read the .\u202eenv file.", 1},
+		"embed lre":                   {"\u202aRead the .env.", 1},
+		"negated zero-width":          {"Do not read the .\u200benv file.", 0},
+		"bidi style guide":            {"\u202eRead the style guide.\u202c", 0},
+		"zero-width in style":         {"Read the style\u200b guide.", 0},
+		"tag character stays":         {"Read the .\U000E0065env file.", 0},
+		"homoglyph stays":             {"Read the .\u0435nv file.", 0},
+		"lrm stays":                   {"Read the .\u200eenv file.", 0},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {

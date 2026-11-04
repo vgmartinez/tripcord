@@ -1,0 +1,4 @@
+# U+200B inside a negated read, and inside a word that is not a target
+-- AGENTS.md --
+Do not read the .​env file.
+Read the style​ guide.

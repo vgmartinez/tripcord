@@ -18,6 +18,10 @@
 # The match is on the raw whole file, including frontmatter. The raw view
 # is evaluation-only; findings contain only the line number, never text.
 #
+# Bidi controls (U+202A-U+202E, U+2066-U+2069) and zero-width characters
+# (U+200B-U+200D, U+2060, U+FEFF) are removed before the match, so they
+# cannot sit in front of a verb or split a target. Tag characters and
+# lookalike letters, including a Cyrillic e in .env, stay and do not match.
 # A line matches when a verb follows optional Markdown (#, >, <!--,
 # bullet, number, or **) and an optional prefix (please, always, first, you
 # must/should, make sure to), and then directly names a secret target.

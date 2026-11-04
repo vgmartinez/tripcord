@@ -11,8 +11,5 @@ arxiv-2602.06547/html-comment-directive	TC-CFG-012	an "assistant:" label between
 arxiv-2602.06547/skill-credential-harvest	TC-CFG-012	singular "environment variable" is not a target and the send line names no secret
 arxiv-2602.06547/cursor-prompt-exfil~env-indirection	TC-CFG-008	${TC_DL:-curl} hides the downloader from the hook network check
 arxiv-2602.06547/skill-credential-files~bidi	TC-CFG-011	TC-CFG-011 does not read SKILL.md
-arxiv-2602.06547/skill-credential-files~bidi	TC-CFG-012	a bidi control before the verb breaks the line-start match
 arxiv-2602.06547/skill-credential-harvest~bidi	TC-CFG-011	TC-CFG-011 does not read SKILL.md
-novee-sandbox/agents-dotenv-exfil~zero-width	TC-CFG-012	a zero-width space inside .env breaks the target match; TC-CFG-011 still reports the file
-novee-sandbox/agents-dotenv-exfil~bidi	TC-CFG-012	a bidi control before the verb breaks the line-start match; TC-CFG-011 still reports the file
 novee-sandbox/agents-dotenv-exfil~homoglyph	TC-CFG-012	a Cyrillic e in .env is neither a target nor hidden, so nothing reports the file

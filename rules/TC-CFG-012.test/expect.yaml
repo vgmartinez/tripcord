@@ -1,6 +1,7 @@
 # The severity each positive fixture must produce (see
 # internal/rules/fixtures.go, ExpectFile).
 positivos:
+  agents-bidi-read-dotenv: medium
   agents-bold-read-dotenv: medium
   agents-blockquote-dotenv: medium
   agents-bullet-credentials: medium
@@ -33,6 +34,7 @@ positivos:
   agents-send-all-their-tokens: medium
   agents-wget-header-post-file-dotenv: medium
   agents-wget-post-file-dotenv: medium
+  agents-zero-width-dotenv: medium
   claude-command-read-dotenv: medium
   claude-local-dotenv: medium
   claude-nested-plugin-skill: medium

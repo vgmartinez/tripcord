@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/vgmartinez/tripcord/internal/hiddenchar"
 	"github.com/vgmartinez/tripcord/internal/model"
 )
 
@@ -33,6 +34,7 @@ var (
 // the line text: findings expose only this coordinate.
 func instructionMatchLine(content string) int {
 	for line, text := range strings.Split(content, "\n") {
+		text = stripInstructionHidden(text)
 		prefix := instructionPrefix.FindStringIndex(text)
 		if prefix == nil {
 			continue
@@ -75,6 +77,20 @@ func instructionMatchLine(content string) int {
 		}
 	}
 	return 0
+}
+
+// stripInstructionHidden drops bidi controls and zero-width characters
+// so they cannot sit in front of a verb or split a target. Tag
+// characters and other letters, including homoglyphs, stay.
+func stripInstructionHidden(text string) string {
+	return strings.Map(func(r rune) rune {
+		switch hiddenchar.Class(r) {
+		case hiddenchar.Bidi, hiddenchar.ZeroWidth:
+			return -1
+		default:
+			return r
+		}
+	}, text)
 }
 
 func instructionDirectSecret(text string) bool {

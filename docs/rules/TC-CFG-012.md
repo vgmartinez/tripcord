@@ -15,7 +15,15 @@ model follows the file. The check is a heuristic over the text. It does
 not know whether a session obeyed it.
 
 One finding per file whose raw text has a matching line. Findings carry
-the first matching line number, but no content excerpt. The line starts
+the first matching line number, but no content excerpt.
+
+Before that test, bidi controls (U+202A–U+202E and U+2066–U+2069) and
+zero-width characters (U+200B–U+200D, U+2060, and U+FEFF) are removed,
+so they cannot sit in front of the verb or split a target. Tag
+characters and lookalike letters stay. A Cyrillic `e` in `.env` is
+neither removed nor a target.
+
+The line starts
 with the verb after optional Markdown (`#`, `>`, `<!--`, a bullet, a
 number, or `**`) and an optional prefix (`please`, `always`, `first`,
 `you must`, `you should`, or `make sure to`). A negated line does not
@@ -80,6 +88,11 @@ Not reported:
 - User-scope files, referenced files, and `AGENTS.local.md` /
   `GEMINI.local.md`, which no repository adapter emits.
 - A file that only says to follow another document.
+- Ordinary prose wrapped in a bidi control, a zero-width character
+  inside a word that is not a target, and a negated read whose `.env`
+  contains a zero-width character.
+- A Cyrillic letter standing in for `e` in `.env`, and a tag character
+  or left-to-right mark left inside the target.
 
 ## Why medium
 
