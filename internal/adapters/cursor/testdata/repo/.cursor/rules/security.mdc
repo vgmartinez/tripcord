@@ -1,4 +1,0 @@
----
-alwaysApply: true
----
-Never print environment variables.

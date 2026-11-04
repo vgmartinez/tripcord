@@ -12,6 +12,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/vgmartinez/tripcord/internal/txtar"
 )
 
 // parityHit is the part of a finding the staged scan must share with a
@@ -30,13 +32,9 @@ func TestStagedCheckoutParity(t *testing.T) {
 	fixtures := parityFixtureDirs(t, root)
 	scenarios := stagedParityRepos(t)
 	t.Logf("parity fixtures: %d (%d corpus and testdata repos, %d staged scenarios)", len(fixtures)+len(scenarios), len(fixtures), len(scenarios))
-	for _, dir := range fixtures {
-		rel, err := filepath.Rel(root, dir)
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Run(filepath.ToSlash(rel), func(t *testing.T) {
-			assertIndexParity(t, bin, stageFixture(t, dir))
+	for _, fx := range fixtures {
+		t.Run(fx.name, func(t *testing.T) {
+			assertIndexParity(t, bin, stageFixture(t, fx.dir))
 		})
 	}
 	for _, sc := range scenarios {
@@ -57,9 +55,24 @@ func assertIndexParity(t *testing.T, bin, repo string) {
 	}
 }
 
-func parityFixtureDirs(t *testing.T, root string) []string {
+// parityFixture is a fixture tree named by its path from the module
+// root. A testdata/repo.txtar archive is named testdata/repo and
+// unpacked into dir.
+type parityFixture struct {
+	name string
+	dir  string
+}
+
+func parityFixtureDirs(t *testing.T, root string) []parityFixture {
 	t.Helper()
-	var dirs []string
+	var dirs []parityFixture
+	add := func(path string) {
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		dirs = append(dirs, parityFixture{name: filepath.ToSlash(rel), dir: path})
+	}
 	corpus := filepath.Join(root, "corpus")
 	entries, err := os.ReadDir(corpus)
 	if err != nil {
@@ -67,27 +80,35 @@ func parityFixtureDirs(t *testing.T, root string) []string {
 	}
 	for _, entry := range entries {
 		if entry.IsDir() {
-			dirs = append(dirs, filepath.Join(corpus, entry.Name()))
+			add(filepath.Join(corpus, entry.Name()))
 		}
 	}
 	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if !d.IsDir() {
-			return nil
-		}
 		base := d.Name()
-		if base == ".git" || base == "node_modules" {
-			return filepath.SkipDir
-		}
 		rel, err := filepath.Rel(root, path)
 		if err != nil {
 			return err
 		}
 		slash := filepath.ToSlash(rel)
-		if base == "repo" && strings.Contains("/"+slash+"/", "/testdata/") {
-			dirs = append(dirs, path)
+		inTestdata := strings.Contains("/"+slash+"/", "/testdata/")
+		if !d.IsDir() {
+			if base == "repo"+txtar.Ext && inTestdata {
+				raw, err := os.ReadFile(path)
+				if err != nil {
+					return err
+				}
+				dirs = append(dirs, parityFixture{name: strings.TrimSuffix(slash, txtar.Ext), dir: txtar.Unpack(t, txtar.Parse(raw))})
+			}
+			return nil
+		}
+		if base == ".git" || base == "node_modules" {
+			return filepath.SkipDir
+		}
+		if base == "repo" && inTestdata {
+			add(path)
 			return filepath.SkipDir
 		}
 		return nil
@@ -103,8 +124,8 @@ func parityFixtureDirs(t *testing.T, root string) []string {
 	if !info.IsDir() {
 		t.Fatalf("%s is not a directory", caller)
 	}
-	dirs = append(dirs, caller)
-	sort.Strings(dirs)
+	add(caller)
+	sort.Slice(dirs, func(i, j int) bool { return dirs[i].name < dirs[j].name })
 	return dirs
 }
 

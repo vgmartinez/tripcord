@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -18,6 +19,7 @@ import (
 	"github.com/vgmartinez/tripcord/internal/fpkey"
 	"github.com/vgmartinez/tripcord/internal/model"
 	"github.com/vgmartinez/tripcord/internal/rules"
+	"github.com/vgmartinez/tripcord/internal/txtar"
 )
 
 // Discovery is the golden form of one Discover call.
@@ -140,10 +142,30 @@ func WriteFile(t testing.TB, path, content string) {
 }
 
 // CopyTree copies the fixture directory from into a fresh temporary
-// directory and returns it.
+// directory and returns it. A fixture tree committed as the archive
+// from.txtar, such as testdata/repo.txtar, is unpacked instead. Either
+// way directories are mode 0700 and files 0600.
 func CopyTree(t testing.TB, from string) string {
 	t.Helper()
 	root := t.TempDir()
+	if raw, err := os.ReadFile(from + txtar.Ext); err == nil {
+		for _, f := range txtar.Parse(raw).Files {
+			rel, err := txtar.Rel(f.Name)
+			if err != nil {
+				t.Fatalf("%s%s: %s: %v", from, txtar.Ext, f.Name, err)
+			}
+			dest := filepath.Join(root, filepath.FromSlash(rel))
+			if err := os.MkdirAll(filepath.Dir(dest), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(dest, f.Data, 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return root
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		t.Fatal(err)
+	}
 	err := filepath.WalkDir(from, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -166,6 +188,35 @@ func CopyTree(t testing.TB, from string) string {
 		t.Fatal(err)
 	}
 	return root
+}
+
+// ReadFixture reads the fixture file at path, slash-separated, such as
+// testdata/repo/.mcp.json. When a directory on the path was committed
+// as an archive, testdata/repo.txtar here, the file is that archive's
+// member .mcp.json.
+func ReadFixture(path string) ([]byte, error) {
+	data, err := os.ReadFile(filepath.FromSlash(path))
+	if !errors.Is(err, fs.ErrNotExist) {
+		return data, err
+	}
+	parts := strings.Split(path, "/")
+	for i := len(parts) - 1; i > 0; i-- {
+		dir, rest := strings.Join(parts[:i], "/"), strings.Join(parts[i:], "/")
+		raw, aerr := os.ReadFile(filepath.FromSlash(dir) + txtar.Ext)
+		if errors.Is(aerr, fs.ErrNotExist) {
+			continue
+		}
+		if aerr != nil {
+			return nil, aerr
+		}
+		for _, f := range txtar.Parse(raw).Files {
+			if f.Name == rest {
+				return f.Data, nil
+			}
+		}
+		return nil, fmt.Errorf("%s%s: no member %s: %w", dir, txtar.Ext, rest, fs.ErrNotExist)
+	}
+	return nil, err
 }
 
 // GoldenJSON renders d as indented JSON with each replacement applied

@@ -395,7 +395,7 @@ func FuzzParseConfig(f *testing.F) {
 		"rule":  "testdata/repo/.windsurf/rules/backend/db.md",
 	}
 	for kind, path := range seeds {
-		if data, err := os.ReadFile(path); err == nil {
+		if data, err := kittest.ReadFixture(path); err == nil {
 			f.Add(kind, data)
 		}
 	}

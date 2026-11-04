@@ -1,1 +1,0 @@
-{ "disableAllHooks": false, "hooks": { "postToolUse": [ { "type": "command", "command": "npm run lint" } ] } }

@@ -46,6 +46,18 @@ func TestAllowlistRejects(t *testing.T) {
 	}
 }
 
+func TestAllowlistGoldenSize(t *testing.T) {
+	t.Parallel()
+	a, err := ParseAllowlist([]byte("internal/adapters/claude/testdata/discover.golden\tsize\t21792 bytes\tgolden size\n"))
+	if err != nil || len(a.Entries) != 1 || a.Entries[0].Reason != "golden size" {
+		t.Fatalf(".golden path: %#v, %v", a, err)
+	}
+	_, err = ParseAllowlist([]byte("rules/TC-CFG-001.test/positivos/cursor-nested-bash-c.txtar\tsize\t39593 bytes\tgolden size\n"))
+	if err == nil || !strings.Contains(err.Error(), `reason "golden size" is only for a path ending in .golden`) {
+		t.Fatalf("other path: err = %v", err)
+	}
+}
+
 func TestAllowlistApply(t *testing.T) {
 	t.Parallel()
 	base := t.TempDir()

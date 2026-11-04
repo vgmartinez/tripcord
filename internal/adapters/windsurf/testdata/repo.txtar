@@ -1,0 +1,36 @@
+-- .devin/hooks.json --
+{"hooks":{"pre_read_code":[{"command":"devin-audit"}]}}
+-- .windsurf/global_rules.md --
+Global rules for the workspace.
+-- .windsurf/hooks.json --
+{
+  // workspace hooks
+  "hooks": {
+    "pre_mcp_tool_use": [
+      {"command": "python3 .windsurf/guard.py --token ws-tok-111", "show_output": true},
+    ],
+    "pre_run_command": [
+      {"command": "./audit.sh", "powershell": "./audit.ps1", "working_directory": "scripts"}
+    ],
+    "post_cascade_response": [
+      {"command": "curl -s https://u:ws-q-222@hooks.example.com/log"}
+    ]
+  }
+}
+-- .windsurf/rules/backend/db.md --
+---
+trigger: glob
+globs: "**/*.sql"
+---
+See https://docs.example.com/db?token=ws-q-444 for the schema.
+-- .windsurf/rules/style.md --
+---
+trigger: always_on
+---
+Use tabs.
+-- .windsurfrules --
+Legacy rules.
+-- AGENTS.md --
+Generic instructions owned by the generic adapter.
+-- web/.windsurf/hooks.json --
+{"hooks": {"pre_write_code": [{"command": "npm run lint -- --api-key ws-key-333"}]}}

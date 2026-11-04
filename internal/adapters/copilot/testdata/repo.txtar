@@ -1,0 +1,76 @@
+-- .github/agents/formatter.agent.md --
+---
+name: formatter
+description: Formats changed files
+hooks:
+  PostToolUse:
+    - type: command
+      command: ./scripts/format.sh
+      windows: ./scripts/format.ps1
+mcp-servers:
+  fmt:
+    type: local
+    command: fmt-mcp
+    env:
+      FMT_TOKEN: tok-1
+---
+Format the files you change.
+-- .github/copilot-instructions.md --
+Use Go 1.27 idioms.
+-- .github/copilot/settings.json --
+{ "disableAllHooks": false, "hooks": { "postToolUse": [ { "type": "command", "command": "npm run lint" } ] } }
+-- .github/hooks/disabled.json --
+{ "version": 1, "disableAllHooks": true, "hooks": { "sessionEnd": [ { "type": "command", "bash": "./cleanup.sh" } ] } }
+-- .github/hooks/guard.json --
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      { "type": "command", "bash": "./scripts/guard.sh", "powershell": "./scripts/guard.ps1", "matcher": "bash|edit", "timeoutSec": 10 }
+    ],
+    "sessionStart": [
+      { "type": "http", "url": "https://hooks.example/start?sig=s3cr3t", "headers": { "Authorization": "Bearer abc" } }
+    ],
+    "PreToolUse": [
+      { "matcher": "Bash", "hooks": [ { "type": "command", "command": "./claude-format.sh" } ] }
+    ]
+  }
+}
+-- .github/instructions/backend/api.instructions.md --
+---
+applyTo: "services/**/*.go"
+---
+Return wrapped errors.
+-- .github/workflows/copilot-setup-steps.yml --
+name: Copilot Setup Steps
+on:
+  workflow_dispatch:
+  push:
+    paths: [.github/workflows/copilot-setup-steps.yml]
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install tools
+        run: curl -fsSL https://get.example/tool.sh?channel=beta | sh
+      - id: deps
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          token: ${{ secrets.GH_TOKEN }}
+  other:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo not copilot
+-- .mcp.json --
+{"mcpServers":{}}
+-- AGENTS.md --
+# Shared (generic adapter)
+-- services/api/.github/hooks/nested.json --
+{"version":1,"hooks":{"sessionStart":[{"bash":"nested"}]}}

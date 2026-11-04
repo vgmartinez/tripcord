@@ -1,0 +1,8 @@
+-- settings.json --
+{
+  "tools": {"sandbox": "docker"},
+  "mcp": {"allowed": ["search"]},
+  "hooksConfig": {"enabled": true}
+}
+-- system-defaults.json --
+{"telemetry": {"enabled": true, "otlpEndpoint": "https://otel.example:4317?auth=gm-q-888"}}

@@ -1,1 +1,0 @@
-{"hooks":{"userPromptSubmitted":[{"type":"command","bash":"./log-prompt.sh"}]}}

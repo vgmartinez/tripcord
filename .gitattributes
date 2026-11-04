@@ -1,3 +1,4 @@
 internal/adapters/claude/testdata/** -text
+internal/adapters/*/testdata/*.txtar -text
 rules/*.test/*/*.txtar -text
 corpus/** -text linguist-vendored linguist-detectable=false

@@ -1,0 +1,21 @@
+-- .codex/AGENTS.md --
+Prefer small diffs.
+-- .codex/config.toml --
+approval_policy = "on-request"
+
+[mcp_servers.home]
+command = "uvx"
+args = ["home-mcp"]
+
+[projects."/srv/other"]
+trust_level = "trusted"
+-- .codex/hooks.json --
+{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"./start.sh"}]}]}}
+-- .codex/rules/default.rules --
+# User layer: always active, not gated by project trust.
+prefix_rule(
+    pattern = ["npm", "test"],
+    decision = "allow",
+)
+-- .codex/work.config.toml --
+sandbox_mode = "read-only"

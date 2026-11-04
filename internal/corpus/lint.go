@@ -1,6 +1,7 @@
 // Package corpus lints fixture trees. Check walks the roots it is given.
 // The corpus test passes corpus/, which must be clean, and the rules/
-// fixture tree, whose remaining findings are listed in allowlist.tsv.
+// and adapter testdata fixture trees, whose remaining findings are
+// listed in allowlist.tsv.
 package corpus
 
 import (

@@ -1,0 +1,14 @@
+-- config.toml --
+approval_policy = "on-request"
+-- requirements.toml --
+allowed_sandbox_modes = ["read-only", "workspace-write"]
+allowed_approval_policies = ["on-request"]
+allow_managed_hooks_only = true
+
+[hooks]
+managed_dir = "/etc/codex/hooks"
+
+[[hooks.SessionStart]]
+[[hooks.SessionStart.hooks]]
+type = "command"
+command = "/etc/codex/hooks/audit.sh"

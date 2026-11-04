@@ -42,6 +42,8 @@ type Allowlist struct {
 // reason. Blank lines and lines starting with # are skipped. A line
 // that names a check outside allowable, a path that is not a clean
 // relative file path, an empty field, or a duplicate is an error.
+// The reason "golden size" is accepted only for a path ending in
+// .golden.
 func ParseAllowlist(data []byte) (*Allowlist, error) {
 	a := &Allowlist{}
 	seen := map[entryKey]int{}
@@ -71,6 +73,9 @@ func ParseAllowlist(data []byte) (*Allowlist, error) {
 		}
 		if err := filePath(e.Path); err != nil {
 			return nil, fmt.Errorf("line %d: %s: %w", n, e.Path, err)
+		}
+		if e.Reason == "golden size" && !strings.HasSuffix(e.Path, ".golden") {
+			return nil, fmt.Errorf("line %d: reason %q is only for a path ending in .golden", n, e.Reason)
 		}
 		k := entryKey{e.Path, e.Kind, e.Detail}
 		if prev, ok := seen[k]; ok {

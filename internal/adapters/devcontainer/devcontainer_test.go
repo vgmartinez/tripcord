@@ -356,7 +356,7 @@ func TestDetect(t *testing.T) {
 
 func FuzzParseConfig(f *testing.F) {
 	for _, path := range []string{"testdata/repo/.devcontainer/devcontainer.json", "testdata/repo/.devcontainer/gpu/devcontainer.json"} {
-		if data, err := os.ReadFile(path); err == nil {
+		if data, err := kittest.ReadFixture(path); err == nil {
 			f.Add(data)
 		}
 	}

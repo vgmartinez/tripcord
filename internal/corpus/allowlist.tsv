@@ -1,4 +1,5 @@
-# Corpus lint findings that stay in rules/ fixtures. One line per finding:
+# Corpus lint findings that stay in rules/ and adapter testdata fixtures.
+# One line per finding:
 # path (from the module root), check, detail, and reason, tab-separated.
 # TestFixtureTrees fails on a finding with no line here and on a line
 # that matches no finding, and allowlistCeiling in corpus_test.go must
@@ -11,7 +12,21 @@
 #   TC-CFG-015 lists pastebin.com; TC-CFG-009 pins a 40-hex commit;
 #   TC-CFG-001 nests bash -c past eight levels, which is the size.
 # cosmetic, see #43 item 116: a real host or shebang the rule does not
-#   need. Rewriting it changes goldens, so it waits for that item.
+#   need, or a UUID-shaped session id in a hook payload. Rewriting it
+#   changes goldens, so it waits for that item.
+# golden size: the golden is the adapter's discover output over its
+#   whole fixture repository; splitting it regenerates the golden.
+#   Accepted only for a path ending in .golden.
+internal/adapters/claude/testdata/discover.golden	size	21792 bytes	golden size
+internal/adapters/claude/testdata/hook/pre-tool-use-bash-allow.json	entropy	claude/projects/-home-dev-project/8a3f1c2e-5b7d-4e9a-9c1f-2d6b8e4a7f10	cosmetic, see #43 item 116
+internal/adapters/claude/testdata/hook/pre-tool-use-bash-deny.json	entropy	claude/projects/-home-dev-project/8a3f1c2e-5b7d-4e9a-9c1f-2d6b8e4a7f10	cosmetic, see #43 item 116
+internal/adapters/claude/testdata/hook/pre-tool-use-read.json	entropy	claude/projects/-home-dev-project/8a3f1c2e-5b7d-4e9a-9c1f-2d6b8e4a7f10	cosmetic, see #43 item 116
+internal/adapters/claude/testdata/repo.txtar	host	json.schemastore.org	cosmetic, see #43 item 116
+internal/adapters/devcontainer/testdata/discover.golden	host	ghcr.io	cosmetic, see #43 item 116
+internal/adapters/devcontainer/testdata/discover.golden	host	mcr.microsoft.com	cosmetic, see #43 item 116
+internal/adapters/devcontainer/testdata/repo.txtar	host	ghcr.io	cosmetic, see #43 item 116
+internal/adapters/devcontainer/testdata/repo.txtar	host	mcr.microsoft.com	cosmetic, see #43 item 116
+internal/adapters/opencode/testdata/repo.txtar	host	opencode.ai	cosmetic, see #43 item 116
 rules/TC-CFG-001.test/negativos/claude-benign-session-hooks.txtar	host	json.schemastore.org	cosmetic, see #43 item 116
 rules/TC-CFG-001.test/negativos/claude-loopback-no-pipe.txtar	host	127.0.0.1	rule-dependent
 rules/TC-CFG-001.test/negativos/claude-loopback-no-pipe.txtar	host	::1	rule-dependent

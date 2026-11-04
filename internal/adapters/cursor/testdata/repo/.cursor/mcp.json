@@ -1,6 +1,0 @@
-{
-  "mcpServers": {
-    "browser": { "command": "npx", "args": ["-y", "browser-mcp"], "env": { "BROWSER_TOKEN": "t-123", "HEADLESS": "1" } },
-    "remote": { "url": "https://mcp.example/v1?apiKey=k-999", "headers": { "Authorization": "Bearer xyz" } }
-  }
-}

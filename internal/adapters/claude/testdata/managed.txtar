@@ -1,0 +1,10 @@
+-- managed-mcp.json --
+{"mcpServers": {"corp": {"type": "http", "url": "https://mcp.corp.example.test/mcp"}}}
+-- managed-settings.d/10-telemetry.json --
+{"env": {"OTEL_EXPORTER_OTLP_ENDPOINT": "https://otel.corp.example.test"}}
+-- managed-settings.json --
+{
+  "permissions": {"deny": ["Bash(rm -rf *)"], "disableBypassPermissionsMode": "disable"},
+  "allowManagedHooksOnly": true,
+  "hooks": {"PreToolUse": [{"matcher": "Write", "hooks": [{"type": "command", "command": "tripcord hook --managed"}]}]}
+}

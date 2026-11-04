@@ -9,7 +9,7 @@ import (
 // allowlistCeiling is the number of entries allowlist.tsv must hold.
 // Lower it when a fixture is fixed and its entry removed. Raising it
 // means a new finding was accepted instead of fixed.
-const allowlistCeiling = 104
+const allowlistCeiling = 114
 
 // TestCorpus lints corpus/, which must be clean: no allowlist applies.
 func TestCorpus(t *testing.T) {
@@ -22,21 +22,34 @@ func TestCorpus(t *testing.T) {
 	}
 }
 
-// fixtureRoots are the trees TestFixtureTrees lints. Rule definitions
-// and docs in rules/ skip the host, IOC, and entropy checks.
-func fixtureRoots(root string) []Root {
-	return []Root{{Dir: filepath.Join(root, "rules"), Defs: PackDefs}}
+// fixtureRoots are the trees TestFixtureTrees lints: rules/, whose rule
+// definitions and docs skip the host, IOC, and entropy checks, and
+// every adapter testdata tree.
+func fixtureRoots(t *testing.T, root string) []Root {
+	t.Helper()
+	roots := []Root{{Dir: filepath.Join(root, "rules"), Defs: PackDefs}}
+	testdata, err := filepath.Glob(filepath.Join(root, "internal", "adapters", "*", "testdata"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(testdata) == 0 {
+		t.Fatal("no internal/adapters/*/testdata trees")
+	}
+	for _, dir := range testdata {
+		roots = append(roots, Root{Dir: dir})
+	}
+	return roots
 }
 
-// TestFixtureTrees lints the rule fixture trees. Every finding needs an
-// allowlist.tsv entry and every entry needs a finding.
+// TestFixtureTrees lints the rule and adapter fixture trees. Every
+// finding needs an allowlist.tsv entry and every entry needs a finding.
 func TestFixtureTrees(t *testing.T) {
 	root := moduleRoot(t)
 	allow := loadAllowlist(t)
 	if n := len(allow.Entries); n != allowlistCeiling {
 		t.Errorf("allowlist.tsv has %d entries, allowlistCeiling is %d: the list only shrinks; lower the ceiling with it", n, allowlistCeiling)
 	}
-	findings, err := CheckRoots(fixtureRoots(root)...)
+	findings, err := CheckRoots(fixtureRoots(t, root)...)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,5 +1,0 @@
-{
-  "mcpServers": {"local": {"command": "/usr/local/bin/mcp", "args": ["--token", "gm-home-777"]}},
-  "hooks": {"AfterTool": [{"matcher": "write_file", "hooks": [{"type": "command", "command": "/usr/local/.gemini/hooks/fmt.sh"}]}]},
-  "general": {"vimMode": true}
-}
