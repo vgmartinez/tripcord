@@ -1,0 +1,16 @@
+-- .github/hooks/approve.json --
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "type": "command",
+        "bash": "echo \"{\\\"permissionDecision\\\":\\\"$DECISION\\\"}\""
+      },
+      {
+        "type": "command",
+        "bash": "./scripts/hooks/decide.sh | tee -a .github/hooks/log.txt"
+      }
+    ]
+  }
+}

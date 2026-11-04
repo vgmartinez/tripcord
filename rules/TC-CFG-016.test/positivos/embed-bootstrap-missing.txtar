@@ -1,0 +1,111 @@
+-- .claude/settings.json --
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/.tripcord/bootstrap.sh\" session-start --harness claude"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/.tripcord/bootstrap.sh\" hook --harness claude --event pre-tool --on-failure block",
+            "onFailure": "block"
+          }
+        ]
+      }
+    ]
+  }
+}
+-- .gitattributes --
+# Tripcord embed: bash needs LF, and tripcord scan hashes these files.
+/.tripcord/bootstrap.sh text eol=lf
+/.tripcord/embed.json text eol=lf
+/.github/workflows/tripcord.yml text eol=lf
+/.github/hooks/tripcord.json text eol=lf
+-- .github/workflows/tripcord.yml --
+# Written by tripcord init --embed.
+# Scans pull requests that touch agent configuration. pull_request only:
+# never pull_request_target, so a fork's head never runs with write
+# access or secrets.
+name: tripcord
+
+on:
+  pull_request:
+    paths:
+      - ".claude/**"
+      - ".cursor/**"
+      - ".codex/**"
+      - ".github/**"
+      - ".vscode/**"
+      - ".mcp.json"
+      - "AGENTS.md"
+      - "CLAUDE.md"
+      - "GEMINI.md"
+      - ".devin/**"
+      - ".tripcord/**"
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    permissions:
+      contents: read # checkout the repository being scanned
+      pull-requests: read # tripcord-pr.yml reads pull request reviews
+      security-events: write # upload the SARIF report
+    # Reusable workflow pinned by full commit SHA (main@6a12795).
+    uses: vgmartinez/tripcord/.github/workflows/tripcord-pr.yml@6a1279565e9e41e9dec163e6bedf07f2647a2c67 # main@6a12795 # zizmor: ignore[ref-version-mismatch]
+    with:
+      fail-on: high
+-- .gitignore --
+/.tripcord/policy.local.yaml
+-- .tripcord/embed.json --
+{
+  "schema": "tripcord.embed/v1",
+  "version": "0.1.0",
+  "sha256": {
+    "linux-x64": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "harnesses": [
+    "claude"
+  ],
+  "files": [
+    {
+      "path": ".tripcord/bootstrap.sh",
+      "sha256": "971752bf3f8534917d90ea0142df0e5e0b28c06f0a95ef47665fbb662f62f7fb"
+    },
+    {
+      "path": ".github/workflows/tripcord.yml",
+      "sha256": "6f6dac49ffd49928526fef319d7464d20c43b33d0fcaa02d3c9f03a5dfec869b"
+    }
+  ],
+  "hooks": [
+    {
+      "harness": "claude",
+      "path": ".claude/settings.json",
+      "event": "SessionStart",
+      "sha256": "3c2b4d1858b4e8afc5cac4838025edb3a8838804765573a3671e99d277f0372d"
+    },
+    {
+      "harness": "claude",
+      "path": ".claude/settings.json",
+      "event": "PreToolUse",
+      "sha256": "7b26bc6d65b3c6705ec8aff6e78db7f36041f56ad9472ed3b5ad5f1b7f68cdf3"
+    }
+  ]
+}
+-- .tripcord/policy.yaml --
+# Tripcord policy. See docs/policy.md for every field.
+version: 1
+mode: enforce
+fail-on: high

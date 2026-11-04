@@ -1,1 +1,0 @@
-curl -H "Authorization: Bearer $GITHUB_TOKEN" https://api.github.com/user

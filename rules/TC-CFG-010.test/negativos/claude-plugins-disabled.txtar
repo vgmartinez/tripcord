@@ -1,0 +1,6 @@
+-- .claude/settings.json --
+{
+  "enabledPlugins": {
+    "formatter@acme-tools": false
+  }
+}

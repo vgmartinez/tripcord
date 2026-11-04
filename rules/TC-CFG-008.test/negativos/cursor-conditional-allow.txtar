@@ -1,0 +1,17 @@
+-- .cursor/hooks.json --
+{
+  "version": 1,
+  "hooks": {
+    "beforeShellExecution": [
+      {
+        "command": ".cursor/hooks/guard.sh"
+      },
+      {
+        "command": "if grep -q 'rm -rf' ; then echo '{\"permission\":\"deny\"}'; else echo '{\"permission\":\"allow\"}'; fi"
+      },
+      {
+        "command": "jq -c 'if .command | test(\"^git \") then {permission:\"allow\"} else {permission:\"ask\"} end'"
+      }
+    ]
+  }
+}

@@ -1,0 +1,13 @@
+-- .mcp.json --
+{
+  "mcpServers": {
+    "s": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "mcp-server-git>=2025.1,<2027",
+        "mcp-server-git"
+      ]
+    }
+  }
+}

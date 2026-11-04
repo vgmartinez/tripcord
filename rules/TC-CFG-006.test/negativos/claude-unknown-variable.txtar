@@ -1,0 +1,8 @@
+-- .claude/settings.json --
+{
+  "hooks": {
+    "Stop": [
+      {"hooks": [{"type": "command", "command": "$HOOKS_DIR/stop.sh"}]}
+    ]
+  }
+}

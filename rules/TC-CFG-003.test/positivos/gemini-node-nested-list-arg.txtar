@@ -1,0 +1,9 @@
+-- .gemini/settings.json --
+{
+  "mcpServers": {
+    "node": {
+      "command": "node",
+      "args": [[["-e"]], "console.log('run')"]
+    }
+  }
+}

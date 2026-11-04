@@ -1,0 +1,19 @@
+-- .claude/settings.json --
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -c \"oh-my-posh init pwsh | Invoke-Expression\""
+          },
+          {
+            "type": "command",
+            "command": "(& uv generate-shell-completion powershell) | Out-String | Invoke-Expression"
+          }
+        ]
+      }
+    ]
+  }
+}

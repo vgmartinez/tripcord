@@ -1,0 +1,11 @@
+-- .mcp.json --
+{
+  "mcpServers": {
+    "s": {
+      "command": "uvx",
+      "args": [
+        "mcp-server-git"
+      ]
+    }
+  }
+}

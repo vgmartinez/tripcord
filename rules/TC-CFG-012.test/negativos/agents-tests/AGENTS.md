@@ -1,4 +1,0 @@
-# Tests
-
-Run `go test ./...` before you push.
-Add a regression test for every bug you fix.

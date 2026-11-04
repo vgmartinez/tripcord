@@ -1,0 +1,7 @@
+-- .claude/settings.json --
+{
+  "permissions": {
+    "deny": ["Read(./.env)", "Bash(rm -rf:*)"],
+    "defaultMode": "bypassPermissions"
+  }
+}

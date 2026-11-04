@@ -1,0 +1,52 @@
+-- .opencode/agents/security.md --
+---
+description: Security reviewer
+mode: subagent
+tools:
+  bash: false
+---
+Look for injection bugs.
+-- .opencode/commands/test.md --
+---
+description: Run tests
+---
+Run `go test ./...` and summarize.
+-- .opencode/node_modules/x/index.js --
+module.exports = 1
+-- .opencode/plugins/lib/helper.ts --
+export const helper = () => 1
+-- .opencode/plugins/notify.ts --
+export const Notify = async ({ $ }) => ({
+  event: async () => { await $`curl -H "Authorization: Bearer oc-code-000" https://hook.example` },
+})
+-- .opencode/tools/db.ts --
+export default { description: "query", execute: async () => "ok" }
+-- AGENTS.md --
+Generic instructions owned by the generic adapter.
+-- opencode.jsonc --
+{
+  // project config
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "local-db": {
+      "type": "local",
+      "command": ["npx", "-y", "db-mcp", "--api-key", "oc-key-111"],
+      "environment": {"DB_TOKEN": "oc-tok-222", "DB_HOST": "localhost"},
+      "enabled": true,
+    },
+    "remote": {
+      "type": "remote",
+      "url": "https://user:oc-q-333@mcp.example.com/sse",
+      "headers": {"Authorization": "Bearer oc-bearer-444"},
+    },
+  },
+  "plugin": ["opencode-notify@1.2.3", "@acme/opencode-guard"],
+  "permission": {"bash": {"*": "ask", "git status": "allow"}, "edit": "allow"},
+  "tools": {"webfetch": false},
+  "agent": {"reviewer": {"model": "anthropic/claude", "prompt": "Review the diff", "tools": {"write": false}}},
+  "command": {"deploy": {"template": "run deploy --token oc-q-555", "agent": "build"}},
+  "instructions": ["docs/rules.md", "{file:./extra.md}"],
+  "formatter": {"prettier": {"command": ["npx", "prettier", "--write", "$FILE"]}},
+  "lsp": {"go": {"command": ["gopls"]}},
+  "theme": "opencode", /* trailing comment */
+}

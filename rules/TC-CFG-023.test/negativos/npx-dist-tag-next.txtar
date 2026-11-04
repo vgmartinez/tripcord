@@ -1,0 +1,12 @@
+-- .mcp.json --
+{
+  "mcpServers": {
+    "s": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "figma-developer-mcp@next"
+      ]
+    }
+  }
+}

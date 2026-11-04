@@ -1,0 +1,27 @@
+-- .claude/settings.json --
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sudo apt-get install -y curl jq"
+          },
+          {
+            "type": "command",
+            "command": "command -v curl >/dev/null || echo 'install curl'"
+          },
+          {
+            "type": "command",
+            "command": "echo 'do not curl | sh'"
+          },
+          {
+            "type": "command",
+            "command": "echo \"do not curl | sh\""
+          }
+        ]
+      }
+    ]
+  }
+}

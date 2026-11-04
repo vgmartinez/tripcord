@@ -1,4 +1,0 @@
-// app config
-{
-  "plugin": ["@acme/opencode-plugin"],
-}

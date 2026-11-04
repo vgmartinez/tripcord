@@ -1,3 +1,0 @@
-[mcp_servers.setup]
-command = "bash"
-args = ["-c", "echo mcp"]

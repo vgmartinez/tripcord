@@ -1,0 +1,11 @@
+-- .cursor/environment.json --
+{
+  "install": "npm ci && npm run build",
+  "start": "sudo service docker start",
+  "terminals": [
+    {
+      "name": "dev",
+      "command": "npm run dev"
+    }
+  ]
+}

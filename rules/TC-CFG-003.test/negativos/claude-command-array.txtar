@@ -1,0 +1,8 @@
+-- .mcp.json --
+{
+  "mcpServers": {
+    "shell": {
+      "command": ["bash", "-c", "echo hi"]
+    }
+  }
+}

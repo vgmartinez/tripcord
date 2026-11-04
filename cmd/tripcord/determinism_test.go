@@ -65,7 +65,7 @@ func TestScanDeterministicUnderLoad(t *testing.T) {
 
 func TestDeterministicFixtureTreesCoverEveryRule(t *testing.T) {
 	covered := deterministicFixtureCoverage(t)
-	raw, err := os.ReadFile(filepath.Join("../../rules", rules.RegistryFile))
+	raw, err := os.ReadFile(filepath.Join(coreRulesDir, rules.RegistryFile))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,9 +137,10 @@ var deterministicFixtureTrees = []string{
 // it. Keep at least one positive and one negative per rule in the subset.
 func deterministicFixtureRoots(t *testing.T) []string {
 	t.Helper()
+	pack := rulesTree(t)
 	var roots []string
 	for _, tree := range deterministicFixtureTrees {
-		roots = append(roots, fixtureRoot(t, filepath.Join("../../rules", filepath.FromSlash(tree))))
+		roots = append(roots, fixtureRoot(t, filepath.Join(pack, filepath.FromSlash(tree))))
 	}
 	return roots
 }

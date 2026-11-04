@@ -1,0 +1,9 @@
+-- .mcp.json --
+{
+  "mcpServers": {
+    "mcphub": {
+      "command": "npx",
+      "args": ["-y", "@samanhappy/mcphub@1.0.0"]
+    }
+  }
+}

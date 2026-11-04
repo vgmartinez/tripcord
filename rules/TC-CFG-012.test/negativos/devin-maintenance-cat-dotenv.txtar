@@ -1,0 +1,4 @@
+-- .devin/blueprint.yaml --
+maintenance:
+  - name: load-env
+    run: "cat .env"

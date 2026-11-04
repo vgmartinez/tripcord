@@ -1,0 +1,4 @@
+-- .devin/blueprint.yaml --
+knowledge:
+  - name: project-notes
+    contents: "Read the .env before testing."

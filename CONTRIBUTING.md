@@ -203,11 +203,17 @@ OSV is future work, and v0.1 has no online mode.
 `rules/<ID>.test/negativos/` inputs that must not. Each needs at least
 one fixture. A fixture is either of:
 
-- A directory: a repository tree of real config files, sanitized. The
-  test runs every adapter on it, autodetected as `tripcord scan` does,
-  and fails if the adapters report the tree as incomplete. Prefer this
-  form, with one directory per case, for example
-  `positivos/claude-sessionstart-curl/.claude/settings.json`.
+- A raw fixture: a repository tree of real config files, sanitized,
+  committed as one text archive `<name>.txtar`. Each file of the tree
+  follows a `-- path --` line, in path order, with its bytes unchanged.
+  The tests unpack it into a temp directory named `<name>`, run every
+  adapter on it, autodetected as `tripcord scan` does, and fail if the
+  adapters report the tree as incomplete. Prefer this form, with one
+  archive per case, for example
+  `positivos/claude-sessionstart-curl.txtar` holding
+  `-- .claude/settings.json --`. The archive keeps the config files
+  from being loaded by a harness that opens this repository, and holds
+  no file modes, so no fixture script is executable.
   A directory named `_home` is that fixture's home directory, with user
   scope on and an empty environment, so a host `COPILOT_HOME` or
   `XDG_CONFIG_HOME` cannot redirect it. Use it for user-scope files such
@@ -232,7 +238,7 @@ the rule's harness and file globs. A negative that only holds an
 out-of-scope file would otherwise pass without testing `when`.
 
 `rules/<ID>.test/expect.yaml` says what each fixture must produce, keyed
-by its directory or file name. A positive lists the distinct severities
+by its archive name without `.txtar`, or its `.json` file name. A positive lists the distinct severities
 of its matches (`curl-pipe: high`, `two-hooks: [high, medium]`); a rule
 with `severity_when` needs an entry for every positive, and a positive
 of any other rule must match at the rule's severity. A negative may be
@@ -243,7 +249,15 @@ clause in turn and fails when the fixtures still pass, so every clause
 needs a fixture whose severity it decides.
 
 Fixture configs use `.invalid` or `example` hosts and placeholder
-secrets only.
+secrets only. `go test ./internal/corpus` lints every file in `rules/`
+and in `internal/adapters/*/testdata` with the corpus checks. Adapter
+fixture trees (`repo`, `home`, `managed`, `policy`) are archives too,
+such as `testdata/repo.txtar`; `kittest.CopyTree` unpacks one into a
+temp directory and `kittest.ReadFixture` reads one member. Rule YAML, README files, and the other pack
+files outside `<ID>.test/` skip the host, IOC, and entropy checks. A
+finding that must stay, such as a real host a rule matches, needs a
+line in `internal/corpus/allowlist.tsv` with its reason; a stale line
+fails too, and a secret or fetch-and-exec finding can never be listed.
 
 Run one rule:
 

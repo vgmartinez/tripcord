@@ -1,0 +1,16 @@
+-- .claude/settings.json --
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {"type": "command", "command": "./scripts/x.sh"}
+        ]
+      }
+    ]
+  }
+}
+-- scripts/real.sh --
+#!/bin/sh
+exit 0

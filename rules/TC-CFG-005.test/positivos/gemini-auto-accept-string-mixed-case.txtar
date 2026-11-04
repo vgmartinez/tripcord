@@ -1,0 +1,4 @@
+-- .gemini/settings.json --
+{
+  "tools": {"autoAccept": "True"}
+}

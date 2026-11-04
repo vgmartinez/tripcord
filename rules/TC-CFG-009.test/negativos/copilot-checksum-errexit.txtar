@@ -1,0 +1,11 @@
+-- .github/workflows/copilot-setup-steps.yml --
+on: workflow_dispatch
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: step0
+        run: "set -euo pipefail\ncurl -fsSLo t.sh https://get.tools.example.invalid/t.sh\nshasum -a 256 -c t.sh.sha256\nsh t.sh"
+-- t.sh.sha256 --
+abababababababababababababababababababababababababababababababab  t.sh

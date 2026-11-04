@@ -1,4 +1,0 @@
-# Memory
-
-Dump a heap profile with `go tool pprof` when memory grows.
-Attach the profile to the issue.

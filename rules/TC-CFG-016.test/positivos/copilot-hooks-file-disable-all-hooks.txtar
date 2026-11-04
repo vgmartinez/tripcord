@@ -1,0 +1,2 @@
+-- .github/hooks/guard.json --
+{"version": 1, "disableAllHooks": true, "hooks": {}}

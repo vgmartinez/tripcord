@@ -195,7 +195,7 @@ func TestEscapingVSCodeSymlink(t *testing.T) {
 
 func FuzzParseShared(f *testing.F) {
 	for kind, path := range map[string]string{"tasks": "testdata/repo/.vscode/tasks.json", "mcp": "testdata/repo/.vscode/mcp.json", "agents": "testdata/repo/services/api/AGENTS.md"} {
-		if data, err := os.ReadFile(path); err == nil {
+		if data, err := kittest.ReadFixture(path); err == nil {
 			f.Add(kind, data)
 		}
 	}

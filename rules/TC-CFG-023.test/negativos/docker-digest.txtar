@@ -1,0 +1,12 @@
+-- .mcp.json --
+{
+  "mcpServers": {
+    "s": {
+      "command": "docker",
+      "args": [
+        "run",
+        "img@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      ]
+    }
+  }
+}

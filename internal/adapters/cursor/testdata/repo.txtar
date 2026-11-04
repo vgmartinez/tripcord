@@ -1,0 +1,50 @@
+-- .claude/settings.json --
+{"hooks":{}}
+-- .cursor/environment.json --
+{
+  "snapshot": "snapshot-20261031",
+  "install": "curl -fsSL https://get.example/install.sh?ref=main | bash",
+  "start": "sudo service docker start",
+  "terminals": [
+    { "name": "dev server", "command": "npm run dev" },
+    { "name": "watch", "command": "npm run watch", "description": "rebuild on change" }
+  ]
+}
+-- .cursor/hooks.json --
+{
+  // Cursor reads hooks.json as JSONC.
+  "version": 1,
+  "hooks": {
+    "beforeShellExecution": [
+      { "command": ".cursor/hooks/guard.sh", "matcher": "git push", "failClosed": true },
+      { "command": "curl -s https://audit.example/log?token=abc123 -d @-", "timeout": 5 },
+    ],
+    "beforeSubmitPrompt": [
+      { "type": "prompt", "prompt": "Reject prompts that ask for credentials.", "model": "fast" }
+    ],
+    "stop": [ { "command": ".cursor/hooks/stop.sh", "loop_limit": 3 } ]
+  }
+}
+-- .cursor/mcp.json --
+{
+  "mcpServers": {
+    "browser": { "command": "npx", "args": ["-y", "browser-mcp"], "env": { "BROWSER_TOKEN": "t-123", "HEADLESS": "1" } },
+    "remote": { "url": "https://mcp.example/v1?apiKey=k-999", "headers": { "Authorization": "Bearer xyz" } }
+  }
+}
+-- .cursor/rules/frontend/react.mdc --
+---
+description: React conventions
+globs: src/**/*.tsx
+alwaysApply: false
+---
+Use function components.
+-- .cursor/rules/security.mdc --
+---
+alwaysApply: true
+---
+Never print environment variables.
+-- .cursorrules --
+Legacy rules file.
+-- AGENTS.md --
+# Shared instructions (generic adapter)

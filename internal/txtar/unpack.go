@@ -102,13 +102,65 @@ func Write(dir string, a *Archive) error {
 }
 
 // Unpack writes a under a fresh t.TempDir and returns that directory.
-func Unpack(t *testing.T, a *Archive) string {
+func Unpack(t testing.TB, a *Archive) string {
 	t.Helper()
 	dir := t.TempDir()
 	if err := Write(dir, a); err != nil {
 		t.Fatal(err)
 	}
 	return dir
+}
+
+// Ext is the archive file extension ExpandTree unpacks.
+const Ext = ".txtar"
+
+// ExpandTree copies the tree at src to a fresh t.TempDir, under src's
+// base name, and returns the copy. Each regular file named <name>.txtar
+// is unpacked into a directory <name> instead of copied. Other regular
+// files keep their bytes and permission bits. Any other file type
+// fails the test.
+func ExpandTree(t testing.TB, src string) string {
+	t.Helper()
+	dst := filepath.Join(t.TempDir(), filepath.Base(src))
+	err := filepath.WalkDir(src, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, p)
+		if err != nil {
+			return err
+		}
+		out := filepath.Join(dst, rel)
+		switch {
+		case d.IsDir():
+			return os.MkdirAll(out, 0o755)
+		case !d.Type().IsRegular():
+			return fmt.Errorf("%s: not a regular file or directory", p)
+		}
+		data, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		if strings.HasSuffix(d.Name(), Ext) {
+			out = strings.TrimSuffix(out, Ext)
+			if err := os.Mkdir(out, 0o755); err != nil {
+				return err
+			}
+			if err := Write(out, Parse(data)); err != nil {
+				return fmt.Errorf("%s: %w", p, err)
+			}
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(out, data, info.Mode().Perm())
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dst
 }
 
 func writeFile(root, dest string, data []byte) error {

@@ -1,0 +1,13 @@
+-- .mcp.json --
+{
+  "mcpServers": {
+    "s": {
+      "command": "uvx",
+      "args": [
+        "--with",
+        "prefab-ui==0.13.0",
+        "my-fastmcp-server"
+      ]
+    }
+  }
+}

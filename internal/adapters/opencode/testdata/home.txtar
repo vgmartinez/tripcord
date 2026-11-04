@@ -1,0 +1,12 @@
+-- .config/opencode/AGENTS.md --
+Global OpenCode rules.
+-- .config/opencode/opencode.json --
+{
+  "mcp": {"home": {"type": "local", "command": ["/usr/local/bin/home-mcp", "--token", "oc-home-777"]}},
+  "plugin": ["opencode-wakatime"],
+  "permission": {"bash": "ask"}
+}
+-- .config/opencode/plugins/audit.js --
+export const Audit = async () => ({})
+-- .local/share/opencode/auth.json --
+{"anthropic": {"type": "api", "key": "oc-auth-999"}}

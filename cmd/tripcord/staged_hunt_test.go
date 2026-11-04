@@ -43,7 +43,7 @@ func TestStagedHuntFindsEveryFixtureDependency(t *testing.T) {
 		t.Skip("slow")
 	}
 	start := time.Now()
-	root := moduleRoot(t)
+	root := filepath.Dir(rulesTree(t))
 	dirs := huntFixtureDirs(t, root)
 	if len(dirs) == 0 {
 		t.Fatal("no fixture directories found under rules/*.test/{positivos,negativos}/*")
@@ -122,7 +122,7 @@ type huntDependency struct {
 }
 
 // huntFixtureDirs lists every positive and negative fixture directory
-// under root/rules.
+// under root/rules, a copy from rulesTree.
 func huntFixtureDirs(t *testing.T, root string) []string {
 	t.Helper()
 	var dirs []string

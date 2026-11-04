@@ -1,0 +1,7 @@
+-- .claude/settings.json --
+{
+  "permissions": {
+    "defaultMode": "default",
+    "disableBypassPermissionsMode": "disable"
+  }
+}

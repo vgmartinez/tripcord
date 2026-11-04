@@ -1,5 +1,0 @@
-{
-  "permissions": {"deny": ["Bash(rm -rf *)"], "disableBypassPermissionsMode": "disable"},
-  "allowManagedHooksOnly": true,
-  "hooks": {"PreToolUse": [{"matcher": "Write", "hooks": [{"type": "command", "command": "tripcord hook --managed"}]}]}
-}

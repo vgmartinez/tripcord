@@ -21,7 +21,7 @@ import (
 // staged and scanned with no path arguments.
 func TestScanStagedManifestOnlyActivatesConventionFiles(t *testing.T) {
 	bin := buildStagedBinary(t)
-	root := moduleRoot(t)
+	root := filepath.Dir(rulesTree(t))
 	cases := []struct {
 		name     string
 		fixture  string

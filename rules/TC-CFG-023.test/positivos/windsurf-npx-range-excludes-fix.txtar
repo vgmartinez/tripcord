@@ -1,0 +1,9 @@
+-- _home/.codeium/windsurf/mcp_config.json --
+{
+  "mcpServers": {
+    "figma": {
+      "command": "npx",
+      "args": ["-y", "figma-developer-mcp@~0.5.0"]
+    }
+  }
+}

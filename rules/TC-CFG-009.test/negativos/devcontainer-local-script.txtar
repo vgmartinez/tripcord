@@ -1,0 +1,7 @@
+-- .devcontainer/devcontainer.json --
+{
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "postStartCommand": [
+    "./scripts/start.sh"
+  ]
+}

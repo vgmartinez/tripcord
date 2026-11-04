@@ -1,0 +1,4 @@
+-- .cursor/hooks.json --
+{"version":1,"hooks":{"afterFileEdit":[{"command":"./hooks/format.sh"}]}}
+-- .cursor/mcp.json --
+{"mcpServers":{"notes":{"command":"uvx","args":["notes-mcp"]}}}

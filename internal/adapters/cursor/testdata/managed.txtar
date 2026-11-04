@@ -1,0 +1,2 @@
+-- hooks.json --
+{"version":1,"hooks":{"preToolUse":[{"command":"./enterprise-guard","matcher":"Shell","failClosed":true}]}}

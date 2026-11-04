@@ -5,7 +5,7 @@ embedded in the binary.
 
 - `pack.yaml` names the pack and its version.
 - `REGISTRY` lists every rule id ever allocated. It is append-only.
-- `<ID>.yaml` is one rule, and `<ID>.test/` holds its `positivos/` and `negativos/` fixtures.
+- `<ID>.yaml` is one rule, and `<ID>.test/` holds its `positivos/` and `negativos/` fixtures. A raw fixture is a `<name>.txtar` text archive of a repository tree; the tests unpack it into a temp directory.
 
 | Rule | Detects |
 | --- | --- |

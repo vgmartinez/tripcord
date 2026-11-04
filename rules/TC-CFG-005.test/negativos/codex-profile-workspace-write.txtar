@@ -1,0 +1,6 @@
+-- .codex/config.toml --
+sandbox_mode = "workspace-write"
+
+[profiles.review]
+sandbox_mode = "read-only"
+approval_policy = "on-request"

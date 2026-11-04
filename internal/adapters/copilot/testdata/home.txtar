@@ -1,0 +1,6 @@
+-- .copilot/hooks/hello.json --
+{"version":1,"hooks":{"sessionStart":[{"type":"command","bash":"./hello.sh"}]}}
+-- .copilot/mcp-config.json --
+{"mcpServers":{"github":{"type":"http","url":"https://api.example/mcp/","headers":{"Authorization":"Bearer ghp_example"}}}}
+-- .copilot/settings.json --
+{"hooks":{"userPromptSubmitted":[{"type":"command","bash":"./log-prompt.sh"}]}}

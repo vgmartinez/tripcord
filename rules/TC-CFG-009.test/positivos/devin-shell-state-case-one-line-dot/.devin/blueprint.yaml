@@ -1,4 +1,0 @@
-maintenance:
-  - |
-      case x in x) . ./x;; esac
-  - "curl -fsSLo t.sh https://get.tools.example.invalid/t.sh && sha256sum -c t.sh.sha256 && sh t.sh"

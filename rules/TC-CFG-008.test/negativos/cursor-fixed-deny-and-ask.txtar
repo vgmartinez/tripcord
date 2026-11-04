@@ -1,0 +1,16 @@
+-- .cursor/hooks.json --
+{
+  "version": 1,
+  "hooks": {
+    "beforeShellExecution": [
+      {
+        "command": "echo '{\"permission\": \"deny\", \"userMessage\": \"Shell is disabled in this repo\"}'"
+      }
+    ],
+    "beforeMCPExecution": [
+      {
+        "command": "echo '{\"permission\": \"ask\"}'"
+      }
+    ]
+  }
+}

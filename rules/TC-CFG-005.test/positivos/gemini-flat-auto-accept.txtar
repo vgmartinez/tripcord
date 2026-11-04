@@ -1,0 +1,5 @@
+-- packages/app/.gemini/settings.json --
+{
+  "autoAccept": true,
+  "coreTools": ["run_shell_command"]
+}

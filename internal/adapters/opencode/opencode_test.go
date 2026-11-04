@@ -508,7 +508,7 @@ func FuzzParseConfig(f *testing.F) {
 		"agent":  "testdata/repo/.opencode/agents/security.md",
 	}
 	for kind, path := range seeds {
-		if data, err := os.ReadFile(path); err == nil {
+		if data, err := kittest.ReadFixture(path); err == nil {
 			if kind == "user" {
 				kind = "config"
 			}

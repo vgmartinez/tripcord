@@ -1,0 +1,9 @@
+-- .vscode/mcp.json --
+{
+  "servers": {
+    "ui": {
+      "command": "uvx",
+      "args": ["--with", "Prefab_UI==0.14.0", "my-fastmcp-server"]
+    }
+  }
+}

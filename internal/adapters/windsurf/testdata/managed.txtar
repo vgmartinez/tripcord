@@ -1,0 +1,2 @@
+-- hooks.json --
+{"hooks": {"pre_run_command": [{"command": "/opt/corp/block-rm.sh --secret ws-q-777"}]}}

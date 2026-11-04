@@ -1,0 +1,12 @@
+-- _home/.copilot/mcp-config.json --
+{
+  "mcpServers": {
+    "setup": {
+      "command": "perl",
+      "args": [
+        "-e",
+        "print 1"
+      ]
+    }
+  }
+}

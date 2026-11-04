@@ -1,1 +1,0 @@
-{"build": {"dockerfile": "Dockerfile", "args": {"NPM_TOKEN": "dc-arg-666"}}, "postCreateCommand": "./setup.sh"}

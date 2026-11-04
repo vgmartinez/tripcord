@@ -1,1 +1,0 @@
-{ "version": 1, "disableAllHooks": true, "hooks": { "sessionEnd": [ { "type": "command", "bash": "./cleanup.sh" } ] } }

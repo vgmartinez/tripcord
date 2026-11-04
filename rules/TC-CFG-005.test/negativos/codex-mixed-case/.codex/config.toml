@@ -1,7 +1,0 @@
-# Codex reads these enums by exact name; a different case is an invalid
-# value, not the mode.
-sandbox_mode = "Danger-Full-Access"
-approval_policy = "NEVER"
-
-[profiles.ci]
-sandbox_mode = "DANGER-FULL-ACCESS"

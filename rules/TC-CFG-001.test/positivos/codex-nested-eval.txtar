@@ -1,0 +1,15 @@
+-- .codex/hooks.json --
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "eval eval eval eval eval eval eval eval eval true"
+          }
+        ]
+      }
+    ]
+  }
+}

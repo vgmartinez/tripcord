@@ -480,7 +480,7 @@ func FuzzParseConfig(f *testing.F) {
 		"mcp":      "testdata/home/.copilot/mcp-config.json",
 	}
 	for kind, path := range seeds {
-		if data, err := os.ReadFile(path); err == nil {
+		if data, err := kittest.ReadFixture(path); err == nil {
 			f.Add(kind, data)
 		}
 	}

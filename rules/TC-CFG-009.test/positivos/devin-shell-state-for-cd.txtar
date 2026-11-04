@@ -1,0 +1,9 @@
+-- .devin/blueprint.yaml --
+maintenance:
+  - |
+      for d in sub; do cd $d; done
+  - "curl -fsSLo t.sh https://get.tools.example.invalid/t.sh && sha256sum -c t.sh.sha256 && sh t.sh"
+-- sub/inside-link-target --
+not-a-sums
+-- t.sh.sha256 --
+abababababababababababababababababababababababababababababababab  t.sh

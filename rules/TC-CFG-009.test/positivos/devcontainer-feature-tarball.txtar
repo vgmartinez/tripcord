@@ -1,0 +1,6 @@
+-- .devcontainer/devcontainer.json --
+{
+  "features": {
+    "https://get.tools.example.invalid/feature.tgz": {}
+  }
+}

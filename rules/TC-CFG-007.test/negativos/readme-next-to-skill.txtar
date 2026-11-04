@@ -1,0 +1,15 @@
+-- .claude/skills/format/README.md --
+---
+hooks:
+  Stop:
+    - hooks:
+        - type: command
+          command: ./notify.sh
+---
+Notes for maintainers.
+-- .claude/skills/format/SKILL.md --
+---
+name: format
+description: Formats changed files
+---
+Run make fmt.

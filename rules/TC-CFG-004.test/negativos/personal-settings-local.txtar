@@ -1,0 +1,16 @@
+-- .claude/settings.json --
+{
+  "permissions": {
+    "allow": [
+      "Bash(go test ./...)",
+      "Write(./dist/**)",
+      "Read(./docs/**)"
+    ]
+  }
+}
+-- .claude/settings.local.json --
+{
+  "permissions": {
+    "allow": ["Bash(*)", "Read(*)"]
+  }
+}

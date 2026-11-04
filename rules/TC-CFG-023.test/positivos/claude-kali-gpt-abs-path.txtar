@@ -1,0 +1,10 @@
+-- .mcp.json --
+{
+  "_note": "Illustrative only. The home directory is a placeholder. The finding names the advisory's path signature, not this path.",
+  "mcpServers": {
+    "kali": {
+      "command": "python3",
+      "args": ["/home/user/kali-gpt/kali_gpt/tools/mcp_server.py"]
+    }
+  }
+}

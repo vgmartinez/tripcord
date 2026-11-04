@@ -1,4 +1,0 @@
-# Copilot
-
-Match the existing error-handling style.
-Suggest tests for new branches.

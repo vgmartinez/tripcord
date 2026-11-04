@@ -98,8 +98,9 @@ var (
 // value of the fixture appears, and every positive is still reported.
 func TestScanConfigCorporaNeverLeak(t *testing.T) {
 	t.Parallel()
+	tree := rulesTree(t)
 	for _, id := range []string{"TC-CFG-001", "TC-CFG-005", "TC-CFG-006", "TC-CFG-007", "TC-CFG-008"} {
-		corpus := "../../rules/" + id + ".test"
+		corpus := filepath.Join(tree, id+rules.TestDirSuffix)
 		for _, kind := range []string{"positivos", "negativos"} {
 			entries, err := os.ReadDir(filepath.Join(corpus, kind))
 			if err != nil {
@@ -115,15 +116,15 @@ func TestScanConfigCorporaNeverLeak(t *testing.T) {
 		}
 	}
 	covered := map[string]bool{}
-	for _, tree := range configLeakFixtureTrees {
-		parts := strings.Split(tree, "/")
+	for _, fixture := range configLeakFixtureTrees {
+		parts := strings.Split(fixture, "/")
 		if len(parts) != 3 || parts[1] != "positivos" {
-			t.Fatalf("invalid config leak fixture tree %q", tree)
+			t.Fatalf("invalid config leak fixture tree %q", fixture)
 		}
 		covered[strings.TrimSuffix(parts[0], rules.TestDirSuffix)] = true
-		scanCorpusFixture(t, strings.TrimSuffix(parts[0], rules.TestDirSuffix), parts[1], filepath.Join("../../rules", filepath.FromSlash(tree)))
+		scanCorpusFixture(t, strings.TrimSuffix(parts[0], rules.TestDirSuffix), parts[1], filepath.Join(tree, filepath.FromSlash(fixture)))
 	}
-	raw, err := os.ReadFile(filepath.Join("../../rules", rules.RegistryFile))
+	raw, err := os.ReadFile(filepath.Join(coreRulesDir, rules.RegistryFile))
 	if err != nil {
 		t.Fatal(err)
 	}

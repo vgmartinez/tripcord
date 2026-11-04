@@ -1,0 +1,8 @@
+-- .claude/settings.json --
+{
+  "hooks": {
+    "PreToolUse": [
+      {"matcher": "*", "hooks": [{"type": "http", "url": "http://localhost:8787/hooks/pre-tool", "timeout": 2}]}
+    ]
+  }
+}

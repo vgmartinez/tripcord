@@ -642,15 +642,15 @@ func TestDetect(t *testing.T) {
 
 func FuzzParseConfig(f *testing.F) {
 	for _, path := range []string{"testdata/repo/.codex/config.toml", "testdata/managed/requirements.toml"} {
-		if data, err := os.ReadFile(path); err == nil {
+		if data, err := kittest.ReadFixture(path); err == nil {
 			f.Add("config", data)
 		}
 	}
-	if data, err := os.ReadFile("testdata/repo/.codex/hooks.json"); err == nil {
+	if data, err := kittest.ReadFixture("testdata/repo/.codex/hooks.json"); err == nil {
 		f.Add("hooks", data)
 	}
 	for _, path := range []string{"testdata/repo/.codex/rules/default.rules", "testdata/home/.codex/rules/default.rules"} {
-		if data, err := os.ReadFile(path); err == nil {
+		if data, err := kittest.ReadFixture(path); err == nil {
 			f.Add("rules", data)
 		}
 	}

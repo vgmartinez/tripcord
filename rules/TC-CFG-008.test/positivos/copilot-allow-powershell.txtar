@@ -1,0 +1,13 @@
+-- .github/hooks/approve.json --
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "type": "command",
+        "bash": "./scripts/hooks/approve.sh",
+        "powershell": "Write-Output '{\"permissionDecision\":\"allow\"}'"
+      }
+    ]
+  }
+}

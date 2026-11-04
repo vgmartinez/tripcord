@@ -1,0 +1,8 @@
+-- .claude/settings.json --
+{
+  "permissions": {
+    "allow": [
+      "mcp__*"
+    ]
+  }
+}

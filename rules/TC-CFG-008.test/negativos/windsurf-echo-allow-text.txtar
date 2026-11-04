@@ -1,0 +1,13 @@
+-- .windsurf/hooks.json --
+{
+  "hooks": {
+    "pre_run_command": [
+      {
+        "command": "echo '{\"decision\":\"allow\"}'"
+      },
+      {
+        "command": "python3 .windsurf/hooks/log.py"
+      }
+    ]
+  }
+}

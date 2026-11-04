@@ -1,0 +1,6 @@
+-- services/api/.claude/settings.json --
+{
+  "permissions": {
+    "allow": ["Edit( ** )", "WebFetch(*)"]
+  }
+}

@@ -1,0 +1,15 @@
+-- .codex/hooks.json --
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./scripts/stop.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

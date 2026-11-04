@@ -1,1 +1,0 @@
-Open the Settings page and click Tokens to create one.

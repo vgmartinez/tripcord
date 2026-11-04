@@ -1,0 +1,13 @@
+-- .mcp.json --
+{
+  "mcpServers": {
+    "s": {
+      "command": "uvx",
+      "args": [
+        "--some-future-flag",
+        "x",
+        "figma-developer-mcp@0.6.2"
+      ]
+    }
+  }
+}

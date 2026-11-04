@@ -1,0 +1,41 @@
+-- .claude/settings.json --
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/.tripcord/bootstrap.sh\" session-start --harness claude"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/.tripcord/bootstrap.sh\" hook --harness claude --event pre-tool --on-failure block",
+            "onFailure": "block"
+          }
+        ]
+      }
+    ]
+  }
+}
+-- .gitattributes --
+# Tripcord embed: bash needs LF, and tripcord scan hashes these files.
+/.tripcord/bootstrap.sh text eol=lf
+/.tripcord/embed.json text eol=lf
+/.github/workflows/tripcord.yml text eol=lf
+/.github/hooks/tripcord.json text eol=lf
+-- .gitignore --
+/.tripcord/policy.local.yaml
+-- .tripcord/policy.yaml --
+# Tripcord policy. See docs/policy.md for every field.
+version: 1
+mode: enforce
+fail-on: high

@@ -1,1 +1,0 @@
-{"mcpServers": {"acme": {"command": "${CLAUDE_PLUGIN_ROOT}/bin/mcp"}}}

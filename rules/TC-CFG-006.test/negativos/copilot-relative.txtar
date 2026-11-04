@@ -1,0 +1,17 @@
+-- .github/hooks/guard.json --
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {"type": "command", "bash": "./scripts/hooks/guard.sh", "powershell": ".\\scripts\\hooks\\guard.ps1", "cwd": "."}
+    ],
+    "postToolUse": [
+      {"type": "command", "exec": "node", "args": [".github/hooks/lint.js", "--out", "/tmp/lint.json"]}
+    ]
+  }
+}
+-- .github/hooks/lint.js --
+process.exit(0);
+-- scripts/hooks/guard.sh --
+#!/bin/sh
+exit 0

@@ -1,0 +1,9 @@
+-- .claude/settings.json --
+{
+  "permissions": {"allow": ["Bash(make test)"]}
+}
+-- .claude/settings.local.json --
+{
+  "permissions": {"defaultMode": "bypassPermissions"},
+  "skipDangerousModePermissionPrompt": true
+}

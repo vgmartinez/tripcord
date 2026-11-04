@@ -14,6 +14,7 @@ import (
 	"github.com/vgmartinez/tripcord/internal/embedded"
 	"github.com/vgmartinez/tripcord/internal/model"
 	"github.com/vgmartinez/tripcord/internal/policy"
+	"github.com/vgmartinez/tripcord/internal/txtar"
 )
 
 const cfg016FixtureDir = "../../rules/TC-CFG-016.test"
@@ -37,14 +38,10 @@ type cfg016Fixture struct {
 	againstBase bool
 	tracked     bool
 	// crlfTolerant compares content CRLF-normalized the way the embed
-	// checker's own digest does, rather than byte-for-byte. Some of
-	// this fixture's own files are covered by its committed
-	// .gitattributes `text eol=lf` lines, so a fresh git checkout (CI,
-	// a clean clone) renormalizes them to LF regardless of what bytes
-	// this test, or a prior UPDATE_GOLDEN run, wrote to disk; a local
-	// working tree that only ever ran `git add`, never a checkout,
-	// keeps the stale CRLF bytes instead. Comparing raw bytes is
-	// therefore checkout-history-dependent. The actual CRLF-bytes
+	// checker's own digest does, rather than byte-for-byte. When this
+	// fixture was a plain directory, its own .gitattributes `text
+	// eol=lf` lines made git store three of its files with LF, and the
+	// archive keeps those committed bytes. The actual CRLF-bytes
 	// behavior is pinned independently, without going through git at
 	// all, by TestCheckCRLFCheckout in internal/embedded.
 	crlfTolerant bool
@@ -291,22 +288,15 @@ func TestCFG016FixturesMatchInit(t *testing.T) {
 			if fx.edit != nil {
 				fx.edit(t, dir)
 			}
-			committed := filepath.Join(cfg016FixtureDir, fx.kind, name)
-			want, read := snapshot(t, dir), snapshot
+			committed := filepath.Join(cfg016FixtureDir, fx.kind, name) + txtar.Ext
+			want, read, format := snapshot(t, dir), readFixtureArchive, formatFixtureArchive
 			if fx.items() {
-				committed += ".json"
-				want, read = checkItems(t, base, dir, fx.tracked), readFixtureFile
+				committed = strings.TrimSuffix(committed, txtar.Ext) + ".json"
+				want, read, format = checkItems(t, base, dir, fx.tracked), readFixtureFile, func(m map[string]string) []byte { return []byte(m[""]) }
 			}
 			if os.Getenv("UPDATE_GOLDEN") == "1" {
-				if err := os.RemoveAll(committed); err != nil {
+				if err := os.WriteFile(committed, format(want), 0o644); err != nil {
 					t.Fatal(err)
-				}
-				for rel, content := range want {
-					if rel == "" {
-						writeTestFile(t, filepath.Dir(committed), filepath.Base(committed), content)
-						continue
-					}
-					writeTestFile(t, committed, rel, content)
 				}
 			}
 			got := read(t, committed)
@@ -339,6 +329,31 @@ func readFixtureFile(t *testing.T, path string) map[string]string {
 	return map[string]string{"": string(raw)}
 }
 
+// readFixtureArchive maps every member of the raw fixture archive at
+// path to its content, the way snapshot maps a directory.
+func readFixtureArchive(t *testing.T, path string) map[string]string {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{}
+	for _, f := range txtar.Parse(raw).Files {
+		files[f.Name] = string(f.Data)
+	}
+	return files
+}
+
+// formatFixtureArchive is the raw fixture archive of files, members in
+// path order.
+func formatFixtureArchive(files map[string]string) []byte {
+	a := &txtar.Archive{}
+	for _, rel := range slices.Sorted(maps.Keys(files)) {
+		a.Files = append(a.Files, txtar.File{Name: rel, Data: []byte(files[rel])})
+	}
+	return txtar.Format(a)
+}
+
 func sha256Hex(raw []byte) string {
 	sum := sha256.Sum256(raw)
 	return hex.EncodeToString(sum[:])
@@ -348,7 +363,7 @@ func sha256Hex(raw []byte) string {
 // reporting on the other rules' fixtures: none of them is an embed, so
 // a guard item there means the check reads a pattern that is not one.
 func TestCFG016OtherRuleFixturesHaveNoGuardItems(t *testing.T) {
-	dirs, err := filepath.Glob("../../rules/*.test/*/*")
+	dirs, err := filepath.Glob(filepath.Join(rulesTree(t), "*.test", "*", "*"))
 	if err != nil {
 		t.Fatal(err)
 	}

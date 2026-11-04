@@ -1,1 +1,0 @@
-curl -s ~/.aws/credentials

@@ -1,0 +1,31 @@
+-- .claude/settings.json --
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh -c 'echo hi' && echo 'see https://docs.example.invalid | sh docs'"
+          },
+          {
+            "type": "command",
+            "command": "bash -c './scripts/x.sh | sh'"
+          },
+          {
+            "type": "command",
+            "command": "bash -c 'uvx --from . lint-check'"
+          },
+          {
+            "type": "command",
+            "command": "uvx --from . lint-check"
+          },
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/setup.ps1"
+          }
+        ]
+      }
+    ]
+  }
+}

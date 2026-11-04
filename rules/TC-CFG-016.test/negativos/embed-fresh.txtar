@@ -1,0 +1,515 @@
+-- .claude/settings.json --
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/.tripcord/bootstrap.sh\" session-start --harness claude"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/.tripcord/bootstrap.sh\" hook --harness claude --event pre-tool --on-failure block",
+            "onFailure": "block"
+          }
+        ]
+      }
+    ]
+  }
+}
+-- .cursor/environment.json --
+{
+  "install": "bash .tripcord/bootstrap.sh install"
+}
+-- .cursor/hooks.json --
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "command": "bash \"${CURSOR_PROJECT_DIR}/.tripcord/bootstrap.sh\" session-start --harness cursor"
+      }
+    ],
+    "preToolUse": [
+      {
+        "command": "bash \"${CURSOR_PROJECT_DIR}/.tripcord/bootstrap.sh\" hook --harness cursor --event pre-tool --on-failure block",
+        "failClosed": true
+      }
+    ]
+  }
+}
+-- .devin/blueprint.yaml --
+# Written by tripcord init --embed.
+maintenance:
+  - name: tripcord
+    run: bash .tripcord/bootstrap.sh install
+-- .gitattributes --
+# Tripcord embed: bash needs LF, and tripcord scan hashes these files.
+/.tripcord/bootstrap.sh text eol=lf
+/.tripcord/embed.json text eol=lf
+/.github/workflows/tripcord.yml text eol=lf
+/.github/hooks/tripcord.json text eol=lf
+-- .github/hooks/tripcord.json --
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "type": "command",
+        "bash": "bash .tripcord/bootstrap.sh session-start --harness copilot",
+        "cwd": ".",
+        "timeoutSec": 300
+      }
+    ],
+    "preToolUse": [
+      {
+        "type": "command",
+        "bash": "bash .tripcord/bootstrap.sh hook --harness copilot --event pre-tool --on-failure block",
+        "cwd": ".",
+        "timeoutSec": 60
+      }
+    ]
+  }
+}
+-- .github/workflows/copilot-setup-steps.yml --
+# Written by tripcord init --embed.
+name: Copilot Setup Steps
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+  pull_request:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: copilot-setup-steps-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  copilot-setup-steps:
+    name: Copilot setup steps
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read # checkout the repository
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Tripcord bootstrap
+        run: bash .tripcord/bootstrap.sh install
+-- .github/workflows/tripcord.yml --
+# Written by tripcord init --embed.
+# Scans pull requests that touch agent configuration. pull_request only:
+# never pull_request_target, so a fork's head never runs with write
+# access or secrets.
+name: tripcord
+
+on:
+  pull_request:
+    paths:
+      - ".claude/**"
+      - ".cursor/**"
+      - ".codex/**"
+      - ".github/**"
+      - ".vscode/**"
+      - ".mcp.json"
+      - "AGENTS.md"
+      - "CLAUDE.md"
+      - "GEMINI.md"
+      - ".devin/**"
+      - ".tripcord/**"
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    permissions:
+      contents: read # checkout the repository being scanned
+      pull-requests: read # tripcord-pr.yml reads pull request reviews
+      security-events: write # upload the SARIF report
+    # Reusable workflow pinned by full commit SHA (main@6a12795).
+    uses: vgmartinez/tripcord/.github/workflows/tripcord-pr.yml@6a1279565e9e41e9dec163e6bedf07f2647a2c67 # main@6a12795 # zizmor: ignore[ref-version-mismatch]
+    with:
+      fail-on: high
+-- .gitignore --
+/.tripcord/policy.local.yaml
+-- .tripcord/bootstrap.sh --
+#!/bin/sh
+# Written by tripcord init --embed. Re-pin with:
+#   tripcord init --embed --force --version <v> --sha256 <os-arch>=<hex>
+#
+# Runs the pinned Tripcord build from the cache, after checking it
+# against the pinned SHA-256. It never downloads or installs anything:
+# fill the cache with go build -trimpath of the pinned commit (see
+# docs/init.md). It fails closed: an unpinned platform, a missing or
+# non-executable binary, a checksum mismatch, or a cache directory
+# another user can write exits 2 with the reason on stderr, and no
+# unverified binary is ever run. tripcord scan compares this file with
+# the pin recorded in .tripcord/embed.json (TC-CFG-016); do not edit it.
+#
+# Usage:
+#   bash .tripcord/bootstrap.sh install
+#   bash .tripcord/bootstrap.sh session-start [--harness claude|cursor|copilot]
+#   bash .tripcord/bootstrap.sh hook --harness <h> --event <e> [--on-failure block|error]
+#
+# Every mode copies the cached binary into a private directory, checks
+# the copy, and runs the copy, so the file that runs is the file that
+# was hashed. install and session-start then run tripcord scan --config;
+# hook execs the copy's hook mode. Diagnostics and scan output go to
+# stderr; stdout carries only what the harness reads: {} for a Cursor
+# session start, and the binary's own output in hook mode.
+set -eu
+
+TRIPCORD_VERSION='0.1.0'
+
+emit_json=''
+run=''
+on_exit() {
+  status=$?
+  if [ -n "$run" ]; then
+    "$rm_tool" -rf "$run"
+  fi
+  if [ -n "$emit_json" ]; then
+    printf '{}\n'
+  fi
+  exit "$status"
+}
+trap on_exit EXIT
+trap 'exit 2' HUP INT TERM
+
+# fold_home prints $1 with each path under $HOME that starts a word
+# written as ~/..., the way the tripcord binary prints one.
+fold_home() {
+  rest=$1
+  out=''
+  case "${HOME:-}" in
+    ''|/) printf '%s\n' "$rest"; return 0 ;;
+  esac
+  while :; do
+    case "$rest" in
+      *"$HOME/"*) ;;
+      *) break ;;
+    esac
+    before=${rest%%"$HOME/"*}
+    case "$before" in
+      ''|*' ') out="$out$before~/" ;;
+      *) out="$out$before$HOME/" ;;
+    esac
+    rest=${rest#*"$HOME/"}
+  done
+  printf '%s\n' "$out$rest"
+}
+
+fail() {
+  printf 'tripcord bootstrap: %s\n' "$(fold_home "$1")" >&2
+  exit 2
+}
+
+# The tools that decide what runs are called by absolute path, never
+# through the caller's PATH, which the caller may have prepended to.
+# NixOS links its system tools under /run/current-system/sw/bin. Only
+# use that directory when it is root-owned and not writable by group or
+# other users. Its stat verifies the directory before other tools there
+# are selected; a Nix system populates that link as root.
+nix_tools_safe() {
+  nix_bin=/run/current-system/sw/bin
+  [ -d "$nix_bin" ] && [ -x "$nix_bin/stat" ] || return 1
+  nix_owner_mode="$("$nix_bin/stat" -c '%u:%a' "$nix_bin" 2>/dev/null)" || return 1
+  case "$nix_owner_mode" in
+    0:[0-7][0-5][0-5]|0:[0-7][0-5][0-5][0-5]) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+system_tool() {
+  for dir in /usr/bin /bin; do
+    if [ -x "$dir/$1" ]; then
+      printf '%s\n' "$dir/$1"
+      return 0
+    fi
+  done
+  if nix_tools_safe && [ -x "/run/current-system/sw/bin/$1" ]; then
+    printf '%s\n' "/run/current-system/sw/bin/$1"
+    return 0
+  fi
+  return 1
+}
+need() {
+  system_tool "$1" || fail "$1 is not installed in /usr/bin or /bin"
+}
+rm_tool="$(need rm)" || exit 2
+uname_tool="$(need uname)" || exit 2
+dirname_tool="$(need dirname)" || exit 2
+id_tool="$(need id)" || exit 2
+find_tool="$(need find)" || exit 2
+mkdir_tool="$(need mkdir)" || exit 2
+mktemp_tool="$(need mktemp)" || exit 2
+cp_tool="$(need cp)" || exit 2
+chmod_tool="$(need chmod)" || exit 2
+
+usage='usage: bootstrap.sh install | session-start [--harness claude|cursor|copilot] | hook --harness <h> --event <e> [--on-failure block|error]'
+mode="${1:-}"
+case "$mode" in
+  install)
+    [ "$#" -eq 1 ] || fail "$usage"
+    ;;
+  session-start)
+    case "$#:${2:-}" in
+      1:) ;;
+      3:--harness)
+        case "$3" in
+          cursor) emit_json=1 ;;
+          claude|copilot) ;;
+          *) fail "$usage" ;;
+        esac
+        ;;
+      *) fail "$usage" ;;
+    esac
+    ;;
+  hook) ;;
+  *) fail "$usage" ;;
+esac
+shift
+
+pinned_sha256() {
+  case "$1" in
+    linux-x64) printf '%s\n' '0000000000000000000000000000000000000000000000000000000000000000' ;;
+    *) return 1 ;;
+  esac
+}
+
+case "$("$uname_tool" -s)" in
+  Linux) os=linux ;;
+  Darwin) os=darwin ;;
+  *) fail "unsupported operating system: $("$uname_tool" -s)" ;;
+esac
+case "$("$uname_tool" -m)" in
+  x86_64|amd64) arch=x64 ;;
+  aarch64|arm64) arch=arm64 ;;
+  *) fail "unsupported architecture: $("$uname_tool" -m)" ;;
+esac
+platform="$os-$arch"
+
+if ! want="$(pinned_sha256 "$platform")"; then
+  fail "no SHA-256 is pinned for $platform; rerun tripcord init --embed --force with --sha256 $platform=<hex>"
+fi
+
+if sha_tool="$(system_tool sha256sum)"; then
+  sha_args=''
+elif sha_tool="$(system_tool shasum)"; then
+  sha_args='-a 256'
+else
+  fail "neither sha256sum nor shasum is installed in /usr/bin or /bin"
+fi
+
+sha256_of() {
+  # shellcheck disable=SC2086 # sha_args is empty or two words
+  sum="$("$sha_tool" $sha_args "$1")" || return 1
+  printf '%s\n' "${sum%% *}"
+}
+
+# pwd -P below resolves the script's directory: through a symlinked
+# .tripcord it would name another tree and scan that instead.
+if [ -L "$0" ] || [ -L "$("$dirname_tool" -- "$0")" ]; then
+  fail ".tripcord and .tripcord/bootstrap.sh must not be symlinks; rerun tripcord init --embed --force"
+fi
+script_dir="$(CDPATH='' cd -- "$("$dirname_tool" -- "$0")" && pwd -P)"
+repo_root="$(CDPATH='' cd -- "$script_dir/.." && pwd -P)"
+cache_root="${XDG_CACHE_HOME:-${HOME:?HOME is not set}/.cache}"
+case "$cache_root" in
+  /*) ;;
+  *) fail "the cache directory must be an absolute path: $cache_root" ;;
+esac
+tripcord_root="$cache_root/tripcord"
+cache_dir="$tripcord_root/$TRIPCORD_VERSION/$platform"
+cached="$cache_dir/tripcord"
+
+if [ ! -e "$cached" ] && [ ! -L "$cached" ]; then
+  fail "tripcord $TRIPCORD_VERSION for $platform is not in the cache at $cached; build the pinned commit there with go build -trimpath (see docs/init.md)"
+fi
+
+uid="$("$id_tool" -u)"
+# private_dirs fails unless every directory is a directory, not a
+# symlink, owned by this user, and not writable by anyone else. It
+# reports every bad directory at once so a cache filled under umask 0002
+# can be fixed by one chmod command before any hook is wired.
+private_dirs() {
+  bad_type=''
+  bad_owner=''
+  bad_mode=''
+  for dir in "$@"; do
+    if [ -L "$dir" ] || [ ! -d "$dir" ]; then
+      bad_type="$bad_type $dir"
+      continue
+    fi
+    if [ -z "$("$find_tool" "$dir" -prune -user "$uid" -print)" ]; then
+      bad_owner="$bad_owner $dir"
+    fi
+    if [ -n "$("$find_tool" "$dir" -prune \( -perm -0020 -o -perm -0002 \) -print)" ]; then
+      bad_mode="$bad_mode $dir"
+    fi
+  done
+  if [ -n "$bad_type" ]; then
+    fail "cache directories are not directories or are symlinks:$bad_type"
+  fi
+  if [ -n "$bad_owner$bad_mode" ]; then
+    message="unsafe cache directories:$bad_owner$bad_mode"
+    if [ -n "$bad_mode" ]; then
+      message="$message (group- or world-writable)"
+    fi
+    if [ -n "$bad_mode" ]; then
+      message="$message; run chmod go-w$bad_mode"
+    fi
+    if [ -n "$bad_owner" ]; then
+      message="$message; cache directories must be owned by uid $uid"
+    fi
+    fail "$message"
+  fi
+}
+private_dirs "$tripcord_root" "$tripcord_root/$TRIPCORD_VERSION" "$cache_dir"
+
+if [ -L "$cached" ] || [ ! -f "$cached" ]; then
+  fail "the cached tripcord at $cached is not a regular file; replace it with a go build -trimpath of the pinned commit"
+fi
+if [ ! -x "$cached" ]; then
+  fail "the cached tripcord at $cached is not executable; run chmod 0755 on it"
+fi
+
+# The copy lives under the cache root, not TMPDIR, which may be mounted
+# noexec. The script waits for the copy rather than execing it, so it
+# can turn an exec failure (including noexec) into an exit-2 reason and
+# remove the copy through its exit trap.
+runs="$tripcord_root/.run"
+if [ ! -e "$runs" ] && [ ! -L "$runs" ]; then
+  "$mkdir_tool" -m 0700 "$runs" 2>/dev/null || [ -d "$runs" ] || fail "cannot create $runs"
+fi
+private_dirs "$runs"
+"$find_tool" "$runs" -mindepth 1 -maxdepth 1 -type d -name 'run.*' -user "$uid" -mmin +1 -exec "$rm_tool" -rf {} + 2>/dev/null || true
+run="$(umask 077 && "$mktemp_tool" -d "$runs/run.XXXXXX")" || fail "cannot create a private directory in $runs"
+"$chmod_tool" 0700 "$run"
+copy="$run/tripcord"
+"$cp_tool" "$cached" "$copy" || fail "cannot copy the cached tripcord at $cached"
+"$chmod_tool" 0700 "$copy"
+got="$(sha256_of "$copy")" || fail "cannot read the cached tripcord at $cached"
+if [ "$got" != "$want" ]; then
+  fail "the cached tripcord at $cached has SHA-256 $got, not the pinned $want; it was not run"
+fi
+
+run_copy() {
+  if "$@"; then
+    return 0
+  else
+    status=$?
+  fi
+  case "$status" in
+    126|127) fail "cannot execute $copy; a noexec mount is a likely cause" ;;
+    *) exit "$status" ;;
+  esac
+}
+if [ "$mode" = hook ]; then
+  run_copy "$copy" hook "$@"
+  exit 0
+fi
+run_copy "$copy" scan --config "$repo_root" >&2
+-- .tripcord/embed.json --
+{
+  "schema": "tripcord.embed/v1",
+  "version": "0.1.0",
+  "sha256": {
+    "linux-x64": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "harnesses": [
+    "claude",
+    "cursor",
+    "copilot",
+    "devin",
+    "codex"
+  ],
+  "files": [
+    {
+      "path": ".tripcord/bootstrap.sh",
+      "sha256": "971752bf3f8534917d90ea0142df0e5e0b28c06f0a95ef47665fbb662f62f7fb"
+    },
+    {
+      "path": ".github/workflows/tripcord.yml",
+      "sha256": "6f6dac49ffd49928526fef319d7464d20c43b33d0fcaa02d3c9f03a5dfec869b"
+    },
+    {
+      "path": ".github/workflows/copilot-setup-steps.yml",
+      "step": "Tripcord bootstrap",
+      "sha256": "591047426ca45077ff170cb8c7b8bb8d7b5d722679189ce064ba23236df25a73"
+    }
+  ],
+  "hooks": [
+    {
+      "harness": "claude",
+      "path": ".claude/settings.json",
+      "event": "SessionStart",
+      "sha256": "3c2b4d1858b4e8afc5cac4838025edb3a8838804765573a3671e99d277f0372d"
+    },
+    {
+      "harness": "claude",
+      "path": ".claude/settings.json",
+      "event": "PreToolUse",
+      "sha256": "7b26bc6d65b3c6705ec8aff6e78db7f36041f56ad9472ed3b5ad5f1b7f68cdf3"
+    },
+    {
+      "harness": "cursor",
+      "path": ".cursor/hooks.json",
+      "event": "sessionStart",
+      "sha256": "abe6517009e5da8733eb7c6989230a1b3fe7a5de725ff4a8d352ce3c0278f48f"
+    },
+    {
+      "harness": "cursor",
+      "path": ".cursor/hooks.json",
+      "event": "preToolUse",
+      "sha256": "95c73d22ad8031613847db070e09acc50f53feb7f8aa37eb91df44144f44c5da"
+    },
+    {
+      "harness": "copilot",
+      "path": ".github/hooks/tripcord.json",
+      "event": "sessionStart",
+      "sha256": "f5d43cbc60daa916c8625aca341397decf39f554067a2e2c617667de096dac2d"
+    },
+    {
+      "harness": "copilot",
+      "path": ".github/hooks/tripcord.json",
+      "event": "preToolUse",
+      "sha256": "866c9bd3649002c1256c7d2d641f131e405ad732309b96b77ec462fb96c7866a"
+    }
+  ]
+}
+-- .tripcord/policy.yaml --
+# Tripcord policy. See docs/policy.md for every field.
+version: 1
+mode: enforce
+fail-on: high
+-- AGENTS.md --
+<!-- tripcord:begin -->
+## Tripcord
+
+This repository embeds Tripcord (`.tripcord/`). Agents without
+repository hooks, such as Codex and Jules, should have their environment
+setup script run `bash .tripcord/bootstrap.sh install`. It installs the pinned
+Tripcord release, verifies its checksum, and runs `tripcord scan --config`.
+Do not remove or edit the Tripcord hooks in `.claude/settings.json`,
+`.cursor/hooks.json`, or `.github/hooks/tripcord.json`.
+Pull requests are scanned again in CI.
+<!-- tripcord:end -->

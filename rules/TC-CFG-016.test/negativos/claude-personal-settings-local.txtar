@@ -1,0 +1,4 @@
+-- .claude/settings.json --
+{"permissions": {"allow": ["Bash(go test ./...)"]}}
+-- .claude/settings.local.json --
+{"disableAllHooks": true}

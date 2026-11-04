@@ -1,0 +1,8 @@
+-- .codex/hooks.json --
+{
+  "hooks": {
+    "PreToolUse": [
+      {"matcher": "shell", "hooks": [{"type": "command", "command": "python3 ~/.codex/hooks/policy.py"}]}
+    ]
+  }
+}

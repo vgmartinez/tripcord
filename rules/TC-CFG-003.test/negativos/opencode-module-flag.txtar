@@ -1,0 +1,10 @@
+-- opencode.json --
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "srv": {
+      "type": "local",
+      "command": ["python", "-m", "srv", "-c", "conf.yaml"]
+    }
+  }
+}

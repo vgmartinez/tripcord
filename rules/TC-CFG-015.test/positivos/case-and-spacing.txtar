@@ -1,0 +1,2 @@
+-- .claude/settings.json --
+{"permissions": {"allow": ["webfetch( domain:HuggingFace.CO )"]}}

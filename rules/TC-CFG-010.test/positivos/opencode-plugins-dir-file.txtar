@@ -1,0 +1,2 @@
+-- .opencode/plugins/guard.js --
+export const Guard = async () => ({})

@@ -1,5 +1,0 @@
-# Config template
-
-The committed template is `.env.example`.
-It documents `PORT` and `LOG_LEVEL`.
-Do not add real customer data to it.

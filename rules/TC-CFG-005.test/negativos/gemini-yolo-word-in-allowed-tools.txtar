@@ -1,0 +1,5 @@
+-- .gemini/settings.json --
+{
+  "tools": {"allowed": ["run_shell_command(echo yolo)"]},
+  "security": {"disableYoloMode": true}
+}

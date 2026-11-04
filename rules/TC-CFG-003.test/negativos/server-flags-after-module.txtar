@@ -1,0 +1,26 @@
+-- .mcp.json --
+{
+  "mcpServers": {
+    "inventory": {
+      "command": "python",
+      "args": ["-m", "my_server", "-c", "config.yaml"]
+    },
+    "docs": {
+      "command": "node",
+      "args": ["server.js", "-e", "production"]
+    },
+    "lint": {
+      "command": "python3 -m lint_server -c lint.toml"
+    }
+  }
+}
+-- .vscode/mcp.json --
+{
+  "servers": {
+    "search": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["./dist/server.js", "--eval-mode", "strict", "-e", "staging"]
+    }
+  }
+}

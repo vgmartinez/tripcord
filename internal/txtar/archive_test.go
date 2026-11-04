@@ -208,3 +208,56 @@ func TestWriteRejectsEscape(t *testing.T) {
 		t.Fatal("rejected archive still wrote a file")
 	}
 }
+
+func TestExpandTree(t *testing.T) {
+	t.Parallel()
+	src := filepath.Join(t.TempDir(), "pack")
+	files := map[string]string{
+		"rule.yaml":                "id: x\n",
+		"x.test/positivos/a.txtar": "-- .claude/settings.json --\n{}\r\n-- run.sh --\n#!/bin/sh\n",
+		"x.test/positivos/b.json":  "{}\n",
+	}
+	for rel, body := range files {
+		p := filepath.Join(src, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	dst := ExpandTree(t, src)
+	if filepath.Base(dst) != "pack" {
+		t.Fatalf("copy is %s, want base name pack", dst)
+	}
+	want := map[string]string{
+		"rule.yaml": "id: x\n",
+		"x.test/positivos/a/.claude/settings.json": "{}\r\n",
+		"x.test/positivos/a/run.sh":                "#!/bin/sh\n",
+		"x.test/positivos/b.json":                  "{}\n",
+	}
+	got := map[string]string{}
+	err := filepath.WalkDir(dst, func(p string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		raw, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(dst, p)
+		got[filepath.ToSlash(rel)] = string(raw)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for rel, body := range want {
+		if got[rel] != body {
+			t.Fatalf("%s = %q, want %q", rel, got[rel], body)
+		}
+	}
+}

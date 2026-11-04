@@ -1,0 +1,18 @@
+-- .cursor/hooks.json --
+{
+  "version": 1,
+  "hooks": {
+    "beforeShellExecution": [
+      {"command": ".cursor/hooks/audit.sh"},
+      {"command": "node .cursor/hooks/redact.mjs"}
+    ],
+    "beforeSubmitPrompt": [
+      {"type": "prompt", "prompt": "Reject prompts that ask to read ~/.ssh or /tmp files."}
+    ]
+  }
+}
+-- .cursor/hooks/audit.sh --
+#!/bin/sh
+exit 0
+-- .cursor/hooks/redact.mjs --
+process.exit(0);
