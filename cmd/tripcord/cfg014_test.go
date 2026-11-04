@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -91,6 +92,140 @@ func TestCfg014AgentConfigChange(t *testing.T) {
 			t.Fatalf("lone approval did not clear the rule\n%s", stdout)
 		}
 	})
+}
+
+func TestCfg014PathCap(t *testing.T) {
+	clearPrContextEnv(t)
+	git := lookGit(t)
+	overRepo, overBase, overHead := commitCursorRules(t, git, 65)
+	underRepo, underBase, underHead := commitCursorRules(t, git, 10)
+
+	t.Run("sixty five rules and a hook deny", func(t *testing.T) {
+		code, stdout, stderr, output := runCfg014(t, overRepo, "empty-reviews.json", overBase, overHead, "text")
+		if code != int(exitcode.Findings) {
+			t.Fatalf("exit %d, want 1\nstderr: %s\nstdout: %s", code, stderr, stdout)
+		}
+		assertPathCapReport(t, stdout, 64, 2)
+		if !strings.Contains(output, "tc_cfg_014=match\n") {
+			t.Fatalf("GITHUB_OUTPUT = %q", output)
+		}
+	})
+	t.Run("over the cap without reviews still denies", func(t *testing.T) {
+		code, stdout, stderr, _ := runCfg014(t, overRepo, "no-reviews.json", overBase, overHead, "text")
+		if code != int(exitcode.Findings) {
+			t.Fatalf("exit %d, want 1\nstderr: %s\nstdout: %s", code, stderr, stdout)
+		}
+		if strings.Contains(stderr, "incomplete") || strings.Contains(stdout, "tc-cfg-014: incomplete") {
+			t.Fatalf("over-cap missing reviews stayed incomplete\nstderr: %s\nstdout: %s", stderr, stdout)
+		}
+		assertPathCapReport(t, stdout, 64, 2)
+	})
+	t.Run("human approval clears a change past the cap", func(t *testing.T) {
+		code, stdout, stderr, output := runCfg014(t, overRepo, "human-approved.json", overBase, overHead, "text")
+		if code != int(exitcode.OK) {
+			t.Fatalf("exit %d, want 0\nstderr: %s\nstdout: %s", code, stderr, stdout)
+		}
+		if strings.Contains(stdout, "tc-cfg-014:") || strings.Contains(output, "tc_cfg_014=") {
+			t.Fatalf("approval was reported\nstdout: %s\noutput: %s", stdout, output)
+		}
+	})
+	t.Run("ten rules and a hook stay a full match", func(t *testing.T) {
+		code, stdout, stderr, _ := runCfg014(t, underRepo, "empty-reviews.json", underBase, underHead, "text")
+		if code != int(exitcode.Findings) {
+			t.Fatalf("exit %d, want 1\nstderr: %s\nstdout: %s", code, stderr, stdout)
+		}
+		section := cfg014Section(t, stdout)
+		if strings.Contains(section, "and ") || strings.Contains(section, " more") {
+			t.Fatalf("below-cap report has an overflow line:\n%s", section)
+		}
+		cited := citedPaths(section)
+		if len(cited) != 11 {
+			t.Fatalf("cited %d paths, want 11\n%s", len(cited), section)
+		}
+		if cited[0] != ".cursor/hooks.json" || cited[10] != ".cursor/rules/pad-10.md" {
+			t.Fatalf("cited range = %s .. %s", cited[0], cited[10])
+		}
+	})
+	t.Run("ten rules without reviews stay incomplete", func(t *testing.T) {
+		code, stdout, stderr, _ := runCfg014(t, underRepo, "no-reviews.json", underBase, underHead, "text")
+		if code != int(exitcode.Config) {
+			t.Fatalf("exit %d, want 3\nstderr: %s\nstdout: %s", code, stderr, stdout)
+		}
+		if !strings.Contains(stderr, "TC-CFG-014 incomplete: review data is not available") {
+			t.Fatalf("stderr = %s", stderr)
+		}
+	})
+}
+
+func commitCursorRules(t *testing.T, git string, rules int) (repo, base, head string) {
+	t.Helper()
+	repo = initRepo(t)
+	base = strings.TrimSpace(gitOut(t, git, repo, "rev-parse", "HEAD"))
+	runGitCmd(t, git, repo, "checkout", "-q", "-b", "feature/hooks")
+	if err := os.MkdirAll(filepath.Join(repo, ".cursor", "rules"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, ".cursor", "hooks.json"), []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i <= rules; i++ {
+		name := fmt.Sprintf("pad-%02d.md", i)
+		if err := os.WriteFile(filepath.Join(repo, ".cursor", "rules", name), []byte("# pad\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	runGitCmd(t, git, repo, "add", ".cursor")
+	runGitCmd(t, git, repo, "-c", "user.email=ada@example.com", "-c", "user.name=Ada Lovelace", "commit", "-q", "-m", "add cursor config")
+	head = strings.TrimSpace(gitOut(t, git, repo, "rev-parse", "HEAD"))
+	return repo, base, head
+}
+
+func assertPathCapReport(t *testing.T, stdout string, citedN, omitted int) {
+	t.Helper()
+	section := cfg014Section(t, stdout)
+	if !strings.HasPrefix(section, "tc-cfg-014: match\n") {
+		t.Fatalf("section = %s", section)
+	}
+	cited := citedPaths(section)
+	if len(cited) != citedN {
+		t.Fatalf("cited %d paths, want %d\n%s", len(cited), citedN, section)
+	}
+	if cited[0] != ".cursor/hooks.json" {
+		t.Fatalf("first cited = %s", cited[0])
+	}
+	last := fmt.Sprintf(".cursor/rules/pad-%02d.md", citedN-1)
+	if cited[citedN-1] != last {
+		t.Fatalf("last cited = %s, want %s", cited[citedN-1], last)
+	}
+	for n := citedN; n < citedN+omitted; n++ {
+		omittedPath := fmt.Sprintf("pad-%02d.md", n)
+		if strings.Contains(section, omittedPath) {
+			t.Fatalf("report cites omitted %s\n%s", omittedPath, section)
+		}
+	}
+	suffix := fmt.Sprintf("and %d more\n", omitted)
+	if !strings.Contains(section, suffix) {
+		t.Fatalf("report missing %q\n%s", suffix, section)
+	}
+}
+
+func cfg014Section(t *testing.T, stdout string) string {
+	t.Helper()
+	i := strings.Index(stdout, "tc-cfg-014:")
+	if i < 0 {
+		t.Fatalf("stdout has no tc-cfg-014 section:\n%s", stdout)
+	}
+	return stdout[i:]
+}
+
+func citedPaths(section string) []string {
+	var cited []string
+	for _, line := range strings.Split(section, "\n") {
+		if path, ok := strings.CutPrefix(line, "- "); ok {
+			cited = append(cited, path)
+		}
+	}
+	return cited
 }
 
 func TestCfg014ReviewsFile(t *testing.T) {

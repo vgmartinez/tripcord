@@ -1065,3 +1065,38 @@ jobs:
           test "$TRIPCORD_OUTCOME" = "failure"
           test "$TRIPCORD_TC_CFG_014" = "match"
           grep -F '::error::tripcord pr-context denied the pull request under TC-CFG-014' .github/actions/tripcord/action.yml
+
+      - name: Write a TC-CFG-014 exit-3 stub
+        shell: bash
+        run: |
+          cat > "${RUNNER_TEMP}/tripcord-incomplete" <<'EOF'
+          #!/usr/bin/env bash
+          case "$1" in
+            scan) exit 0 ;;
+            pr-context)
+              printf '%s\n' 'tripcord pr-context: TC-CFG-014 incomplete: review data is not available' >&2
+              exit 3
+              ;;
+            *) exit 2 ;;
+          esac
+          EOF
+          chmod +x "${RUNNER_TEMP}/tripcord-incomplete"
+          printf '[]\n' > "${RUNNER_TEMP}/tripcord-reviews.json"
+
+      - id: tripcord-incomplete
+        name: TC-CFG-014 exit 3 still fails
+        continue-on-error: true
+        uses: ./.github/actions/tripcord # zizmor: ignore[self-repository] test this checkout's exit-3 handling
+        with:
+          binary: ${{ runner.temp }}/tripcord-incomplete
+          path: ${{ runner.temp }}/tripcord-ci
+          reviews-file: ${{ runner.temp }}/tripcord-reviews.json
+          upload-sarif: "false"
+          comment: "false"
+
+      - name: Assert TC-CFG-014 exit 3 fails
+        shell: bash
+        env:
+          TRIPCORD_OUTCOME: ${{ steps.tripcord-incomplete.outcome }}
+        run: |
+          test "$TRIPCORD_OUTCOME" = "failure"

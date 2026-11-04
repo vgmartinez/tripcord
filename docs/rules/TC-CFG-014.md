@@ -87,10 +87,18 @@ JSON array of review objects, the same shape as
 not call the GitHub API. A missing file, a file that is not a regular
 file, a file over 8MiB, and JSON that is not an array exit 3. A single
 `review` object is not the complete set. It clears the rule only
-when that object itself is a qualifying approval. Otherwise, and when
-the event has no reviews array and `--reviews-file` was not passed, the
-rule is incomplete. Incomplete is a diagnostic on stderr and exit 3. It
-is not a pass.
+when that object itself is a qualifying approval. When 64 or fewer
+classified paths changed, and the event has no reviews array and
+`--reviews-file` was not passed, the rule is incomplete. Incomplete
+is a diagnostic on stderr and exit 3. It is not a pass.
+
+More than 64 classified paths, with no human approval of the head, is
+a match. The finding cites the first 64 paths in path order. The
+reason lists those paths and then `and N more`, where N is how many
+classified paths were not cited. Under the default policy the command
+exits 1. A human approval of the head still clears the rule, including
+when more than 64 paths changed. The same match is returned when the
+review set was not loaded.
 
 An author `pr-context` does not classify as an agent is clear, including
 when they change agent config. An agent-authored pull request that does
@@ -123,13 +131,18 @@ is still applied, and a lock there rejects a weaker base policy.
   that.
 - It does not call the GitHub API. Pass `--reviews-file` with the
   review array, or include a `reviews` array on the event. If neither
-  is present, the result is incomplete whenever a classified path
-  changed. Fetching the reviews is left to the workflow.
+  is present and 64 or fewer classified paths changed, the result is
+  incomplete. More than 64 classified paths, with no human approval,
+  is a match that cites the first 64 paths and then `and N more`.
+  Fetching the reviews is left to the workflow.
 - The composite action forwards its optional `reviews-file` input to
   `pr-context`. It fails after publishing when TC-CFG-014 denies
-  (exit 1), and also fails on an incomplete or invalid review file
-  (exit 3 or 4). Without `reviews-file`, exits 3 and 4 warn without
-  failing the action.
+  (exit 1), including a change past the 64-path cap. With
+  `reviews-file`, an incomplete result or an invalid review file
+  (exit 3 or 4) also fails the action. Without `reviews-file`, exits
+  3 and 4 warn without failing the action. The reusable workflows
+  `tripcord-pr.yml` and `tripcord-pr-comment.yml` pass `reviews-file`,
+  so exit 1 and exit 3 or 4 both fail their jobs.
 
 ## References
 
