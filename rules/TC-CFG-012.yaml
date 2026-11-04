@@ -28,8 +28,11 @@
 # printenv, process.env, os.environ, "environment variables",
 # credentials, secret(s), api key, token, password, private key,
 # ~/.aws, ~/.ssh, id_rsa, and AWS_*/GITHUB_TOKEN-style environment
-# variables. .env.example, .env.sample, .env.template, and .envrc do
-# not count.
+# variables. /proc/self/environ, /proc/$PPID/environ,
+# /proc/${PPID}/environ, and /proc/<digits>/environ are targets.
+# /proc/self/status, /proc/self/environment, /proc/self/../self/environ,
+# and /proc/self/environ.example are not. .env.example, .env.sample,
+# .env.template, and .envrc do not count.
 # Between the verb and target, only curl/wget flags, one URL, one or
 # more determiners (the/all/your/any/every/each/its/their/those and the
 # rest), "contents/values of", and one quote, backtick, @, or

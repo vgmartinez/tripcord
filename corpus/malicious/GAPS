@@ -4,7 +4,7 @@
 # fires is stale and fails the test, so this list only shrinks.
 # Rule changes for these go in their own pull requests.
 # case	rule	reason
-novee-sandbox/agents-proc-environ	TC-CFG-012	/proc/self/environ and /proc/$PPID/environ are not secret targets
+novee-sandbox/agents-proc-environ	TC-CFG-012	the path is on its own line, and printing on the previous line is not a read verb
 novee-sandbox/claude-md-printenv	TC-CFG-012	the line starts with a "When ..." clause and the verb is run, which is not a read verb
 novee-sandbox/webfetch-allowed-exfil	TC-CFG-012	"look up" is not a read verb and "API key from the .env" puts words between verb and target
 arxiv-2602.06547/html-comment-directive	TC-CFG-012	an "assistant:" label between <!-- and the verb breaks the line-start match

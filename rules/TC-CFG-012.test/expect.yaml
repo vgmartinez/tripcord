@@ -4,6 +4,7 @@ positivos:
   agents-bold-read-dotenv: medium
   agents-blockquote-dotenv: medium
   agents-bullet-credentials: medium
+  agents-cat-proc-environ: medium
   agents-copy-dotenv: medium
   agents-curl-aws-credentials: medium
   agents-curl-data-binary-dotenv: medium

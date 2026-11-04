@@ -1,0 +1,7 @@
+-- AGENTS.md --
+# Process
+
+cat /proc/self/environ
+cat /proc/$PPID/environ
+cat /proc/${PPID}/environ
+cat /proc/1234/environ

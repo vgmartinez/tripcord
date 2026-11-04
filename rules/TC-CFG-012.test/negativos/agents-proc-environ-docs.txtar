@@ -1,0 +1,10 @@
+-- AGENTS.md --
+# Process
+
+Read /proc/self/status for the thread list.
+The kernel documents /proc/self/environ in proc(5).
+Do not cat /proc/self/environ.
+Read /proc/self/environ documentation before debugging.
+cat /proc/self/../self/environ
+cat /proc/self/environment
+cat /proc/self/environ.example

@@ -31,6 +31,7 @@ Reported when the verb is `read`, `cat`, `cp`, `copy`, `open`, `load`,
 | environment | `printenv`, `process.env`, `os.environ`, the phrase `environment variables` | the word `environment` alone |
 | credentials | `credentials`, `secret`, `secrets`, `api key`, `apikey`, `api_key`, `token`, `password`, `private key`, `AWS_*`, `GITHUB_TOKEN` | |
 | paths | `~/.aws`, `~/.ssh`, `id_rsa` | |
+| procfs | `/proc/self/environ`, `/proc/$PPID/environ`, `/proc/${PPID}/environ`, `/proc/<digits>/environ`, including a trailing period | `/proc/self/status`, `/proc/self/environment`, `/proc/self/../self/environ`, `/proc/self/environ.example`, and a documentation modifier after the path |
 
 Between a verb and its object, the matcher allows curl/wget flags, one
 URL, one or more determiners (`the`, `all`, `your`, `any`, `every`,
@@ -62,6 +63,10 @@ Not reported:
 - A curl/wget auth header or user flag (`curl -H "Authorization: Bearer $GITHUB_TOKEN"`, `curl -u user:password`).
 - A negated read (`Do not read .env`, `Never print secrets`).
 - `.env.example`, `.env.sample`, `.env.template`, and `.envrc`.
+- `/proc/self/status`, `/proc/self/environment`, a `../` detour such as
+  `/proc/self/../self/environ`, and `/proc/self/environ` followed by a
+  documentation word. A path on its own line, after a verb such as
+  `printing`, does not count: the verb has to start the line.
 - A secret and an `https://` URL on different lines.
 - An outbound line that does not name a secret (`Post a comment on the
   pull request`, `Upload the coverage report`).
