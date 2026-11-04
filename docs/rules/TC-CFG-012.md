@@ -22,8 +22,9 @@ number, or `**`) and an optional prefix (`please`, `always`, `first`,
 start with one of those forms and is quiet.
 
 Reported when the verb is `read`, `cat`, `cp`, `copy`, `open`, `load`,
-`source`, `print`, `dump`, `collect`, `extract`, `show`, `curl`, `wget`,
-`type`, or `Get-Content`, and its direct object names one of these:
+`source`, `printenv`, `print`, `dump`, `collect`, `extract`, `show`,
+`curl`, `wget`, `type`, or `Get-Content`, and its direct object names
+one of these:
 
 | Target | Counts | Does not count |
 | --- | --- | --- |
@@ -32,6 +33,12 @@ Reported when the verb is `read`, `cat`, `cp`, `copy`, `open`, `load`,
 | credentials | `credentials`, `secret`, `secrets`, `api key`, `apikey`, `api_key`, `token`, `password`, `private key`, `AWS_*`, `GITHUB_TOKEN` | |
 | paths | `~/.aws`, `~/.ssh`, `id_rsa` | |
 | procfs | `/proc/self/environ`, `/proc/$PPID/environ`, `/proc/${PPID}/environ`, `/proc/<digits>/environ`, including a trailing period | `/proc/self/status`, `/proc/self/environment`, `/proc/self/../self/environ`, `/proc/self/environ.example`, and a documentation modifier after the path |
+
+`printenv` at the start of the line is itself the read, so it matches
+without a further object. A documentation modifier after it
+(`printenv documentation`, `printenv section`) is quiet. Another read
+verb can still take `printenv` as its object (`Print printenv`). A line
+that only reaches `printenv` later (`run printenv`) does not count.
 
 Between a verb and its object, the matcher allows curl/wget flags, one
 URL, one or more determiners (`the`, `all`, `your`, `any`, `every`,

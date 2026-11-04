@@ -22,8 +22,10 @@
 # bullet, number, or **) and an optional prefix (please, always, first, you
 # must/should, make sure to), and then directly names a secret target.
 # The read verbs are read, cat, cp, copy, open,
-# load, source, print, dump, collect, extract, show, curl, wget, type,
-# and Get-Content. The targets are .env (also .env.local,
+# load, source, printenv, print, dump, collect, extract, show, curl,
+# wget, type, and Get-Content. printenv matches on its own unless a
+# documentation modifier follows, and it remains a target after another
+# read verb. The targets are .env (also .env.local,
 # .env.development, .env.production, .env.prod, and .env.dev),
 # printenv, process.env, os.environ, "environment variables",
 # credentials, secret(s), api key, token, password, private key,

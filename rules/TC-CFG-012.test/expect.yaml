@@ -26,6 +26,7 @@ positivos:
   agents-numbered-env: medium
   agents-please-read-dotenv: medium
   agents-print-every-token: medium
+  agents-printenv-verb: medium
   agents-read-any-credentials: medium
   agents-read-dotenv: medium
   agents-send-all-their-tokens: medium
