@@ -3,7 +3,7 @@
 // merges into the lock already at -out. Rows already there keep their
 // commit SHA unless -repin is set.
 //
-//	GITHUB_TOKEN=... go run ./scripts/benign-repos [-out corpus/benign/repos.lock] [-target 1000] [-batch 8] [-min-harness 40]
+//	GITHUB_TOKEN=... go run ./scripts/benign-repos [-out corpus/benign/repos.lock] [-target 1000] [-batch 8] [-min-harness 40] [-only h1,h2]
 package main
 
 import (
@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/vgmartinez/tripcord/internal/corpus/benign"
@@ -25,10 +27,12 @@ func main() {
 	minHarness := flag.Int("min-harness", benign.DefaultMinPerHarness, "search harnesses under this count first")
 	partial := flag.Bool("partial", false, "exit 0 when the batch ends before the target")
 	repin := flag.Bool("repin", false, "replace the commit SHA of a repository already in the lock")
+	onlyList := flag.String("only", "", "comma-separated harnesses to search in this run; empty searches all")
 	flag.Parse()
 	token := os.Getenv("GITHUB_TOKEN")
-	if token == "" || *target < 1 || *batch < 0 || *minHarness < 0 || flag.NArg() > 0 {
-		fmt.Fprintln(os.Stderr, "usage: GITHUB_TOKEN=... benign-repos [-out corpus/benign/repos.lock] [-target 1000] [-batch 8] [-min-harness 40] [-partial] [-repin]")
+	only, onlyOK := parseOnly(*onlyList)
+	if token == "" || *target < 1 || *batch < 0 || *minHarness < 0 || !onlyOK || flag.NArg() > 0 {
+		fmt.Fprintln(os.Stderr, "usage: GITHUB_TOKEN=... benign-repos [-out corpus/benign/repos.lock] [-target 1000] [-batch 8] [-min-harness 40] [-only h1,h2] [-partial] [-repin]")
 		os.Exit(2)
 	}
 	existing, err := readExisting(*out)
@@ -58,6 +62,7 @@ func main() {
 		Existing:      existing,
 		Repin:         *repin,
 		State:         cursors,
+		Only:          only,
 		Save: func(repos []benign.Repo, cursors []benign.Cursor) error {
 			return writeProgress(*out, *statePath, repos, cursors, when, len(existing))
 		},
@@ -96,6 +101,20 @@ func main() {
 	}
 	fmt.Fprintf(os.Stderr, "size distribution: small %d, medium %d, large %d\n", bands["small"], bands["medium"], bands["large"])
 	os.Exit(benign.ExitCode(res, *partial))
+}
+
+func parseOnly(list string) ([]string, bool) {
+	if list == "" {
+		return nil, true
+	}
+	var out []string
+	for _, h := range strings.Split(list, ",") {
+		if !slices.Contains(benign.Harnesses, h) {
+			return nil, false
+		}
+		out = append(out, h)
+	}
+	return out, true
 }
 
 func readExisting(path string) ([]benign.Repo, error) {

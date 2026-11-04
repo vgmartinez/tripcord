@@ -57,8 +57,9 @@ contents. A row is `owner/repo`, the pinned default-branch commit, the
 SPDX license (`NOASSERTION` when the API reports none), the harnesses
 found, the size band (`small`, `medium`, or `large`), and the date that
 row was added. The search looks for a file the adapters read:
-`.claude/settings.json`, `.mcp.json` (any depth), `.cursor/`,
-`AGENTS.md`, `.vscode/tasks.json`, `.github/copilot-instructions.md`,
+`.claude/settings.json`, `.claude/settings.local.json`, `CLAUDE.md`,
+`.mcp.json` (any depth), `.cursor/`, `AGENTS.md`, `.vscode/tasks.json`,
+`.vscode/mcp.json`, `.github/copilot-instructions.md`,
 `.github/workflows/copilot-setup-steps.yml`,
 `.devcontainer/devcontainer.json`, `.devcontainer/<name>/devcontainer.json`,
 `.devcontainer.json`, `.codex/config.toml` (any depth), `GEMINI.md`, and

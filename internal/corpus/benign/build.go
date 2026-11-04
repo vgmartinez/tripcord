@@ -35,6 +35,8 @@ type Options struct {
 	Repin bool
 	// State is the crawl cursor from the previous run.
 	State []Cursor
+	// Only limits this run to the named harnesses. Empty searches all.
+	Only []string
 	// Save is called after each code-search page with the merged rows
 	// and the cursor to resume from. It may be nil.
 	Save func(repos []Repo, cursors []Cursor) error
@@ -282,11 +284,14 @@ func allDone(states []searchState) bool {
 }
 
 func pickState(states []searchState, opt Options, cands map[string]*candidate, rr int) int {
+	skip := func(i int) bool {
+		return states[i].done || (len(opt.Only) > 0 && !slices.Contains(opt.Only, states[i].q.harness))
+	}
 	if opt.MinPerHarness > 0 {
 		counts := coverage(opt.Existing, cands)
 		lowest := -1
 		for i := range states {
-			if states[i].done {
+			if skip(i) {
 				continue
 			}
 			n := counts[states[i].q.harness]
@@ -300,7 +305,7 @@ func pickState(states []searchState, opt Options, cands map[string]*candidate, r
 		if lowest >= 0 {
 			for k := 0; k < len(states); k++ {
 				i := (rr + k) % len(states)
-				if states[i].done {
+				if skip(i) {
 					continue
 				}
 				n := counts[states[i].q.harness]
@@ -312,7 +317,7 @@ func pickState(states []searchState, opt Options, cands map[string]*candidate, r
 	}
 	for k := 0; k < len(states); k++ {
 		i := (rr + k) % len(states)
-		if !states[i].done {
+		if !skip(i) {
 			return i
 		}
 	}
@@ -533,11 +538,15 @@ func rootTree(path, dir string) bool {
 // more than 1,000 hits, both index orders are read, because each order
 // returns a different window of at most 1,000.
 var codeQueries = []codeQuery{
-	{harness: "claude", accept: func(p string) bool { return rootFile(p, ".claude/settings.json") }, tries: []string{
+	{harness: "claude", accept: acceptClaude, tries: []string{
 		`filename:settings.json path:.claude`,
+		`filename:CLAUDE.md`,
+		`filename:settings.local.json path:.claude`,
 	}},
 	{harness: "mcp", accept: acceptMCP, tries: []string{
 		`filename:.mcp.json`,
+		`filename:.mcp.json path:/`,
+		`filename:.mcp.json size:>1500`,
 	}},
 	{harness: "cursor", accept: func(p string) bool { return rootTree(p, ".cursor") }, tries: []string{
 		`path:.cursor`,
@@ -547,8 +556,9 @@ var codeQueries = []codeQuery{
 	{harness: "agents", accept: func(p string) bool { return rootFile(p, "AGENTS.md") }, tries: []string{
 		`filename:AGENTS.md`,
 	}},
-	{harness: "vscode", accept: func(p string) bool { return rootFile(p, ".vscode/tasks.json") }, tries: []string{
+	{harness: "vscode", accept: acceptVSCode, tries: []string{
 		`filename:tasks.json path:.vscode`,
+		`filename:mcp.json path:.vscode`,
 	}},
 	{harness: "copilot", accept: acceptCopilot, tries: []string{
 		`filename:copilot-instructions.md path:.github`,
@@ -557,6 +567,7 @@ var codeQueries = []codeQuery{
 	{harness: "devcontainer", accept: acceptDevcontainer, tries: []string{
 		`filename:devcontainer.json path:.devcontainer`,
 		`filename:.devcontainer.json`,
+		`filename:devcontainer.json path:.devcontainer size:>2000`,
 	}},
 	{harness: "codex", accept: acceptCodex, tries: []string{
 		`filename:config.toml path:.codex`,
@@ -565,6 +576,19 @@ var codeQueries = []codeQuery{
 		`filename:GEMINI.md`,
 		`filename:settings.json path:.gemini`,
 	}},
+}
+
+func acceptClaude(p string) bool {
+	switch p {
+	case ".claude/settings.json", ".claude/settings.local.json", "CLAUDE.md":
+		return true
+	default:
+		return false
+	}
+}
+
+func acceptVSCode(p string) bool {
+	return p == ".vscode/tasks.json" || p == ".vscode/mcp.json"
 }
 
 func acceptMCP(p string) bool {

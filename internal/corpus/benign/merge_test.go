@@ -16,6 +16,7 @@ import (
 	"github.com/vgmartinez/tripcord/internal/adapters/copilot"
 	"github.com/vgmartinez/tripcord/internal/adapters/devcontainer"
 	"github.com/vgmartinez/tripcord/internal/adapters/gemini"
+	"github.com/vgmartinez/tripcord/internal/adapters/generic"
 )
 
 func TestMergeKeepsThePin(t *testing.T) {
@@ -160,7 +161,7 @@ func TestResumeStartsAtTheSavedPage(t *testing.T) {
 			mcp = cur
 		}
 	}
-	if !mcp.Done || mcp.Page != 4 {
+	if mcp.Done || mcp.Try != 1 || mcp.Page != 1 {
 		t.Fatalf("cursor after an empty page: %#v", mcp)
 	}
 }
@@ -318,6 +319,37 @@ func TestPriorityPrefersTheEmptiestHarness(t *testing.T) {
 	}
 }
 
+func TestOnlySearchesTheNamedHarness(t *testing.T) {
+	var queries []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/search/code") {
+			queries = append(queries, r.URL.Query().Get("q"))
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"total_count":0,"items":[]}`))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+	c := &Client{BaseURL: srv.URL, Token: "t", HTTP: srv.Client()}
+	state, err := ParseState(mustState(t, []Cursor{{
+		Harness: "devcontainer", Try: 1, Order: "desc", Page: 1, Done: false,
+	}}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = Build(context.Background(), c, Options{
+		Target: 10, Now: time.Date(2026, 11, 4, 0, 0, 0, 0, time.UTC),
+		MinPerHarness: 40, Batch: 1, State: state, Only: []string{"devcontainer"},
+	}, func(string) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(queries) != 1 || queries[0] != "filename:.devcontainer.json" {
+		t.Fatalf("queries %v", queries)
+	}
+}
+
 func TestRateLimitKeepsTheExistingLock(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Retry-After", "1200")
@@ -368,6 +400,13 @@ func TestAcceptPathsMatchAdapters(t *testing.T) {
 		{"a/GEMINI.md", acceptGemini, gemini.RepoCandidate, true},
 		{".gemini/settings.json", acceptGemini, gemini.RepoCandidate, true},
 		{".gemini/other.json", acceptGemini, gemini.RepoCandidate, false},
+		{".claude/settings.json", acceptClaude, claude.RepoCandidate, true},
+		{".claude/settings.local.json", acceptClaude, claude.RepoCandidate, true},
+		{"CLAUDE.md", acceptClaude, claude.RepoCandidate, true},
+		{"docs/CLAUDE.md", acceptClaude, claude.RepoCandidate, false},
+		{".vscode/tasks.json", acceptVSCode, generic.RepoCandidate, true},
+		{".vscode/mcp.json", acceptVSCode, generic.RepoCandidate, true},
+		{".vscode/settings.json", acceptVSCode, generic.RepoCandidate, false},
 	}
 	for _, tc := range cases {
 		if tc.accept(tc.path) != tc.want {
