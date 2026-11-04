@@ -59,10 +59,10 @@ const LockHeader = `# corpus/benign/repos.lock
 # archived and not a fork. The list is stratified by harness and by
 # repository size (small is under 1 MB, medium is under 10 MB, and
 # large is the rest) and targets 1000 repositories.
-# This copy is partial: 132 of 1000. The harnesses mcp, copilot,
-# devcontainer, codex, and gemini have no rows. A resumable crawl
-# fills the list in. v0 does not ship below 1000 repositories plus a
-# per-harness minimum (#41).
+# This copy is partial: 132 of 1,000 repositories. mcp, copilot,
+# devcontainer, codex, and gemini have no rows yet. A resumable crawl
+# fills the list in. v0 doesn't ship until it reaches at least 1,000
+# repositories with a minimum per harness (#41).
 # Columns, tab-separated: owner/repo, 40-character commit SHA of the
 # default branch HEAD at generation time, SPDX license (NOASSERTION
 # when the API reports none), harnesses (comma-separated), date
