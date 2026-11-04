@@ -49,19 +49,24 @@ func discover(t *testing.T, a *Adapter, root string) discovery {
 
 func TestDiscoverGolden(t *testing.T) {
 	t.Parallel()
-	root := kittest.CopyTree(t, filepath.Join("testdata", "repo"))
-	managed := kittest.CopyTree(t, filepath.Join("testdata", "managed"))
-	home := t.TempDir()
-	writeFile(t, filepath.Join(home, ".claude", "settings.json"), `{"permissions":{"allow":["Bash(git status)"]},"hooks":{"Stop":[{"hooks":[{"type":"command","command":"notify-send done"}]}]}}`)
-	writeFile(t, filepath.Join(home, ".claude.json"), `{"numStartups":3,"mcpServers":{"user":{"command":"user-mcp"}},"projects":{"/srv/app":{"allowedTools":[],"mcpServers":{"local":{"command":"local-mcp","env":{"KEY":"project-secret"}}}}}}`)
-	a := New(Options{IncludeUser: true, IncludeManaged: true, HomeDir: home, ManagedDir: managed, Getenv: noEnv})
-	got := discover(t, a, root)
-	raw, err := json.MarshalIndent(got, "", "  ")
-	if err != nil {
-		t.Fatal(err)
+	for _, version := range kittest.Versions(t) {
+		t.Run(version, func(t *testing.T) {
+			t.Parallel()
+			root := kittest.CopyTree(t, kittest.Tree(version, "repo"))
+			managed := kittest.CopyTree(t, kittest.Tree(version, "managed"))
+			home := t.TempDir()
+			writeFile(t, filepath.Join(home, ".claude", "settings.json"), `{"permissions":{"allow":["Bash(git status)"]},"hooks":{"Stop":[{"hooks":[{"type":"command","command":"notify-send done"}]}]}}`)
+			writeFile(t, filepath.Join(home, ".claude.json"), `{"numStartups":3,"mcpServers":{"user":{"command":"user-mcp"}},"projects":{"/srv/app":{"allowedTools":[],"mcpServers":{"local":{"command":"local-mcp","env":{"KEY":"project-secret"}}}}}}`)
+			a := New(Options{IncludeUser: true, IncludeManaged: true, HomeDir: home, ManagedDir: managed, Getenv: noEnv})
+			got := discover(t, a, root)
+			raw, err := json.MarshalIndent(got, "", "  ")
+			if err != nil {
+				t.Fatal(err)
+			}
+			raw = bytes.ReplaceAll(raw, []byte(filepath.ToSlash(managed)), []byte(fixtureManagedDir))
+			kittest.AssertGolden(t, filepath.Join(version, "discover.golden"), append(raw, '\n'))
+		})
 	}
-	raw = bytes.ReplaceAll(raw, []byte(filepath.ToSlash(managed)), []byte(fixtureManagedDir))
-	assertGolden(t, "discover.golden", append(raw, '\n'))
 }
 
 func TestDetect(t *testing.T) {
@@ -716,7 +721,7 @@ func TestLegacyManagedDirIsInformational(t *testing.T) {
 
 func TestRedactsEnvAndHeaderValues(t *testing.T) {
 	t.Parallel()
-	got := discover(t, New(Options{}), kittest.CopyTree(t, filepath.Join("testdata", "repo")))
+	got := discover(t, New(Options{}), kittest.CopyTree(t, kittest.Tree(kittest.Baseline("claude"), "repo")))
 	raw := mustJSON(t, got.Items)
 	for _, secret := range []string{"fixture-secret-value", "remote-secret-value", "audit-token-value", "agent-secret-value", "fixture-github-token"} {
 		if bytes.Contains(raw, []byte(secret)) && !strings.Contains(secret, "agent") {
@@ -826,7 +831,7 @@ func TestManagedScope(t *testing.T) {
 
 func TestDiscoverDoesNotChangeFixture(t *testing.T) {
 	t.Parallel()
-	root := kittest.CopyTree(t, filepath.Join("testdata", "repo"))
+	root := kittest.CopyTree(t, kittest.Tree(kittest.Baseline("claude"), "repo"))
 	before := snapshot(t, root)
 	discover(t, New(Options{}), root)
 	if after := snapshot(t, root); after != before {
@@ -836,13 +841,13 @@ func TestDiscoverDoesNotChangeFixture(t *testing.T) {
 
 func FuzzParseConfig(f *testing.F) {
 	seeds := map[string]string{
-		"settings":    "testdata/repo/.claude/settings.json",
-		"mcp":         "testdata/repo/.mcp.json",
-		"skill":       "testdata/repo/.claude/skills/review/SKILL.md",
-		"agent":       "testdata/repo/.claude/agents/reviewer.md",
-		"pluginhooks": "testdata/repo/plugins/acme/hooks/hooks.json",
-		"marketplace": "testdata/repo/.claude-plugin/marketplace.json",
-		"manifest":    "testdata/repo/plugins/acme/.claude-plugin/plugin.json",
+		"settings":    "testdata/claude-baseline/repo/.claude/settings.json",
+		"mcp":         "testdata/claude-baseline/repo/.mcp.json",
+		"skill":       "testdata/claude-baseline/repo/.claude/skills/review/SKILL.md",
+		"agent":       "testdata/claude-baseline/repo/.claude/agents/reviewer.md",
+		"pluginhooks": "testdata/claude-baseline/repo/plugins/acme/hooks/hooks.json",
+		"marketplace": "testdata/claude-baseline/repo/.claude-plugin/marketplace.json",
+		"manifest":    "testdata/claude-baseline/repo/plugins/acme/.claude-plugin/plugin.json",
 	}
 	for kind, path := range seeds {
 		if data, err := kittest.ReadFixture(path); err == nil {
@@ -983,23 +988,6 @@ func snapshot(t *testing.T, root string) string {
 		t.Fatal(err)
 	}
 	return b.String()
-}
-
-func assertGolden(t *testing.T, name string, got []byte) {
-	t.Helper()
-	path := filepath.Join("testdata", name)
-	if os.Getenv("UPDATE_GOLDEN") == "1" {
-		if err := os.WriteFile(path, got, 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	want, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(got, want) {
-		t.Fatalf("%s mismatch\n--- got ---\n%s--- want ---\n%s", name, got, want)
-	}
 }
 
 // TestBypassPairDetectFlags checks that each of permissions and

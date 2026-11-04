@@ -251,9 +251,16 @@ needs a fixture whose severity it decides.
 Fixture configs use `.invalid` or `example` hosts and placeholder
 secrets only. `go test ./internal/corpus` lints every file in `rules/`
 and in `internal/adapters/*/testdata` with the corpus checks. Adapter
-fixture trees (`repo`, `home`, `managed`, `policy`) are archives too,
-such as `testdata/repo.txtar`; `kittest.CopyTree` unpacks one into a
-temp directory and `kittest.ReadFixture` reads one member. Rule YAML, README files, and the other pack
+fixture trees (`repo`, `home`, `managed`, `policy`) live in a
+harness-version directory under `testdata/`, as archives such as
+`testdata/claude-baseline/repo.txtar`. No release version is recorded
+for the fixtures that were already here, so those directories are named
+`<harness>-baseline`. A new harness version adds a directory and does
+not edit an old one. `kittest.CopyTree` unpacks an archive into a temp
+directory and `kittest.ReadFixture` reads one member. The discover
+golden test walks every version directory. `discover.golden` is
+regenerated only with `go test ./internal/adapters/... -update`;
+without `-update` a diff fails the test. Rule YAML, README files, and the other pack
 files outside `<ID>.test/` skip the host, IOC, and entropy checks. A
 finding that must stay, such as a real host a rule matches, needs a
 line in `internal/corpus/allowlist.tsv` with its reason; a stale line

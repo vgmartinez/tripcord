@@ -56,8 +56,8 @@ func assertIndexParity(t *testing.T, bin, repo string) {
 }
 
 // parityFixture is a fixture tree named by its path from the module
-// root. A testdata/repo.txtar archive is named testdata/repo and
-// unpacked into dir.
+// root. A repo.txtar archive under testdata is unpacked into dir and
+// named by its path without the extension.
 type parityFixture struct {
 	name string
 	dir  string

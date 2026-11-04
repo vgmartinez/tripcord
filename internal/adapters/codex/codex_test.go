@@ -19,19 +19,24 @@ func userConfig(root string) string {
 
 func TestDiscoverGolden(t *testing.T) {
 	t.Parallel()
-	root := kittest.CopyTree(t, filepath.Join("testdata", "repo"))
-	managed := kittest.CopyTree(t, filepath.Join("testdata", "managed"))
-	home := kittest.CopyTree(t, filepath.Join("testdata", "home"))
-	a := New(Options{IncludeUser: true, IncludeManaged: true, HomeDir: home, ManagedDir: managed, Getenv: kittest.Env()})
-	got := kittest.Discover(t, a, root)
-	kittest.AssertGolden(t, "discover.golden", kittest.GoldenJSON(t, got, map[string]string{filepath.ToSlash(managed): fixtureManagedDir}))
-	if raw := string(kittest.GoldenJSON(t, got, nil)); strings.Contains(raw, home) || strings.Contains(raw, "sk-live-123") || strings.Contains(raw, "abc123") || strings.Contains(raw, "t0k3n") {
-		t.Fatalf("discovery leaks the home directory or a secret:\n%s", raw)
-	}
-	for _, item := range got.Items {
-		if strings.EqualFold(filepath.Base(item.Path), "AGENTS.md") && item.Scope == model.ScopeRepo {
-			t.Fatalf("codex reported a repository AGENTS.md, which the generic adapter owns: %+v", item)
-		}
+	for _, version := range kittest.Versions(t) {
+		t.Run(version, func(t *testing.T) {
+			t.Parallel()
+			root := kittest.CopyTree(t, kittest.Tree(version, "repo"))
+			managed := kittest.CopyTree(t, kittest.Tree(version, "managed"))
+			home := kittest.CopyTree(t, kittest.Tree(version, "home"))
+			a := New(Options{IncludeUser: true, IncludeManaged: true, HomeDir: home, ManagedDir: managed, Getenv: kittest.Env()})
+			got := kittest.Discover(t, a, root)
+			kittest.AssertGolden(t, filepath.Join(version, "discover.golden"), kittest.GoldenJSON(t, got, map[string]string{filepath.ToSlash(managed): fixtureManagedDir}))
+			if raw := string(kittest.GoldenJSON(t, got, nil)); strings.Contains(raw, home) || strings.Contains(raw, "sk-live-123") || strings.Contains(raw, "abc123") || strings.Contains(raw, "t0k3n") {
+				t.Fatalf("discovery leaks the home directory or a secret:\n%s", raw)
+			}
+			for _, item := range got.Items {
+				if strings.EqualFold(filepath.Base(item.Path), "AGENTS.md") && item.Scope == model.ScopeRepo {
+					t.Fatalf("codex reported a repository AGENTS.md, which the generic adapter owns: %+v", item)
+				}
+			}
+		})
 	}
 }
 
@@ -605,7 +610,7 @@ func TestCodexHomeOutsideHome(t *testing.T) {
 func TestFingerprintsIgnoreMachinePaths(t *testing.T) {
 	t.Parallel()
 	run := func() []string {
-		root := kittest.CopyTree(t, filepath.Join("testdata", "repo"))
+		root := kittest.CopyTree(t, kittest.Tree(kittest.Baseline("codex"), "repo"))
 		home := t.TempDir()
 		kittest.WriteFile(t, filepath.Join(home, ".codex", "config.toml"), "[mcp_servers.home]\ncommand = \""+filepath.ToSlash(home)+"/bin/mcp\"\nargs = [\"--config\", \""+filepath.ToSlash(home)+"/.config/x.json\"]\n")
 		got := kittest.Discover(t, New(Options{IncludeUser: true, HomeDir: home, Getenv: kittest.Env()}), root)
@@ -641,15 +646,15 @@ func TestDetect(t *testing.T) {
 }
 
 func FuzzParseConfig(f *testing.F) {
-	for _, path := range []string{"testdata/repo/.codex/config.toml", "testdata/managed/requirements.toml"} {
+	for _, path := range []string{"testdata/codex-baseline/repo/.codex/config.toml", "testdata/codex-baseline/managed/requirements.toml"} {
 		if data, err := kittest.ReadFixture(path); err == nil {
 			f.Add("config", data)
 		}
 	}
-	if data, err := kittest.ReadFixture("testdata/repo/.codex/hooks.json"); err == nil {
+	if data, err := kittest.ReadFixture("testdata/codex-baseline/repo/.codex/hooks.json"); err == nil {
 		f.Add("hooks", data)
 	}
-	for _, path := range []string{"testdata/repo/.codex/rules/default.rules", "testdata/home/.codex/rules/default.rules"} {
+	for _, path := range []string{"testdata/codex-baseline/repo/.codex/rules/default.rules", "testdata/codex-baseline/home/.codex/rules/default.rules"} {
 		if data, err := kittest.ReadFixture(path); err == nil {
 			f.Add("rules", data)
 		}

@@ -17,16 +17,16 @@
 # golden size: the golden is the adapter's discover output over its
 #   whole fixture repository; splitting it regenerates the golden.
 #   Accepted only for a path ending in .golden.
-internal/adapters/claude/testdata/discover.golden	size	21792 bytes	golden size
+internal/adapters/claude/testdata/claude-baseline/discover.golden	size	21792 bytes	golden size
 internal/adapters/claude/testdata/hook/pre-tool-use-bash-allow.json	entropy	claude/projects/-home-dev-project/8a3f1c2e-5b7d-4e9a-9c1f-2d6b8e4a7f10	cosmetic, see #43 item 116
 internal/adapters/claude/testdata/hook/pre-tool-use-bash-deny.json	entropy	claude/projects/-home-dev-project/8a3f1c2e-5b7d-4e9a-9c1f-2d6b8e4a7f10	cosmetic, see #43 item 116
 internal/adapters/claude/testdata/hook/pre-tool-use-read.json	entropy	claude/projects/-home-dev-project/8a3f1c2e-5b7d-4e9a-9c1f-2d6b8e4a7f10	cosmetic, see #43 item 116
-internal/adapters/claude/testdata/repo.txtar	host	json.schemastore.org	cosmetic, see #43 item 116
-internal/adapters/devcontainer/testdata/discover.golden	host	ghcr.io	cosmetic, see #43 item 116
-internal/adapters/devcontainer/testdata/discover.golden	host	mcr.microsoft.com	cosmetic, see #43 item 116
-internal/adapters/devcontainer/testdata/repo.txtar	host	ghcr.io	cosmetic, see #43 item 116
-internal/adapters/devcontainer/testdata/repo.txtar	host	mcr.microsoft.com	cosmetic, see #43 item 116
-internal/adapters/opencode/testdata/repo.txtar	host	opencode.ai	cosmetic, see #43 item 116
+internal/adapters/claude/testdata/claude-baseline/repo.txtar	host	json.schemastore.org	cosmetic, see #43 item 116
+internal/adapters/devcontainer/testdata/devcontainer-baseline/discover.golden	host	ghcr.io	cosmetic, see #43 item 116
+internal/adapters/devcontainer/testdata/devcontainer-baseline/discover.golden	host	mcr.microsoft.com	cosmetic, see #43 item 116
+internal/adapters/devcontainer/testdata/devcontainer-baseline/repo.txtar	host	ghcr.io	cosmetic, see #43 item 116
+internal/adapters/devcontainer/testdata/devcontainer-baseline/repo.txtar	host	mcr.microsoft.com	cosmetic, see #43 item 116
+internal/adapters/opencode/testdata/opencode-baseline/repo.txtar	host	opencode.ai	cosmetic, see #43 item 116
 rules/TC-CFG-001.test/negativos/claude-benign-session-hooks.txtar	host	json.schemastore.org	cosmetic, see #43 item 116
 rules/TC-CFG-001.test/negativos/claude-loopback-no-pipe.txtar	host	127.0.0.1	rule-dependent
 rules/TC-CFG-001.test/negativos/claude-loopback-no-pipe.txtar	host	::1	rule-dependent

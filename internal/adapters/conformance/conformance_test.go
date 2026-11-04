@@ -36,16 +36,16 @@ import (
 // repository so every adapter sees every other adapter's files. The first
 // fixture to provide a path wins.
 var fixtureRepos = []string{
-	"../claude/testdata/repo",
-	"../codex/testdata/repo",
-	"../cursor/testdata/repo",
-	"../copilot/testdata/repo",
-	"../generic/testdata/repo",
-	"../gemini/testdata/repo",
-	"../opencode/testdata/repo",
-	"../windsurf/testdata/repo",
-	"../devcontainer/testdata/repo",
-	"../devin/testdata/repo",
+	"../claude/testdata/claude-baseline/repo",
+	"../codex/testdata/codex-baseline/repo",
+	"../cursor/testdata/cursor-baseline/repo",
+	"../copilot/testdata/copilot-baseline/repo",
+	"../generic/testdata/generic-baseline/repo",
+	"../gemini/testdata/gemini-baseline/repo",
+	"../opencode/testdata/opencode-baseline/repo",
+	"../windsurf/testdata/windsurf-baseline/repo",
+	"../devcontainer/testdata/devcontainer-baseline/repo",
+	"../devin/testdata/devin-baseline/repo",
 }
 
 // secrets are values planted in the fixtures and in userConfig that no

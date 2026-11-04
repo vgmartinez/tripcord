@@ -21,25 +21,30 @@ var fixtureSecrets = []string{"oc-key-111", "oc-tok-222", "oc-q-333", "oc-bearer
 
 func TestDiscoverGolden(t *testing.T) {
 	t.Parallel()
-	root := kittest.CopyTree(t, filepath.Join("testdata", "repo"))
-	home := kittest.CopyTree(t, filepath.Join("testdata", "home"))
-	managed := kittest.CopyTree(t, filepath.Join("testdata", "managed"))
-	a := New(Options{IncludeUser: true, IncludeManaged: true, HomeDir: home, ManagedDir: managed, Getenv: kittest.Env()})
-	got := kittest.Discover(t, a, root)
-	kittest.AssertGolden(t, "discover.golden", kittest.GoldenJSON(t, got, map[string]string{filepath.ToSlash(managed): fixtureManagedDir}))
-	raw := string(kittest.GoldenJSON(t, got, nil))
-	for _, leak := range append([]string{home}, fixtureSecrets...) {
-		if strings.Contains(raw, leak) {
-			t.Fatalf("discovery leaks %q", leak)
-		}
-	}
-	for _, item := range got.Items {
-		if item.Scope == model.ScopeRepo && strings.EqualFold(filepath.Base(item.Path), "AGENTS.md") {
-			t.Fatalf("opencode reported %s, which the generic adapter owns", item.Path)
-		}
-		if strings.Contains(item.Path, "node_modules") || strings.Contains(item.Path, "lib/helper") {
-			t.Fatalf("opencode reported %s, which it does not load as a plugin", item.Path)
-		}
+	for _, version := range kittest.Versions(t) {
+		t.Run(version, func(t *testing.T) {
+			t.Parallel()
+			root := kittest.CopyTree(t, kittest.Tree(version, "repo"))
+			home := kittest.CopyTree(t, kittest.Tree(version, "home"))
+			managed := kittest.CopyTree(t, kittest.Tree(version, "managed"))
+			a := New(Options{IncludeUser: true, IncludeManaged: true, HomeDir: home, ManagedDir: managed, Getenv: kittest.Env()})
+			got := kittest.Discover(t, a, root)
+			kittest.AssertGolden(t, filepath.Join(version, "discover.golden"), kittest.GoldenJSON(t, got, map[string]string{filepath.ToSlash(managed): fixtureManagedDir}))
+			raw := string(kittest.GoldenJSON(t, got, nil))
+			for _, leak := range append([]string{home}, fixtureSecrets...) {
+				if strings.Contains(raw, leak) {
+					t.Fatalf("discovery leaks %q", leak)
+				}
+			}
+			for _, item := range got.Items {
+				if item.Scope == model.ScopeRepo && strings.EqualFold(filepath.Base(item.Path), "AGENTS.md") {
+					t.Fatalf("opencode reported %s, which the generic adapter owns", item.Path)
+				}
+				if strings.Contains(item.Path, "node_modules") || strings.Contains(item.Path, "lib/helper") {
+					t.Fatalf("opencode reported %s, which it does not load as a plugin", item.Path)
+				}
+			}
+		})
 	}
 }
 
@@ -453,7 +458,7 @@ func TestDefaultManagedDir(t *testing.T) {
 func TestFingerprintsIgnoreMachinePaths(t *testing.T) {
 	t.Parallel()
 	run := func() []string {
-		root := kittest.CopyTree(t, filepath.Join("testdata", "repo"))
+		root := kittest.CopyTree(t, kittest.Tree(kittest.Baseline("opencode"), "repo"))
 		home := t.TempDir()
 		h := filepath.ToSlash(home)
 		kittest.WriteFile(t, filepath.Join(home, ".config", "opencode", "opencode.json"), `{"mcp":{"a":{"type":"local","command":["`+h+`/bin/mcp","--token","x"]}}}`)
@@ -479,8 +484,8 @@ func TestFingerprintsIgnoreMachinePaths(t *testing.T) {
 
 func TestRepoScanDoesNotReadHome(t *testing.T) {
 	t.Parallel()
-	home := kittest.CopyTree(t, filepath.Join("testdata", "home"))
-	managed := kittest.CopyTree(t, filepath.Join("testdata", "managed"))
+	home := kittest.CopyTree(t, kittest.Tree(kittest.Baseline("opencode"), "home"))
+	managed := kittest.CopyTree(t, kittest.Tree(kittest.Baseline("opencode"), "managed"))
 	got := kittest.Discover(t, New(Options{HomeDir: home, ManagedDir: managed, Getenv: kittest.Env()}), t.TempDir())
 	if len(got.Items) != 0 || len(got.Diagnostics) != 0 {
 		t.Fatalf("repository-only scan read user or managed files: %+v", got)
@@ -503,9 +508,9 @@ func TestDetect(t *testing.T) {
 
 func FuzzParseConfig(f *testing.F) {
 	seeds := map[string]string{
-		"config": "testdata/repo/opencode.jsonc",
-		"user":   "testdata/home/.config/opencode/opencode.json",
-		"agent":  "testdata/repo/.opencode/agents/security.md",
+		"config": "testdata/opencode-baseline/repo/opencode.jsonc",
+		"user":   "testdata/opencode-baseline/home/.config/opencode/opencode.json",
+		"agent":  "testdata/opencode-baseline/repo/.opencode/agents/security.md",
 	}
 	for kind, path := range seeds {
 		if data, err := kittest.ReadFixture(path); err == nil {
