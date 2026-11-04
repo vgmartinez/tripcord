@@ -460,12 +460,34 @@ func validRepoName(name string) bool {
 	return !randomName(name)
 }
 
-// randomName applies the reason entropy rule to the whole owner/repo
-// with its separators removed, so a hyphen every few characters does
-// not split a payload into short tokens. Real names score lower: the
-// highest in the index is 4.42.
+// randomName rejects a payload hidden in a repository name. Separators
+// are removed so a hyphen cannot split one token into short pieces.
+// Every 40-character window is then scored, because a low-entropy pad
+// can hold the whole name under 4.5 while a window sits above it. A
+// name shorter than 40 characters keeps the whole-string rule, which
+// does not reject it. Hex entropy cannot exceed 4, so a run of 24 or
+// more hex digits is rejected on its own. The highest window in the
+// index is 4.43 and the longest hex run is 9.
 func randomName(name string) bool {
+	if hexRun(name) >= 24 {
+		return true
+	}
+	s := strippedName(name)
+	// Below 40 characters the whole-string rule cannot reject the name.
+	if len(s) < reasonEntropyMin {
+		return false
+	}
+	for i := 0; i+reasonEntropyMin <= len(s); i++ {
+		if shannon(s[i:i+reasonEntropyMin]) > reasonEntropyMax {
+			return true
+		}
+	}
+	return false
+}
+
+func strippedName(name string) string {
 	var b strings.Builder
+	b.Grow(len(name))
 	for i := 0; i < len(name); i++ {
 		switch name[i] {
 		case '/', '-', '_', '.':
@@ -473,8 +495,26 @@ func randomName(name string) bool {
 			b.WriteByte(name[i])
 		}
 	}
-	s := b.String()
-	return len(s) >= reasonEntropyMin && shannon(s) > reasonEntropyMax
+	return b.String()
+}
+
+func hexRun(name string) int {
+	best, cur := 0, 0
+	for i := 0; i < len(name); i++ {
+		if isHex(name[i]) {
+			cur++
+			if cur > best {
+				best = cur
+			}
+			continue
+		}
+		cur = 0
+	}
+	return best
+}
+
+func isHex(c byte) bool {
+	return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
 }
 
 func validDate(s string) bool {

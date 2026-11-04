@@ -111,11 +111,12 @@ a pass with no checks. The same relative path under any other lint root
 is an ordinary fixture.
 
 The validator caps a repository name at a 39-character owner and a
-64-character repository, and rejects a name whose letters and digits,
-with `/`, `-`, `_`, and `.` removed, run 40 or more characters with
-Shannon entropy above 4.5. A reason is printable ASCII. A dotted word in
-a reason is rejected unless it ends in a known file extension (`.md`,
-`.json`, `.yml`, and so on), so no list of top-level domains is
-involved; "e.g." and version numbers like "v1.2" are rejected too and
-have to be spelled out. Decimal, hex, and octal IPv4 literals and IPv6
-addresses, bracketed or not, are rejected.
+64-character repository. With `/`, `-`, `_`, and `.` removed, a name
+shorter than 40 characters keeps the whole-string rule, and a longer
+name is rejected when any 40-character window has Shannon entropy above
+4.5. A run of 24 or more hex digits is rejected as well. A reason is
+printable ASCII. A dotted word in a reason is rejected unless it ends
+in a known file extension (`.md`, `.json`, `.yml`, and so on), so no
+list of top-level domains is involved; "e.g." and version numbers like
+"v1.2" are rejected too and have to be spelled out. Decimal, hex, and
+octal IPv4 literals and IPv6 addresses, bracketed or not, are rejected.
