@@ -22,6 +22,7 @@ positivos:
   agents-exfil-url: medium
   agents-exfil-url-first: medium
   agents-frontmatter-read-dotenv: medium
+  agents-html-assistant-upload-dotenv: medium
   agents-html-comment: medium
   agents-nested-ssh: medium
   agents-numbered-env: medium

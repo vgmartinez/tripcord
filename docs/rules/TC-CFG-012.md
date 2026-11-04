@@ -25,9 +25,13 @@ neither removed nor a target.
 
 The line starts
 with the verb after optional Markdown (`#`, `>`, `<!--`, a bullet, a
-number, or `**`) and an optional prefix (`please`, `always`, `first`,
-`you must`, `you should`, or `make sure to`). A negated line does not
-start with one of those forms and is quiet.
+number, or `**`), an optional role label, and an optional prefix
+(`please`, `always`, `first`, `you must`, `you should`, or `make sure
+to`). The role label is `assistant`, `user`, `system`, or `human`,
+then a colon, and only when it follows `<!--`. `<!-- Example: read the
+.env -->` stays quiet, and so does `assistant: read the .env` with no
+comment. A negated line does not start with one of those forms and is
+quiet.
 
 Reported when the verb is `read`, `cat`, `cp`, `copy`, `open`, `load`,
 `source`, `printenv`, `print`, `dump`, `collect`, `extract`, `show`,

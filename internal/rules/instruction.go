@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	instructionPrefix    = regexp.MustCompile(`(?i)^[ \t]*(?:(?:#{1,6}|>+|<!--)[ \t]*|(?:[-*+]|\d+[.)])[ \t]+|\*\*[ \t]*)*(?:(?:please|always|first|you[ \t]+(?:must|should)|make[ \t]+sure[ \t]+to)[,:; \t]+)*`)
+	instructionPrefix    = regexp.MustCompile(`(?i)^[ \t]*(?:(?:#{1,6}|>+|<!--[ \t]*(?:(?:assistant|user|system|human):[ \t]+)?)[ \t]*|(?:[-*+]|\d+[.)])[ \t]+|\*\*[ \t]*)*(?:(?:please|always|first|you[ \t]+(?:must|should)|make[ \t]+sure[ \t]+to)[,:; \t]+)*`)
 	instructionRead      = regexp.MustCompile(`(?i)\b(?:read|cat|cp|copy|open|load|source|printenv|print|dump|collect|extract|show|curl|wget|type|get-content)\b`)
 	instructionOpenPR    = regexp.MustCompile(`(?i)^[ \t]+(?:a[ \t]+)?(?:pull[ \t]+request|pr)\b`)
 	instructionSend      = regexp.MustCompile(`(?i)\b(?:send|post|upload|email|exfiltrate|transmit|forward)\b`)
