@@ -52,6 +52,12 @@ func loadable(rel string) bool {
 }
 
 func candidate(rel string) bool {
+	// A bare mcp.json at a workspace root is loadable. No adapter
+	// RepoCandidate names that exact file; .mcp.json and the
+	// per-harness copies still come from those predicates.
+	if rel == "mcp.json" {
+		return true
+	}
 	switch {
 	case claude.RepoCandidate(rel),
 		codex.RepoCandidate(rel),

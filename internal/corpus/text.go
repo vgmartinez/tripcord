@@ -73,8 +73,16 @@ var testNets []*net.IPNet
 
 func scanText(root, rel, text string) []Finding {
 	var out []Finding
-	for _, host := range badHosts(text) {
+	seenHost := map[string]bool{}
+	addHost := func(host string) {
+		if host == "" || seenHost[host] {
+			return
+		}
+		seenHost[host] = true
 		out = append(out, Finding{Root: root, Path: rel, Kind: KindHost, Detail: host})
+	}
+	for _, host := range badHosts(text) {
+		addHost(host)
 	}
 	for _, tok := range highEntropy(text) {
 		out = append(out, Finding{Root: root, Path: rel, Kind: KindEntropy, Detail: clip(tok)})
@@ -89,6 +97,9 @@ func scanText(root, rel, text string) []Finding {
 		}
 	}
 	for _, line := range strings.Split(text, "\n") {
+		for _, host := range fetchArgHosts(line) {
+			addHost(host)
+		}
 		if fetchLine(line) {
 			out = append(out, Finding{Root: root, Path: rel, Kind: KindFetch, Detail: clip(strings.TrimSpace(line))})
 		}
@@ -97,14 +108,22 @@ func scanText(root, rel, text string) []Finding {
 }
 
 func fetchLine(line string) bool {
-	risks := shellcmd.Risks(line)
-	if !slices.Contains(risks, shellcmd.Fetch) {
+	if !fetchExec(line) {
 		return false
 	}
+	return len(badHosts(line)) > 0 || len(fetchArgHosts(line)) > 0
+}
+
+// fetchExec reports a download that is run: a pipe into a shell, or a
+// substitution handed to sh -c, eval, or Invoke-Expression. shellcmd
+// misses a scheme-less target and an integer address, so a downloader
+// on the line counts when the shell reader did not mark a fetch.
+func fetchExec(line string) bool {
+	risks := shellcmd.Risks(line)
 	if !slices.Contains(risks, shellcmd.Pipe) && !substitutionExec(line) {
 		return false
 	}
-	return len(badHosts(line)) > 0
+	return slices.Contains(risks, shellcmd.Fetch) || hasDownloader(line)
 }
 
 // substitutionExec is the fetch that never sets a pipe: a shell -c, eval,
