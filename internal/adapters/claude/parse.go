@@ -729,7 +729,7 @@ func (s *src) markdown(kind model.ConfigKind, role string, raw []byte) {
 		payload["frontmatter"] = frontmatter
 	}
 	hidden, valid := hiddenchar.Scan(raw)
-	if !valid && kind == model.ConfigKindInstructions && hiddenchar.InstructionPath(s.path) {
+	if !valid && hiddenchar.InstructionFile(s.scope, kind, s.path) {
 		s.warn("%s", kit.InvalidUTF8)
 	}
 	before := len(s.c.items)

@@ -9,6 +9,9 @@
 # .claude/rules/**/*.md, .windsurfrules, .cursorrules,
 # .github/copilot-instructions.md, .github/instructions/**/*.md,
 # .github/agents/**/*.agent.md, and .cursor/rules/**/*.md(c).
+# Repository skills are read only at .claude/skills/<name>/SKILL.md,
+# .agents/skills/<name>/SKILL.md, and .github/skills/<name>/SKILL.md.
+# docs/SKILL.md and a Claude plugin's skills/ directory are not.
 #
 # Code points: U+202A-U+202E and U+2066-U+2069 (bidi), U+E0000-U+E007F
 # (tags), U+200B-U+200D, U+2060, and U+FEFF (zero-width), except a BOM
@@ -27,8 +30,12 @@ evidence: hidden_chars
 harness: [claude, copilot, cursor, gemini, windsurf, generic, devin]
 files: ["**"]
 when: |
-  config.kind == "instructions" && config.scope == "repo" && config.hidden_chars > 0 &&
-    config.path.matches(r'''(?i)((^|/)(AGENTS|CLAUDE|GEMINI)(\.local)?\.md|(^|/)\.claude/rules/.+\.md|(^|/)\.windsurfrules|^\.cursorrules|^\.github/copilot-instructions\.md|^\.github/instructions/.+\.md|^\.github/agents/.+\.agent\.md|(^|/)\.cursor/rules/.+\.mdc?|(^|/)\.devin/blueprint\.yaml)$''')
+  config.scope == "repo" && config.hidden_chars > 0 &&
+    config.kind in ["instructions", "skill"] &&
+    (
+      (config.kind == "instructions" && config.path.matches(r'''(?i)((^|/)(AGENTS|CLAUDE|GEMINI)(\.local)?\.md|(^|/)\.claude/rules/.+\.md|(^|/)\.windsurfrules|^\.cursorrules|^\.github/copilot-instructions\.md|^\.github/instructions/.+\.md|^\.github/agents/.+\.agent\.md|(^|/)\.cursor/rules/.+\.mdc?|(^|/)\.devin/blueprint\.yaml)$''')) ||
+      (config.kind == "skill" && config.path.matches(r'''(?i)((^|/)\.claude/skills/.+/SKILL\.md|(^|/)\.agents/skills/.+/SKILL\.md|(^|/)\.github/skills/.+/SKILL\.md)$'''))
+    )
 fix: "Remove the hidden code points (the finding names each one's line and column), then review the instructions as they read without them. If a non-Latin script needs a direction mark, use U+200E or U+200F."
 refs:
   - https://trojansource.codes/

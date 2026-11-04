@@ -2,10 +2,13 @@ package main
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/vgmartinez/tripcord/internal/exitcode"
+	"github.com/vgmartinez/tripcord/internal/fpkey"
 )
 
 // TestScanEnvSetupAndPluginsInvalidInput checks that an env-setup
@@ -40,6 +43,10 @@ func TestScanEnvSetupAndPluginsInvalidInput(t *testing.T) {
 		"agents invalid UTF-8": {
 			map[string]string{"AGENTS.md": "# Agents\n\xff LEAKtc011utf8 \u202e\n"},
 			"AGENTS.md: not valid UTF-8; hidden Unicode is checked in the valid parts only",
+		},
+		"skill invalid UTF-8": {
+			map[string]string{".claude/skills/fmt/SKILL.md": "# Format\n\xff LEAKtc011skill \u202e\n"},
+			".claude/skills/fmt/SKILL.md: not valid UTF-8; hidden Unicode is checked in the valid parts only",
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -115,7 +122,9 @@ func TestScanHiddenCharsEvidence(t *testing.T) {
 func TestScanInvalidUTF8OnlyForTCFG011Files(t *testing.T) {
 	t.Parallel()
 	root := writeRepo(t, map[string]string{
-		".claude/skills/fmt/SKILL.md": "# Format\n\xff\n",
+		"docs/SKILL.md":              "# Format\n\xff\n",
+		"skills/p/SKILL.md":          "# Format\n\xff\n",
+		".claude-plugin/plugin.json": `{"name":"p","version":"1.0.0"}`,
 	})
 	var stdout, stderr bytes.Buffer
 	if code := run([]string{"scan", "--format", "json", root}, &stdout, &stderr); code != int(exitcode.OK) {
@@ -123,5 +132,39 @@ func TestScanInvalidUTF8OnlyForTCFG011Files(t *testing.T) {
 	}
 	if strings.Contains(stdout.String()+stderr.String(), "not valid UTF-8") {
 		t.Fatalf("non-TC-CFG-011 file diagnosed:\n%s%s", stdout.String(), stderr.String())
+	}
+}
+
+// TestScanUserScopeInvalidUTF8IsQuiet checks that invalid UTF-8 in a
+// user-scope skill or instruction file is not a diagnostic. TC-CFG-011
+// reads repository scope only. The generic adapter reads
+// ~/.agents/skills; ~/.claude/skills and ~/.claude/CLAUDE.md are present
+// for the same reason, whether or not this scan loads them.
+func TestScanUserScopeInvalidUTF8IsQuiet(t *testing.T) {
+	root := writeRepo(t, nil)
+	home := t.TempDir()
+	setHome(t, home)
+	t.Setenv(fpkey.EnvVar, noCINote)
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("XDG_DATA_HOME", "")
+	for _, rel := range []string{
+		".claude/skills/x/SKILL.md",
+		".agents/skills/x/SKILL.md",
+		".claude/CLAUDE.md",
+	} {
+		path := filepath.Join(home, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("# x\n\xff\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"scan", "--scope", "user", "--format", "json", root}, &stdout, &stderr); code != int(exitcode.OK) {
+		t.Fatalf("exit %d, stdout %q stderr %q", code, stdout.String(), stderr.String())
+	}
+	if strings.Contains(stdout.String()+stderr.String(), "not valid UTF-8") {
+		t.Fatalf("user-scope file diagnosed:\n%s%s", stdout.String(), stderr.String())
 	}
 }

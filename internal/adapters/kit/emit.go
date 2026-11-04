@@ -226,8 +226,9 @@ const (
 
 // Markdown emits an instruction, rule, or agent file. Its hidden code
 // points (see internal/hiddenchar) are located in the whole raw file,
-// frontmatter included, and an instruction file that is not valid UTF-8
-// is a diagnostic. The content is kept for Unicode and instruction
+// frontmatter included. A repository file TC-CFG-011 reads that is not
+// valid UTF-8 is a diagnostic; a user or managed file is not, even when
+// the path matches. The content is kept for Unicode and instruction
 // checks, with URL secrets stripped (and the home directory rewritten in user
 // scope). When a frontmatter block parses, the sanitized payload retains only
 // its body, but rules receive the whole original Markdown through Detect.
@@ -256,7 +257,7 @@ func (s *Source) Markdown(kind model.ConfigKind, role string, raw []byte, mode F
 		payload["frontmatter"] = front
 	}
 	hidden, valid := hiddenchar.Scan(raw)
-	if !valid && kind == model.ConfigKindInstructions && hiddenchar.InstructionPath(s.path) {
+	if !valid && hiddenchar.InstructionFile(s.scope, kind, s.path) {
 		s.Warn("%s", InvalidUTF8)
 	}
 	before := len(s.c.items)
@@ -267,8 +268,9 @@ func (s *Source) Markdown(kind model.ConfigKind, role string, raw []byte, mode F
 	return meta
 }
 
-// InvalidUTF8 is the diagnostic for an instruction file that is not
-// valid UTF-8: hidden code points are found in its valid parts only.
+// InvalidUTF8 is the diagnostic for a repository file TC-CFG-011 reads
+// that is not valid UTF-8: hidden code points are found in its valid
+// parts only.
 const InvalidUTF8 = "not valid UTF-8; hidden Unicode is checked in the valid parts only"
 
 func (s *Source) frontmatter(raw []byte, mode Frontmatter, folded []string) map[string]any {

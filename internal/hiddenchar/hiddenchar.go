@@ -163,8 +163,11 @@ func FingerprintKey(h model.HiddenChars, ordinal int) string {
 
 // InstructionPath reports whether rel is one of the files TC-CFG-011
 // reads, including nested .claude/rules, .cursor/rules, and
-// .windsurfrules. The test is the rule's path expression: every
-// alternative is matched to the end of the path.
+// .windsurfrules, and a repository skill at .claude/skills/<name>/SKILL.md,
+// .agents/skills/<name>/SKILL.md, or .github/skills/<name>/SKILL.md.
+// <name> is at least one character. docs/SKILL.md and a plugin skills/
+// directory are not included. The test is the rule's path expression:
+// every alternative is matched to the end of the path.
 func InstructionPath(rel string) bool {
 	p := strings.ToLower(strings.TrimPrefix(strings.ReplaceAll(rel, "\\", "/"), "./"))
 	base := path.Base(p)
@@ -181,10 +184,54 @@ func InstructionPath(rel string) bool {
 	if under(p, ".cursor/rules/") && (strings.HasSuffix(p, ".md") || strings.HasSuffix(p, ".mdc")) {
 		return true
 	}
+	if skillInstructionPath(p) {
+		return true
+	}
 	if strings.HasPrefix(p, ".github/instructions/") && strings.HasSuffix(p, ".md") && path.Base(p) != ".md" {
 		return true
 	}
 	return strings.HasPrefix(p, ".github/agents/") && strings.HasSuffix(p, ".agent.md") && len(path.Base(p)) > len(".agent.md")
+}
+
+// skillInstructionPath matches TC-CFG-012's three skill directories and
+// no others. The name segment is the regex's `.+` before /SKILL.md.
+func skillInstructionPath(p string) bool {
+	const file = "/skill.md"
+	for _, root := range []string{".claude/skills/", ".agents/skills/", ".github/skills/"} {
+		start := 0
+		for start < len(p) {
+			i := strings.Index(p[start:], root)
+			if i < 0 {
+				break
+			}
+			i += start
+			if i == 0 || p[i-1] == '/' {
+				rest := p[i+len(root):]
+				if len(rest) > len(file) && strings.HasSuffix(rest, file) {
+					return true
+				}
+			}
+			start = i + 1
+		}
+	}
+	return false
+}
+
+// InstructionFile reports whether a markdown item of this scope and
+// kind at rel is a file TC-CFG-011 reads, so an invalid UTF-8
+// diagnostic follows the rule. The rule requires repository scope, so
+// a user or managed file is not one, even when its path matches. A
+// skill counts only when InstructionPath does.
+func InstructionFile(scope model.Scope, kind model.ConfigKind, rel string) bool {
+	if scope != model.ScopeRepo {
+		return false
+	}
+	switch kind {
+	case model.ConfigKindInstructions, model.ConfigKindSkill:
+		return InstructionPath(rel)
+	default:
+		return false
+	}
 }
 
 func under(path, dir string) bool {

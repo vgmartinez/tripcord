@@ -65,6 +65,9 @@ func TestInstructionPath(t *testing.T) {
 		".github/instructions/go.instructions.md",
 		".github/agents/review.agent.md",
 		".devin/blueprint.yaml", "pkg/.devin/blueprint.yaml",
+		".claude/skills/review/SKILL.md", "pkg/.claude/skills/review/SKILL.md",
+		".Claude/Skills/Review/SKILL.md",
+		".agents/skills/a/b/SKILL.md", ".github/skills/x/SKILL.md",
 	}
 	no := []string{
 		"CLAUDE.md.bak", "pkg/CLAUDE.md.txt",
@@ -73,6 +76,9 @@ func TestInstructionPath(t *testing.T) {
 		".github/instructions/.md", ".github/agents/review.md",
 		".cursor/rules/style.mdc.bak",
 		".devin/blueprint.yml", ".devin/hooks.json",
+		"docs/SKILL.md", "skills/SKILL.md", "skills/review/SKILL.md",
+		".claude/skills/SKILL.md", ".claude/skills/review/skill.md.txt",
+		"tools/acme/skills/review/SKILL.md", "not.claude/skills/review/SKILL.md",
 	}
 	for _, rel := range yes {
 		if !InstructionPath(rel) {
@@ -82,6 +88,37 @@ func TestInstructionPath(t *testing.T) {
 	for _, rel := range no {
 		if InstructionPath(rel) {
 			t.Errorf("InstructionPath(%q) = true", rel)
+		}
+	}
+}
+
+func TestInstructionFileRequiresRepoScope(t *testing.T) {
+	if !InstructionFile(model.ScopeRepo, model.ConfigKindInstructions, "CLAUDE.md") {
+		t.Error("repo CLAUDE.md")
+	}
+	if !InstructionFile(model.ScopeRepo, model.ConfigKindSkill, ".claude/skills/x/SKILL.md") {
+		t.Error("repo skill")
+	}
+	if !InstructionFile(model.ScopeRepo, model.ConfigKindSkill, ".agents/skills/x/SKILL.md") {
+		t.Error("repo agents skill")
+	}
+	quiet := []struct {
+		scope model.Scope
+		kind  model.ConfigKind
+		path  string
+	}{
+		{model.ScopeUser, model.ConfigKindSkill, "~/.claude/skills/x/SKILL.md"},
+		{model.ScopeUser, model.ConfigKindSkill, "~/.agents/skills/x/SKILL.md"},
+		{model.ScopeUser, model.ConfigKindInstructions, "~/.claude/CLAUDE.md"},
+		{model.ScopeUser, model.ConfigKindInstructions, "~/.gemini/GEMINI.md"},
+		{model.ScopeUser, model.ConfigKindInstructions, "~/.codex/AGENTS.md"},
+		{model.ScopeManaged, model.ConfigKindInstructions, "CLAUDE.md"},
+		{model.ScopeRepo, model.ConfigKindHook, "AGENTS.md"},
+		{model.ScopeRepo, model.ConfigKindSkill, "docs/SKILL.md"},
+	}
+	for _, tc := range quiet {
+		if InstructionFile(tc.scope, tc.kind, tc.path) {
+			t.Errorf("InstructionFile(%s, %s, %q) = true", tc.scope, tc.kind, tc.path)
 		}
 	}
 }
