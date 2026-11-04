@@ -27,6 +27,8 @@ embedded in the binary.
 | TC-CFG-016 | A shared setting that turns off every hook at once: Claude Code and Copilot `disableAllHooks: true`, Gemini CLI `hooksConfig.enabled: false`. Cursor and Windsurf document no such key. High: this also disables any hook-based guard the harness would otherwise run, including Tripcord's own once hook mode ships. Detecting that a previously-present hook was deleted needs a base to diff against and is out of scope here; see [docs](../docs/rules/TC-CFG-016.md). |
 | TC-CFG-023 | Stdio MCP server whose package spec can resolve only to a version in the offline list `ADVISORIES.json` (npx, bunx, npm exec, pnpm/yarn dlx, uvx, uv tool run, uv run --with, pipx run, docker/podman run, and, when the advisory has no fix, a Python module or git URL). Unpinned specs do not match unless that advisory has no fixed version. Critical advisories stay critical; moderate and low are reported high. No network lookup. [Docs](../docs/rules/TC-CFG-023.md). |
 
+TC-SEC and TC-FOR are planned (v1). They have no fixtures and no rule files.
+
 `severity` is the catalog severity and the floor a policy lock uses.
 `severity_when`, when a rule has it, is tried in order once `when` is
 true. The first true clause is the severity of that match, and an item

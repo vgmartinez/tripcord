@@ -30,9 +30,10 @@ regardless of how it reaches the prompt.
 ## Why this pack does not implement a CEL rule for it
 
 Every other rule in this pack (`TC-CFG-001` through `TC-CFG-012`,
-`TC-CFG-015`, `TC-CFG-016`) runs over `model.ConfigItem`s that an
-existing Tripcord adapter already normalizes from a repository's AI
-agent configuration files. No adapter in this codebase reads arbitrary
+`TC-CFG-015`, `TC-CFG-016`, and `TC-CFG-023`) runs over
+`model.ConfigItem`s that an existing Tripcord adapter already
+normalizes from a repository's AI agent configuration files. No adapter
+in this codebase reads arbitrary
 `.github/workflows/*.yml` files or models GitHub Actions triggers,
 permissions, or expressions; the one workflow file an adapter does read
 (`.github/workflows/copilot-setup-steps.yml`, via the
