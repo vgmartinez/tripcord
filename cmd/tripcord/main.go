@@ -857,7 +857,14 @@ func scanRoot(scanPath string) (string, error) {
 	}
 	info, err := os.Stat(absolute)
 	if err != nil {
-		return "", fmt.Errorf("scan path: %w", err)
+		// Name the argument as given, redacted, not the error's own
+		// path: filepath.Abs cleans "https://u:pw@h" into "https:/u:pw@h",
+		// which no URL userinfo pattern matches any more.
+		var pathErr *fs.PathError
+		if errors.As(err, &pathErr) {
+			err = pathErr.Err
+		}
+		return "", fmt.Errorf("scan path %q: %w", output.Message(foldHome(scanPath)), err)
 	}
 	if !info.IsDir() {
 		absolute = filepath.Dir(absolute)

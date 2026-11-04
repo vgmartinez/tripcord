@@ -541,6 +541,30 @@ func TestRedactionCanaryUnknownCommand(t *testing.T) {
 	}
 }
 
+// TestRedactionCanaryScanPathArgument: a scan path that does not exist
+// is named in the error as given, redacted, not as the cleaned absolute
+// path, whose "://" has become ":/" and no longer looks like a URL.
+func TestRedactionCanaryScanPathArgument(t *testing.T) {
+	t.Parallel()
+	const pw, token = "CNRYSPPW7Q2W", "CNRYSPTK7Q2W"
+	args := []string{"https://u:" + pw + "@host.invalid/r.git?token=" + token}
+	for _, c := range redactionCanaries {
+		args = append(args, c.text)
+	}
+	for _, arg := range args {
+		var stdout, stderr bytes.Buffer
+		code := run([]string{"scan", arg}, &stdout, &stderr)
+		if code != int(exitcode.Config) {
+			t.Errorf("scan %q: exit %d, want %d, stderr %q", arg, code, exitcode.Config, stderr.String())
+		}
+		out := stdout.String() + stderr.String()
+		if strings.Contains(out, pw) || strings.Contains(out, token) {
+			t.Errorf("scan %q leaks the URL canary:\n%s", arg, out)
+		}
+		assertNoCanary(t, "scan path argument", out)
+	}
+}
+
 // TestPrivacyRedactFalseWarns: privacy.redact: false has no effect
 // (TestRedactionCanaryRedactFalse already covers that scan and the
 // hook still redact), but scan and init each warn about it once, on
