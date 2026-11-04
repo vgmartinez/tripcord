@@ -9,10 +9,13 @@ import (
 // TestRedactionScalesLinearly guards against a redaction pass that
 // retries a rejected candidate byte by byte, or scans back to the start
 // of the line for each one: on a long line of near-miss candidates that
-// is quadratic, which turns a large config excerpt into a hang. Growing
-// the input 4x must cost well under the 16x a quadratic pass would.
-// The fixed allowance absorbs a busy -race runner, where a tiny input
-// can have only a few milliseconds of useful work.
+// is quadratic, which turns a large config excerpt into a hang.
+// 1 MiB is 16x the 64 KiB input; a linear pass costs about 16x, a
+// quadratic one about 256x. The best of several runs is what counts, so
+// a busy -race runner or a single CPU does not fail a linear pass, and
+// the 64x budget still rejects a quadratic one. A fixed time allowance
+// is not added: at a few tens of kilobytes it was large enough to hide
+// a backward scan that takes tens of seconds at 1 MiB.
 func TestRedactionScalesLinearly(t *testing.T) {
 	t.Parallel()
 	units := map[string]string{
@@ -27,10 +30,12 @@ func TestRedactionScalesLinearly(t *testing.T) {
 		"tool flag":          "sshpass -p $X ",
 	}
 	for name, unit := range units {
-		small := fastestRedaction(strings.Repeat(unit, (8<<10)/len(unit)))
-		large := fastestRedaction(strings.Repeat(unit, (32<<10)/len(unit)))
-		if large > 10*small+100*time.Millisecond {
-			t.Errorf("%s: 8KiB took %v, 32KiB took %v", name, small, large)
+		small := fastestRedaction(strings.Repeat(unit, (64<<10)/len(unit)))
+		large := fastestRedaction(strings.Repeat(unit, (1<<20)/len(unit)))
+		ratio := float64(large) / float64(small)
+		t.Logf("%s: 64KiB %v, 1MiB %v (%.1fx)", name, small, large, ratio)
+		if large > 64*small {
+			t.Errorf("%s: 64KiB took %v, 1MiB took %v (%.1fx, budget 64x)", name, small, large, ratio)
 		}
 	}
 }
