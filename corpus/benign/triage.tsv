@@ -8,3 +8,17 @@
 # verdict: TP, FP, or accepted-risk.
 # reason: why that verdict was chosen. 16 to 200 bytes of printable ASCII, with no URL, host, IP address, or high-entropy token.
 # date: YYYY-MM-DD.
+tcf_1630b6e93bff8d62	TC-CFG-005	Hacksore/cursed-repo	TP	Shared Codex config sets approval_policy to never, so commands run with no prompt.	2026-11-04
+tcf_177e5e305589078d	TC-CFG-005	KeepSoftwareSimple/compass-calendar	TP	Shared Claude settings set defaultMode to bypassPermissions, so tool calls are not prompted.	2026-11-04
+tcf_46f0d343c65fd2b5	TC-CFG-004	KeepSoftwareSimple/compass-calendar	TP	The allow list contains a bare Bash entry, which pre-approves every shell command.	2026-11-04
+tcf_489a29294b191feb	TC-CFG-009	KeepSoftwareSimple/compass-calendar	TP	Cursor install pipes a remote script into a shell with no commit pin and no checksum.	2026-11-04
+tcf_0a41d82009225785	TC-CFG-006	pegasi-ai/reins	TP	PreToolUse Write hook runs node on pre-tool-use.js under a home directory, and that file is not committed.	2026-11-04
+tcf_1921847b1dbc7133	TC-CFG-006	pegasi-ai/reins	TP	PostToolUse MultiEdit hook runs node on post-tool-use.js under a home directory, and that file is not committed.	2026-11-04
+tcf_2aa656f3ebd38f2d	TC-CFG-006	pegasi-ai/reins	TP	PostToolUse Edit hook runs node on post-tool-use.js under a home directory, and that file is not committed.	2026-11-04
+tcf_5246f2695a3c5bee	TC-CFG-006	pegasi-ai/reins	TP	PreToolUse hook with an empty matcher runs node on pre-tool-use.js under a home directory, and that file is not committed.	2026-11-04
+tcf_97b4630098ce8959	TC-CFG-006	pegasi-ai/reins	TP	PostToolUse Write hook runs node on post-tool-use.js under a home directory, and that file is not committed.	2026-11-04
+tcf_9a8810de427eb66c	TC-CFG-006	pegasi-ai/reins	TP	PreToolUse Edit hook runs node on pre-tool-use.js under a home directory, and that file is not committed.	2026-11-04
+tcf_acb751b4b02a9695	TC-CFG-006	pegasi-ai/reins	TP	PreToolUse Bash hook runs node on pre-tool-use.js under a home directory, and that file is not committed.	2026-11-04
+tcf_b059339a4a480bbe	TC-CFG-006	pegasi-ai/reins	TP	PostToolUse Bash hook runs node on post-tool-use.js under a home directory, and that file is not committed.	2026-11-04
+tcf_b1e3d6b987162272	TC-CFG-006	pegasi-ai/reins	TP	PostToolUse hook with an empty matcher runs node on post-tool-use.js under a home directory, and that file is not committed.	2026-11-04
+tcf_fc756c591a364179	TC-CFG-006	pegasi-ai/reins	TP	PreToolUse MultiEdit hook runs node on pre-tool-use.js under a home directory, and that file is not committed.	2026-11-04

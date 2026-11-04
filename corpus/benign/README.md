@@ -74,8 +74,8 @@ GITHUB_TOKEN=... go run ./scripts/benign-repos -out corpus/benign/repos.lock
 
 `triage.tsv` is the review of findings on that list. Its columns are
 the finding fingerprint, the rule id, `owner/repo`, a verdict (`TP`,
-`FP`, or `accepted-risk`), the reason, and the date. It has no rows
-until a scan is reviewed. Every repository it names has to be in
+`FP`, or `accepted-risk`), the reason, and the date. A row is added
+when a finding from a scan is reviewed. Every repository it names has to be in
 `repos.lock`.
 
 `repos.lock` and `triage.tsv` are indexes, not fixtures, and only when
