@@ -415,7 +415,7 @@ func TestTripcordActionPropagatesPolicyExit(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Run("deny with reviews file fails", func(t *testing.T) {
-		if code, out := run(t, "0", reviewsFile, "1"); code != 1 {
+		if code, out := run(t, "0", reviewsFile, "1"); code != 1 || !strings.Contains(out, "denied the pull request under TC-CFG-014") {
 			t.Fatalf("policy deny = %d, want 1\n%s", code, out)
 		}
 	})
@@ -425,7 +425,7 @@ func TestTripcordActionPropagatesPolicyExit(t *testing.T) {
 		}
 	})
 	t.Run("incomplete reviews file fails", func(t *testing.T) {
-		if code, out := run(t, "0", reviewsFile, "3"); code != 3 {
+		if code, out := run(t, "0", reviewsFile, "3"); code != 3 || !strings.Contains(out, "could not validate TC-CFG-014") {
 			t.Fatalf("incomplete review file = %d, want 3\n%s", code, out)
 		}
 	})

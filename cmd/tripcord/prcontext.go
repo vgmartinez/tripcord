@@ -352,6 +352,9 @@ func formatCfg014Text(outcome cfg014.Outcome) string {
 		for _, path := range outcome.Paths {
 			b.WriteString("- " + redactControlPath(path) + "\n")
 		}
+		if suffix := overflowLine(outcome.Reason); suffix != "" {
+			b.WriteString(suffix + "\n")
+		}
 		return b.String()
 	case cfg014.StatusIncomplete:
 		return "tc-cfg-014: incomplete\n- " + outcome.Reason + "\n"
@@ -364,6 +367,34 @@ type prContextEnvelope struct {
 	prcontext.Result
 	TCCFG014 string         `json:"tc_cfg_014,omitempty"`
 	Finding  *model.Finding `json:"finding,omitempty"`
+}
+
+// overflowLine is the "and N more" line of a path-cap reason. A match
+// that cites every path has an empty reason, so this stays empty and
+// the report is only the path list.
+func overflowLine(reason string) string {
+	reason = strings.TrimRight(reason, "\n")
+	if reason == "" {
+		return ""
+	}
+	line := reason
+	if i := strings.LastIndex(reason, "\n"); i >= 0 {
+		line = reason[i+1:]
+	}
+	rest, ok := strings.CutPrefix(line, "and ")
+	if !ok {
+		return ""
+	}
+	n, ok := strings.CutSuffix(rest, " more")
+	if !ok || n == "" {
+		return ""
+	}
+	for _, r := range n {
+		if r < '0' || r > '9' {
+			return ""
+		}
+	}
+	return line
 }
 
 // redactControlPath keeps a filename from injecting a workflow command

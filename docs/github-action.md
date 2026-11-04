@@ -37,9 +37,11 @@ It then runs `tripcord pr-context` with the same binary. Set
 `--reviews-file`. An empty value skips the flag. The array stays on
 disk and is not printed. The action outputs `is_agent`, `agents`, and
 `tc-cfg-014` are that command's `GITHUB_OUTPUT` values. After reports
-are published, a TC-CFG-014 denial (exit 1) fails the job. With
-`reviews-file`, incomplete or invalid review data (exit 3 or 4) also
-fails the job; without it, exits 3 and 4 warn and leave the job green.
+are published, a TC-CFG-014 denial (exit 1) fails the job. An
+unapproved change of more than 64 agent-config paths is that denial:
+the report lists the first 64 paths and `and N more`. With
+`reviews-file`, incomplete or invalid review data (exit 3 or 4) fails
+the job; without it, exits 3 and 4 warn and leave the job green.
 The scan exit code also fails the job after reports are published.
 
 `pr-context` reads commits between the pull request base and head. The
@@ -112,7 +114,9 @@ an input. An empty `github-token` uses `github.token`, because a
 input: an empty `fail-on` still leaves the threshold to the CLI and the
 repository policy. The outputs are `is_agent` and `agents`. The
 action step does not continue on error, so a TC-CFG-014 denial
-(exit 1) fails the scan job after publishing.
+(exit 1) fails the scan job after publishing. An unapproved change of
+more than 64 agent-config paths is that denial. These workflows pass
+`reviews-file`, so exit 1 fails the job, and exit 3 or 4 also fails it.
 
 The reviews step calls `github.paginate` on
 `GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews`. Owner,
