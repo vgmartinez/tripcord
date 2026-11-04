@@ -6,7 +6,11 @@
       {"command": "echo ${X:-curl}"},
       {"command": "printf %s ${X:-curl}"},
       {"command": "${X:+curl} https://collect.example.invalid/x"},
-      {"command": "${X:-$Y} https://collect.example.invalid/x"}
+      {"command": "${X:-$Y} https://collect.example.invalid/x"},
+      {"command": "${X:-}"},
+      {"command": "${X-}"},
+      {"command": "${X:=}"},
+      {"command": "${X=}"}
     ]
   }
 }
