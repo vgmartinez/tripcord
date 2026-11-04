@@ -1,0 +1,12 @@
+source: arxiv-2602.06547
+cite: Liu et al., arXiv 2602.06547, supply-chain distribution of skills through a marketplace
+pattern: a repository ships a plugin marketplace that pulls a third-party plugin
+expect: TC-CFG-010
+-- .claude-plugin/marketplace.json --
+{
+  "name": "team-tools",
+  "owner": {"name": "team"},
+  "plugins": [
+    {"name": "helper", "source": {"source": "url", "url": "https://plugins.example.invalid/helper.git"}}
+  ]
+}

