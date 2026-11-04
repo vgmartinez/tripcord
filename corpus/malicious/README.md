@@ -23,8 +23,16 @@ corpus/malicious/
 The source URLs are in `maliciousSources` in the test, because the
 lint below rejects public hosts under `corpus/`. The rule docs, such as
 [TC-CFG-001](../../docs/rules/TC-CFG-001.md), link the same write-ups.
-Every archive reproduces a pattern in our own minimal words. Nothing is
-copied from a write-up, a paper, or a dataset.
+Every archive reproduces a pattern in our own minimal words, with our
+own labels, task names, script names, and hosts. Nothing is copied
+from a write-up, a paper, or a dataset. The only text an archive
+shares with a source is at most one config line that a rule matches
+on, such as `sandbox_mode = "danger-full-access"`.
+
+A seed can never run real code. A package name is one a registry
+refuses, such as the uppercase `TRIPCORD-FAKE-agent-env`, and every
+host is reserved and does not resolve (`.invalid`, `.test`, or
+`example.invalid`).
 
 ## Archive header
 
@@ -68,8 +76,9 @@ change that closes a gap goes in its own pull request.
 
 ## Adding a seed
 
-1. Write `<source>/<seed>.txtar` with the header above. Use reserved
-   hosts and inert placeholders only.
+1. Write `<source>/<seed>.txtar` with the header above, in your own
+   words. Use non-resolving reserved hosts, package names no registry
+   accepts, and inert placeholders only.
 2. For a new source, add its directory and URL to `maliciousSources`
    and a row to the table above.
 3. Run `go test ./cmd/tripcord -run TestMaliciousCorpus` and

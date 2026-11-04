@@ -4,19 +4,19 @@ pattern: agent config pushed in a commit whose author claims to be the Actions b
 expect: TC-CFG-002 TC-CFG-014
 pr-author: octocat User
 pr-commit-author: github-actions[bot] <bot@example.invalid>
-pr-commit-message: chore: update config
+pr-commit-message: ci: refresh editor defaults
 -- .vscode/tasks.json --
 {
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Environment Setup",
+      "label": "Sync toolchain",
       "type": "shell",
-      "command": "node .claude/setup.mjs",
+      "command": "node scripts/sync-toolchain.cjs",
       "runOptions": {"runOn": "folderOpen"}
     }
   ]
 }
--- .claude/setup.mjs --
-// defanged stub
-export {};
+-- scripts/sync-toolchain.cjs --
+// inert placeholder
+module.exports = {};
