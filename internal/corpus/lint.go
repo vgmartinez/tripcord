@@ -112,7 +112,11 @@ func CheckRoots(roots ...Root) ([]Finding, error) {
 			if err != nil {
 				return err
 			}
-			content := r.Defs == nil || !r.Defs(rel)
+			// repos.lock and triage.tsv are indexes of third-party
+			// repositories, not fixtures. The size cap and the host
+			// and entropy checks do not apply: the lock is larger than
+			// a fixture, and a repository name can look like a host.
+			content := (r.Defs == nil || !r.Defs(rel)) && !benignIndex(rel)
 			out = append(out, inspect(root, rel, info, p, content)...)
 			if info.IsDir() && info.Mode()&os.ModeSymlink != 0 {
 				return fs.SkipDir
@@ -138,6 +142,17 @@ func CheckRoots(roots ...Root) ([]Finding, error) {
 	return out, nil
 }
 
+// benignIndex reports the benign-corpus indexes. They are not fixture
+// content. Symlinks and executables are still rejected.
+func benignIndex(rel string) bool {
+	switch rel {
+	case "benign/repos.lock", "benign/triage.tsv":
+		return true
+	default:
+		return false
+	}
+}
+
 func inspect(root, rel string, info fs.FileInfo, p string, content bool) []Finding {
 	mode := info.Mode()
 	if mode&os.ModeSymlink != 0 {
@@ -156,7 +171,7 @@ func inspect(root, rel string, info fs.FileInfo, p string, content bool) []Findi
 	if loadable(rel) {
 		out = append(out, Finding{Root: root, Path: rel, Kind: KindConfig, Detail: rel})
 	}
-	if info.Size() > maxFileBytes {
+	if info.Size() > maxFileBytes && !benignIndex(rel) {
 		out = append(out, Finding{Root: root, Path: rel, Kind: KindSize, Detail: fmt.Sprintf("%d bytes", info.Size())})
 	}
 	if info.Size() > maxScanBytes {

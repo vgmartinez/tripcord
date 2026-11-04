@@ -252,6 +252,32 @@ func moduleRoot(t *testing.T) string {
 	}
 }
 
+func TestBenignIndexIsNotAFixture(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	body := append(bytes.Repeat([]byte("a"), maxFileBytes+1), []byte("\ntracking.evil.com\n")...)
+	writeFile(t, filepath.Join(dir, "benign", "repos.lock"), body, 0o644)
+	writeFile(t, filepath.Join(dir, "big.txt"), bytes.Repeat([]byte("b"), maxFileBytes+1), 0o644)
+	got, err := Check(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range got {
+		if f.Path == "benign/repos.lock" {
+			t.Errorf("index flagged: %s %s", f.Kind, f.Detail)
+		}
+	}
+	var sawSize bool
+	for _, f := range got {
+		if f.Path == "big.txt" && f.Kind == KindSize {
+			sawSize = true
+		}
+	}
+	if !sawSize {
+		t.Fatalf("ordinary file was not size-capped: %#v", got)
+	}
+}
+
 func writeFile(t *testing.T, path string, data []byte, mode os.FileMode) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

@@ -47,3 +47,35 @@ and are never vendored.
 
 Benign reports are CI artifacts only. They are not committed in this
 directory.
+
+## Repository index
+
+`repos.lock` names public repositories used to measure false positives.
+`scripts/benign-repos` builds it from the GitHub code search API with a
+read-only `GITHUB_TOKEN`. The command does not download repository
+contents. A row is `owner/repo`, the default-branch commit at build
+time, the SPDX license (`NOASSERTION` when the API reports none), the
+harnesses found, and the build date. The search looks for a root agent
+config: `.claude/settings.json`, `.mcp.json`, `.cursor/`, `AGENTS.md`,
+`.vscode/tasks.json`, `.github/workflows/copilot-setup-steps.yml`,
+`.devcontainer/`, `.codex/`, and `.gemini/`. A repository is kept when
+it has at least 50 stars and is not archived and not a fork. The list
+is stratified by harness and by repository size (small is under 1 MB,
+medium is under 10 MB, and large is the rest) and targets 1,000
+repositories. It changes only through a pull request.
+
+```sh
+GITHUB_TOKEN=... go run ./scripts/benign-repos -out corpus/benign/repos.lock
+```
+
+`triage.tsv` is the review of findings on that list. Its columns are
+the finding fingerprint, the rule id, `owner/repo`, a verdict (`TP`,
+`FP`, or `accepted-risk`), the reason, and the date. It has no rows
+until a scan is reviewed. Every repository it names has to be in
+`repos.lock`.
+
+`repos.lock` and `triage.tsv` are indexes, not fixtures. The corpus
+lint still rejects a symlink or an executable there. It does not apply
+the fixture size cap or the host and entropy checks: a lock of 1,000
+repositories is larger than a fixture, and a repository name can look
+like a host.
