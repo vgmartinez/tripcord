@@ -541,6 +541,82 @@ func TestRedactionCanaryUnknownCommand(t *testing.T) {
 	}
 }
 
+// TestRedactionCanaryInitPathArgument: init names its path argument as
+// given, redacted and then quoted. filepath.Abs cleans "://" into ":/",
+// so a stat error, a not-a-directory error, an inside-repository error,
+// or the --embed repository check must not show that cleaned path.
+func TestRedactionCanaryInitPathArgument(t *testing.T) {
+	t.Parallel()
+	const pw = "CNRYINPW7Q2W"
+	url := "https://u:" + pw + "@h.invalid/r"
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"init", url}, &stdout, &stderr); code != int(exitcode.Config) {
+		t.Fatalf("stat: exit %d, stderr %q", code, stderr.String())
+	}
+	if out := stdout.String() + stderr.String(); strings.Contains(out, pw) {
+		t.Fatalf("stat leaks the init path:\n%s", out)
+	}
+
+	dir := t.TempDir()
+	fileArg := dir + "/https://u:" + pw + "@h/r"
+	abs, err := filepath.Abs(fileArg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(abs, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"init", fileArg}, &stdout, &stderr); code != int(exitcode.Config) {
+		t.Fatalf("not a directory: exit %d, stderr %q", code, stderr.String())
+	}
+	if out := stdout.String() + stderr.String(); strings.Contains(out, pw) || !strings.Contains(out, "not a directory") {
+		t.Fatalf("not a directory: stdout %q stderr %q", stdout.String(), stderr.String())
+	}
+
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	inside := repo + "/https://u:" + pw + "@h/sub"
+	insideAbs, err := filepath.Abs(inside)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(insideAbs, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"init", inside}, &stdout, &stderr); code != int(exitcode.Config) {
+		t.Fatalf("inside repository: exit %d, stderr %q", code, stderr.String())
+	}
+	if out := stdout.String() + stderr.String(); strings.Contains(out, pw) || !strings.Contains(out, "repository root") {
+		t.Fatalf("inside repository: stdout %q stderr %q", stdout.String(), stderr.String())
+	}
+
+	embedDir := dir + "/https://u:" + pw + "@h/repo"
+	embedAbs, err := filepath.Abs(embedDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(embedAbs, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"init", "--embed", "--version", "0.1.0", "--sha256", "linux-x64=" + testSHA256, embedDir}, &stdout, &stderr); code != int(exitcode.Config) {
+		t.Fatalf("embed: exit %d, stderr %q", code, stderr.String())
+	}
+	if out := stdout.String() + stderr.String(); strings.Contains(out, pw) || !strings.Contains(out, "no .git") {
+		t.Fatalf("embed: stdout %q stderr %q", stdout.String(), stderr.String())
+	}
+}
+
 // TestRedactionCanaryScanPathArgument: a scan path that does not exist
 // is named in the error as given, redacted, not as the cleaned absolute
 // path, whose "://" has become ":/" and no longer looks like a URL.

@@ -5,8 +5,10 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/vgmartinez/tripcord/internal/embedded"
@@ -85,7 +87,7 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 	// tripcord hook finds the policy at the Git root and fails without
 	// one, so wiring outside a repository would block every tool call.
 	if embed && !repoRoot(dir) {
-		return fail(exitcode.Config, fmt.Errorf("--embed needs a Git repository: %s has no .git, so every hook would block; run git init there first; nothing was written", dir))
+		return fail(exitcode.Config, fmt.Errorf("--embed needs a Git repository: %s has no .git, so every hook would block; run git init there first; nothing was written", quotedRedactedArg(flags.Arg(0))))
 	}
 	changes, err := embedded.Plan(dir, opts)
 	if err != nil {
@@ -151,26 +153,44 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 
 // initRoot is the directory init writes into: path itself. A path
 // inside a Git repository must be that repository's root, so init never
-// writes somewhere other than the directory it was given.
+// writes somewhere other than the directory it was given. Every error
+// names path as given, redacted and then quoted: filepath.Abs cleans
+// "https://u:pw@h" into "https:/u:pw@h", which no URL userinfo pattern
+// matches, so a stat error's own path must not be shown.
 func initRoot(path string) (string, error) {
 	if path == "" {
 		path = "."
 	}
+	named := quotedRedactedArg(path)
 	abs, err := filepath.Abs(path)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("init path %s: %w", named, err)
 	}
 	info, err := os.Stat(abs)
 	if err != nil {
-		return "", err
+		var pathErr *fs.PathError
+		if errors.As(err, &pathErr) {
+			err = pathErr.Err
+		}
+		return "", fmt.Errorf("init path %s: %w", named, err)
 	}
 	if !info.IsDir() {
-		return "", fmt.Errorf("%s is not a directory", path)
+		return "", fmt.Errorf("%s is not a directory", named)
 	}
 	if root := gitRoot(abs); root != "" && root != abs {
-		return "", fmt.Errorf("%s is inside the Git repository at %s; run init at the repository root", path, root)
+		return "", fmt.Errorf("%s is inside the Git repository at %s; run init at the repository root", named, root)
 	}
 	return abs, nil
+}
+
+// quotedRedactedArg is path as the user gave it, with the home directory
+// folded and credentials redacted, then quoted. Quoting first would let
+// a line continuation or a cleaned "://" through unredacted.
+func quotedRedactedArg(path string) string {
+	if path == "" {
+		path = "."
+	}
+	return strconv.Quote(output.Message(foldHome(path)))
 }
 
 // normalizeInitArgs moves flags ahead of the PATH operand, as scan does.
