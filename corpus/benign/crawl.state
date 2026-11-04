@@ -1,10 +1,10 @@
 # benign crawl cursor. Columns: harness, try, order, page, done.
-agents	0	desc	6	no
-claude	1	desc	2	no
-codex	0	desc	5	no
+agents	0	desc	7	no
+claude	2	desc	1	no
+codex	0	desc	6	no
 copilot	1	desc	2	no
 cursor	1	desc	2	no
 devcontainer	1	desc	2	no
-gemini	1	desc	2	no
-mcp	2	desc	3	no
-vscode	1	desc	5	no
+gemini	1	desc	3	no
+mcp	2	desc	4	no
+vscode	1	desc	6	no

@@ -10,12 +10,12 @@
 # archived and not a fork. The list is stratified by harness and by
 # repository size (small is under 1 MB, medium is under 10 MB, and
 # large is the rest) and targets 1000 repositories.
-# This copy is partial: 712 of 1000 repositories.
+# This copy is partial: 724 of 1000 repositories.
 # Every harness has at least one row.
 # A resumable crawl fills the list in.
 # v0 doesn't ship until it reaches at least 1,000 repositories with a minimum per harness (#41).
-# Harness counts: agents 44, claude 74, codex 64, copilot 131, cursor 99, devcontainer 122, gemini 69, mcp 67, vscode 55.
-# Size bands: small 96, medium 203, large 413.
+# Harness counts: agents 46, claude 77, codex 65, copilot 131, cursor 99, devcontainer 122, gemini 72, mcp 68, vscode 57.
+# Size bands: small 96, medium 207, large 421.
 # Columns, tab-separated: owner/repo, 40-character commit SHA of the
 # default branch HEAD at generation time, SPDX license (NOASSERTION
 # when the API reports none), harnesses (comma-separated), size band
@@ -53,6 +53,7 @@ Bike4Mind/bike4mind	f8b42dbb6ff3e6e2ffa27865d6be33ff6a61e468	NOASSERTION	mcp	lar
 BlackHC/batchbald_redux	e56c2607ceafc312a99c32b521bdd2355e4716fe	Apache-2.0	devcontainer	medium	2026-11-04
 BrowserOperator/browser-operator-core	85da86c2a9421c44d682af0e627243b76d3df0ef	BSD-3-Clause	claude	large	2026-11-04
 CYRUS-STUDIO/CyReverse	741e28502a56a99ab22af0d159ec1475cb00d02d	NOASSERTION	gemini	large	2026-11-04
+CaoMeiYouRen/caomei-auth	f5dcbe387f52ef62cef6624c7e7108941d823f99	MIT	agents	medium	2026-11-04
 ChenyCHENYU/Robot_Admin	c627673b7c21e27789375ba8369bd9ffb79d6512	MIT	vscode	large	2026-11-04
 Chess-analysis-mcp/tintins-chess-analysis	88b265af8a3c07c10438182feacb2ff96e844d29	MIT	mcp	medium	2026-11-04
 Chia-Network/chia-blockchain	66bf646554d61203d909918961f442a4b3b37f3b	Apache-2.0	cursor	large	2026-11-04
@@ -188,6 +189,7 @@ SeeminglyScience/EditorServicesCommandSuite	5b77fdf99e7eede488484f3104d647ebb5e8
 SepineTam/mcp-for-stata	1e94c3bfe82675eed8c85b18f6c9303dd92b4757	AGPL-3.0	codex	medium	2026-11-04
 Seve1995/ai-portfolio-experiment	08169121c677e8f0738d03fc321751ed85fb7a16	NOASSERTION	gemini	medium	2026-11-04
 Sidiora-Labs/hyperfide	22e546f132b16bee2d139ad049635cd0c588ad66	Apache-2.0	gemini	large	2026-11-04
+Sidiora-Labs/paxeer-monorepo	a9379026dc479e3a609bcef2b60b6090744e7b3b	Apache-2.0	gemini	large	2026-11-04
 Simon-Initiative/oli-torus	e2effab6939d26b3748a54c3457caf97a9f165a3	MIT	cursor	large	2026-11-04
 Smith42/astroPT	fa361ae5b6631c89525429755ed3fc2b2d304eca	AGPL-3.0	agents	large	2026-11-04
 Snapchat/GiGL	1f698ff45f00ba7cff846e7fbbc034bc78e64d04	NOASSERTION	cursor	large	2026-11-04
@@ -224,6 +226,7 @@ adityaputra11/sholat-reminder	43ace6f6a37faf95646c440b6050434c221d42fb	MIT	vscod
 adobe/spectrum-design-data	9e9a6fa618b8e65a3d6ba19d83e9e6f00ec6ec46	Apache-2.0	mcp	large	2026-11-04
 aeirola/react-native-svg-app-icon	3de2535fcc751514fc28cc51763e6c1b5ef2bd2a	MIT	copilot	medium	2026-11-04
 agentlas-ai/Agentlas-OS	33e256b950210d07de716714fedb38ba1aa76b20	Apache-2.0	gemini	large	2026-11-04
+ahang1598/doubao-workbuddy-qwenwork-skills	1427bcba23a8d16b6ee04e8b176f8eede45a131b	NOASSERTION	mcp	large	2026-11-04
 ahaodev/shadmin	e58b7f7857e25c0d2f1237967eb7159ba4e77bd3	MIT	codex	medium	2026-11-04
 ahmed3elshaer/everything-claude-code-mobile	d94b24037d719bf64794cd385e99fa775a8de428	MIT	mcp	small	2026-11-04
 alex35mil/pi.nvim	d688bd00a21c5404d14e464c78444ebe648f346e	NOASSERTION	agents	small	2026-11-04
@@ -302,6 +305,7 @@ cowprotocol/cowswap	53e8966084538c8be51f3536b2f459d472bdb07f	GPL-3.0	agents	larg
 cypress-io/cypress	7da9f57571debfe0d73100285c63eea6cde5cfb6	MIT	cursor	large	2026-11-04
 cypress-io/cypress-docker-images	b582acfb8f4474f454774328971f773ba7896c09	MIT	cursor	medium	2026-11-04
 dahlb/ha_blueair	b2d06e098fba9143e3763d22b81dd1ed690bb410	MIT	devcontainer	small	2026-11-04
+dangreenisrael/eslint-plugin-jest-formatting	8efabaefff81a8d46be5a2904c185ac6296c92dc	MIT	agents	medium	2026-11-04
 danielcherubini/elegoo-homeassistant	7214c37a498dee9a94bc9194128babc6994349dc	MIT	gemini	large	2026-11-04
 danielfernau/unifi-protect-video-downloader	3513691b034628350750671d2cda0b58344c76f8	MIT	devcontainer	medium	2026-11-04
 dart-lang/native	18386375888e370851e2f8851a2d7ca84273d6f5	BSD-3-Clause	gemini	large	2026-11-04
@@ -355,6 +359,7 @@ floodsung/gongzhonghao_agent_team	a0abca0e076a9bf3fef98973e522ff84f7be980e	MIT	m
 flutter/samples	9df2cac15cc3d28a51aace018ad822387d30ac72	NOASSERTION	gemini	large	2026-11-04
 flux-rs/flux	ef6af17f647cf98c860e18e90c36d1f1b69849ff	MIT	copilot	large	2026-11-04
 flwrlabs/flower	91e6c680b07b07b1193bbcc7755f21e8bd63eea4	Apache-2.0	devcontainer	large	2026-11-04
+founded-labs/react-native-reusables	385834c2196f8a303cbc9057d1ac768f3bde0a3b	MIT	vscode	large	2026-11-04
 frankie567/pwdlib	743f35d70a848c57e33c11c7724d235bbe73c693	MIT	copilot	small	2026-11-04
 fundamental-research-labs/mog	c8dd394806b8242f1cad0e3b27f5d58ee7c276cb	Apache-2.0	agents	large	2026-11-04
 gaoconggit/SharpPad	03df32abd56f12e3407b1679cf736a7506a35c73	MIT	mcp	large	2026-11-04
@@ -373,6 +378,7 @@ goaop/parser-reflection	795105c73dc1452db381a18b5070688afc6acf77	MIT	copilot	sma
 gobifrost/bifrost	5efdc12c15a43f19ce09cfc347435354d9431ed8	AGPL-3.0	claude	large	2026-11-04
 gocodebox/lifterlms	bac8d46e981a5129ccd3bfa4d81e8104a543d263	GPL-3.0	cursor	large	2026-11-04
 gogpu/gg	bd563f4c293fd1f70afe56276c444a38302bac15	MIT	agents	large	2026-11-04
+google/capsem	c1018eacbcfb1de12aaadb56b1a388d107ef074d	Apache-2.0	gemini	large	2026-11-04
 google/site-kit-wp	7604f8e23e1a892fc9ebe8e0c5decf214077d165	Apache-2.0	gemini	large	2026-11-04
 googleworkspace/developer-tools	496529e5392eeaea3a19854a40979a6f57a3f315	Apache-2.0	gemini	medium	2026-11-04
 googleworkspace/drive-picker-element	5869186e996b8b0b4786d8ecf9e8ed1c0e5bd8e2	Apache-2.0	gemini	medium	2026-11-04
@@ -401,6 +407,7 @@ hpcc-systems/hpcc-js-wasm	be97c1e8e62eac8d8acf1dcb138a13fed81f6973	Apache-2.0	vs
 huangjia2019/claude-code-engineering	89fea03bf9d577c608bce49c66d942996e801b19	NOASSERTION	mcp	medium	2026-11-04
 hyperledger-iroha/iroha	fbe677b98ed309808074ec5a0a8a16de2a0c2286	Apache-2.0	gemini	large	2026-11-04
 idoforgod/Sermon-Assistant-AgenticWorkflow	ab75428f5c2e1790f451653eba89bd3f0473fded	NOASSERTION	gemini	medium	2026-11-04
+igorzheludkov/execbro	7fe774c9a2e8209852efe5a7afcb4aa6f16df939	NOASSERTION	claude	large	2026-11-04
 inboundemail/inbound	f63e321225c62495969df333ee6c0b68ac58925b	MIT	cursor	large	2026-11-04
 infinispan/infinispan	1533b49918a700c6cfc6f3985b9af74b4e926198	Apache-2.0	cursor	large	2026-11-04
 influxdata/docs-v2	cb0c5bad337a6062e49a610d92935212b2a2172c	MIT	mcp	large	2026-11-04
@@ -437,6 +444,7 @@ jvkersch/tmtools	c506ec546699b9b47db9a343d02a69393d23fc68	GPL-3.0	claude	medium	
 kami-community/kami	28346b92e415281bfe901d80c25ca2cae0039567	NOASSERTION	cursor	medium	2026-11-04
 kantorge/yaffa	26c68e7bc1cb9cff8a7b76acc9cda4627ace1cff	MIT	copilot	large	2026-11-04
 kargnas/laravel-ai-translator	2d06ede9d59c0c906b016b152e1075b3d2603d01	MIT	cursor	small	2026-11-04
+kayl-codes/homeassistant-truenas	b63bf00812f1e808bd92d1df2b583a6e6cfbb6b4	Apache-2.0	claude	medium	2026-11-04
 kbialek/deye-inverter-mqtt	d555fe046152208c5cb2e223d23fe644b5b17b80	Apache-2.0	devcontainer	medium	2026-11-04
 keras-team/keras-tuner	48f671490201f6b873e4d27dee8df6f406256ca4	Apache-2.0	devcontainer	medium	2026-11-04
 kernel/kernel-images	06f5f9f591380977d632efaaa9b075025e79de96	Apache-2.0	devcontainer	large	2026-11-04
@@ -506,6 +514,7 @@ microsoft/azure-devops-skills	b418a6c8fa9fd622274882a1378e664df746f356	MIT	vscod
 microsoft/azurelinux	e4536f840fd31d70988dbccec942caedb5c3dea8	MIT	mcp	large	2026-11-04
 microsoft/fluentui-system-icons	9bfae3d782fda4c8764f2128cec4d0dda160b283	MIT	copilot	large	2026-11-04
 microsoft/griffel	8a7b9d5a1f446302195f608af8888b53c9849fd4	MIT	copilot	large	2026-11-04
+microsoft/llmwiki	e09126f257c1fcf8e63234382748a51cf6a5df7f	MIT	vscode	medium	2026-11-04
 microsoft/service-fabric-explorer	698c82b06f6cafd64dc7958bfdbc9c608f849b2c	MIT	vscode	large	2026-11-04
 microsoft/vscode-cmake-tools	51c73887f9e2622302cfa279e8cb2376cbcd92a6	MIT	copilot	large	2026-11-04
 microsoftgraph/MSGraph-SDK-Code-Generator	ee7ae8c90941e82eca87bae8f7f196ab20f9d16e	NOASSERTION	devcontainer	medium	2026-11-04
@@ -520,6 +529,7 @@ mongodb-js/mongodb-mcp-server	6143ab66116f73ccccd94ab207ce85db6bdb0d50	Apache-2.
 moq-dev/moq	736d22de793cbc4afa8f065f267f5b945c29485f	Apache-2.0	codex	large	2026-11-04
 mpieniak01/Venom	bd05a651995e362835798725c13c804e1121cdff	MIT	copilot	large	2026-11-04
 mscraftsman/generative-ai	79222c1051aa1bb79fa6946a2eae851361431d8b	Apache-2.0	gemini	large	2026-11-04
+msrbuilds/elementor-mcp	e0abbaf22dc3e00d92668ef436afc1afcc8f873a	GPL-2.0	claude	large	2026-11-04
 mt-caret/polars-ocaml	f9fed9099c25e746c06d14e4e5cf568f6c0ddefc	MIT	devcontainer	large	2026-11-04
 mturac/everything-openai-codex	b5057da5f42ed6b12cd3a59e89af0ccd12cff7c2	MIT	codex,mcp	large	2026-11-04
 murar8/axum_typed_multipart	dda070f5b5c296d24a79b78fbb91557f3d5ad1d4	NOASSERTION	devcontainer	small	2026-11-04
@@ -601,6 +611,7 @@ rmpowell77/wxUI	d6970156192198f1b75a4569fb814e35b6490741	MIT	copilot	medium	2026
 roboticforce/sugar	623a8e3455df7fb9f543685faaf7106c1089cec7	NOASSERTION	mcp	medium	2026-11-04
 rokbenko/quackd	389dafe9c0c4f5f56901d02f183c7f50735a968d	Apache-2.0	mcp	large	2026-11-04
 rokucommunity/brighterscript	fd27d9bf6129a0f233edda896c051e25486e8f70	MIT	copilot	large	2026-11-04
+rome-os/rome	567adb5da1323fb457668bb100caef1a0e615148	MIT	codex	large	2026-11-04
 rstrouse/nodejs-poolController-dashPanel	a5e8c15f9e13319ff9905cfbc1145f95ed63302e	NOASSERTION	copilot	medium	2026-11-04
 rust-boom/rust-boom	b1ebaaed14f27d6c2ec584214b134fc0c89702a0	MIT	copilot	large	2026-11-04
 rust-tieng-viet/rust-tieng-viet.github.io	f9aef2e28f096d7bc4dd31d469ae1a1f758e69b8	MIT	claude	large	2026-11-04
@@ -630,6 +641,7 @@ sjev/trading-with-python	3198b62c7cc80e73a35949c63aab9701ca72bbc7	NOASSERTION	de
 skillrecordings/egghead-next	992ec9a1e7582dd96270c9c8e648b92273086e73	NOASSERTION	cursor	large	2026-11-04
 slax-lab/slax-reader	6fe1ebd95dfc1f2fbdef9834967732d0619a4761	Apache-2.0	codex	large	2026-11-04
 slick/slick	7fb3ecacb94caf37091f810b662b736734a08cae	BSD-2-Clause	copilot	large	2026-11-04
+socialincome-san/public	5b6e4ae6820bb6d41221328924bbd71a1255e300	NOASSERTION	gemini	large	2026-11-04
 solectrus/solectrus	6d38baf45bebc478a356048cfff768a5b5e4875b	AGPL-3.0	vscode	large	2026-11-04
 songshuquant/ssquant	3ce323d0f76ed12570949ab25400c2767fcc344f	MIT	agents	large	2026-11-04
 sous-chefs/aws	d42b69aa8c8a0824e794b8198e852c7745320829	Apache-2.0	copilot	medium	2026-11-04

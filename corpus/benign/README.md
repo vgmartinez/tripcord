@@ -82,11 +82,11 @@ penalty stops the run. Progress is written after each page, to the lock
 and to `crawl.state`, by renaming a temporary file in the same
 directory. A rate limit exits non-zero and does not replace the lock
 with a shorter list. A batch that stops before the target exits non-zero
-unless `-partial` is set. This copy is partial: 712 of 1,000
+unless `-partial` is set. This copy is partial: 724 of 1,000
 repositories. Every harness has at least one row. Harness counts:
-agents 44, claude 74, codex 64, copilot 131, cursor 99, devcontainer 122,
-gemini 69, mcp 67, vscode 55. Size bands: small 96, medium 203, large
-413. A resumable crawl fills the list in. v0 doesn't ship until it
+agents 46, claude 77, codex 65, copilot 131, cursor 99, devcontainer 122,
+gemini 72, mcp 68, vscode 57. Size bands: small 96, medium 207, large
+421. A resumable crawl fills the list in. v0 doesn't ship until it
 reaches at least 1,000 repositories with a minimum per harness (#41).
 The file changes only through a pull request.
 
