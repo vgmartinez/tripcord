@@ -23,16 +23,20 @@ order:
 | MCP argv with the value in the next element (S4) | `["--token", "X"]` | `RedactToolArgv` (source side) |
 | Token shapes | private key blocks, `AKIA…`, AWS secret keys, `ghp_…`, `github_pat_…`, `glpat-…`, `sk-…`, `sk_live_…`, `xox?-…`, `xapp-…`, `npm_…`, `hf_…`, `ya29.…`, `AIza…`, JWTs, `bearer X`, Slack webhook URLs | `secretPatterns` |
 | An assignment to a credential name, `=` or `:` | `SECRET_KEY=X`, `api_key: X`, `"api_key": X` | `RedactAssignments`, `CredentialName` |
-| A YAML block scalar or nested mapping under a credential name, quoted or not, as a whole | `api_key: \|-` then `  X`, `'api_key': >` then `  X`, `token:` then `  "pw": X` | `redactColonAssignments` (`blockScalarHeader`, `nestedMappingStart`) |
+| A YAML block scalar, nested mapping, or comment gap under a credential name, as a whole | `api_key: \|-` then `  X`, `token:` then `  "pw":X`, `token: # c` then `  X` | `redactColonAssignments` (`blockScalarHeader`, `nestedMappingStart`, `commentGapStart`) |
 
 A shell line continuation (`\` and a newline) between a flag, a header,
 or `bearer` and its value is skipped, as the shell deletes it.
 
 A credential name's value may start on the next line. If that line is
-a key, a name (quoted or not) and a `:` followed by a blank, a line
-break, or the end of the text, the more-indented lines are a nested
-mapping and are redacted as one. Anything else there, including a
-glued `sk:X` or a URL, is the outer key's own plain scalar.
+a key, the more-indented lines are a nested mapping and are redacted
+as one. An unquoted key needs a space, tab, CR, LF, or the end of the
+text after its colon, so a glued `sk:X` or a URL stays the outer key's
+own plain scalar. A quoted key is a key even when its value is glued
+on (`"pw":X`). A `#` comment between the key and a more-indented value
+(`token: # c` then `  X`, or a comment line between them) is not the
+value; the indented lines are, and they are redacted as one. A `#`
+with nothing indented after it is the value itself.
 
 The home directory classes (S5 to S7) are not redactor patterns but path
 folding: the running user's home directory is shown as `~` in every
@@ -80,6 +84,7 @@ then a cut at 1024 bytes (`MaxFieldBytes`).
 | Policy or CEL error (syntax, type check, evaluation, such as a `matches` error that quotes the event value) | `hookFailure` / `errorText` | message |
 | Exit-4 panic (`hook`, and every other command through `run`) | the panic value is dropped: `tripcord: internal error` or `tripcord hook: internal error` (`tripcord hook failed closed: internal error` under `--on-failure block`). No stack, no event, no environment | fixed text |
 | `init` progress and errors | `errorText` | message |
+| `init` path (missing, not a directory, inside a repository, or `--embed` with no `.git`) | `initRoot` and the `--embed` check name the argument as given, through `output.Message(foldHome())`, then quoted, not the cleaned absolute path, whose `://` `filepath.Abs` turns into `:/` | message |
 | `init --dry-run` diff | `output.PreviewLines`: each JSON string decoded, redacted, and re-encoded (`RedactJSONText`), then the redactor over the text; each line escaped when it holds a control, bidi, or invalid byte | field per line |
 | `preopen` (scan output and errors) | the scan sinks; the target URL and Git stderr through `errorText` and `gitrun.Sanitize` | as scan, message |
 | pre-commit (`scan --staged`) | the scan sinks and errors above | as scan |
@@ -135,8 +140,9 @@ the warning must never join (`warnRedactFalse` in `cmd/tripcord`).
 class above, written plainly, fully `\u`-escaped, and split by a JSON
 escape, in config files, in the command, path, and URL of every hook
 harness, in custom rule messages and policy errors, in a panic, in an
-unknown command, and as a scan path argument. No canary may appear in
-any output format, every finding's fingerprint must, and
+unknown command, as a scan path argument, and as an init path argument.
+No canary may appear in any output format, every finding's fingerprint
+must, and
 `redact: false` changes nothing. `internal/output`'s
 `TestRedactionScalesLinearly` and `TestBlockScalarCandidatesScaleLinearly`,
 and `TestDiscoverHookHeavyBudget` in the CI perf job, hold redaction to
