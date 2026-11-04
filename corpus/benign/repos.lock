@@ -10,12 +10,12 @@
 # archived and not a fork. The list is stratified by harness and by
 # repository size (small is under 1 MB, medium is under 10 MB, and
 # large is the rest) and targets 1000 repositories.
-# This copy is partial: 724 of 1000 repositories.
+# This copy is partial: 726 of 1000 repositories.
 # Every harness has at least one row.
 # A resumable crawl fills the list in.
 # v0 doesn't ship until it reaches at least 1,000 repositories with a minimum per harness (#41).
-# Harness counts: agents 46, claude 77, codex 65, copilot 131, cursor 99, devcontainer 122, gemini 72, mcp 68, vscode 57.
-# Size bands: small 96, medium 207, large 421.
+# Harness counts: agents 48, claude 77, codex 65, copilot 131, cursor 99, devcontainer 122, gemini 72, mcp 68, vscode 57.
+# Size bands: small 96, medium 207, large 423.
 # Columns, tab-separated: owner/repo, 40-character commit SHA of the
 # default branch HEAD at generation time, SPDX license (NOASSERTION
 # when the API reports none), harnesses (comma-separated), size band
@@ -536,6 +536,7 @@ murar8/axum_typed_multipart	dda070f5b5c296d24a79b78fbb91557f3d5ad1d4	NOASSERTION
 mvdbos/php-spider	b3d6d2d9060cc01f717033c94ecc763be415e9d6	MIT	copilot	medium	2026-11-04
 n7space/aerugo	e4e3065cb046d4724a21a5fc3f2d9762b973032c	Apache-2.0	vscode	medium	2026-11-04
 near/nearcore	c134562747040dfe2dbdbf1ce6130837f1420eb3	GPL-3.0	claude	large	2026-11-04
+neka-nat/freecad-mcp	8babe9927ce8e6e8fe7dd6ae2ffa2c93776e845a	MIT	agents	large	2026-11-04
 netbrain/zwift	445efbdd36cd82ea75cbc75a52e790c4811de734	Unlicense	devcontainer	medium	2026-11-04
 netdevops/hier_config	806c654ed0d696a1537bfd36f8a13caf812083a7	MIT	copilot	medium	2026-11-04
 ngx-vest-forms/ngx-vest-forms	37feeac50b1883c82a6070828cc96892920d9363	MIT	vscode	large	2026-11-04
@@ -708,6 +709,7 @@ unoplatform/uno.toolkit.ui	77e823c1bcab55a219b119fbe6ec4f13e0c99787	NOASSERTION	
 up-for-grabs/up-for-grabs.net	4f77b4eba623b29449c90ffc3d056b093acccf6b	NOASSERTION	devcontainer	large	2026-11-04
 v-fidelusaleksander/ghcertified	023f9a020dedfce1e8e2539fd28009abbda6f48b	GPL-3.0	copilot	large	2026-11-04
 vericontext/vibeframe	af7655700c9112a3432a04e852494fb37596955b	MIT	codex	large	2026-11-04
+vicanso/cyberapi	4185d88b38ff9067c00d0a784555ef4faf13dc99	Apache-2.0	agents	large	2026-11-04
 vinhnx/vtchat	e4e76c61085038432f965f5bd1b11985fbcf05b1	MIT	codex,gemini	large	2026-11-04
 vitejs/vite-plugin-react	9678b48b14104a7905baebd58fd9ff88a2309c29	MIT	copilot	large	2026-11-04
 vitobotta/hetzner-k3s	a49a1972dd1bcd7a2a11dce5c02552fb4c295a14	MIT	devcontainer	large	2026-11-04
