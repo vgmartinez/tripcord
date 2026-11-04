@@ -70,6 +70,9 @@ func TestTripcordActionContract(t *testing.T) {
 	if action.Outputs["tc-cfg-014"].Value == "" {
 		t.Error("action does not expose the TC-CFG-014 outcome")
 	}
+	if action.Outputs["pr-context-stderr"].Value != "${{ steps.pr-context.outputs.stderr }}" {
+		t.Fatalf("pr-context-stderr = %q", action.Outputs["pr-context-stderr"].Value)
+	}
 
 	const (
 		checkout    = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
@@ -146,6 +149,9 @@ func TestTripcordActionContract(t *testing.T) {
 	}
 	if !strings.Contains(prContext, `echo "exit-code=$status"`) {
 		t.Fatal("pr-context does not record exit-code=$status")
+	}
+	if !strings.Contains(prContext, `2>"$stderr_file"`) || !strings.Contains(prContext, "printf 'stderr<<%s\\n'") {
+		t.Fatal("pr-context does not capture stderr")
 	}
 	if strings.Contains(prContext, "${{") {
 		t.Fatal("pr-context interpolates an expression into run")
@@ -387,7 +393,9 @@ func TestTripcordActionPropagatesPolicyExit(t *testing.T) {
 	wantEnv := map[string]string{
 		"TRIPCORD_SCAN_STATUS":       "${{ steps.scan.outputs.exit-code }}",
 		"TRIPCORD_PR_CONTEXT_STATUS": "${{ steps.pr-context.outputs.exit-code }}",
+		"TRIPCORD_PR_CONTEXT_STDERR": "${{ steps.pr-context.outputs.stderr }}",
 		"TRIPCORD_REVIEWS_FILE":      "${{ inputs.reviews-file }}",
+		"TRIPCORD_ACTION_PATH":       "${{ github.action_path }}",
 	}
 	if len(apply.Env) != len(wantEnv) {
 		t.Fatalf("final step env = %#v, want %#v", apply.Env, wantEnv)
@@ -398,13 +406,19 @@ func TestTripcordActionPropagatesPolicyExit(t *testing.T) {
 		}
 	}
 
-	run := func(t *testing.T, scanStatus, reviewsFile, prContextStatus string) (int, string) {
+	actionPath, err := filepath.Abs(filepath.Join("..", "..", ".github", "actions", "tripcord"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := func(t *testing.T, scanStatus, reviewsFile, prContextStatus, stderr string) (int, string) {
 		t.Helper()
 		cmd := exec.Command("bash", "-c", apply.Run)
 		cmd.Env = append(os.Environ(),
 			"TRIPCORD_SCAN_STATUS="+scanStatus,
 			"TRIPCORD_PR_CONTEXT_STATUS="+prContextStatus,
+			"TRIPCORD_PR_CONTEXT_STDERR="+stderr,
 			"TRIPCORD_REVIEWS_FILE="+reviewsFile,
+			"TRIPCORD_ACTION_PATH="+actionPath,
 		)
 		out, err := cmd.CombinedOutput()
 		return exitCode(t, err), string(out)
@@ -415,38 +429,67 @@ func TestTripcordActionPropagatesPolicyExit(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Run("deny with reviews file fails", func(t *testing.T) {
-		if code, out := run(t, "0", reviewsFile, "1"); code != 1 {
+		if code, out := run(t, "0", reviewsFile, "1", ""); code != 1 {
 			t.Fatalf("policy deny = %d, want 1\n%s", code, out)
 		}
 	})
 	t.Run("deny without reviews file fails", func(t *testing.T) {
-		if code, out := run(t, "0", "", "1"); code != 1 {
+		if code, out := run(t, "0", "", "1", ""); code != 1 {
 			t.Fatalf("policy deny without reviews = %d, want 1\n%s", code, out)
 		}
 	})
 	t.Run("incomplete reviews file fails", func(t *testing.T) {
-		if code, out := run(t, "0", reviewsFile, "3"); code != 3 {
+		if code, out := run(t, "0", reviewsFile, "3", ""); code != 3 {
 			t.Fatalf("incomplete review file = %d, want 3\n%s", code, out)
 		}
 	})
 	t.Run("review read error fails", func(t *testing.T) {
-		if code, out := run(t, "0", reviewsFile, "4"); code != 4 {
+		if code, out := run(t, "0", reviewsFile, "4", ""); code != 4 {
 			t.Fatalf("review read error = %d, want 4\n%s", code, out)
 		}
 	})
 	t.Run("incomplete without reviews file warns", func(t *testing.T) {
-		if code, out := run(t, "0", "", "3"); code != 0 {
+		if code, out := run(t, "0", "", "3", ""); code != 0 {
 			t.Fatalf("missing review file = %d, want 0\n%s", code, out)
 		}
 	})
 	t.Run("missing policy status fails", func(t *testing.T) {
-		if code, out := run(t, "0", "", ""); code == 0 {
+		if code, out := run(t, "0", "", "", ""); code == 0 {
 			t.Fatalf("missing policy status = %d, want non-zero\n%s", code, out)
 		}
 	})
 	t.Run("scan exit code wins", func(t *testing.T) {
-		if code, out := run(t, "2", reviewsFile, "1"); code != 2 {
+		if code, out := run(t, "2", reviewsFile, "1", ""); code != 2 {
 			t.Fatalf("scan exit = %d, want 2\n%s", code, out)
+		}
+	})
+	line := pathCapStderr(t)
+	warning := pathCapWarning
+	t.Run("path cap with reviews file warns", func(t *testing.T) {
+		for _, stderr := range []string{line, line + "\n"} {
+			code, out := run(t, "0", reviewsFile, "3", stderr)
+			if code != 0 || !strings.Contains(out, warning) || strings.Contains(out, "::error::") {
+				t.Fatalf("path cap stderr %q = %d\n%s", stderr, code, out)
+			}
+		}
+	})
+	t.Run("other exit 3 with reviews file fails", func(t *testing.T) {
+		for _, stderr := range []string{
+			"tripcord pr-context: TC-CFG-014 incomplete: review data is not available\n",
+			line + " extra\n",
+			line + "\n\n",
+			"",
+		} {
+			code, out := run(t, "0", reviewsFile, "3", stderr)
+			if code != 3 || strings.Contains(out, warning) || !strings.Contains(out, "could not validate TC-CFG-014") {
+				t.Fatalf("stderr %q = %d\n%s", stderr, code, out)
+			}
+		}
+	})
+	t.Run("exit 1 is still a denial", func(t *testing.T) {
+		code, out := run(t, "0", reviewsFile, "1", line+"\n")
+		if code != 1 || strings.Contains(out, warning) || !strings.Contains(out, "denied the pull request under TC-CFG-014") {
+			t.Fatalf("exit 1 with path-cap stderr = %d\n%s", code, out)
 		}
 	})
 }

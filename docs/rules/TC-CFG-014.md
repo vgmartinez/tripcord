@@ -127,9 +127,12 @@ is still applied, and a lock there rejects a weaker base policy.
   changed. Fetching the reviews is left to the workflow.
 - The composite action forwards its optional `reviews-file` input to
   `pr-context`. It fails after publishing when TC-CFG-014 denies
-  (exit 1), and also fails on an incomplete or invalid review file
-  (exit 3 or 4). Without `reviews-file`, exits 3 and 4 warn without
-  failing the action.
+  (exit 1). Exit 3 whose stderr is exactly
+  `tripcord pr-context: TC-CFG-014 incomplete: more than 64 agent-config paths changed`
+  warns that the rule could not be fully evaluated and does not fail
+  the action. Any other incomplete result, and an invalid review file
+  (exit 3 or 4), still fail when `reviews-file` is set. Without
+  `reviews-file`, exits 3 and 4 warn without failing the action.
 
 ## References
 

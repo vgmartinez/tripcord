@@ -56,6 +56,9 @@ outputs:
   pr-context-exit-code:
     description: Exit code from pr-context.
     value: ${{ steps.pr-context.outputs.exit-code }}
+  pr-context-stderr:
+    description: stderr from pr-context. The caller self-test compares it to the TC-CFG-014 path-cap line.
+    value: ${{ steps.pr-context.outputs.stderr }}
   tc-cfg-014:
     description: TC-CFG-014 outcome from pr-context, when it is not clear.
     value: ${{ steps.pr-context.outputs.tc_cfg_014 }}
@@ -212,13 +215,22 @@ runs:
         TRIPCORD_REVIEWS_FILE: ${{ inputs.reviews-file }}
       run: |
         set +e
+        stderr_file="${RUNNER_TEMP}/tripcord-pr-context-stderr"
         if [ -n "$TRIPCORD_REVIEWS_FILE" ]; then
-          "$TRIPCORD" pr-context --format gha --repo "$TRIPCORD_PATH" --reviews-file "$TRIPCORD_REVIEWS_FILE"
+          "$TRIPCORD" pr-context --format gha --repo "$TRIPCORD_PATH" --reviews-file "$TRIPCORD_REVIEWS_FILE" 2>"$stderr_file"
         else
-          "$TRIPCORD" pr-context --format gha --repo "$TRIPCORD_PATH"
+          "$TRIPCORD" pr-context --format gha --repo "$TRIPCORD_PATH" 2>"$stderr_file"
         fi
         status=$?
-        echo "exit-code=$status" >> "$GITHUB_OUTPUT"
+        cat "$stderr_file" >&2
+        # A random delimiter keeps a stderr line from closing the output early.
+        delim="tripcord_stderr_$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+        {
+          echo "exit-code=$status"
+          printf 'stderr<<%s\n' "$delim"
+          cat "$stderr_file"
+          printf '%s\n' "$delim"
+        } >> "$GITHUB_OUTPUT"
         if [ -z "$TRIPCORD_REVIEWS_FILE" ] && { [ "$status" -eq 3 ] || [ "$status" -eq 4 ]; }; then
           echo "::warning::tripcord pr-context could not make a policy decision (exit ${status}) without reviews-file; the job continues"
         fi
@@ -305,8 +317,12 @@ runs:
       env:
         TRIPCORD_SCAN_STATUS: ${{ steps.scan.outputs.exit-code }}
         TRIPCORD_PR_CONTEXT_STATUS: ${{ steps.pr-context.outputs.exit-code }}
+        TRIPCORD_PR_CONTEXT_STDERR: ${{ steps.pr-context.outputs.stderr }}
         TRIPCORD_REVIEWS_FILE: ${{ inputs.reviews-file }}
+        TRIPCORD_ACTION_PATH: ${{ github.action_path }}
       run: |
+        # shellcheck source=pathcap.sh
+        . "$TRIPCORD_ACTION_PATH/pathcap.sh"
         if [ "$TRIPCORD_SCAN_STATUS" -ne 0 ]; then
           exit "$TRIPCORD_SCAN_STATUS"
         fi
@@ -323,6 +339,10 @@ runs:
             exit 1
             ;;
           3|4)
+            if [ "$TRIPCORD_PR_CONTEXT_STATUS" = 3 ] && path_cap_match "$TRIPCORD_PR_CONTEXT_STDERR"; then
+              path_cap_warn
+              exit 0
+            fi
             if [ -n "$TRIPCORD_REVIEWS_FILE" ]; then
               echo "::error::tripcord pr-context could not validate TC-CFG-014 with reviews-file (exit ${TRIPCORD_PR_CONTEXT_STATUS})"
               exit "$TRIPCORD_PR_CONTEXT_STATUS"
