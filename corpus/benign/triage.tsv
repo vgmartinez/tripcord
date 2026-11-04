@@ -6,5 +6,5 @@
 # rule id: a TC rule id that is listed in rules/REGISTRY, such as TC-CFG-001.
 # repo: owner/repo. Every value must appear in repos.lock.
 # verdict: TP, FP, or accepted-risk.
-# reason: why that verdict was chosen. 16 to 200 bytes, with no URL, host, or high-entropy token.
+# reason: why that verdict was chosen. 16 to 200 bytes of printable ASCII, with no URL, host, IP address, or high-entropy token.
 # date: YYYY-MM-DD.

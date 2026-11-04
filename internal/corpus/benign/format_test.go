@@ -150,6 +150,7 @@ func TestRejectedRows(t *testing.T) {
 		return []byte(LockHeader + name + "\t" + sha + "\t" + license + "\tagents\t2026-11-04\n")
 	}
 	beacon := "see https://tracking.evil.com/beacon " + "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
+	payload100 := strings.Repeat("Q2hhcmFjdGVyc0FuZFBheWxvYWQ", 4)[:100]
 	for _, tc := range []struct {
 		name string
 		raw  []byte
@@ -160,6 +161,11 @@ func TestRejectedRows(t *testing.T) {
 		{"repo URL", row("zzzz/https://tracking.evil.com/beacon", "MIT"), "bad repository"},
 		{"repo base64", row("zzzz/AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=", "MIT"), "bad repository"},
 		{"repo dotdot", row("zzzz/..", "MIT"), "bad repository"},
+		{"repo 100-char payload", row("zzzz/"+payload100, "MIT"), "bad repository"},
+		{"repo 39-char owner and 100-char payload", row(strings.Repeat("o", 39)+"/"+payload100, "MIT"), "bad repository"},
+		{"repo 65 chars", row("zzzz/"+strings.Repeat("a", 65), "MIT"), "bad repository"},
+		{"repo random under the cap", row("AbCdEfGhIjKlMnOpQr/StUvWxYz0123456789gHiJ", "MIT"), "bad repository"},
+		{"repo random split by hyphens", row("AbCdEfGhIjKlMnOpQr/StUvWx-Yz0123-456789-gHiJ", "MIT"), "bad repository"},
 		{"unknown license", row("zzzz/name", "NotALicense"), "unknown license"},
 		{"license junk", row("zzzz/name", "MIT "+beacon), "unknown license"},
 	} {
@@ -184,6 +190,17 @@ func TestRejectedRows(t *testing.T) {
 		{"reason base64", triage("TC-CFG-001", fp, "token AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="), "high-entropy"},
 		{"over-long reason", triage("TC-CFG-001", fp, strings.Repeat("x", maxReasonBytes+1)), "reason length"},
 		{"anything goes", triage("TC-CFG-001", fp, "anything goes"), "reason length"},
+		{"reason fullwidth dot", triage("TC-CFG-001", fp, "see evil\uff0ecom for the beacon"), "printable ASCII"},
+		{"reason ideographic dot", triage("TC-CFG-001", fp, "see evil\u3002com for the beacon"), "printable ASCII"},
+		{"reason Cyrillic letters", triage("TC-CFG-001", fp, "see \u0435vil.\u0441\u043em for the beacon"), "printable ASCII"},
+		{"reason host top", triage("TC-CFG-001", fp, "the task posts to evil.top"), "URL or host"},
+		{"reason host biz", triage("TC-CFG-001", fp, "the task posts to evil.biz"), "URL or host"},
+		{"reason host ly", triage("TC-CFG-001", fp, "the task posts to evil.ly"), "URL or host"},
+		{"reason host internal", triage("TC-CFG-001", fp, "the task posts to tracker.internal"), "URL or host"},
+		{"reason decimal IP", triage("TC-CFG-001", fp, "the task posts to 3232235777"), "IP address"},
+		{"reason hex IP", triage("TC-CFG-001", fp, "the task posts to 0xC0A80101"), "IP address"},
+		{"reason octal IP", triage("TC-CFG-001", fp, "the task posts to 0300.0250.1.1"), "IP address"},
+		{"reason bracketed IPv6", triage("TC-CFG-001", fp, "the task posts to [::ffff:c0a8:101]"), "IP address"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if _, err := ParseTriage(tc.raw); err == nil || !strings.Contains(err.Error(), tc.want) {
@@ -208,6 +225,27 @@ func TestRejectedRows(t *testing.T) {
 	}
 	if _, err := ParseTriage([]byte(TriageHeader + fp + "\tTC-CFG-001\tzzzz/name\tFP\tlocal task only echoes\t2026-11-4\n")); err == nil || !strings.Contains(err.Error(), "bad date") {
 		t.Fatalf("date: %v", err)
+	}
+}
+
+func TestAcceptedNamesAndReasons(t *testing.T) {
+	for _, name := range []string{
+		"RinDevJunior/matterbridge-roborock-vacuum-plugin",
+		"PrayerfulDrop/ESPHome-Guition-ESP32-S3-4848S040",
+		"AzureAD/microsoft-authentication-library-common-for-objc",
+	} {
+		if !validRepoName(name) {
+			t.Errorf("rejected %s", name)
+		}
+	}
+	for _, reason := range []string{
+		"local task only echoes package.json.",
+		"runs 2 times, then reads SKILL.md and tasks.json",
+		"hook prints the branch name, nothing else",
+	} {
+		if err := checkReason(reason); err != nil {
+			t.Errorf("rejected %q: %v", reason, err)
+		}
 	}
 }
 

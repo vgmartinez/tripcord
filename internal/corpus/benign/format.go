@@ -42,7 +42,7 @@ const (
 var (
 	shaRE         = regexp.MustCompile(`^[0-9a-f]{40}$`)
 	dateRE        = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}$`)
-	repoRE        = regexp.MustCompile(`^[A-Za-z0-9-]{1,39}/[A-Za-z0-9._-]{1,100}$`)
+	repoRE        = regexp.MustCompile(`^[A-Za-z0-9-]{1,39}/[A-Za-z0-9._-]{1,64}$`)
 	ruleRE        = regexp.MustCompile(`^TC-[A-Z]+-\d{3}$`)
 	fingerprintRE = regexp.MustCompile(`^tcf_[0-9a-f]{16}$`)
 )
@@ -85,7 +85,7 @@ const TriageHeader = `# corpus/benign/triage.tsv
 # rule id: a TC rule id that is listed in rules/REGISTRY, such as TC-CFG-001.
 # repo: owner/repo. Every value must appear in repos.lock.
 # verdict: TP, FP, or accepted-risk.
-# reason: why that verdict was chosen. 16 to 200 bytes, with no URL, host, or high-entropy token.
+# reason: why that verdict was chosen. 16 to 200 bytes of printable ASCII, with no URL, host, IP address, or high-entropy token.
 # date: YYYY-MM-DD.
 `
 
@@ -353,7 +353,27 @@ func validRepoName(name string) bool {
 		return false
 	}
 	_, repo, _ := strings.Cut(name, "/")
-	return repo != "." && repo != ".."
+	if repo == "." || repo == ".." {
+		return false
+	}
+	return !randomName(name)
+}
+
+// randomName applies the reason entropy rule to the whole owner/repo
+// with its separators removed, so a hyphen every few characters does
+// not split a payload into short tokens. Real names score lower: the
+// highest in the index is 4.42.
+func randomName(name string) bool {
+	var b strings.Builder
+	for i := 0; i < len(name); i++ {
+		switch name[i] {
+		case '/', '-', '_', '.':
+		default:
+			b.WriteByte(name[i])
+		}
+	}
+	s := b.String()
+	return len(s) >= reasonEntropyMin && shannon(s) > reasonEntropyMax
 }
 
 func validDate(s string) bool {
