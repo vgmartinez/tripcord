@@ -60,6 +60,9 @@ var redactionCanaries = []redactionCanary{
 	{class: "YAML double-quoted key block scalar", text: "cat <<'EOF' > c.yaml\n\"api_key\": |\n  CNRYYQDB7Q2W\nEOF", secret: "CNRYYQDB7Q2W"},
 	{class: "YAML single-quoted key block scalar", text: "cat <<'EOF' > c.yaml\n'api_key': |\n  CNRYYQSB7Q2W\nEOF", secret: "CNRYYQSB7Q2W"},
 	{class: "YAML nested quoted key", text: "cat <<'EOF' > c.yaml\ntoken:\n  \"pw\": CNRYYNQK7Q2W\nEOF", secret: "CNRYYNQK7Q2W"},
+	{class: "YAML comment after colon", text: "cat <<'EOF' > c.yaml\ntoken: # c\n  CNRYYCAC7Q2W\nEOF", secret: "CNRYYCAC7Q2W"},
+	{class: "YAML comment line", text: "cat <<'EOF' > c.yaml\ntoken:\n  # c\n  CNRYYCLN7Q2W\nEOF", secret: "CNRYYCLN7Q2W"},
+	{class: "YAML quoted key glued", text: "cat <<'EOF' > c.yaml\ntoken:\n  \"pw\":CNRYYQKG7Q2W\nEOF", secret: "CNRYYQKG7Q2W"},
 }
 
 // canaryEncoding is how a canary is written inside a JSON string:

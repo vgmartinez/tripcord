@@ -124,12 +124,13 @@ func TestColonAssignmentsRedactYAMLBlockScalars(t *testing.T) {
 
 // A credential-named key whose colon is followed only by a newline holds
 // a nested mapping when the next, more-indented line is itself a key: a
-// name, optionally quoted, then a ":" followed by a blank, a line break,
-// or the end of input. That mapping is the key's value and is redacted
-// whole, whatever its own keys are named. A plain scalar wrapped onto
-// the next line, including a glued "name:value" or a URL, is still that
-// key's own value, as it was before block scalars were handled. A key
-// at the outer key's own indentation is a sibling, found on its own.
+// name, optionally quoted, then a ":". An unquoted key needs a blank, a
+// line break, or the end of input after that colon; a quoted key is a
+// key even when its value is glued on ("\"pw\":X"). The mapping is the
+// key's value and is redacted whole, whatever its own keys are named. A
+// plain scalar wrapped onto the next line, including a glued unquoted
+// "name:value" or a URL, is still that key's own value. A key at the
+// outer key's own indentation is a sibling, found on its own.
 func TestColonAssignmentsNestedMappingKeyHasNoOwnValue(t *testing.T) {
 	t.Parallel()
 	for in, want := range map[string]string{
@@ -145,6 +146,35 @@ func TestColonAssignmentsNestedMappingKeyHasNoOwnValue(t *testing.T) {
 		"token:\n  user:":                                "token:\n  [REDACTED]",
 		"token:\npassword: NESTH\n":                      "token:\npassword: [REDACTED]\n",
 		"- token:\n    a: NESTI\n  b: ok\n":              "- token:\n    [REDACTED]\n  b: ok\n",
+		"token:\n  \"pw\":NESTJ\n":                       "token:\n  [REDACTED]\n",
+		"token:\n  'pw':NESTK\nnext: ok\n":               "token:\n  [REDACTED]\nnext: ok\n",
+	} {
+		if got := DefaultRedactor(in); got != want {
+			t.Errorf("DefaultRedactor(%q) = %q, want %q", in, got, want)
+		}
+		if got, _ := RedactAssignments(in); got != want {
+			t.Errorf("RedactAssignments(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// A "#" between a credential key and a more-indented value is a YAML
+// comment, not the value: colonValue stops at the newline and would
+// leave the indented lines behind. Those lines are redacted as one,
+// and the comment stays. A "#" with nothing indented after it is the
+// value itself and is still redacted. A following line at the key's
+// own indentation is the next line, not the value.
+func TestColonAssignmentsCommentGap(t *testing.T) {
+	t.Parallel()
+	for in, want := range map[string]string{
+		"token: # c\n  GAPAxx\n":                 "token: # c\n  [REDACTED]\n",
+		"token:\n  # c\n  GAPBxx\n":              "token:\n  # c\n  [REDACTED]\n",
+		"token:\n  # c\n  # d\n  GAPCxx\n":       "token:\n  # c\n  # d\n  [REDACTED]\n",
+		"token: # c\n  A\n  B\nnext: ok\n":       "token: # c\n  [REDACTED]\nnext: ok\n",
+		"token: #secret\n":                       "token: [REDACTED]\n",
+		"token: # c\nnext: ok\n":                 "token: [REDACTED]\nnext: ok\n",
+		"token:\n  # c\nnext: ok\n":              "token:\n  [REDACTED]\nnext: ok\n",
+		"  token: # c\n    GAPDxx\n  other: 1\n": "  token: # c\n    [REDACTED]\n  other: 1\n",
 	} {
 		if got := DefaultRedactor(in); got != want {
 			t.Errorf("DefaultRedactor(%q) = %q, want %q", in, got, want)

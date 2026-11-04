@@ -697,6 +697,9 @@ func redactColonAssignments(value string, removed *[]string) string {
 			if !isBlock {
 				blockStart, isBlock = nestedMappingStart(value, h)
 			}
+			if !isBlock {
+				blockStart, isBlock = commentGapStart(value, h, lines)
+			}
 			if isBlock {
 				bodyEnd := blockBodyEnd(value, blockStart, lines.column(h.start))
 				if bodyEnd > blockStart {
@@ -925,19 +928,24 @@ func imageTag(value string) bool {
 
 // nestedMappingStart reports whether h, a key whose colon is followed by
 // nothing but a newline, holds a nested mapping ("token:\n  pw: x",
-// "token:\n  \"pw\": x") rather than a plain scalar wrapped onto the
-// next line ("token:\n  opaque-value", "api_key:\n  sk:X"). start is the
-// offset of the line holding the nested key, where the mapping starts.
-// A nested key is a name, optionally quoted, optional blanks, and a ":"
-// followed by a blank, a line break, or the end of value, as in YAML: a
-// glued "sk:X" or a URL ("https://...") is a scalar, not a key.
+// "token:\n  \"pw\": x", "token:\n  \"pw\":x") rather than a plain scalar
+// wrapped onto the next line ("token:\n  opaque-value",
+// "api_key:\n  sk:X"). start is the offset of the line holding the
+// nested key, where the mapping starts. A nested key is a name,
+// optionally quoted, optional blanks, and a ":". An unquoted key needs
+// a space, tab, CR, LF, or the end of value after that colon, as in
+// YAML: a glued "sk:X" or a URL ("https://...") is a scalar, not a key.
+// A quoted key is a key even when its value is glued on ("\"pw\":X"),
+// because the quotes already ended the name.
 func nestedMappingStart(value string, h assignmentHead) (start int, ok bool) {
 	nl := strings.LastIndexByte(h.sep, '\n')
 	if nl < 0 {
 		return 0, false
 	}
 	pos := h.valStart
+	quoted := false
 	if pos < len(value) && (value[pos] == '"' || value[pos] == '\'') {
+		quoted = true
 		quote := value[pos]
 		pos++
 		for pos < len(value) && value[pos] != quote && value[pos] != '\n' {
@@ -962,7 +970,7 @@ func nestedMappingStart(value string, h assignmentHead) (start int, ok bool) {
 	if pos == len(value) || value[pos] != ':' {
 		return 0, false
 	}
-	if pos++; pos < len(value) {
+	if pos++; !quoted && pos < len(value) {
 		switch value[pos] {
 		case ' ', '\t', '\r', '\n':
 		default:
@@ -970,6 +978,62 @@ func nestedMappingStart(value string, h assignmentHead) (start int, ok bool) {
 		}
 	}
 	return h.valStart - len(h.sep) + nl + 1, true
+}
+
+// commentGapStart reports whether h's value is more-indented content
+// after a YAML comment, which colonValue cannot see because it stops at
+// the first newline: "token: # c\n  X" and "token:\n  # c\n  X".
+// bodyStart is the first line of that content. A "#" with nothing
+// indented after it is the value itself ("token: #secret"), so this
+// returns false and colonValue redacts it. The check reads forward only
+// (lineIndex.lineEnd), so a long line of "token: #x" candidates stays
+// linear.
+func commentGapStart(value string, h assignmentHead, lines *lineIndex) (bodyStart int, ok bool) {
+	i := h.valStart
+	for i < len(value) && (value[i] == ' ' || value[i] == '\t') {
+		i++
+	}
+	if i >= len(value) || value[i] != '#' {
+		return 0, false
+	}
+	i = lines.lineEnd(i)
+	if i >= len(value) || value[i] != '\n' {
+		return 0, false
+	}
+	keyIndent := lines.column(h.start)
+	for {
+		i++
+		if i >= len(value) {
+			return 0, false
+		}
+		line := i
+		for i < len(value) && (value[i] == ' ' || value[i] == '\t') {
+			i++
+		}
+		if i >= len(value) {
+			return 0, false
+		}
+		switch value[i] {
+		case '\n':
+			continue
+		case '\r':
+			if i+1 < len(value) && value[i+1] == '\n' {
+				i++
+				continue
+			}
+			return 0, false
+		case '#':
+			i = lines.lineEnd(i)
+			if i >= len(value) || value[i] != '\n' {
+				return 0, false
+			}
+			continue
+		}
+		if i-line <= keyIndent {
+			return 0, false
+		}
+		return line, true
+	}
 }
 
 // colonValue returns the "key: value" value at the start of rest: a
