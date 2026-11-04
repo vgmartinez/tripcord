@@ -13,20 +13,25 @@ import (
 
 func TestDiscoverGolden(t *testing.T) {
 	t.Parallel()
-	root := kittest.CopyTree(t, filepath.Join("testdata", "repo"))
-	got := kittest.Discover(t, New(Options{}), root)
-	golden := kittest.GoldenJSON(t, got, nil)
-	kittest.AssertGolden(t, "discover.golden", golden)
-	for _, leak := range []string{"npm_live_123", "key=abc", "k-1", "access=tok", "sig=xyz"} {
-		if strings.Contains(string(golden), leak) {
-			t.Fatalf("discovery leaks %q", leak)
-		}
+	for _, version := range kittest.Versions(t) {
+		t.Run(version, func(t *testing.T) {
+			t.Parallel()
+			root := kittest.CopyTree(t, kittest.Tree(version, "repo"))
+			got := kittest.Discover(t, New(Options{}), root)
+			golden := kittest.GoldenJSON(t, got, nil)
+			kittest.AssertGolden(t, filepath.Join(version, "discover.golden"), golden)
+			for _, leak := range []string{"npm_live_123", "key=abc", "k-1", "access=tok", "sig=xyz"} {
+				if strings.Contains(string(golden), leak) {
+					t.Fatalf("discovery leaks %q", leak)
+				}
+			}
+		})
 	}
 }
 
 func TestSharedFileHarnesses(t *testing.T) {
 	t.Parallel()
-	root := kittest.CopyTree(t, filepath.Join("testdata", "repo"))
+	root := kittest.CopyTree(t, kittest.Tree(kittest.Baseline("generic"), "repo"))
 	got := kittest.Discover(t, New(Options{}), root)
 	want := map[string]model.Harness{
 		"AGENTS.md":                    model.SurfaceGeneric,
@@ -51,7 +56,7 @@ func TestSharedFileHarnesses(t *testing.T) {
 
 func TestTasksOnly(t *testing.T) {
 	t.Parallel()
-	root := kittest.CopyTree(t, filepath.Join("testdata", "repo"))
+	root := kittest.CopyTree(t, kittest.Tree(kittest.Baseline("generic"), "repo"))
 	home := t.TempDir()
 	kittest.WriteFile(t, filepath.Join(home, ".agents", "skills", "a", "SKILL.md"), "---\nname: a\n---\nx\n")
 	a := New(Options{TasksOnly: true, IncludeUser: true, HomeDir: home})
@@ -71,7 +76,7 @@ func TestTasksOnly(t *testing.T) {
 
 func TestFolderOpenTask(t *testing.T) {
 	t.Parallel()
-	root := kittest.CopyTree(t, filepath.Join("testdata", "repo"))
+	root := kittest.CopyTree(t, kittest.Tree(kittest.Baseline("generic"), "repo"))
 	got := kittest.Discover(t, New(Options{}), root)
 	open := map[string]bool{}
 	for _, item := range got.Find(".vscode/tasks.json", model.ConfigKindTask) {
@@ -194,7 +199,7 @@ func TestEscapingVSCodeSymlink(t *testing.T) {
 }
 
 func FuzzParseShared(f *testing.F) {
-	for kind, path := range map[string]string{"tasks": "testdata/repo/.vscode/tasks.json", "mcp": "testdata/repo/.vscode/mcp.json", "agents": "testdata/repo/services/api/AGENTS.md"} {
+	for kind, path := range map[string]string{"tasks": "testdata/generic-baseline/repo/.vscode/tasks.json", "mcp": "testdata/generic-baseline/repo/.vscode/mcp.json", "agents": "testdata/generic-baseline/repo/services/api/AGENTS.md"} {
 		if data, err := kittest.ReadFixture(path); err == nil {
 			f.Add(kind, data)
 		}

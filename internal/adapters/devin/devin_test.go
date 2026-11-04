@@ -19,17 +19,22 @@ var fixtureSecrets = []string{"devin-tok-111", "devin-tok-222"}
 
 func TestDiscoverGolden(t *testing.T) {
 	t.Parallel()
-	root := kittest.CopyTree(t, filepath.Join("testdata", "repo"))
-	got := kittest.Discover(t, New(Options{}), root)
-	kittest.AssertGolden(t, "discover.golden", kittest.GoldenJSON(t, got, nil))
-	raw := string(kittest.GoldenJSON(t, got, nil))
-	for _, leak := range fixtureSecrets {
-		if strings.Contains(raw, leak) {
-			t.Fatalf("discovery leaks %q", leak)
-		}
-	}
-	if len(got.Diagnostics) != 0 {
-		t.Fatalf("diagnostics = %v", got.Diagnostics)
+	for _, version := range kittest.Versions(t) {
+		t.Run(version, func(t *testing.T) {
+			t.Parallel()
+			root := kittest.CopyTree(t, kittest.Tree(version, "repo"))
+			got := kittest.Discover(t, New(Options{}), root)
+			kittest.AssertGolden(t, filepath.Join(version, "discover.golden"), kittest.GoldenJSON(t, got, nil))
+			raw := string(kittest.GoldenJSON(t, got, nil))
+			for _, leak := range fixtureSecrets {
+				if strings.Contains(raw, leak) {
+					t.Fatalf("discovery leaks %q", leak)
+				}
+			}
+			if len(got.Diagnostics) != 0 {
+				t.Fatalf("diagnostics = %v", got.Diagnostics)
+			}
+		})
 	}
 }
 
@@ -295,7 +300,7 @@ func TestDetect(t *testing.T) {
 
 func TestSkipRepo(t *testing.T) {
 	t.Parallel()
-	root := kittest.CopyTree(t, filepath.Join("testdata", "repo"))
+	root := kittest.CopyTree(t, kittest.Tree(kittest.Baseline("devin"), "repo"))
 	a := New(Options{SkipRepo: true})
 	got := kittest.Discover(t, a, root)
 	if a.Detect(root) || len(got.Items) != 0 || len(got.Diagnostics) != 0 {
@@ -518,7 +523,7 @@ func TestHasShellState(t *testing.T) {
 }
 
 func FuzzParseBlueprint(f *testing.F) {
-	if data, err := kittest.ReadFixture("testdata/repo/.devin/blueprint.yaml"); err == nil {
+	if data, err := kittest.ReadFixture("testdata/devin-baseline/repo/.devin/blueprint.yaml"); err == nil {
 		f.Add(data)
 	}
 	f.Add([]byte("initialize: 5\n"))

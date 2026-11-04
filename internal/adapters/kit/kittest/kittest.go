@@ -12,6 +12,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -21,6 +22,10 @@ import (
 	"github.com/vgmartinez/tripcord/internal/rules"
 	"github.com/vgmartinez/tripcord/internal/txtar"
 )
+
+func init() {
+	adapters.RegisterGoldenUpdate()
+}
 
 // Discovery is the golden form of one Discover call.
 type Discovery struct {
@@ -143,8 +148,8 @@ func WriteFile(t testing.TB, path, content string) {
 
 // CopyTree copies the fixture directory from into a fresh temporary
 // directory and returns it. A fixture tree committed as the archive
-// from.txtar, such as testdata/repo.txtar, is unpacked instead. Either
-// way directories are mode 0700 and files 0600.
+// from.txtar, such as testdata/claude-baseline/repo.txtar, is unpacked
+// instead. Either way directories are mode 0700 and files 0600.
 func CopyTree(t testing.TB, from string) string {
 	t.Helper()
 	root := t.TempDir()
@@ -191,9 +196,9 @@ func CopyTree(t testing.TB, from string) string {
 }
 
 // ReadFixture reads the fixture file at path, slash-separated, such as
-// testdata/repo/.mcp.json. When a directory on the path was committed
-// as an archive, testdata/repo.txtar here, the file is that archive's
-// member .mcp.json.
+// testdata/claude-baseline/repo/.mcp.json. When a directory on the path
+// was committed as an archive, testdata/claude-baseline/repo.txtar
+// here, the file is that archive's member .mcp.json.
 func ReadFixture(path string) ([]byte, error) {
 	data, err := os.ReadFile(filepath.FromSlash(path))
 	if !errors.Is(err, fs.ErrNotExist) {
@@ -233,22 +238,75 @@ func GoldenJSON(t testing.TB, d Discovery, replace map[string]string) []byte {
 	return append(raw, '\n')
 }
 
-// AssertGolden compares got with testdata/name. UPDATE_GOLDEN=1 rewrites
-// the file.
+// Versions lists harness-version directories under testdata. A version
+// directory contains repo.txtar. A new harness version adds a directory
+// and never edits an old one. Hook samples and other files that sit
+// beside the version directories are not versions.
+//
+// discover.golden is rewritten only by
+//
+//	go test ./internal/adapters/... -update
+func Versions(t testing.TB) []string {
+	t.Helper()
+	entries, err := os.ReadDir("testdata")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []string
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		repo := filepath.Join("testdata", entry.Name(), "repo.txtar")
+		if _, err := os.Stat(repo); err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				continue
+			}
+			t.Fatal(err)
+		}
+		out = append(out, entry.Name())
+	}
+	if len(out) == 0 {
+		t.Fatal("testdata has no harness-version directory")
+	}
+	slices.Sort(out)
+	return out
+}
+
+// Baseline is the directory for fixtures whose harness release version
+// is not recorded. It is named "<harness>-baseline".
+func Baseline(harness string) string {
+	return harness + "-baseline"
+}
+
+// Tree is the fixture path testdata/<version>/<name>. CopyTree unpacks
+// name.txtar when that archive is present.
+func Tree(version, name string) string {
+	return filepath.Join("testdata", version, name)
+}
+
+// AssertGolden compares got with testdata/name. The -update flag
+// rewrites the file. Without it, any difference fails the test.
+// Regenerate with:
+//
+//	go test ./internal/adapters/... -update
 func AssertGolden(t testing.TB, name string, got []byte) {
 	t.Helper()
 	path := filepath.Join("testdata", name)
-	if os.Getenv("UPDATE_GOLDEN") == "1" {
-		if err := os.WriteFile(path, got, 0o600); err != nil {
+	if adapters.GoldenUpdate {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, got, 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
 	want, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("read %s: %v\nregenerate with: go test ./internal/adapters/... -update", path, err)
 	}
 	if !bytes.Equal(got, want) {
-		t.Fatalf("%s mismatch\n--- got ---\n%s--- want ---\n%s", name, got, want)
+		t.Fatalf("%s mismatch\nregenerate with: go test ./internal/adapters/... -update\n--- got ---\n%s--- want ---\n%s", name, got, want)
 	}
 }
 
