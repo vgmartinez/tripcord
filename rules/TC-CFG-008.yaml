@@ -29,11 +29,12 @@
 # Not read: what a hook's script prints (.cursor/hooks/allow.sh may
 # allow everything), an allow wrapped in bash -c or cat <<EOF, a
 # POSIX download from a variable (curl $u | sh), and which hook events
-# a hook runs on. A non-empty default value in command position is
-# expanded (${NAME:-word}, ${NAME-word}, ${NAME:=word}, ${NAME=word}),
-# after the prefixes unwrap already strips (assignments, sudo, doas,
-# env, exec, and command). An empty word, :+, +, and a default that is
-# only an argument are left as written.
+# a hook runs on. A default value in command position is expanded
+# (${NAME:-word}, ${NAME-word}, ${NAME:=word}, ${NAME=word}), after the
+# prefixes unwrap already strips (assignments, sudo, doas, env, exec,
+# and command). An empty default is dropped and the next word is the
+# command. :+, +, and a default that is only an argument are left as
+# written.
 # A session-start hook that fetches is also TC-CFG-001.
 id: TC-CFG-008
 pack: tripcord/core

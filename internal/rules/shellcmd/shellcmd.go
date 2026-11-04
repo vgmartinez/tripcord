@@ -28,15 +28,16 @@
 // that contains a backtick is read both ways, since a hook command does
 // not say which shell runs it.
 //
-// Static limits: variables are not expanded, except a non-empty default
-// value in command position (${NAME:-word}, ${NAME-word}, ${NAME:=word},
-// or ${NAME=word}, where NAME matches [A-Za-z_][A-Za-z0-9_]* and word is
-// a literal with no $, backtick, or nested braces), resolved after the
+// Static limits: variables are not expanded, except a default value in
+// command position (${NAME:-word}, ${NAME-word}, ${NAME:=word}, or
+// ${NAME=word}, where NAME matches [A-Za-z_][A-Za-z0-9_]* and word is a
+// literal with no $, backtick, or nested braces), resolved after the
 // prefixes unwrap already strips (assignments, sudo, doas, env, exec,
-// and command). An empty word is left as written. $URL is not a fetch
-// target outside Invoke-Expression and $(echo cur)l is not curl. nohup,
-// xargs, env -S, busybox, and start /b are not unwrapped. A script a
-// hook calls is not read.
+// and command). An empty default (${NAME:-}, ${NAME-}, ${NAME:=}, or
+// ${NAME=}) is dropped and the next word is the command. $URL is not a
+// fetch target outside Invoke-Expression and $(echo cur)l is not curl.
+// nohup, xargs, env -S, busybox, and start /b are not unwrapped. A
+// script a hook calls is not read.
 package shellcmd
 
 import (
@@ -198,11 +199,11 @@ func (s *scanner) line(src string, depth int, ps bool) (decodes bool) {
 	return decodes
 }
 
-// defaultCommandWord accepts ${NAME:-word}, ${NAME-word}, ${NAME:=word},
-// and ${NAME=word}. NAME is [A-Za-z_][A-Za-z0-9_]*. word is a non-empty
-// literal with no $, backtick, or brace. An empty word, :+, and + stay
-// as written, and the replacement is one word.
-func defaultCommandWord(word string) (string, bool) {
+// commandDefault accepts ${NAME:-word}, ${NAME-word}, ${NAME:=word}, and
+// ${NAME=word}. NAME is [A-Za-z_][A-Za-z0-9_]*. word is a literal with
+// no $, backtick, or brace, and the replacement is one word. An empty
+// word is a drop. :+, +, and anything else are left as written.
+func commandDefault(word string) (lit string, drop bool) {
 	if len(word) < 3 || word[0] != '$' || word[1] != '{' || word[len(word)-1] != '}' {
 		return "", false
 	}
@@ -227,11 +228,14 @@ func defaultCommandWord(word string) (string, bool) {
 	default:
 		return "", false
 	}
-	lit := inner[i+op:]
-	if lit == "" || strings.ContainsAny(lit, "$`{}") {
+	lit = inner[i+op:]
+	if strings.ContainsAny(lit, "$`{}") {
 		return "", false
 	}
-	return lit, true
+	if lit == "" {
+		return "", true
+	}
+	return lit, false
 }
 
 func isNameStart(c byte) bool {
@@ -454,16 +458,22 @@ var reserved = map[string]bool{
 
 // unwrap drops assignments, reserved words, and the wrappers that run
 // the rest of the command unchanged, and reads a PowerShell assignment
-// as its command. Before it reads a word, a non-empty default value
+// as its command. Before it reads a word, a default value
 // (${NAME:-word}, ${NAME-word}, ${NAME:=word}, ${NAME=word}) replaces
 // that word, so sudo ${X:-curl} and FOO=1 ${X:-curl} are curl. An empty
-// default is left as written. It returns nil for command -v, which only
+// default is dropped and the next word is read, so ${X:-} curl and
+// sudo ${X:-} curl are curl. It returns nil for command -v, which only
 // looks a name up.
 func unwrap(w []string) []string {
 	for len(w) > 0 {
-		if word, ok := defaultCommandWord(w[0]); ok {
+		lit, drop := commandDefault(w[0])
+		if drop {
+			w = w[1:]
+			continue
+		}
+		if lit != "" {
 			next := make([]string, len(w))
-			next[0] = word
+			next[0] = lit
 			copy(next[1:], w[1:])
 			w = next
 		}

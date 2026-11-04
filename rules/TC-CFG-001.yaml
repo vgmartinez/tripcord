@@ -42,15 +42,15 @@
 #
 # npx and bunx of a bare name (npx tsc) are read as a local or
 # devDependency binary: the expression cannot read package.json.
-# Not read, except a non-empty default value in command position
+# Not read, except a default value in command position
 # (${NAME:-word}, ${NAME-word}, ${NAME:=word}, ${NAME=word}; NAME matches
 # [A-Za-z_][A-Za-z0-9_]* and word is a literal with no $, backtick, or
 # nested braces), resolved after the prefixes unwrap already strips
 # (assignments, sudo, doas, env, exec, and command): $VAR as a fetch
 # target outside Invoke-Expression, $(echo cur)l, nohup, xargs, env -S,
 # busybox, and start /b wrappers, and the script a hook calls. An empty
-# ${NAME:-}, ${NAME-}, ${NAME:=}, or ${NAME=} is left as written. :+ and
-# + are not expanded.
+# ${NAME:-}, ${NAME-}, ${NAME:=}, or ${NAME=} is dropped, and the next
+# word is the command. :+ and + are not expanded.
 id: TC-CFG-001
 pack: tripcord/core
 title: "SessionStart or Setup hook in shared config downloads or runs code from the network"

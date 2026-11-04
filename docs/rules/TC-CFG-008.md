@@ -65,7 +65,7 @@ Not reported:
 
 ## Limits
 
-- Variables are not expanded, except a non-empty default value in command position (`${NAME:-word}`, `${NAME-word}`, `${NAME:=word}`, or `${NAME=word}`, where NAME matches `[A-Za-z_][A-Za-z0-9_]*` and word is a literal with no `$`, backtick, or nested braces), resolved after the prefixes shellcmd already unwraps (assignments, sudo, doas, env, exec, and command). `$URL` is not a fetch target outside Invoke-Expression, and `$(echo cur)l` is not `curl`.
+- Variables are not expanded, except a default value in command position (`${NAME:-word}`, `${NAME-word}`, `${NAME:=word}`, or `${NAME=word}`, where NAME matches `[A-Za-z_][A-Za-z0-9_]*` and word is a literal with no `$`, backtick, or nested braces), resolved after the prefixes shellcmd already unwraps (assignments, sudo, doas, env, exec, and command). An empty default (`${NAME:-}`, `${NAME-}`, `${NAME:=}`, or `${NAME=}`) is dropped and the next word is the command. `$URL` is not a fetch target outside Invoke-Expression, and `$(echo cur)l` is not `curl`.
 - What a hook's script prints. `.cursor/hooks/allow.sh` that always
   allows is not reported, because the scan reads only the hook entry.
 - An allow wrapped in `bash -c '...'` or written with `cat <<EOF`.

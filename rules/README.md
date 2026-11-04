@@ -35,7 +35,7 @@ true. The first true clause is the severity of that match, and an item
 no clause accepts is not a match. A policy severity override replaces
 the per-match result.
 
-Static matching does not expand `$VAR` or `$(echo cur)l`, except a non-empty default value in command position (`${NAME:-word}`, `${NAME-word}`, `${NAME:=word}`, or `${NAME=word}`), resolved after the prefixes shellcmd already unwraps (assignments, sudo, doas, env, exec, and command). Split quotes
+Static matching does not expand `$VAR` or `$(echo cur)l`, except a default value in command position (`${NAME:-word}`, `${NAME-word}`, `${NAME:=word}`, or `${NAME=word}`), resolved after the prefixes shellcmd already unwraps (assignments, sudo, doas, env, exec, and command). An empty default (`${NAME:-}`, `${NAME-}`, `${NAME:=}`, or `${NAME=}`) is dropped and the next word is the command. Split quotes
 such as `c''url` are joined as a shell would, and `LOCALHOST` is
 loopback like `localhost`. It does not unwrap `nohup`, `xargs`,
 `env -S`, `busybox`, or `start /b` in a hook, or an `env`, `busybox`,
