@@ -1,11 +1,14 @@
 package benign
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/vgmartinez/tripcord/internal/model"
 )
 
 func TestFormatAndValidate(t *testing.T) {
@@ -19,8 +22,8 @@ func TestFormatAndValidate(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(raw)
-	if !strings.Contains(text, "GitHub code search") || !strings.Contains(text, "changes only through a pull request") {
-		t.Fatalf("header missing generation note:\n%s", text)
+	if !bytes.HasPrefix(raw, []byte(LockHeader)) {
+		t.Fatal("formatted lock does not start with LockHeader")
 	}
 	if !strings.Contains(text, "a/a") || strings.Index(text, "a/a") > strings.Index(text, "b/b") {
 		t.Fatalf("rows are not sorted:\n%s", text)
@@ -32,33 +35,37 @@ func TestFormatAndValidate(t *testing.T) {
 	if parsed[0].License != "NOASSERTION" || parsed[1].Harnesses[0] != "agents" || parsed[1].Harnesses[1] != "cursor" {
 		t.Fatalf("parsed %#v", parsed)
 	}
+	rules := map[string]bool{"TC-CFG-001": true}
 	triage := []Triage{{
-		Fingerprint: "fp-1", RuleID: "TC-CFG-001", Repo: "a/a", Verdict: VerdictFP, Reason: "local task", Date: "2026-11-04",
+		Fingerprint: "tcf_c761c03b24e7b179", RuleID: "TC-CFG-001", Repo: "a/a", Verdict: VerdictFP, Reason: "local task only echoes", Date: "2026-11-04",
 	}}
-	if err := Validate(parsed, triage); err != nil {
+	if err := Validate(parsed, triage, rules); err != nil {
 		t.Fatal(err)
 	}
-	dup := append(triage, triage[0])
-	if err := Validate(parsed, dup); err == nil || !strings.Contains(err.Error(), "duplicate fingerprint") {
+	dup := append([]Triage{triage[0]}, triage[0])
+	if err := Validate(parsed, dup, rules); err == nil || !strings.Contains(err.Error(), "duplicate fingerprint") {
 		t.Fatalf("duplicate fingerprint: %v", err)
 	}
-	missing := []Triage{{Fingerprint: "fp-2", RuleID: "TC-CFG-001", Repo: "z/z", Verdict: VerdictTP, Reason: "x", Date: "2026-11-04"}}
-	if err := Validate(parsed, missing); err == nil || !strings.Contains(err.Error(), "not in repos.lock") {
+	missing := []Triage{{Fingerprint: "tcf_ae4bd8fa3ea4035c", RuleID: "TC-CFG-001", Repo: "z/z", Verdict: VerdictTP, Reason: "reviewed as a local task", Date: "2026-11-04"}}
+	if err := Validate(parsed, missing, rules); err == nil || !strings.Contains(err.Error(), "not in repos.lock") {
 		t.Fatalf("missing repo: %v", err)
 	}
-	badVerdict := []byte("# comment\nfp\tTC-CFG-001\ta/a\tMAYBE\treason\t2026-11-04\n")
+	badVerdict := []byte(TriageHeader + "tcf_c761c03b24e7b179\tTC-CFG-001\ta/a\tMAYBE\tlocal task only echoes\t2026-11-04\n")
 	if _, err := ParseTriage(badVerdict); err == nil || !strings.Contains(err.Error(), "bad verdict") {
 		t.Fatalf("verdict: %v", err)
 	}
-	if _, err := ParseLock([]byte("a/a\tshort\tMIT\tagents\t2026-11-04\n")); err == nil {
+	if _, err := ParseLock([]byte(LockHeader + "a/a\tshort\tMIT\tagents\t2026-11-04\n")); err == nil {
 		t.Fatal("short SHA was accepted")
 	}
-	empty, err := ParseTriage([]byte("# no rows yet\n\n"))
+	empty, err := ParseTriage([]byte(TriageHeader))
 	if err != nil || len(empty) != 0 {
 		t.Fatalf("empty triage: %v %#v", err, empty)
 	}
-	if err := Validate(parsed, nil); err != nil {
+	if err := Validate(parsed, nil, nil); err != nil {
 		t.Fatal(err)
+	}
+	if _, err := FormatLock(repos, time.Date(2026, 11, 5, 0, 0, 0, 0, time.UTC)); err == nil {
+		t.Fatal("a different generation date was accepted")
 	}
 }
 
@@ -100,19 +107,107 @@ func TestCommittedLists(t *testing.T) {
 			t.Errorf("triage.tsv header missing %q", phrase)
 		}
 	}
+	if !bytes.HasPrefix(lockRaw, []byte(LockHeader)) {
+		t.Fatal("repos.lock header is not LockHeader")
+	}
+	if !bytes.Equal(triageRaw, []byte(TriageHeader)) {
+		t.Fatal("triage.tsv is not TriageHeader")
+	}
 	repos, err := ParseLock(lockRaw)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(repos) == 0 {
-		t.Fatal("repos.lock has no repositories")
+	if len(repos) != 132 {
+		t.Fatalf("repos.lock has %d repositories, want 132", len(repos))
 	}
 	triage, err := ParseTriage(triageRaw)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := Validate(repos, triage); err != nil {
+	regRaw, err := os.ReadFile(filepath.Join(root, "rules", "REGISTRY"))
+	if err != nil {
 		t.Fatal(err)
+	}
+	rules, err := ParseRegistry(regRaw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Validate(repos, triage, rules); err != nil {
+		t.Fatal(err)
+	}
+	fp, err := model.Fingerprint("TC-CFG-002", model.Location{Harness: model.SurfaceVSCode, Path: ".vscode/tasks.json"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !fingerprintRE.MatchString(fp) || fp != "tcf_"+fp[4:] || len(fp) != len("tcf_")+16 {
+		t.Fatalf("scanner fingerprint %q is not tcf_ plus 16 hex digits", fp)
+	}
+}
+
+func TestRejectedRows(t *testing.T) {
+	sha := strings.Repeat("ab", 20)
+	row := func(name, license string) []byte {
+		return []byte(LockHeader + name + "\t" + sha + "\t" + license + "\tagents\t2026-11-04\n")
+	}
+	beacon := "see https://tracking.evil.com/beacon " + "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
+	for _, tc := range []struct {
+		name string
+		raw  []byte
+		want string
+	}{
+		{"comment URL", []byte(LockHeader + "# " + beacon + "\n"), "comment or blank line"},
+		{"40KB line", []byte(LockHeader + strings.Repeat("x", 40*1024) + "\n"), "limit"},
+		{"repo URL", row("zzzz/https://tracking.evil.com/beacon", "MIT"), "bad repository"},
+		{"repo base64", row("zzzz/AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=", "MIT"), "bad repository"},
+		{"repo dotdot", row("zzzz/..", "MIT"), "bad repository"},
+		{"unknown license", row("zzzz/name", "NotALicense"), "unknown license"},
+		{"license junk", row("zzzz/name", "MIT "+beacon), "unknown license"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := ParseLock(tc.raw); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("got %v, want %q", err, tc.want)
+			}
+		})
+	}
+	triage := func(rule, fp, reason string) []byte {
+		return []byte(TriageHeader + fp + "\t" + rule + "\tzzzz/name\tFP\t" + reason + "\t2026-11-04\n")
+	}
+	fp := "tcf_c761c03b24e7b179"
+	for _, tc := range []struct {
+		name string
+		raw  []byte
+		want string
+	}{
+		{"bad rule", triage("nope", fp, "local task only echoes"), "bad rule id"},
+		{"bad fingerprint", triage("TC-CFG-001", "fp-1", "local task only echoes"), "bad fingerprint"},
+		{"reason URL", triage("TC-CFG-001", fp, "see https://tracking.evil.com/beacon today"), "URL or host"},
+		{"reason base64", triage("TC-CFG-001", fp, "token AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="), "high-entropy"},
+		{"over-long reason", triage("TC-CFG-001", fp, strings.Repeat("x", maxReasonBytes+1)), "reason length"},
+		{"anything goes", triage("TC-CFG-001", fp, "anything goes"), "reason length"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := ParseTriage(tc.raw); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("got %v, want %q", err, tc.want)
+			}
+		})
+	}
+	repos, err := ParseLock(row("zzzz/name", "MIT"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err := ParseTriage(triage("TC-CFG-999", fp, "local task only echoes"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Validate(repos, rows, map[string]bool{"TC-CFG-001": true}); err == nil || !strings.Contains(err.Error(), "not in the registry") {
+		t.Fatalf("fake rule: %v", err)
+	}
+	upper := strings.ToUpper(sha)
+	if _, err := ParseLock([]byte(LockHeader + "zzzz/name\t" + upper + "\tMIT\tagents\t2026-11-04\n")); err == nil || !strings.Contains(err.Error(), "bad SHA") {
+		t.Fatalf("uppercase SHA: %v", err)
+	}
+	if _, err := ParseTriage([]byte(TriageHeader + fp + "\tTC-CFG-001\tzzzz/name\tFP\tlocal task only echoes\t2026-11-4\n")); err == nil || !strings.Contains(err.Error(), "bad date") {
+		t.Fatalf("date: %v", err)
 	}
 }
 

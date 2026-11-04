@@ -2,10 +2,13 @@ package corpus
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/vgmartinez/tripcord/internal/corpus/benign"
 )
 
 func TestGoodTxtar(t *testing.T) {
@@ -262,19 +265,48 @@ func TestBenignIndexIsNotAFixture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	var sawSize, sawHost, sawBig bool
 	for _, f := range got {
-		if f.Path == "benign/repos.lock" {
-			t.Errorf("index flagged: %s %s", f.Kind, f.Detail)
-		}
-	}
-	var sawSize bool
-	for _, f := range got {
-		if f.Path == "big.txt" && f.Kind == KindSize {
+		if f.Path == "benign/repos.lock" && f.Kind == KindSize {
 			sawSize = true
 		}
+		if f.Path == "benign/repos.lock" && f.Kind == KindHost {
+			sawHost = true
+		}
+		if f.Path == "big.txt" && f.Kind == KindSize {
+			sawBig = true
+		}
 	}
-	if !sawSize {
-		t.Fatalf("ordinary file was not size-capped: %#v", got)
+	if !sawSize || !sawHost || !sawBig {
+		t.Fatalf("non-corpus index was exempt: %#v", got)
+	}
+
+	corpus := filepath.Join(t.TempDir(), "corpus")
+	var rows []byte
+	rows = append(rows, benign.LockHeader...)
+	sha := strings.Repeat("ab", 20)
+	for i := 0; i < 300; i++ {
+		rows = append(rows, fmt.Sprintf("org/r%03d\t%s\tMIT\tagents\t2026-11-04\n", i, sha)...)
+	}
+	if len(rows) <= maxFileBytes {
+		t.Fatalf("fixture lock is %d bytes", len(rows))
+	}
+	writeFile(t, filepath.Join(corpus, "benign", "repos.lock"), rows, 0o644)
+	got, err = Check(corpus)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("valid corpus index flagged: %#v", got)
+	}
+	bad := append([]byte(benign.LockHeader), []byte("# see https://tracking.evil.com/beacon AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=\n")...)
+	writeFile(t, filepath.Join(corpus, "benign", "repos.lock"), bad, 0o644)
+	got, err = Check(corpus)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Kind != KindIndex || !strings.Contains(got[0].Detail, "comment") {
+		t.Fatalf("bad comment under corpus: %#v", got)
 	}
 }
 

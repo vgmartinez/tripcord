@@ -62,7 +62,10 @@ config: `.claude/settings.json`, `.mcp.json`, `.cursor/`, `AGENTS.md`,
 it has at least 50 stars and is not archived and not a fork. The list
 is stratified by harness and by repository size (small is under 1 MB,
 medium is under 10 MB, and large is the rest) and targets 1,000
-repositories. It changes only through a pull request.
+repositories. This copy is partial: 132 of 1,000. The harnesses mcp,
+copilot, devcontainer, codex, and gemini have no rows. A resumable crawl
+fills the list in. v0 does not ship below 1,000 repositories plus a
+per-harness minimum (#41). The file changes only through a pull request.
 
 ```sh
 GITHUB_TOKEN=... go run ./scripts/benign-repos -out corpus/benign/repos.lock
@@ -74,8 +77,12 @@ the finding fingerprint, the rule id, `owner/repo`, a verdict (`TP`,
 until a scan is reviewed. Every repository it names has to be in
 `repos.lock`.
 
-`repos.lock` and `triage.tsv` are indexes, not fixtures. The corpus
-lint still rejects a symlink or an executable there. It does not apply
-the fixture size cap or the host and entropy checks: a lock of 1,000
-repositories is larger than a fixture, and a repository name can look
-like a host.
+`repos.lock` and `triage.tsv` are indexes, not fixtures, and only when
+they sit at `benign/repos.lock` and `benign/triage.tsv` under the
+`corpus/` root. The corpus lint still rejects a symlink or an executable
+there. It skips the fixture size cap and the generic host and entropy
+checks on those two paths, because a lock of 1,000 repositories is
+larger than a fixture and a repository name can look like a host. It
+runs the strict row validator on both files, so the exemption is never
+a pass with no checks. The same relative path under any other lint root
+is an ordinary fixture.

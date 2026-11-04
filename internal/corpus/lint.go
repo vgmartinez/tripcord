@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/vgmartinez/tripcord/internal/corpus/benign"
 	"github.com/vgmartinez/tripcord/internal/txtar"
 )
 
@@ -30,6 +31,7 @@ const (
 	KindSecret  = "secret"
 	KindConfig  = "config-path"
 	KindFetch   = "fetch-exec"
+	KindIndex   = "index"
 )
 
 // maxFileBytes is the largest fixture file that passes the size check.
@@ -112,12 +114,16 @@ func CheckRoots(roots ...Root) ([]Finding, error) {
 			if err != nil {
 				return err
 			}
-			// repos.lock and triage.tsv are indexes of third-party
-			// repositories, not fixtures. The size cap and the host
-			// and entropy checks do not apply: the lock is larger than
-			// a fixture, and a repository name can look like a host.
-			content := (r.Defs == nil || !r.Defs(rel)) && !benignIndex(rel)
-			out = append(out, inspect(root, rel, info, p, content)...)
+			// repos.lock and triage.tsv under a corpus root are indexes,
+			// not fixtures. The size cap and the generic host and
+			// entropy checks stay off there, because a lock of 1,000
+			// repositories is larger than a fixture and a repository
+			// name can look like a host. The strict index validator
+			// still runs on those two files. The same relative path
+			// under any other root is an ordinary fixture.
+			index := corpusBenignIndex(abs, rel)
+			content := (r.Defs == nil || !r.Defs(rel)) && !index
+			out = append(out, inspect(root, rel, info, p, content, index)...)
 			if info.IsDir() && info.Mode()&os.ModeSymlink != 0 {
 				return fs.SkipDir
 			}
@@ -142,9 +148,14 @@ func CheckRoots(roots ...Root) ([]Finding, error) {
 	return out, nil
 }
 
-// benignIndex reports the benign-corpus indexes. They are not fixture
-// content. Symlinks and executables are still rejected.
-func benignIndex(rel string) bool {
+// corpusBenignIndex reports the benign-corpus indexes when the walk
+// root itself is named corpus. Symlinks and executables are still
+// rejected. A copy under another root, including an adapter fixture
+// tree, is not an index.
+func corpusBenignIndex(rootAbs, rel string) bool {
+	if filepath.Base(rootAbs) != "corpus" {
+		return false
+	}
 	switch rel {
 	case "benign/repos.lock", "benign/triage.tsv":
 		return true
@@ -153,7 +164,7 @@ func benignIndex(rel string) bool {
 	}
 }
 
-func inspect(root, rel string, info fs.FileInfo, p string, content bool) []Finding {
+func inspect(root, rel string, info fs.FileInfo, p string, content, index bool) []Finding {
 	mode := info.Mode()
 	if mode&os.ModeSymlink != 0 {
 		return []Finding{{Root: root, Path: rel, Kind: KindSymlink, Detail: "symlink"}}
@@ -171,10 +182,13 @@ func inspect(root, rel string, info fs.FileInfo, p string, content bool) []Findi
 	if loadable(rel) {
 		out = append(out, Finding{Root: root, Path: rel, Kind: KindConfig, Detail: rel})
 	}
-	if info.Size() > maxFileBytes && !benignIndex(rel) {
+	if info.Size() > maxFileBytes && !index {
 		out = append(out, Finding{Root: root, Path: rel, Kind: KindSize, Detail: fmt.Sprintf("%d bytes", info.Size())})
 	}
 	if info.Size() > maxScanBytes {
+		if index {
+			out = append(out, Finding{Root: root, Path: rel, Kind: KindIndex, Detail: "file is too large to validate"})
+		}
 		return out
 	}
 	data, err := os.ReadFile(p)
@@ -183,7 +197,59 @@ func inspect(root, rel string, info fs.FileInfo, p string, content bool) []Findi
 		return out
 	}
 	out = append(out, scanBytes(root, rel, data, content)...)
+	if index {
+		out = append(out, validateBenignIndex(root, rel, p, data)...)
+	}
 	return out
+}
+
+// validateBenignIndex runs the row validator. An index exemption never
+// skips it. An empty triage file does not need the lock or the registry.
+func validateBenignIndex(root, rel, path string, data []byte) []Finding {
+	var err error
+	switch rel {
+	case "benign/repos.lock":
+		var repos []benign.Repo
+		repos, err = benign.ParseLock(data)
+		if err == nil {
+			err = benign.Validate(repos, nil, nil)
+		}
+	case "benign/triage.tsv":
+		var rows []benign.Triage
+		rows, err = benign.ParseTriage(data)
+		if err == nil && len(rows) > 0 {
+			err = validateTriageRows(path, rows)
+		}
+	default:
+		err = fmt.Errorf("unhandled index %s", rel)
+	}
+	if err != nil {
+		return []Finding{{Root: root, Path: rel, Kind: KindIndex, Detail: err.Error()}}
+	}
+	return nil
+}
+
+func validateTriageRows(triagePath string, rows []benign.Triage) error {
+	lockRaw, err := os.ReadFile(filepath.Join(filepath.Dir(triagePath), "repos.lock"))
+	if err != nil {
+		return fmt.Errorf("repos.lock: %w", err)
+	}
+	repos, err := benign.ParseLock(lockRaw)
+	if err != nil {
+		return err
+	}
+	// triage.tsv lives at <corpus>/benign/triage.tsv. rules/REGISTRY is
+	// the sibling of that corpus directory.
+	corpusDir := filepath.Dir(filepath.Dir(triagePath))
+	raw, err := os.ReadFile(filepath.Join(filepath.Dir(corpusDir), "rules", "REGISTRY"))
+	if err != nil {
+		return fmt.Errorf("rules/REGISTRY: %w", err)
+	}
+	rules, err := benign.ParseRegistry(raw)
+	if err != nil {
+		return err
+	}
+	return benign.Validate(repos, rows, rules)
 }
 
 func scanBytes(root, rel string, data []byte, content bool) []Finding {
