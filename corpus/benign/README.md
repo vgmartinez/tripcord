@@ -46,7 +46,7 @@ MaliciousAgentSkillsBench labels and statistics may be cited under MIT
 and are never vendored.
 
 Benign reports are CI artifacts only. They are not committed in this
-directory.
+directory, and neither is any fetched repository content.
 
 ## Repository index
 
@@ -98,3 +98,47 @@ in a known file extension (`.md`, `.json`, `.yml`, and so on), so no
 list of top-level domains is involved; "e.g." and version numbers like
 "v1.2" are rejected too and have to be spelled out. Decimal, hex, and
 octal IPv4 literals and IPv6 addresses, bracketed or not, are rejected.
+
+## Nightly scan
+
+`make benign` is opt-in and needs the network. It builds tripcord and
+runs `scripts/benign-scan`, which shallow-fetches each pinned commit in
+`repos.lock`, scans it with `tripcord scan -format json`, and writes a
+JSON report (`BENIGN_REPORT`, default `bin/benign-report.json`).
+
+Each commit is fetched at depth 1 into a bare repository with an empty
+hook template, and only its regular files are written to a temporary
+directory. No work tree is checked out, so no hook, filter, submodule,
+or LFS smudge runs. Symlinks and submodules are skipped, and every file
+is written non-executable. A file of 1 MiB or more is not downloaded:
+it is written as a sparse placeholder one byte over the adapters' 1 MiB
+read cap, so tripcord still sees an oversize file there. Nothing is
+executed, and each tree is removed after its scan. Eight workers run at
+once; one repository gets five minutes and the run gets 35
+(`BENIGN_TIMEOUT`). A repository not scanned in time counts as failed.
+
+The report has:
+
+- `fp_per_repo` and `mean_fp_per_repo`: findings triaged `FP`, per
+  scanned repository.
+- `fp_rate_by_rule`: findings, `FP` findings, and their ratio per rule.
+- `high_repo_share`: the share of scanned repositories with any high or
+  critical finding.
+- `new_untriaged_high`: high and critical findings with no triage row,
+  keyed by fingerprint. A row matches when the repository, the
+  fingerprint, and the rule are all equal.
+- `failed`: repositories that could not be fetched or scanned.
+
+The scan exits 1 when `new_untriaged_high` is not empty, when nothing
+was scanned, or when more than 5% of the repositories failed
+(`-max-failed`). Triage a new finding by adding a `triage.tsv` row.
+
+`make upstream-check` runs `scripts/upstream-check`. It fetches every
+URL in `schemas/upstream.lock`, the upstream schemas the adapters
+follow, and fails when one no longer hashes to its pinned SHA-256. It
+prints a diff against the same file at the commit the row pins, so the
+change can be reviewed before the row is updated.
+
+`.github/workflows/benign-nightly.yml` runs both on a schedule and by
+`workflow_dispatch`, never on a pull request, with `contents: read`. It
+uploads the report as the `benign-report` artifact and opens no issues.
