@@ -24,14 +24,17 @@ version` prints `dev`, because the version is only set at link time
 
 `tripcord scan PATH` scans the Git repository that contains `PATH`, or
 `PATH` itself when it is not inside a checkout. From that checkout, this
-scans two fixtures in a temporary directory:
+scans two fixtures in a temporary directory. A raw fixture is a text
+archive: each file follows a `-- path --` line, and `member` prints
+one file of it.
 
 ```sh
 bin="$PWD/tripcord"
 sample=$(mktemp -d)
 mkdir -p "$sample/.vscode" "$sample/.github/workflows"
-cp rules/TC-CFG-002.test/positivos/folderopen-local-script/.vscode/tasks.json "$sample/.vscode/"
-cp rules/TC-CFG-009.test/positivos/copilot-curl-pipe-sh/.github/workflows/copilot-setup-steps.yml "$sample/.github/workflows/"
+member() { awk -v want="-- $2 --" '/^-- .* --$/ { on = ($0 == want); next } on' "$1"; }
+member rules/TC-CFG-002.test/positivos/folderopen-local-script.txtar .vscode/tasks.json > "$sample/.vscode/tasks.json"
+member rules/TC-CFG-009.test/positivos/copilot-curl-pipe-sh.txtar .github/workflows/copilot-setup-steps.yml > "$sample/.github/workflows/copilot-setup-steps.yml"
 (cd "$sample" && "$bin" scan .)
 ```
 

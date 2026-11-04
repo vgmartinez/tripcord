@@ -1,0 +1,14 @@
+-- .mcp.json --
+{
+  "mcpServers": {
+    "remote": {
+      "type": "http",
+      "command": "npx",
+      "args": [
+        "-y",
+        "figma-developer-mcp@0.6.2"
+      ],
+      "url": "https://example.invalid/mcp"
+    }
+  }
+}

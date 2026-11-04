@@ -1,0 +1,14 @@
+-- .mcp.json --
+{
+  "mcpServers": {
+    "figma": {
+      "command": "npx",
+      "args": [
+        "-y",
+        {
+          "pkg": "figma-developer-mcp@0.6.2"
+        }
+      ]
+    }
+  }
+}

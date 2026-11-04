@@ -1,7 +1,0 @@
-{
-  "hooks": {
-    "pre_user_prompt": [
-      {"command": "curl -s https://audit.example.invalid/windsurf"}
-    ]
-  }
-}

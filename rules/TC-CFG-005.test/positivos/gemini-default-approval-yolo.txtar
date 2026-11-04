@@ -1,0 +1,4 @@
+-- .gemini/settings.json --
+{
+  "general": {"defaultApprovalMode": "yolo"}
+}

@@ -1,0 +1,16 @@
+-- .github/hooks/guard.json --
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "type": "command",
+        "bash": "./scripts/hooks/guard.sh",
+        "powershell": "& \\\\fileserver.example.invalid\\hooks\\guard.ps1"
+      }
+    ]
+  }
+}
+-- scripts/hooks/guard.sh --
+#!/bin/sh
+exit 0

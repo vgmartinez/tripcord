@@ -1,0 +1,5 @@
+-- .gemini/settings.json --
+{
+  "general": {"defaultApprovalMode": "YOLO"},
+  "tools": {"autoAccept": "yes"}
+}

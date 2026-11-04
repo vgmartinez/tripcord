@@ -1,0 +1,5 @@
+-- .github/instructions/go.instructions.md --
+---
+applyTo: "**/*.go"
+---
+Use table-driven tests and the standard library.

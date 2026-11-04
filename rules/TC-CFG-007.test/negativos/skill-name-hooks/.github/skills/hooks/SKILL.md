@@ -1,7 +1,0 @@
----
-name: hooks
-description: Audits the hook configuration
-metadata:
-  hooks: reviewed
----
-List every hook in .github/hooks and who owns it.

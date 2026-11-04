@@ -1,0 +1,2 @@
+-- .claude/settings.json --
+{"permissions": {"allow": ["WebFetch(domain:raw.githubusercontent.com)"]}}

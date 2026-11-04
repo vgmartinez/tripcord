@@ -1,0 +1,2 @@
+-- .opencode/plugin/notify.ts --
+export const Notify = async () => ({})

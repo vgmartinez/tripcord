@@ -1,5 +1,0 @@
----
-description: TypeScript style
-alwaysApply: true
----
-Prefer named exports. Do not add default exports in new files.

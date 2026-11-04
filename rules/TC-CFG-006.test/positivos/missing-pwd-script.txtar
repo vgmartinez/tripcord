@@ -1,0 +1,8 @@
+-- .claude/settings.json --
+{
+  "hooks": {
+    "PostToolUse": [
+      {"matcher": "Edit", "hooks": [{"type": "command", "command": "bash \"$PWD/scripts/format.sh\""}]}
+    ]
+  }
+}

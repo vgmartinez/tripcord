@@ -1,10 +1,11 @@
 package rules
 
 import (
-	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/vgmartinez/tripcord/internal/txtar"
 )
 
 const coreRulesDir = "../../rules"
@@ -70,43 +71,14 @@ var fixtureSymlinks = []fixtureSymlink{
 	{"TC-CFG-009.test/positivos/devin-shell-state-time-option-dot", "sub/t.sh.sha256", "inside-link-target"},
 }
 
-// corePackWithSymlinks copies the core pack into t.TempDir and creates
-// fixtureSymlinks there with os.Symlink. Tests that run core fixtures
-// use the copy, so each symlink case stays covered without a symlink in
-// git.
+// corePackWithSymlinks copies the core pack into t.TempDir, unpacking
+// each raw fixture archive <name>.txtar into its directory <name>, and
+// creates fixtureSymlinks there with os.Symlink. Tests that run core
+// fixtures use the copy, so each symlink case stays covered without a
+// symlink in git.
 func corePackWithSymlinks(t *testing.T) string {
 	t.Helper()
-	dst := filepath.Join(t.TempDir(), "rules")
-	err := filepath.WalkDir(coreRulesDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(coreRulesDir, path)
-		if err != nil {
-			return err
-		}
-		out := filepath.Join(dst, rel)
-		switch {
-		case d.IsDir():
-			return os.MkdirAll(out, 0o755)
-		case d.Type().IsRegular():
-			info, err := d.Info()
-			if err != nil {
-				return err
-			}
-			data, err := os.ReadFile(path)
-			if err != nil {
-				return err
-			}
-			return os.WriteFile(out, data, info.Mode().Perm())
-		default:
-			t.Fatalf("%s: the core pack must not contain a symlink; add it to fixtureSymlinks", path)
-			return nil
-		}
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	dst := txtar.ExpandTree(t, coreRulesDir)
 	for _, l := range fixtureSymlinks {
 		fixture := filepath.Join(dst, filepath.FromSlash(l.fixture))
 		if info, err := os.Stat(fixture); err != nil || !info.IsDir() {

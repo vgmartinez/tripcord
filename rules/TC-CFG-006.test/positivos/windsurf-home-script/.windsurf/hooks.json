@@ -1,7 +1,0 @@
-{
-  "hooks": {
-    "pre_run_command": [
-      {"command": "~/.codeium/windsurf/hooks/pre-run.sh", "show_output": true}
-    ]
-  }
-}

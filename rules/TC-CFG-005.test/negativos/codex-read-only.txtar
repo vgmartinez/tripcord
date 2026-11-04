@@ -1,0 +1,2 @@
+-- .codex/config.toml --
+sandbox_mode = "read-only"

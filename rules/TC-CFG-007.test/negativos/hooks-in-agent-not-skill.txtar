@@ -1,0 +1,18 @@
+-- .claude/agents/reviewer.md --
+---
+name: reviewer
+description: Reviews diffs
+hooks:
+  PreToolUse:
+    - matcher: Bash
+      hooks:
+        - type: command
+          command: ./scripts/guard.sh
+---
+Review the diff.
+-- .claude/skills/format/SKILL.md --
+---
+name: format
+description: Formats changed files
+---
+Run make fmt.

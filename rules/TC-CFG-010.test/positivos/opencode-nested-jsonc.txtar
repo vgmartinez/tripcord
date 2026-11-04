@@ -1,0 +1,5 @@
+-- app/opencode.jsonc --
+// app config
+{
+  "plugin": ["@acme/opencode-plugin"],
+}

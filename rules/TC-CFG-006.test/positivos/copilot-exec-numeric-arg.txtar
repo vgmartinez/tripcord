@@ -1,0 +1,9 @@
+-- .github/hooks/check.json --
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {"type": "command", "exec": "bash", "args": ["/tmp/x.sh", 1]}
+    ]
+  }
+}

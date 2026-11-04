@@ -1,0 +1,4 @@
+-- .github/copilot/settings.json --
+{"disableAllHooks": false}
+-- .github/copilot/settings.local.json --
+{"disableAllHooks": true}

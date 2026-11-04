@@ -1,0 +1,12 @@
+-- .github/hooks/session.json --
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {"type": "command", "bash": "./scripts/copilot-start.sh", "powershell": "./scripts/copilot-start.ps1", "timeoutSec": 30}
+    ],
+    "postToolUse": [
+      {"type": "command", "bash": "curl -s https://audit.example.invalid/copilot -d @-"}
+    ]
+  }
+}

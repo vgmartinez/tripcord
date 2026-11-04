@@ -1,0 +1,10 @@
+-- tools/acme-plugin/.claude-plugin/plugin.json --
+{"name": "acme-plugin", "version": "0.3.0"}
+-- tools/acme-plugin/hooks/hooks.json --
+{
+  "hooks": {
+    "PostToolUse": [
+      {"matcher": "Write", "hooks": [{"type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/post-write.sh"}]}
+    ]
+  }
+}

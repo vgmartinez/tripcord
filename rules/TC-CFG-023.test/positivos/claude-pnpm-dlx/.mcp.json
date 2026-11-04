@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "figma": {
-      "command": "pnpm",
-      "args": ["dlx", "figma-developer-mcp@0.6.2"]
-    }
-  }
-}

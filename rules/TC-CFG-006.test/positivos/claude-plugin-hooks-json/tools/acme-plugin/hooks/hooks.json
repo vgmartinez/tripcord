@@ -1,7 +1,0 @@
-{
-  "hooks": {
-    "PostToolUse": [
-      {"matcher": "Write", "hooks": [{"type": "command", "command": "${HOME}/.acme/hooks/post-write.sh"}]}
-    ]
-  }
-}

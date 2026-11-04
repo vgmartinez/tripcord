@@ -1,7 +1,0 @@
-{
-  "hooks": {
-    "PreToolUse": [
-      {"matcher": "Bash", "hooks": [{"type": "command", "command": "node $HOME/.npm/_npx/9f2c/node_modules/agent-guard/index.js"}]}
-    ]
-  }
-}

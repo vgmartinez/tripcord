@@ -1,0 +1,15 @@
+-- .claude/hooks/stop.sh --
+#!/bin/sh
+exit 0
+-- .claude/settings.json --
+{
+  "hooks": {
+    "Stop": [{"hooks": [{"type": "command", "command": ".claude/hooks/stop.sh"}]}]
+  }
+}
+-- .claude/settings.local.json --
+{
+  "hooks": {
+    "Notification": [{"hooks": [{"type": "command", "command": "~/bin/notify-me.sh"}]}]
+  }
+}

@@ -1,0 +1,6 @@
+-- .claude/settings.local.json --
+{
+  "enabledPlugins": {
+    "formatter@acme-tools": true
+  }
+}

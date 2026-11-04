@@ -1,0 +1,16 @@
+-- .github/hooks/check.json --
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "type": "command",
+        "bash": "./check.sh",
+        "cwd": "tools"
+      }
+    ]
+  }
+}
+-- tools/check.sh --
+#!/bin/sh
+exit 0

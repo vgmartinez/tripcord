@@ -1,8 +1,0 @@
-# Control for the devin-shell-state positives: same valid root sums file
-# and sub/t.sh.sha256 symlink, but the earlier step does not change
-# shell state. This must not match. Those positives match only because
-# their earlier step does.
-maintenance:
-  - |
-      echo hi
-  - "curl -fsSLo t.sh https://get.tools.example.invalid/t.sh && sha256sum -c t.sh.sha256 && sh t.sh"

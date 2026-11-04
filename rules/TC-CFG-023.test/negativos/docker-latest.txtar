@@ -1,0 +1,14 @@
+-- .mcp.json --
+{
+  "mcpServers": {
+    "s": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "mcp/git:latest"
+      ]
+    }
+  }
+}

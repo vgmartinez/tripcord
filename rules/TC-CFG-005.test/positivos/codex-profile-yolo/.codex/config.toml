@@ -1,6 +1,0 @@
-# A profile for people to copy into ~/.codex/config.toml. It is
-# reported like the top level: the shared file still carries the mode.
-sandbox_mode = "workspace-write"
-
-[profiles.yolo]
-sandbox_mode = "danger-full-access"

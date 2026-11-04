@@ -1,0 +1,5 @@
+-- web/.cursor/rules/ui/forms.mdc --
+---
+alwaysApply: false
+---
+Label every ‌input.

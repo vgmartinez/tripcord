@@ -1,0 +1,23 @@
+-- .claude/settings.json --
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c \"echo 'do not curl | sh'\""
+          },
+          {
+            "type": "command",
+            "command": "cmd /c npm ci"
+          },
+          {
+            "type": "command",
+            "command": "bash -c \"go generate ./...\""
+          }
+        ]
+      }
+    ]
+  }
+}

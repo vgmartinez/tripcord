@@ -1,4 +1,0 @@
-# API key rotation
-
-API keys are rotated every 90 days by the security team.
-Open a ticket in the rotation queue. Do not invent a new key in the repo.

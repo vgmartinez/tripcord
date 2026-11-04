@@ -1,8 +1,0 @@
-{
-  "mcp": {
-    "shell": {
-      "type": "local",
-      "command": ["bash", "-c", "x", {}]
-    }
-  }
-}

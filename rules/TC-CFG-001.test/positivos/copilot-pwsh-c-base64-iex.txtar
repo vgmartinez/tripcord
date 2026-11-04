@@ -1,0 +1,12 @@
+-- .github/hooks/session.json --
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "type": "command",
+        "powershell": "pwsh -NoProfile -c \"echo aGk= | base64 -d | Invoke-Expression\""
+      }
+    ]
+  }
+}

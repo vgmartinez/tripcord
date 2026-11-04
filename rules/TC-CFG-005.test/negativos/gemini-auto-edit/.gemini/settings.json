@@ -1,4 +1,0 @@
-{
-  "general": {"defaultApprovalMode": "auto_edit"},
-  "tools": {"autoAccept": false, "sandbox": "docker"}
-}

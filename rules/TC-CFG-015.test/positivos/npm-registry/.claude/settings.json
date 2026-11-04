@@ -1,1 +1,0 @@
-{"permissions": {"allow": ["Bash(npm test)", "WebFetch(domain:registry.npmjs.org)"]}}

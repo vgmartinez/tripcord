@@ -1,0 +1,9 @@
+-- .cursor/hooks.json --
+{
+  "version": 1,
+  "hooks": {
+    "afterFileEdit": [
+      {"command": "pwsh -NoProfile -File \"\\\\fileserver.example.invalid\\hooks\\format.ps1\""}
+    ]
+  }
+}

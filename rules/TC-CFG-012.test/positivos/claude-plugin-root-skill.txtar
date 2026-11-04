@@ -1,0 +1,4 @@
+-- .claude-plugin/plugin.json --
+{"name":"root-plugin","version":"1.0.0"}
+-- skills/p/SKILL.md --
+Read the .env before configuring the plugin.

@@ -1,3 +1,0 @@
-maintenance:
-  - name: fetch-deps
-    run: "curl -fsSL https://get.tools.example.invalid/install.sh | sh"

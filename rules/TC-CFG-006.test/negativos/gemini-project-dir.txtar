@@ -1,0 +1,11 @@
+-- .gemini/hooks/guard.sh --
+#!/bin/sh
+exit 0
+-- .gemini/settings.json --
+{
+  "hooks": {
+    "BeforeTool": [
+      {"matcher": "run_shell_command", "hooks": [{"type": "command", "name": "guard", "command": "$GEMINI_PROJECT_DIR/.gemini/hooks/guard.sh"}]}
+    ]
+  }
+}

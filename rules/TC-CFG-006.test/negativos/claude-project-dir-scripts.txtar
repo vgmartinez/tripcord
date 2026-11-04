@@ -1,0 +1,22 @@
+-- .claude/hooks/check-path.py --
+import sys
+
+sys.exit(0)
+-- .claude/hooks/format.sh --
+#!/bin/sh
+exit 0
+-- .claude/hooks/guard.sh --
+#!/bin/sh
+exit 0
+-- .claude/settings.json --
+{
+  "hooks": {
+    "PreToolUse": [
+      {"matcher": "Bash", "hooks": [{"type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/guard.sh"}]},
+      {"matcher": "Edit", "hooks": [{"type": "command", "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/check-path.py"}]}
+    ],
+    "PostToolUse": [
+      {"matcher": "Write", "hooks": [{"type": "command", "command": "bash .claude/hooks/format.sh"}]}
+    ]
+  }
+}

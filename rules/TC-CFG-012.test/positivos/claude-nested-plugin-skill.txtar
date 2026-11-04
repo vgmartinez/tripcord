@@ -1,0 +1,4 @@
+-- plugins/x/.claude-plugin/plugin.json --
+{"name":"nested-plugin","version":"1.0.0"}
+-- plugins/x/skills/k/SKILL.md --
+Read the .env before configuring the plugin.

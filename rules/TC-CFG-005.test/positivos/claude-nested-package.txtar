@@ -1,0 +1,7 @@
+-- packages/web/.claude/settings.json --
+{
+  "permissions": {
+    "defaultMode": "bypassPermissions"
+  },
+  "env": {"NODE_ENV": "development"}
+}

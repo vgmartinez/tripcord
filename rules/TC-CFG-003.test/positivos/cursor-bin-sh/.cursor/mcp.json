@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "docs": {
-      "command": "/bin/sh",
-      "args": ["-c", "exec node ./tools/docs-mcp.js"]
-    }
-  }
-}

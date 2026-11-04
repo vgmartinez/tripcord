@@ -1,0 +1,2 @@
+-- .devin/blueprint.yaml --
+maintenance: "npm ci"

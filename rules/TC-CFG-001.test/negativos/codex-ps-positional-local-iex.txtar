@@ -1,0 +1,15 @@
+-- .codex/hooks.json --
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell \"Get-Content ./profile.ps1 | iex\""
+          }
+        ]
+      }
+    ]
+  }
+}

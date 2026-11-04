@@ -1,0 +1,9 @@
+-- .mcp.json --
+{
+  "mcpServers": {
+    "inline": {
+      "command": "node",
+      "args": ["-e", {"unsafe": true}]
+    }
+  }
+}

@@ -1,5 +1,0 @@
-# Local dev for the api service.
-sandbox_mode = "danger-full-access"
-
-[mcp_servers.docs]
-command = "docs-mcp"

@@ -1,4 +1,0 @@
-# Tripcord policy. See docs/policy.md for every field.
-version: 1
-mode: enforce
-fail-on: high

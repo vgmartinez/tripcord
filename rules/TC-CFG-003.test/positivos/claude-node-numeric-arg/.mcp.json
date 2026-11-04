@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "inline": {
-      "command": "node",
-      "args": ["-e", 1]
-    }
-  }
-}

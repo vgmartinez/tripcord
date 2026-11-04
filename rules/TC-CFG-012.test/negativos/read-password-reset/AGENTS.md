@@ -1,1 +1,0 @@
-Read the password reset flow in auth/reset.go.

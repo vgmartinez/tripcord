@@ -1,9 +1,0 @@
-{
-  "servers": {
-    "search": {
-      "type": "stdio",
-      "command": "node",
-      "args": ["./dist/server.js", "--eval-mode", "strict", "-e", "staging"]
-    }
-  }
-}

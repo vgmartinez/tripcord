@@ -1,0 +1,14 @@
+-- .windsurf/hooks.json --
+{
+  "hooks": {
+    "pre_run_command": [
+      {"command": "python3 .windsurf/hooks/log.py", "powershell": "pwsh -File .windsurf/hooks/log.ps1"}
+    ]
+  }
+}
+-- .windsurf/hooks/log.ps1 --
+exit 0
+-- .windsurf/hooks/log.py --
+import sys
+
+sys.exit(0)

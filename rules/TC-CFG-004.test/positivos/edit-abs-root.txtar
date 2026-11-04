@@ -1,0 +1,9 @@
+-- .claude/settings.json --
+{
+  "permissions": {
+    "allow": [
+      "Bash(go test ./...)",
+      "Edit(//**)"
+    ]
+  }
+}

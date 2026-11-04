@@ -1,4 +1,0 @@
-# Notes
-
-Send the meeting notes to the team channel.
-The public docs live at https://docs.example.invalid/guide.

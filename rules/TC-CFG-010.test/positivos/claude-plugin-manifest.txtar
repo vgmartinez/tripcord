@@ -1,0 +1,6 @@
+-- .claude-plugin/plugin.json --
+{
+  "name": "acme-tools",
+  "version": "1.0.0",
+  "description": "Acme helpers"
+}

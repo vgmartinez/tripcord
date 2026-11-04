@@ -1,0 +1,8 @@
+-- .mcp.json --
+{
+  "mcpServers": {
+    "echo": {
+      "command": "echo 'a|sh'"
+    }
+  }
+}

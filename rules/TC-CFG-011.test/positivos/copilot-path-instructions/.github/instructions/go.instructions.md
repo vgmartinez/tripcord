@@ -1,4 +1,0 @@
----
-applyTo: "**/*.go"
----
-Wrap‍errors.

@@ -1,0 +1,16 @@
+-- .github/hooks/lint.json --
+{
+  "version": 1,
+  "hooks": {
+    "postToolUse": [
+      {
+        "type": "command",
+        "exec": "node",
+        "args": [
+          ".github/hooks/lint.js",
+          "--fix"
+        ]
+      }
+    ]
+  }
+}

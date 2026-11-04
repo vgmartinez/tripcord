@@ -1,5 +1,0 @@
-# Tripcord embed: bash needs LF, and tripcord scan hashes these files.
-/.tripcord/bootstrap.sh -text
-/.tripcord/embed.json text eol=lf
-/.github/workflows/tripcord.yml text eol=lf
-/.github/hooks/tripcord.json text eol=lf

@@ -1,0 +1,9 @@
+-- .claude/settings.json --
+{
+  "extraKnownMarketplaces": {},
+  "permissions": {
+    "allow": [
+      "Bash(npm test)"
+    ]
+  }
+}

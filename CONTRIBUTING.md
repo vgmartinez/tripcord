@@ -203,11 +203,17 @@ OSV is future work, and v0.1 has no online mode.
 `rules/<ID>.test/negativos/` inputs that must not. Each needs at least
 one fixture. A fixture is either of:
 
-- A directory: a repository tree of real config files, sanitized. The
-  test runs every adapter on it, autodetected as `tripcord scan` does,
-  and fails if the adapters report the tree as incomplete. Prefer this
-  form, with one directory per case, for example
-  `positivos/claude-sessionstart-curl/.claude/settings.json`.
+- A raw fixture: a repository tree of real config files, sanitized,
+  committed as one text archive `<name>.txtar`. Each file of the tree
+  follows a `-- path --` line, in path order, with its bytes unchanged.
+  The tests unpack it into a temp directory named `<name>`, run every
+  adapter on it, autodetected as `tripcord scan` does, and fail if the
+  adapters report the tree as incomplete. Prefer this form, with one
+  archive per case, for example
+  `positivos/claude-sessionstart-curl.txtar` holding
+  `-- .claude/settings.json --`. The archive keeps the config files
+  from being loaded by a harness that opens this repository, and holds
+  no file modes, so no fixture script is executable.
   A directory named `_home` is that fixture's home directory, with user
   scope on and an empty environment, so a host `COPILOT_HOME` or
   `XDG_CONFIG_HOME` cannot redirect it. Use it for user-scope files such
@@ -232,7 +238,7 @@ the rule's harness and file globs. A negative that only holds an
 out-of-scope file would otherwise pass without testing `when`.
 
 `rules/<ID>.test/expect.yaml` says what each fixture must produce, keyed
-by its directory or file name. A positive lists the distinct severities
+by its archive name without `.txtar`, or its `.json` file name. A positive lists the distinct severities
 of its matches (`curl-pipe: high`, `two-hooks: [high, medium]`); a rule
 with `severity_when` needs an entry for every positive, and a positive
 of any other rule must match at the rule's severity. A negative may be

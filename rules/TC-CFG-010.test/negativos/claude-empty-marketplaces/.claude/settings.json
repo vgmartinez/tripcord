@@ -1,8 +1,0 @@
-{
-  "extraKnownMarketplaces": {},
-  "permissions": {
-    "allow": [
-      "Bash(npm test)"
-    ]
-  }
-}

@@ -1,0 +1,15 @@
+-- .claude/settings.json --
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uvx ruff==0.5.0 check ."
+          }
+        ]
+      }
+    ]
+  }
+}

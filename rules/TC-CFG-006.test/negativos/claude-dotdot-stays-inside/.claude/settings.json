@@ -1,5 +1,0 @@
-{
-  "hooks": {
-    "Stop": [{"hooks": [{"type": "command", "command": ".claude/hooks/../scripts/stop.sh"}]}]
-  }
-}

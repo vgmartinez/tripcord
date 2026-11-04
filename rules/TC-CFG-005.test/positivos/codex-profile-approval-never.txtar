@@ -1,0 +1,6 @@
+-- .codex/config.toml --
+model = "gpt-5-codex"
+
+[profiles.ci]
+sandbox_mode = "workspace-write"
+approval_policy = "never"

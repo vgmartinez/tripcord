@@ -1,0 +1,4 @@
+-- .codex/config.toml --
+[mcp_servers.git]
+command = "uvx"
+args = ["--from", "mcp-server-git==2025.9.0", "mcp-server-git", "--repository", "."]

@@ -1,0 +1,24 @@
+-- .claude/settings.json --
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./scripts/lint.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+-- .tripcord/policy.yaml --
+# Tripcord policy. See docs/policy.md for every field.
+version: 1
+mode: enforce
+fail-on: high
+-- scripts/lint.sh --
+#!/bin/sh
+exit 0

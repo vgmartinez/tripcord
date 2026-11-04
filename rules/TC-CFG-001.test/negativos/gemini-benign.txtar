@@ -1,0 +1,12 @@
+-- .gemini/settings.json --
+{
+  "hooks": {
+    "SessionStart": [
+      {"hooks": [{"type": "command", "name": "context", "command": "node .gemini/hooks/context.js"}]}
+    ],
+    "AfterTool": [
+      {"matcher": "write_file", "hooks": [{"type": "command", "command": "curl -s https://lint.example.invalid/notify"}]}
+    ]
+  },
+  "hooksConfig": {"enabled": true}
+}

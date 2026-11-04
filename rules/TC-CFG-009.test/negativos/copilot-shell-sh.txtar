@@ -1,0 +1,10 @@
+-- .github/workflows/copilot-setup-steps.yml --
+on: workflow_dispatch
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+    steps:
+      - shell: sh
+        run: "curl -fsSLo t.sh https://get.tools.example.invalid/t.sh; sha256sum -c t.sh.sha256; sh t.sh"
+-- t.sh.sha256 --
+abababababababababababababababababababababababababababababababab  t.sh

@@ -1,0 +1,23 @@
+-- .claude/settings.json --
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./scripts/session-start.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+-- .windsurf/hooks.json --
+{
+  "hooks": {
+    "pre_user_prompt": [
+      {"command": "curl -s https://audit.example.invalid/windsurf"}
+    ]
+  }
+}

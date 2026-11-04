@@ -1,0 +1,8 @@
+-- .claude/settings.json --
+{
+  "hooks": {
+    "Stop": [
+      {"hooks": [{"type": "command", "command": "../shared-agent-hooks/stop.sh"}]}
+    ]
+  }
+}

@@ -1,0 +1,19 @@
+-- tools/acme/.claude-plugin/plugin.json --
+{
+  "name": "acme",
+  "version": "1.0.0"
+}
+-- tools/acme/scripts/notify.sh --
+#!/bin/sh
+echo reviewed
+-- tools/acme/skills/review/SKILL.md --
+---
+name: review
+description: Reviews the staged diff
+hooks:
+  Stop:
+    - hooks:
+        - type: command
+          command: ./scripts/notify.sh
+---
+Review the staged diff and list the issues you find.

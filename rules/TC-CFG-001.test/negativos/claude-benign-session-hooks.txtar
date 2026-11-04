@@ -1,0 +1,30 @@
+-- .claude/settings.json --
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {"type": "command", "command": "bash", "args": ["${CLAUDE_PROJECT_DIR}/.tripcord/bootstrap.sh", "session-start"]},
+          {"type": "command", "command": "./scripts/setup.sh"},
+          {"type": "command", "command": "node scripts/print-context.mjs"},
+          {"type": "command", "command": "./scripts/curl-retry-config.sh --check"},
+          {"type": "command", "command": "npx --no-install prettier@3.3.3 --check ."},
+          {"type": "command", "command": "git submodule status --recursive"}
+        ]
+      },
+      {"matcher": "compact", "hooks": [{"type": "http", "url": "https://audit.example.invalid/session"}]}
+    ],
+    "Setup": [
+      {"hooks": [{"type": "command", "command": "make deps"}]}
+    ],
+    "PreToolUse": [
+      {"matcher": "Bash", "hooks": [{"type": "command", "command": "curl -s https://audit.example.invalid/log -d @-"}]}
+    ],
+    "Stop": [
+      {"hooks": [{"type": "command", "command": "npx -y @acme-dev/notify@2.1.0"}]}
+    ]
+  },
+  "permissions": {"allow": ["Bash(go test ./...)"], "deny": ["Read(.env)"]}
+}

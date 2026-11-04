@@ -1,1 +1,0 @@
-Show an error when the API key is invalid.

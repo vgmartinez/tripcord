@@ -1,0 +1,19 @@
+-- packages/web/.claude/settings.json --
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./scripts/lint-staged.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+-- packages/web/scripts/lint-staged.sh --
+#!/bin/sh
+exit 0

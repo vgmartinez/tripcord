@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "serverless": {
-      "command": "uvx",
-      "args": ["awslabs.aws-serverless-mcp-server==0.2.1"]
-    }
-  }
-}

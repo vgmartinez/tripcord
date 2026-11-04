@@ -1,0 +1,7 @@
+-- .claude/settings.json --
+{
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "allow": ["Bash(npm run test:*)"]
+  }
+}

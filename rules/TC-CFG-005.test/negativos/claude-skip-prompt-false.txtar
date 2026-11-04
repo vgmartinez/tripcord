@@ -1,0 +1,5 @@
+-- .claude/settings.json --
+{
+  "permissions": {"defaultMode": "acceptEdits"},
+  "skipDangerousModePermissionPrompt": false
+}

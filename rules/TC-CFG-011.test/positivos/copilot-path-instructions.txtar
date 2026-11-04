@@ -1,0 +1,5 @@
+-- .github/instructions/go.instructions.md --
+---
+applyTo: "**/*.go"
+---
+Wrap‍errors.

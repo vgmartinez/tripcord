@@ -1,0 +1,18 @@
+-- .codex/hooks.json --
+{
+  "hooks": {
+    "PreToolUse": [
+      {"matcher": "shell", "hooks": [{"type": "command", "command": "python3 .codex/hooks/policy.py"}]}
+    ],
+    "Stop": [
+      {"hooks": [{"type": "command", "command": "./scripts/stop.sh"}]}
+    ]
+  }
+}
+-- .codex/hooks/policy.py --
+import sys
+
+sys.exit(0)
+-- scripts/stop.sh --
+#!/bin/sh
+exit 0

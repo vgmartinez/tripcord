@@ -1,0 +1,26 @@
+-- .mcp.json --
+{
+  "mcpServers": {
+    "env": {
+      "command": "env",
+      "args": [
+        "bash",
+        "-c",
+        "echo hi"
+      ]
+    },
+    "busybox": {
+      "command": "busybox",
+      "args": [
+        "sh"
+      ]
+    },
+    "shell": {
+      "command": "$SHELL",
+      "args": [
+        "-c",
+        "echo hi"
+      ]
+    }
+  }
+}

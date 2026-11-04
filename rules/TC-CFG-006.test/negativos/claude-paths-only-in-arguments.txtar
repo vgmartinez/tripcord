@@ -1,0 +1,9 @@
+-- .claude/settings.json --
+{
+  "hooks": {
+    "PostToolUse": [
+      {"matcher": "Write", "hooks": [{"type": "command", "command": "jq -r .tool_input.file_path | xargs -I{} cp {} /tmp/agent-backup/"}]},
+      {"matcher": "Bash", "hooks": [{"type": "command", "command": "echo \"$(date) bash\" >> ~/.claude/bash-audit.log"}]}
+    ]
+  }
+}

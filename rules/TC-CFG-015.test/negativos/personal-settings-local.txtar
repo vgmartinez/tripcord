@@ -1,0 +1,5 @@
+-- .claude/settings.json --
+{"permissions": {"allow": ["Bash(go test ./...)", "WebFetch(domain:docs.anthropic.com)"]}}
+-- .claude/settings.local.json --
+{"permissions": {"allow": ["WebFetch(domain:huggingface.co)"]}}
+

@@ -1,0 +1,16 @@
+-- .cursor/mcp.json --
+{
+  "mcpServers": {
+    "browser": {"command": "npx", "args": ["-y", "browser-mcp@1.4.0"], "env": {"HEADLESS": "1"}},
+    "notes": {"command": "uvx", "args": ["notes-mcp"]},
+    "remote": {"url": "https://mcp.example.invalid/v1"}
+  }
+}
+-- .vscode/mcp.json --
+{
+  "servers": {
+    "fs": {"type": "stdio", "command": "npx", "args": ["-y", "fs-mcp", "${workspaceFolder}"]},
+    "go": {"type": "stdio", "command": "C:\\Program Files\\Go\\bin\\gopls.exe", "args": ["mcp"]},
+    "github": {"type": "http", "url": "https://api.example.invalid/mcp/"}
+  }
+}
