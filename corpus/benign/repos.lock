@@ -10,12 +10,12 @@
 # archived and not a fork. The list is stratified by harness and by
 # repository size (small is under 1 MB, medium is under 10 MB, and
 # large is the rest) and targets 1000 repositories.
-# This copy is partial: 655 of 1000 repositories.
+# This copy is partial: 656 of 1000 repositories.
 # Every harness has at least one row.
 # A resumable crawl fills the list in.
 # v0 doesn't ship until it reaches at least 1,000 repositories with a minimum per harness (#41).
-# Harness counts: agents 43, claude 74, codex 59, copilot 131, cursor 49, devcontainer 122, gemini 69, mcp 66, vscode 54.
-# Size bands: small 88, medium 189, large 378.
+# Harness counts: agents 44, claude 74, codex 59, copilot 131, cursor 49, devcontainer 122, gemini 69, mcp 66, vscode 54.
+# Size bands: small 88, medium 189, large 379.
 # Columns, tab-separated: owner/repo, 40-character commit SHA of the
 # default branch HEAD at generation time, SPDX license (NOASSERTION
 # when the API reports none), harnesses (comma-separated), size band
@@ -338,6 +338,7 @@ getsentry/sentry-react-native	02acc1433eddb884475f3b9de342e35746eba110	MIT	curso
 getsentry/toolkit	08fac06c54b843ea95a60e719e21b9c7c6cf16fc	NOASSERTION	mcp,vscode	large	2026-11-04
 gia-uh/autogoal	118a5be1bab926981f48c2d19b487ec859426fca	MIT	devcontainer	large	2026-11-04
 gilesknap/mciwb	694358fa687eb578bc363e84d5ba010ff7244f80	Apache-2.0	devcontainer	large	2026-11-04
+ginlix-ai/LangAlpha	26ecfb9c6056c9c8ecf449e03896727d7da8cd33	Apache-2.0	agents	large	2026-11-04
 gitronald/WebSearcher	757caf83f5d23481ed68bb6d1c36b0190501d8e1	GPL-3.0	copilot	large	2026-11-04
 glowingkitty/OpenMates	7b6f5941ce129f0b0b3a29ae27ecbb88df653cae	AGPL-3.0	codex	large	2026-11-04
 goaop/parser-reflection	795105c73dc1452db381a18b5070688afc6acf77	MIT	copilot	small	2026-11-04
