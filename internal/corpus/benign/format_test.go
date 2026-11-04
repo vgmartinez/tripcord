@@ -166,6 +166,9 @@ func TestRejectedRows(t *testing.T) {
 		{"repo 65 chars", row("zzzz/"+strings.Repeat("a", 65), "MIT"), "bad repository"},
 		{"repo random under the cap", row("AbCdEfGhIjKlMnOpQr/StUvWxYz0123456789gHiJ", "MIT"), "bad repository"},
 		{"repo random split by hyphens", row("AbCdEfGhIjKlMnOpQr/StUvWx-Yz0123-456789-gHiJ", "MIT"), "bad repository"},
+		{"repo padded owner", row(strings.Repeat("z", 39)+"/"+strings.Repeat("Q", 24)+"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmn", "MIT"), "bad repository"},
+		{"repo padded payload", row("zzzz/"+strings.Repeat("z", 28)+"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij", "MIT"), "bad repository"},
+		{"repo 24-char hex run", row("acme/0123456789abcdef01234567", "MIT"), "bad repository"},
 		{"unknown license", row("zzzz/name", "NotALicense"), "unknown license"},
 		{"license junk", row("zzzz/name", "MIT "+beacon), "unknown license"},
 	} {
@@ -233,6 +236,7 @@ func TestAcceptedNamesAndReasons(t *testing.T) {
 		"RinDevJunior/matterbridge-roborock-vacuum-plugin",
 		"PrayerfulDrop/ESPHome-Guition-ESP32-S3-4848S040",
 		"AzureAD/microsoft-authentication-library-common-for-objc",
+		"acme/0123456789abcdef0123456",
 	} {
 		if !validRepoName(name) {
 			t.Errorf("rejected %s", name)
