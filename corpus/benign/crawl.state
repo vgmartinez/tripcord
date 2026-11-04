@@ -6,5 +6,5 @@ copilot	1	desc	2	no
 cursor	0	desc	1	no
 devcontainer	1	desc	2	no
 gemini	1	desc	2	no
-mcp	1	desc	1	no
-vscode	1	desc	2	no
+mcp	1	desc	2	no
+vscode	1	desc	3	no

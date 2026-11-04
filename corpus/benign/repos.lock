@@ -10,12 +10,12 @@
 # archived and not a fork. The list is stratified by harness and by
 # repository size (small is under 1 MB, medium is under 10 MB, and
 # large is the rest) and targets 1000 repositories.
-# This copy is partial: 626 of 1000 repositories.
+# This copy is partial: 638 of 1000 repositories.
 # Every harness has at least one row.
 # A resumable crawl fills the list in.
 # v0 doesn't ship until it reaches at least 1,000 repositories with a minimum per harness (#41).
-# Harness counts: agents 42, claude 74, codex 59, copilot 131, cursor 49, devcontainer 122, gemini 69, mcp 39, vscode 50.
-# Size bands: small 83, medium 182, large 361.
+# Harness counts: agents 42, claude 74, codex 59, copilot 131, cursor 49, devcontainer 122, gemini 69, mcp 48, vscode 54.
+# Size bands: small 86, medium 186, large 366.
 # Columns, tab-separated: owner/repo, 40-character commit SHA of the
 # default branch HEAD at generation time, SPDX license (NOASSERTION
 # when the API reports none), harnesses (comma-separated), size band
@@ -36,6 +36,7 @@ Andersbakken/rtags	2e29b5bb8df20814335c45c158d3ee609c2d6475	GPL-3.0	agents	large
 AratKruglik/claude-laravel	00e8b99ea6852d2b6603f56ee38b284477c1d97c	NOASSERTION	claude	medium	2026-11-04
 ArisGuimera/MobiAI-Core	2edc6ac1cde2cc280ae0388aa8072902d2e230d5	MIT	gemini	medium	2026-11-04
 Arize-ai/arize-skills	46ce60f092a28fb0b6e4b2c97b2cbf41d45006d6	MIT	agents	medium	2026-11-04
+AssafWoo/homebrew-pandafilter	b9829307770f5be7225515868a76b966f5e59bc4	MIT	mcp	medium	2026-11-04
 AssemblyAI/blurt	ed98fbc0375ce327a61382bf0337600be2635d23	MIT	mcp	large	2026-11-04
 Aurealibe/claude-config	e8a07f025d17b24781aa9f4dac681b675d97d9cb	MIT	claude	small	2026-11-04
 Austinb/GameQ	347cf58c566f2e1e1948e5b74f7fceeae0dc06cb	LGPL-3.0	devcontainer	medium	2026-11-04
@@ -47,6 +48,7 @@ Azure/azure-functions-dotnet-worker	bbf17dfc9eb805f555e135ca775482427ef70262	MIT
 Azure/kimojio-rs	23210bdd1c47a563fd9dd9675e3a13921203b128	MIT	copilot	small	2026-11-04
 AzureAD/microsoft-authentication-library-common-for-objc	33e84282e0ac6f075421dd1f7c989e1384fad59d	MIT	copilot	large	2026-11-04
 Bdaya-Dev/oidc	fce87b98791409f200200db61989565cb8645ce0	MIT	vscode	medium	2026-11-04
+Bike4Mind/bike4mind	f8b42dbb6ff3e6e2ffa27865d6be33ff6a61e468	NOASSERTION	mcp	large	2026-11-04
 BlackHC/batchbald_redux	e56c2607ceafc312a99c32b521bdd2355e4716fe	Apache-2.0	devcontainer	medium	2026-11-04
 BrowserOperator/browser-operator-core	85da86c2a9421c44d682af0e627243b76d3df0ef	BSD-3-Clause	claude	large	2026-11-04
 CYRUS-STUDIO/CyReverse	741e28502a56a99ab22af0d159ec1475cb00d02d	NOASSERTION	gemini	large	2026-11-04
@@ -69,6 +71,7 @@ EdgeApp/edge-react-gui	300e8c59248925675e43d7d2dc32f9b5b726357d	BSD-3-Clause	cur
 EliasOenal/multimon-ng	b5f7d71c5e9b5a76093ba55c515968dc40f92804	GPL-2.0	copilot	large	2026-11-04
 Endle/fireSeqSearch	ef8888bb9d0d8371621f75ae033e3e09692fd0c9	MIT	claude	medium	2026-11-04
 EricZimmerman/Lnk	dab1c8ab9c1c18d2cf89a4938ab95794d17d3a44	MIT	claude	small	2026-11-04
+EvanBacon/xcode	1731d01f4e6bf5384b9d164714b609909d567acd	NOASSERTION	vscode	small	2026-11-04
 EvilBeaver/OneScript	9a16d08cb548bac79a275cf142b3f9460734d640	MPL-2.0	copilot	large	2026-11-04
 FDA/precisionFDA	2e71d79b1895984b81b8fde2d8fa48dc93a5e89b	NOASSERTION	vscode	large	2026-11-04
 Farama-Foundation/Stable-Retro	089f3fd1aa99c0704fa2b135cfdf824180c3c715	MIT	copilot	large	2026-11-04
@@ -147,6 +150,7 @@ PaloAltoNetworks/docusaurus-openapi-docs	26d48789c6dcf1e817f2b6efacc6b94cf5a2ebd
 Particular/docs.particular.net	2475800aa8490eaead4352cc642e68b0066a21a5	NOASSERTION	devcontainer	large	2026-11-04
 PaulJPhilp/EffectPatterns	f3a0da2299717cf31d31313c5661cebd2446d5a3	MIT	cursor	large	2026-11-04
 PeonPing/openpeon	b0727d5abefc882982c4c7349bd1a8c45b1b73b1	MIT	claude	medium	2026-11-04
+PhpCodeArcheology/PhpCodeArcheology	0d2484fdfaa2ac81c5c3355b1a54d7498fba28b1	MIT	mcp	medium	2026-11-04
 PierreKieffer/http-tanker	abee53e6f6ee931dfecb5fc62955150c578ac2f6	BSD-2-Clause	mcp	large	2026-11-04
 PlagueHO/CosmosDB	a5b2d10dd1697ffdca0a5c84a777be8c84629b39	MIT	vscode	medium	2026-11-04
 PrayerfulDrop/ESPHome-Guition-ESP32-S3-4848S040	1212f2355b7f68296d99785c3138a52f07e1a854	GPL-3.0	claude	large	2026-11-04
@@ -193,6 +197,7 @@ X-Wei/flutter_catalog	194564165ff45a1f56c922f859466a34d71d26c5	MIT	gemini	large	
 XRPLF/xrpl-dev-portal	3433a95cc6753b6eeaa6e51d6d9bf231f28ecb76	NOASSERTION	claude	large	2026-11-04
 Xceptance/neodymium	cdcb1e5c1e9bca3569f9ca59fa629f5d47f73c9f	NOASSERTION	agents	large	2026-11-04
 YoshiiRyo1/document-templates-for-aws	16967f62e08d7f4cba9b044bd0d730212b273669	Unlicense	mcp	small	2026-11-04
+ZongziForu/cn-law-hub	8a62d5cbec94489dcb7a661dd0df411742a2a1e2	Apache-2.0	mcp	small	2026-11-04
 a16z/halmos	079bb4241d1b460baf986257d56ea86977d73451	AGPL-3.0	copilot	medium	2026-11-04
 aa2246740/dsh-better-display	2bfb1a63ac332d8d2032485ea9b182022edd9e78	NOASSERTION	cursor	medium	2026-11-04
 aantich/oneringai	bebdcd173f01977d48b83a4d58614ac0c788c795	MIT	codex	large	2026-11-04
@@ -246,6 +251,7 @@ chamber-orchestra/view-bundle	8644043326015b78d1bd7055fbc102fe9c8ee7b7	MIT	claud
 chaselen/v2ex-playground	99ce0594dca522d93d43c7c6660d9b74df3708f7	MIT	codex	medium	2026-11-04
 chimurai/jscodeshift-typescript-example	887e328611e5d12117095e38e601a5a211a1898f	MIT	vscode	medium	2026-11-04
 chrxh/alien	fd4043d6e912e7b8e1a9cddc67e56b9d3634efa3	BSD-3-Clause	copilot	large	2026-11-04
+chu2bard/pinion-os	24292698ad3766c9718acfd2cd467cf1472b4c6e	MIT	mcp	small	2026-11-04
 cirruslabs/cirrus-cli	1769788a20dc72f6aef85bcdc92abaa1bf061cdc	MIT	copilot	medium	2026-11-04
 cjhyy/codeshell	c7bd259807cc8aa2fcc24880272ce65acc9b761f	MIT	agents	large	2026-11-04
 ckotzbauer/vulnerability-operator	937e69a4211393dee072da75d4f3929978ad4cb8	MIT	claude	medium	2026-11-04
@@ -318,6 +324,7 @@ flux-rs/flux	ef6af17f647cf98c860e18e90c36d1f1b69849ff	MIT	copilot	large	2026-11-
 flwrlabs/flower	91e6c680b07b07b1193bbcc7755f21e8bd63eea4	Apache-2.0	devcontainer	large	2026-11-04
 frankie567/pwdlib	743f35d70a848c57e33c11c7724d235bbe73c693	MIT	copilot	small	2026-11-04
 fundamental-research-labs/mog	c8dd394806b8242f1cad0e3b27f5d58ee7c276cb	Apache-2.0	agents	large	2026-11-04
+gaoconggit/SharpPad	03df32abd56f12e3407b1679cf736a7506a35c73	MIT	mcp	large	2026-11-04
 gdarko/laravel-vue-starter	2b8eb53292ad2a66aa608289c70e04252fffa6c5	NOASSERTION	codex	large	2026-11-04
 geneontology/go-ontology	cbf4072672622a46937260719ef8b7d250d82e1f	CC-BY-4.0	copilot	large	2026-11-04
 getsentry/sentry-react-native	02acc1433eddb884475f3b9de342e35746eba110	MIT	cursor	large	2026-11-04
@@ -404,7 +411,10 @@ lcmchris/thesillyhome-container	66f15b2cbbc9fc5a767ed96d84410fcdc4eca328	Apache-
 learntocloud/learn-to-cloud-app	cfa3cef2dab8958338f04d24af4592e1cfd6ad94	MIT	vscode	medium	2026-11-04
 lemma-work/lemma-platform	c8636906a5c62a21c6f002adb712852aed58d41e	AGPL-3.0	mcp	large	2026-11-04
 leonbehero/Code	b19084a948d2c302797d2f5bfadb0deceef25ca2	NOASSERTION	gemini	large	2026-11-04
+liberusoftware/accounting-erp-laravel	3ee329987ab0152b7cd05d0824109eaccdb013a5	MIT	vscode	large	2026-11-04
+liberusoftware/billing-laravel	83d3ae0756c5df45d0589eacc8e822ab5ea99b87	MIT	vscode	large	2026-11-04
 liberusoftware/boilerplate-laravel	95f445a2901f2296959bec24229c6a1d5d5a6815	MIT	vscode	large	2026-11-04
+liberusoftware/real-estate-laravel	e1ef131e791f7e6f26561be5b5635f25b7cb3a6d	MIT	vscode	large	2026-11-04
 licensee/licensee	6212a8ca547d376582f6d2f5c3cf78ddb749c46e	MIT	copilot	medium	2026-11-04
 lis186/ccxray	9b76d46ccb12c87356f3279a6af638e2fdb6f207	NOASSERTION	claude	large	2026-11-04
 littlebearapps/untether	02fcf8a5d7886b4866c4e98a0b3cf28c1e0861c1	MIT	gemini	large	2026-11-04
@@ -552,7 +562,7 @@ shanraisshan/gemini-cli-best-practice	5d6a9d7daf59efc127191f2b6fbfe07112a7cfac	M
 shazow/wifitui	2026438f2a0d72679edd6f2731c654dd5dac616a	MIT	devcontainer	small	2026-11-04
 shugo/textbringer	c0cb89f37c1cc85e07e7dc97d410eb8d4c9a9d86	MIT	copilot,devcontainer	medium	2026-11-04
 siiway/NextBridge	eb905ecda704a6b66af64eaf360ada9dd9d8b775	GPL-3.0	vscode	large	2026-11-04
-sillsdev/FieldWorks	e455002f443e59c59c172c5329b16f801b976ec9	NOASSERTION	copilot	large	2026-11-04
+sillsdev/FieldWorks	e455002f443e59c59c172c5329b16f801b976ec9	NOASSERTION	copilot,mcp	large	2026-11-04
 sjev/trading-with-python	3198b62c7cc80e73a35949c63aab9701ca72bbc7	NOASSERTION	devcontainer	medium	2026-11-04
 skillrecordings/egghead-next	992ec9a1e7582dd96270c9c8e648b92273086e73	NOASSERTION	cursor	large	2026-11-04
 slax-lab/slax-reader	6fe1ebd95dfc1f2fbdef9834967732d0619a4761	Apache-2.0	codex	large	2026-11-04
@@ -567,6 +577,7 @@ spinframework/spin-operator	6a7632c878b5a97c15724db70f11f561ca6929a9	NOASSERTION
 stablyai/orca	a19de980854e1c875a4555e1bd24d832c9f96657	MIT	mcp	large	2026-11-04
 stefanbschneider/mobile-env	4205dfdd33ab8a89b1138b36804bab04b2495c4e	MIT	claude	medium	2026-11-04
 stella/stella	d6ab1d7b501c5af728a6af3852e7a0eb57c01234	Apache-2.0	codex	large	2026-11-04
+steve228uk/metro-mcp	09b27c7e7cc867a9711355b79bd9f83e1a7c7cdf	MIT	mcp	medium	2026-11-04
 stlab/stlab	051a0983e5048218ac969d17fdc22e8f69465c70	BSL-1.0	copilot	large	2026-11-04
 strapi/documentation	c58765d9dd5f860ce2e02dec16191c34de236d11	NOASSERTION	claude	large	2026-11-04
 stuinfla/ruvnet-brain	0e7b9cfa49dd26642f19f533f22e5bd885e45f83	NOASSERTION	codex	large	2026-11-04
@@ -582,6 +593,7 @@ swissspidy/media-experiments	8971fa24e8fac7b330715f834aa3c90c17939c0f	GPL-2.0	co
 sytone/obsidian-queryallthethings	05fd707d202c231e36a78aa57cee4bf0a0dee000	MIT	copilot	large	2026-11-04
 syyuan14/sh-disney-mcp	797a75f699f3c02b69a658a712b41cf99f66127a	MIT	vscode	medium	2026-11-04
 taskless/cli	5cffc96f61c8405490c7c476efb1cd6e07e599c3	MIT	copilot	medium	2026-11-04
+teaguesterling/duckdb_mcp	2f826214dad1087d1cdcb4a61d21450ee9a32171	Apache-2.0	mcp	medium	2026-11-04
 tegojs/tego	246f18a7a4744c90bda7e5c1dc81e38f9208c88d	Apache-2.0	cursor	large	2026-11-04
 testcontainers/testcontainers-elixir	5ed40540001f20be31473cfdd62cbe398ee63540	MIT	devcontainer	medium	2026-11-04
 the-palindrome/ml-knowledge-graph	c7e20bf18490f3f1ba0afd8f3181f595e0407ca7	MIT	codex	medium	2026-11-04
