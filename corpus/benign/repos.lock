@@ -10,12 +10,12 @@
 # archived and not a fork. The list is stratified by harness and by
 # repository size (small is under 1 MB, medium is under 10 MB, and
 # large is the rest) and targets 1000 repositories.
-# This copy is partial: 562 of 1000 repositories.
+# This copy is partial: 564 of 1000 repositories.
 # Every harness has at least one row.
 # A resumable crawl fills the list in.
 # v0 doesn't ship until it reaches at least 1,000 repositories with a minimum per harness (#41).
-# Harness counts: agents 42, claude 36, codex 59, copilot 131, cursor 49, devcontainer 122, gemini 69, mcp 37, vscode 23.
-# Size bands: small 72, medium 162, large 328.
+# Harness counts: agents 42, claude 36, codex 59, copilot 131, cursor 49, devcontainer 122, gemini 69, mcp 39, vscode 23.
+# Size bands: small 73, medium 162, large 329.
 # Columns, tab-separated: owner/repo, 40-character commit SHA of the
 # default branch HEAD at generation time, SPDX license (NOASSERTION
 # when the API reports none), harnesses (comma-separated), size band
@@ -56,6 +56,7 @@ DamianB-BitFlipper/proton-drive-sync	9e93d2b65afc77c9c19ab0ec59f3ef4ebf29be0b	GP
 DanielPan12/JobHuntBot	21ae79206e29ac3825cfabeb4b7840cbfe1cfe99	MIT	agents	small	2026-11-04
 DarqueWarrior/MyDaprDemos	f84b38eba203c23075eac2037b3994ab9c9928b1	NOASSERTION	devcontainer	medium	2026-11-04
 DasBasti/SmartHashtag	a3b10cc0064687f021fe099a0909e8555eda0c79	MIT	devcontainer	small	2026-11-04
+DefangLabs/defang	8f7554602bb41f19f67049cd09cee3e282fc74ae	MIT	mcp	large	2026-11-04
 DevXDojo/my-github-202X	7c1342b8dddddd7cd1b42a376ae472510aa55856	MIT	copilot	medium	2026-11-04
 DonutShinobu/ShinobuTranslator	c4239a2c653c68f66283b990f96936234c8d7294	GPL-3.0	codex	large	2026-11-04
 Drakkar-Software/OctoBot	c45fdc2c95c5bd3d649251fa90c327e2e8f86b00	GPL-3.0	cursor	large	2026-11-04
@@ -311,6 +312,7 @@ hchris1/Eversolo	1a5a1d67ae16d3cef7d87607d5c6bb424a158b56	Apache-2.0	devcontaine
 hcloud-talos/terraform-hcloud-talos	f85461e63fa3db5327f5b2cc6e5f94af92c08bf9	MIT	codex	large	2026-11-04
 hexianWeb/CubeCity	0191f5170872382954c15b7316f2e34d020d6d49	MIT	cursor	large	2026-11-04
 hkslover/cs2-highlight-tool	fa470d6f746de3ecb19ece67c2c5bb1580f76b92	NOASSERTION	codex	medium	2026-11-04
+howiehu/ddd-architecture-samples	629b86c2293ca1422a249824439fc0f76d6ebfac	MIT	mcp	small	2026-11-04
 hpcc-systems/hpcc-js-wasm	be97c1e8e62eac8d8acf1dcb138a13fed81f6973	Apache-2.0	vscode	large	2026-11-04
 huangjia2019/claude-code-engineering	89fea03bf9d577c608bce49c66d942996e801b19	NOASSERTION	mcp	medium	2026-11-04
 hyperledger-iroha/iroha	fbe677b98ed309808074ec5a0a8a16de2a0c2286	Apache-2.0	gemini	large	2026-11-04
