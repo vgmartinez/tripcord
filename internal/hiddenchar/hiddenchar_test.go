@@ -65,6 +65,9 @@ func TestInstructionPath(t *testing.T) {
 		".github/instructions/go.instructions.md",
 		".github/agents/review.agent.md",
 		".devin/blueprint.yaml", "pkg/.devin/blueprint.yaml",
+		".claude/skills/review/SKILL.md", "pkg/.claude/skills/review/SKILL.md",
+		".Claude/Skills/Review/SKILL.md",
+		".agents/skills/a/b/SKILL.md", ".github/skills/x/SKILL.md",
 	}
 	no := []string{
 		"CLAUDE.md.bak", "pkg/CLAUDE.md.txt",
@@ -73,6 +76,9 @@ func TestInstructionPath(t *testing.T) {
 		".github/instructions/.md", ".github/agents/review.md",
 		".cursor/rules/style.mdc.bak",
 		".devin/blueprint.yml", ".devin/hooks.json",
+		"docs/SKILL.md", "skills/SKILL.md", "skills/review/SKILL.md",
+		".claude/skills/SKILL.md", ".claude/skills/review/skill.md.txt",
+		"tools/acme/skills/review/SKILL.md", "not.claude/skills/review/SKILL.md",
 	}
 	for _, rel := range yes {
 		if !InstructionPath(rel) {

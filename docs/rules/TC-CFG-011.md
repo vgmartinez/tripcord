@@ -4,7 +4,7 @@
 | --- | --- |
 | Severity | high |
 | Harnesses | generic (`AGENTS.md`), Claude Code, Gemini CLI, Windsurf, GitHub Copilot, Cursor, Devin |
-| Files | `AGENTS.md`, `CLAUDE.md`, `CLAUDE.local.md`, `GEMINI.md` (any depth), nested `.claude/rules/**/*.md`, `.cursor/rules/**/*.md(c)`, and `.windsurfrules`, plus root `.cursorrules`, `.github/copilot-instructions.md`, `.github/instructions/**/*.md`, `.github/agents/**/*.agent.md`, and the maintenance commands and knowledge entries of `.devin/blueprint.yaml` (repository scope) |
+| Files | `AGENTS.md`, `CLAUDE.md`, `CLAUDE.local.md`, `GEMINI.md` (any depth), nested `.claude/rules/**/*.md`, `.cursor/rules/**/*.md(c)`, and `.windsurfrules`, plus root `.cursorrules`, `.github/copilot-instructions.md`, `.github/instructions/**/*.md`, `.github/agents/**/*.agent.md`, the maintenance commands and knowledge entries of `.devin/blueprint.yaml`, and repository skills at `.claude/skills/<name>/SKILL.md`, `.agents/skills/<name>/SKILL.md`, and `.github/skills/<name>/SKILL.md` (repository scope) |
 | Rule | [`rules/TC-CFG-011.yaml`](../../rules/TC-CFG-011.yaml) |
 
 ## What it detects
@@ -13,7 +13,8 @@ Some code points are invisible in an editor and in a pull-request diff,
 but the model reads them. A bidi control reorders what a reviewer sees
 (Trojan Source). Tag characters (U+E0000-U+E007F) mirror ASCII, so a run
 of them spells text no one sees. Zero-width code points hide or split
-words. In an instructions file, any of them can carry an instruction a
+words. In an instructions file, or in a repository skill under one of
+the three directories above, any of them can carry an instruction a
 reviewer cannot see.
 
 One finding per file that holds any of:
@@ -39,6 +40,8 @@ Not reported:
 - U+200E and U+200F (left-to-right and right-to-left marks), which
   change no order on their own and are common in right-to-left text.
 - User-scope files.
+- `SKILL.md` outside the three skill directories, including
+  `docs/SKILL.md` and a Claude plugin `skills/` directory.
 
 ## Evidence
 

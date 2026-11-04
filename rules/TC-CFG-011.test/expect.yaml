@@ -7,6 +7,7 @@ positivos:
   agents-zwj-nonemoji: high
   claude-local-file: high
   claude-rules-dir: high
+  claude-skill-bidi: high
   claude-dotclaude-word-joiner: high
   claude-zero-width-space: high
   copilot-instructions-inner-bom: high

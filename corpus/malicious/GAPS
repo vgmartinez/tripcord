@@ -10,7 +10,5 @@ novee-sandbox/agents-proc-environ	TC-CFG-012	the path is on its own line, and pr
 novee-sandbox/claude-md-printenv	TC-CFG-012	the line starts with a "When ..." clause and the verb is run, which is not a read verb; closed by the bounded verb-target PR (#43 item 138)
 novee-sandbox/webfetch-allowed-exfil	TC-CFG-012	"look up" is not a read verb and "API key from the .env" puts words between verb and target
 arxiv-2602.06547/cursor-prompt-exfil~env-indirection	TC-CFG-008	${TC_DL:-curl} hides the downloader from the hook network check
-arxiv-2602.06547/skill-credential-files~bidi	TC-CFG-011	TC-CFG-011 does not read SKILL.md
-arxiv-2602.06547/skill-credential-harvest~bidi	TC-CFG-011	TC-CFG-011 does not read SKILL.md
 arxiv-2602.06547/html-comment-directive~homoglyph	TC-CFG-012	a Cyrillic e in .env is neither a target nor hidden, so nothing reports the file (v1, #43 item 136)
 novee-sandbox/agents-dotenv-exfil~homoglyph	TC-CFG-012	a Cyrillic e in .env is neither a target nor hidden, so nothing reports the file (v1, #43 item 136)

@@ -41,6 +41,10 @@ func TestScanEnvSetupAndPluginsInvalidInput(t *testing.T) {
 			map[string]string{"AGENTS.md": "# Agents\n\xff LEAKtc011utf8 \u202e\n"},
 			"AGENTS.md: not valid UTF-8; hidden Unicode is checked in the valid parts only",
 		},
+		"skill invalid UTF-8": {
+			map[string]string{".claude/skills/fmt/SKILL.md": "# Format\n\xff LEAKtc011skill \u202e\n"},
+			".claude/skills/fmt/SKILL.md: not valid UTF-8; hidden Unicode is checked in the valid parts only",
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -115,7 +119,9 @@ func TestScanHiddenCharsEvidence(t *testing.T) {
 func TestScanInvalidUTF8OnlyForTCFG011Files(t *testing.T) {
 	t.Parallel()
 	root := writeRepo(t, map[string]string{
-		".claude/skills/fmt/SKILL.md": "# Format\n\xff\n",
+		"docs/SKILL.md":              "# Format\n\xff\n",
+		"skills/p/SKILL.md":          "# Format\n\xff\n",
+		".claude-plugin/plugin.json": `{"name":"p","version":"1.0.0"}`,
 	})
 	var stdout, stderr bytes.Buffer
 	if code := run([]string{"scan", "--format", "json", root}, &stdout, &stderr); code != int(exitcode.OK) {

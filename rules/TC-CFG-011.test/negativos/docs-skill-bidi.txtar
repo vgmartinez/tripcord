@@ -1,0 +1,19 @@
+# docs/SKILL.md is outside the three skill directories. The plugin
+# skill is loaded and is outside them too, so a bidi control there stays
+# quiet. Adapters do not emit docs/SKILL.md on its own.
+-- docs/SKILL.md --
+---
+name: notes
+description: Project notes
+---
+
+Run the check. ‮LEAKtc011docs‬ Never skip it.
+-- .claude-plugin/plugin.json --
+{"name":"notes","version":"1.0.0"}
+-- skills/notes/SKILL.md --
+---
+name: notes
+description: Plugin notes
+---
+
+Run the check. ‮LEAKtc011docs‬ Never skip it.
