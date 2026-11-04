@@ -19,13 +19,20 @@ order:
 | `-u` / `--user` value of the form `user:pass` (S2) | `curl -u admin:X` | `RedactUserFlags` |
 | A tool's own short password or token flag (S2) | `sshpass -p X`, `redis-cli -a X`, `mysql -pX`, `docker login -p X`, `openssl -k X`, `vercel -t X` | `RedactToolFlags` |
 | A quoted value, as a whole (S3) | `--password "a b X"` | all flag and assignment classes |
-| URL userinfo, percent-encoded too (S4) | `https://u:X@host`, `https://u:p%40X@host` | `RedactURLUserinfo` |
+| URL userinfo, with an empty username or percent-encoded too (S4) | `https://u:X@host`, `redis://:X@host`, `https://u:p%40X@host` | `RedactURLUserinfo` |
 | MCP argv with the value in the next element (S4) | `["--token", "X"]` | `RedactToolArgv` (source side) |
 | Token shapes | private key blocks, `AKIA…`, AWS secret keys, `ghp_…`, `github_pat_…`, `glpat-…`, `sk-…`, `sk_live_…`, `xox?-…`, `xapp-…`, `npm_…`, `hf_…`, `ya29.…`, `AIza…`, JWTs, `bearer X`, Slack webhook URLs | `secretPatterns` |
-| An assignment to a credential name, `=` or `:` | `SECRET_KEY=X`, `api_key: X` | `RedactAssignments`, `CredentialName` |
+| An assignment to a credential name, `=` or `:` | `SECRET_KEY=X`, `api_key: X`, `"api_key": X` | `RedactAssignments`, `CredentialName` |
+| A YAML block scalar or nested mapping under a credential name, quoted or not, as a whole | `api_key: \|-` then `  X`, `'api_key': >` then `  X`, `token:` then `  "pw": X` | `redactColonAssignments` (`blockScalarHeader`, `nestedMappingStart`) |
 
 A shell line continuation (`\` and a newline) between a flag, a header,
 or `bearer` and its value is skipped, as the shell deletes it.
+
+A credential name's value may start on the next line. If that line is
+a key, a name (quoted or not) and a `:` followed by a blank, a line
+break, or the end of the text, the more-indented lines are a nested
+mapping and are redacted as one. Anything else there, including a
+glued `sk:X` or a URL, is the outer key's own plain scalar.
 
 The home directory classes (S5 to S7) are not redactor patterns but path
 folding: the running user's home directory is shown as `~` in every
@@ -63,6 +70,8 @@ then a cut at 1024 bytes (`MaxFieldBytes`).
 | Job summary | none: v0 never writes `GITHUB_STEP_SUMMARY` | - |
 | `scan` diagnostics on stderr | `output.TerminalLine` (redactor, then one escaped line) | field |
 | `scan` and other CLI errors on stderr | `errorText` = `output.Message(foldHome(err))`; `scanTarget.redactError` also replaces a `--staged` temporary tree path with `.`; Git stderr through `sanitizeGitStderr` and `gitrun.Sanitize` (redactor before the cut) | message (Git stderr 1024 before it) |
+| Unknown command error (`tripcord <argv>`) | `output.Message(foldHome(args[0]))` on the raw argument, then quoted: quoting first would turn a line continuation into a literal `\n` the redactor no longer sees | message |
+| `scan` path that does not exist | `scanRoot` names the argument as given, through `output.Message(foldHome())`, then quoted, not the cleaned absolute path, whose `://` `filepath.Abs` turns into `:/`; then `scanTarget.redactError` | message |
 | `tripcord hook`, Claude Code: stdout `permissionDecisionReason` / `systemMessage`, stderr reason | `hookReason` (`output.Message(foldHome(reason))`) for a decision; `hookFailure` (`errorText`) for a failure | message |
 | `tripcord hook`, Cursor: stdout `user_message` / `agent_message`, stderr reason | the same | message |
 | `tripcord hook`, Copilot: stderr reason or warning | the same | message |
@@ -125,9 +134,13 @@ the warning must never join (`warnRedactFalse` in `cmd/tripcord`).
 `cmd/tripcord/redaction_canary_test.go` is the gate: one canary per
 class above, written plainly, fully `\u`-escaped, and split by a JSON
 escape, in config files, in the command, path, and URL of every hook
-harness, in custom rule messages and policy errors, and in a panic. No
-canary may appear in any output format, every finding's fingerprint
-must, and `redact: false` changes nothing.
+harness, in custom rule messages and policy errors, in a panic, in an
+unknown command, and as a scan path argument. No canary may appear in
+any output format, every finding's fingerprint must, and
+`redact: false` changes nothing. `internal/output`'s
+`TestRedactionScalesLinearly` and `TestBlockScalarCandidatesScaleLinearly`,
+and `TestDiscoverHookHeavyBudget` in the CI perf job, hold redaction to
+linear cost on long lines of near-miss candidates.
 `cmd/tripcord/redaction_persist_unix_test.go` checks that scan, the hook
 through `bootstrap.sh`, and init leave no canary in the repository,
 `HOME`, the cache, or `TMPDIR`, and an empty `.run` directory.
