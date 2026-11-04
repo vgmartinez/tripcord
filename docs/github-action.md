@@ -115,8 +115,8 @@ input: an empty `fail-on` still leaves the threshold to the CLI and the
 repository policy. The outputs are `is_agent` and `agents`. The
 action step does not continue on error, so a TC-CFG-014 denial
 (exit 1) fails the scan job after publishing. An unapproved change of
-more than 64 agent-config paths is that denial. These workflows do
-not pass a review file, and exit 1 still fails the job.
+more than 64 agent-config paths is that denial. These workflows pass
+`reviews-file`, so exit 1 fails the job, and exit 3 or 4 also fails it.
 
 The reviews step calls `github.paginate` on
 `GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews`. Owner,

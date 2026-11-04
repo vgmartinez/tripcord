@@ -140,9 +140,9 @@ is still applied, and a lock there rejects a weaker base policy.
   (exit 1), including a change past the 64-path cap. With
   `reviews-file`, an incomplete result or an invalid review file
   (exit 3 or 4) also fails the action. Without `reviews-file`, exits
-  3 and 4 warn without failing the action. The reusable workflow
-  `tripcord-pr.yml` does not pass reviews, so that denial is what
-  fails its job.
+  3 and 4 warn without failing the action. The reusable workflows
+  `tripcord-pr.yml` and `tripcord-pr-comment.yml` pass `reviews-file`,
+  so exit 1 and exit 3 or 4 both fail their jobs.
 
 ## References
 
