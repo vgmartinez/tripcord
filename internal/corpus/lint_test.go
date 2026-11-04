@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/vgmartinez/tripcord/internal/corpus/benign"
 )
@@ -282,11 +283,15 @@ func TestBenignIndexIsNotAFixture(t *testing.T) {
 	}
 
 	corpus := filepath.Join(t.TempDir(), "corpus")
-	var rows []byte
-	rows = append(rows, benign.LockHeader...)
+	when := time.Date(2026, 11, 4, 0, 0, 0, 0, time.UTC)
 	sha := strings.Repeat("ab", 20)
-	for i := 0; i < 300; i++ {
-		rows = append(rows, fmt.Sprintf("org/r%03d\t%s\tMIT\tagents\t2026-11-04\n", i, sha)...)
+	repos := make([]benign.Repo, 300)
+	for i := range repos {
+		repos[i] = benign.Repo{Name: fmt.Sprintf("org/r%03d", i), SHA: sha, License: "MIT", Harnesses: []string{"agents"}, Band: "small", Date: "2026-11-04"}
+	}
+	rows, err := benign.FormatLock(repos, when)
+	if err != nil {
+		t.Fatal(err)
 	}
 	if len(rows) <= maxFileBytes {
 		t.Fatalf("fixture lock is %d bytes", len(rows))
@@ -299,7 +304,11 @@ func TestBenignIndexIsNotAFixture(t *testing.T) {
 	if len(got) != 0 {
 		t.Fatalf("valid corpus index flagged: %#v", got)
 	}
-	bad := append([]byte(benign.LockHeader), []byte("# see https://tracking.evil.com/beacon AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=\n")...)
+	empty, err := benign.FormatLock(nil, when)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bad := append(empty, []byte("# see https://tracking.evil.com/beacon AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=\n")...)
 	writeFile(t, filepath.Join(corpus, "benign", "repos.lock"), bad, 0o644)
 	got, err = Check(corpus)
 	if err != nil {

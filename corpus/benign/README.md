@@ -53,23 +53,44 @@ directory.
 `repos.lock` names public repositories used to measure false positives.
 `scripts/benign-repos` builds it from the GitHub code search API with a
 read-only `GITHUB_TOKEN`. The command does not download repository
-contents. A row is `owner/repo`, the default-branch commit at build
-time, the SPDX license (`NOASSERTION` when the API reports none), the
-harnesses found, and the build date. The search looks for a root agent
-config: `.claude/settings.json`, `.mcp.json`, `.cursor/`, `AGENTS.md`,
-`.vscode/tasks.json`, `.github/workflows/copilot-setup-steps.yml`,
-`.devcontainer/`, `.codex/`, and `.gemini/`. A repository is kept when
-it has at least 50 stars and is not archived and not a fork. The list
-is stratified by harness and by repository size (small is under 1 MB,
-medium is under 10 MB, and large is the rest) and targets 1,000
-repositories. This copy is partial: 132 of 1,000 repositories. mcp,
-copilot, devcontainer, codex, and gemini have no rows yet. A resumable
-crawl fills the list in. v0 doesn't ship until it reaches at least
-1,000 repositories with a minimum per harness (#41). The file changes
-only through a pull request.
+contents. A row is `owner/repo`, the pinned default-branch commit, the
+SPDX license (`NOASSERTION` when the API reports none), the harnesses
+found, the size band (`small`, `medium`, or `large`), and the date that
+row was added. The search looks for a file the adapters read:
+`.claude/settings.json`, `.mcp.json` (any depth), `.cursor/`,
+`AGENTS.md`, `.vscode/tasks.json`, `.github/copilot-instructions.md`,
+`.github/workflows/copilot-setup-steps.yml`,
+`.devcontainer/devcontainer.json`, `.devcontainer/<name>/devcontainer.json`,
+`.devcontainer.json`, `.codex/config.toml` (any depth), `GEMINI.md`, and
+`.gemini/settings.json`. `AGENTS.md` stays on the agents harness. A
+repository is kept when it has at least 50 stars and is not archived
+and not a fork. The list is stratified by harness and by repository
+size (small is under 1 MB, medium is under 10 MB, and large is the
+rest) and targets 1,000 repositories.
+
+A run merges into the lock that is already there. An existing row keeps
+its commit SHA unless `-repin` is set. The harness furthest below the
+per-harness minimum is searched first. The default minimum is 40 for
+each of the nine harnesses: nine times 40 is 360, so the floor does not
+use up the 1,000-repository target, forty repositories is enough for a
+few false positives to show, and a higher floor would stall a harness
+whose public configs are scarce. `-min-harness` overrides that floor.
+Code search is limited to about 10 requests per minute (`-batch` defaults
+to 8). A secondary rate limit waits for `Retry-After` once; a longer
+penalty stops the run. Progress is written after each page, to the lock
+and to `crawl.state`, by renaming a temporary file in the same
+directory. A rate limit exits non-zero and does not replace the lock
+with a shorter list. A batch that stops before the target exits non-zero
+unless `-partial` is set. This copy is partial: 480 of 1,000
+repositories. Every harness has at least one row. Harness counts:
+agents 42, claude 36, codex 59, copilot 131, cursor 49, devcontainer 39,
+gemini 69, mcp 37, vscode 23. Size bands: small 51, medium 134, large
+295. A resumable crawl fills the list in. v0 doesn't ship until it
+reaches at least 1,000 repositories with a minimum per harness (#41).
+The file changes only through a pull request.
 
 ```sh
-GITHUB_TOKEN=... go run ./scripts/benign-repos -out corpus/benign/repos.lock
+GITHUB_TOKEN=... go run ./scripts/benign-repos -out corpus/benign/repos.lock -batch 8 -partial
 ```
 
 `triage.tsv` is the review of findings on that list. Its columns are
