@@ -10,12 +10,12 @@
 # archived and not a fork. The list is stratified by harness and by
 # repository size (small is under 1 MB, medium is under 10 MB, and
 # large is the rest) and targets 1000 repositories.
-# This copy is partial: 726 of 1000 repositories.
+# This copy is partial: 728 of 1000 repositories.
 # Every harness has at least one row.
 # A resumable crawl fills the list in.
 # v0 doesn't ship until it reaches at least 1,000 repositories with a minimum per harness (#41).
-# Harness counts: agents 48, claude 77, codex 65, copilot 131, cursor 99, devcontainer 122, gemini 72, mcp 68, vscode 57.
-# Size bands: small 96, medium 207, large 423.
+# Harness counts: agents 50, claude 77, codex 65, copilot 131, cursor 99, devcontainer 122, gemini 72, mcp 68, vscode 57.
+# Size bands: small 96, medium 207, large 425.
 # Columns, tab-separated: owner/repo, 40-character commit SHA of the
 # default branch HEAD at generation time, SPDX license (NOASSERTION
 # when the API reports none), harnesses (comma-separated), size band
@@ -259,6 +259,7 @@ beep-effect/beep-effect	405727310e87e7392b3fbd7f684cf9b2ed1fea5f	Apache-2.0	code
 ben-milanko/dart-pdf	650b1616c5bb1fbc3cd4f34d1750a0070c1a7af3	Apache-2.0	codex	large	2026-11-04
 bencherdev/bencher	47445a0c1eda8f5a3e1a7aa2e9f40060132d72c5	NOASSERTION	claude	large	2026-11-04
 bikeindex/bike_index	1854bab816c735eb26185346132d8fa7f0d9b15e	AGPL-3.0	copilot	large	2026-11-04
+birdnet-team/BirdNET-Analyzer	032dcaca6afb2a3438965f80d5e01de0fb2036b4	MIT	agents	large	2026-11-04
 bitcoin-sv/bitcoin-sv	6504a3aff65ba97c0f6c80962b033e35ecbfed4b	NOASSERTION	copilot	large	2026-11-04
 bluelibs/runner	962ebaad70b6ed8f9dd7088ce4cdde25237fff6c	MIT	mcp	large	2026-11-04
 blueprintui/blueprintui	a62f6514db97db0841f048cceaaf147e62004c55	NOASSERTION	cursor	large	2026-11-04
@@ -548,6 +549,7 @@ nonebot/adapter-telegram	6e04ada83674f6409dcf5bc3f9e86530b9f1de6c	MIT	devcontain
 nordicopen/easee_hass	57e6881a0c705a9d8b5df6e004f43a701947b58f	MIT	devcontainer	medium	2026-11-04
 npgsql/efcore.pg	fc542f204303f68b335fa68fb2aa77ddebc068e7	PostgreSQL	copilot	large	2026-11-04
 nrwl/nx-console	62c1e23f959b4c0b49190907d4c3140583af811e	MIT	cursor	large	2026-11-04
+nsnam/ns-3-dev-git	070465047fd0b4fa62ba29fb35bd144fa6251f45	NOASSERTION	agents	large	2026-11-04
 nvim-java/nvim-java	db5536b4cb3da153084e50016596fd0e3a319aae	MIT	devcontainer	small	2026-11-04
 obophenotype/uberon	5e6985ee2dffe64122d637e451ab253ecf56089e	NOASSERTION	copilot	large	2026-11-04
 ocaml/dune	aa9d79b4a7dfe23ce6526525b5915f9087d04577	MIT	copilot	large	2026-11-04
