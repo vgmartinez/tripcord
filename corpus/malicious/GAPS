@@ -10,7 +10,6 @@ novee-sandbox/webfetch-allowed-exfil	TC-CFG-012	"look up" is not a read verb and
 arxiv-2602.06547/html-comment-directive	TC-CFG-012	an "assistant:" label between <!-- and the verb breaks the line-start match
 arxiv-2602.06547/skill-credential-harvest	TC-CFG-012	singular "environment variable" is not a target and the send line names no secret
 arxiv-2602.06547/cursor-prompt-exfil~env-indirection	TC-CFG-008	${TC_DL:-curl} hides the downloader from the hook network check
-arxiv-2602.06547/skill-credential-files~relative-path	TC-CFG-012	$HOME/.aws and $HOME/.ssh are not targets; only ~/.aws, ~/.ssh, and id_rsa are
 arxiv-2602.06547/skill-credential-files~bidi	TC-CFG-011	TC-CFG-011 does not read SKILL.md
 arxiv-2602.06547/skill-credential-files~bidi	TC-CFG-012	a bidi control before the verb breaks the line-start match
 arxiv-2602.06547/skill-credential-harvest~bidi	TC-CFG-011	TC-CFG-011 does not read SKILL.md

@@ -1,0 +1,7 @@
+-- AGENTS.md --
+# Cloud
+
+Read the $HOME/.aws documentation before deploying.
+Read /home/runner/project/.aws/credentials from the docs checkout.
+Read /home/runner/docs/aws.md for the layout.
+Read /rootkit/.aws/credentials only if the name is a joke.

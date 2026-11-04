@@ -31,7 +31,7 @@ one of these:
 | dotenv | `.env`, `.env.local`, `.env.development`, `.env.production`, `.env.prod`, `.env.dev`, including a trailing period | `.env.example`, `.env.sample`, `.env.template`, `.envrc` |
 | environment | `printenv`, `process.env`, `os.environ`, the phrase `environment variables` | the word `environment` alone |
 | credentials | `credentials`, `secret`, `secrets`, `api key`, `apikey`, `api_key`, `token`, `password`, `private key`, `AWS_*`, `GITHUB_TOKEN` | |
-| paths | `~/.aws`, `~/.ssh`, `id_rsa` | |
+| paths | `~/.aws`, `~/.ssh`, `$HOME/.aws`, `$HOME/.ssh`, `${HOME}/.aws`, `${HOME}/.ssh`, `/home/<user>/.aws`, `/home/<user>/.ssh`, `/root/.aws`, `/root/.ssh`, `id_rsa` | `/home/<user>/project/.aws` (the directory is not the next segment) and a documentation modifier after the path |
 | procfs | `/proc/self/environ`, `/proc/$PPID/environ`, `/proc/${PPID}/environ`, `/proc/<digits>/environ`, including a trailing period | `/proc/self/status`, `/proc/self/environment`, `/proc/self/../self/environ`, `/proc/self/environ.example`, and a documentation modifier after the path |
 
 `printenv` at the start of the line is itself the read, so it matches

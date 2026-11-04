@@ -29,6 +29,7 @@ positivos:
   agents-printenv-verb: medium
   agents-read-any-credentials: medium
   agents-read-dotenv: medium
+  agents-read-home-paths: medium
   agents-send-all-their-tokens: medium
   agents-wget-header-post-file-dotenv: medium
   agents-wget-post-file-dotenv: medium

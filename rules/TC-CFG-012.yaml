@@ -29,8 +29,12 @@
 # .env.development, .env.production, .env.prod, and .env.dev),
 # printenv, process.env, os.environ, "environment variables",
 # credentials, secret(s), api key, token, password, private key,
-# ~/.aws, ~/.ssh, id_rsa, and AWS_*/GITHUB_TOKEN-style environment
-# variables. /proc/self/environ, /proc/$PPID/environ,
+# ~/.aws, ~/.ssh, $HOME/.aws, $HOME/.ssh, ${HOME}/.aws, ${HOME}/.ssh,
+# /home/<user>/.aws, /home/<user>/.ssh, /root/.aws, /root/.ssh, id_rsa,
+# and AWS_*/GITHUB_TOKEN-style environment
+# variables. A home path needs the directory in the next segment, so
+# /home/<user>/project/.aws does not count. /proc/self/environ,
+# /proc/$PPID/environ,
 # /proc/${PPID}/environ, and /proc/<digits>/environ are targets.
 # /proc/self/status, /proc/self/environment, /proc/self/../self/environ,
 # and /proc/self/environ.example are not. .env.example, .env.sample,
