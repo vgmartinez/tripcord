@@ -33,6 +33,31 @@ func TestRedactionScalesLinearly(t *testing.T) {
 	}
 }
 
+// TestBlockScalarCandidatesScaleLinearly holds the YAML block scalar
+// check to linear cost on one long, newline-free line of near-miss
+// headers, the shape that once ran a backward line scan per candidate
+// (12s for 1 MiB). 1 MiB is 16x the 64 KiB input; a linear pass costs
+// about 16x, a quadratic one about 256x. The 64x budget, plus a fixed
+// allowance for a slow or busy runner, sits far from both.
+func TestBlockScalarCandidatesScaleLinearly(t *testing.T) {
+	t.Parallel()
+	units := map[string]string{
+		"pipe value":            "api_key: |x ",
+		"mid-line key":          "x api_key: |x ",
+		"token key":             "token: |x ",
+		"separated":             "api_key: |x; ",
+		"folded value":          "api_key: >x ",
+		"comment without break": "api_key: | #c ",
+	}
+	for name, unit := range units {
+		small := fastestRedaction(strings.Repeat(unit, (64<<10)/len(unit)))
+		large := fastestRedaction(strings.Repeat(unit, (1<<20)/len(unit)))
+		if large > 64*small+250*time.Millisecond {
+			t.Errorf("%s: 64KiB took %v, 1MiB took %v (%.1fx, budget 64x)", name, small, large, float64(large)/float64(small))
+		}
+	}
+}
+
 func fastestRedaction(input string) time.Duration {
 	fastest := time.Duration(1<<63 - 1)
 	for range 3 {

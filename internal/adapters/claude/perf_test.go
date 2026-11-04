@@ -35,9 +35,25 @@ const (
 	// scanning through path-like prefixes, which must remain linear.
 	pathColonHook     hookHeavyShape = "path-colon"
 	flagPathColonHook hookHeavyShape = "flag-path-colon"
+	// blockPipeHook, midLineBlockPipeHook, and tokenBlockPipeHook are
+	// one long line of near-miss YAML block scalar headers ("|x" is not
+	// a header): each must be rejected without a scan to the start of
+	// the line, which must remain linear.
+	blockPipeHook        hookHeavyShape = "block-pipe"
+	midLineBlockPipeHook hookHeavyShape = "mid-line-block-pipe"
+	tokenBlockPipeHook   hookHeavyShape = "token-block-pipe"
 )
 
-var hookHeavyShapes = []hookHeavyShape{repeatedHooks, distinctHooks, oneLongHook, pathColonHook, flagPathColonHook}
+var hookHeavyShapes = []hookHeavyShape{
+	repeatedHooks, distinctHooks, oneLongHook, pathColonHook, flagPathColonHook,
+	blockPipeHook, midLineBlockPipeHook, tokenBlockPipeHook,
+}
+
+// singleCommandShape reports whether shape is one hook whose command is
+// one string as long as the file, rather than many hooks.
+func singleCommandShape(shape hookHeavyShape) bool {
+	return shape != repeatedHooks && shape != distinctHooks
+}
 
 // hookHeavySettings returns a settings.json of the given shape just
 // under the 1 MiB read cap.
@@ -50,7 +66,7 @@ func hookHeavySettings(tb testing.TB, shape hookHeavyShape) []byte {
 		}
 		return raw
 	}
-	if shape == oneLongHook || shape == pathColonHook || shape == flagPathColonHook {
+	if singleCommandShape(shape) {
 		budget := int(adapters.MaxConfigFileBytes) - 128 - len(wrap([]any{map[string]any{"type": "command", "command": ""}}))
 		command := strings.Repeat(hookHeavyCommand(shape, 0)+"; ", budget/(len(hookHeavyCommand(shape, 0))+2))
 		return wrap([]any{map[string]any{"type": "command", "command": command}})
@@ -80,6 +96,12 @@ func hookHeavyCommand(shape hookHeavyShape, i int) string {
 		return "a/token:x"
 	case flagPathColonHook:
 		return "--k=a-b/password:z"
+	case blockPipeHook:
+		return "api_key: |x"
+	case midLineBlockPipeHook:
+		return "x api_key: |x"
+	case tokenBlockPipeHook:
+		return "token: |x"
 	default:
 		return hookHeavyPhrase
 	}
@@ -144,6 +166,7 @@ func BenchmarkDiscoverHookHeavySettings(b *testing.B) {
 var hookHeavyBudget = map[hookHeavyShape]float64{
 	repeatedHooks: 20, distinctHooks: 60, oneLongHook: 80,
 	pathColonHook: 80, flagPathColonHook: 80,
+	blockPipeHook: 80, midLineBlockPipeHook: 80, tokenBlockPipeHook: 80,
 }
 
 // TestDiscoverHookHeavyBudget runs only with TRIPCORD_PERF_BUDGET set

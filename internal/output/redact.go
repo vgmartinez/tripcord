@@ -673,6 +673,7 @@ func redactColonAssignments(value string, removed *[]string) string {
 	var spans literalSpans
 	spansFound := false
 	imageRefs := findContainerImageSpans(value)
+	lines := newLineIndex(value)
 	pos := 0
 	for {
 		h, found := nextAssignmentHead(value, scan, pos, ':')
@@ -689,25 +690,19 @@ func redactColonAssignments(value string, removed *[]string) string {
 		if ok {
 			stop = colonValueStop(value, h.start, h.openQuote, h.closeQuote, h.sep)
 			if stop == "" {
-				// lineIndent scans backward to the start of the line, so it
-				// is only cheap to call for a genuine block scalar (rare,
-				// and inherently bounded by the nearest newline behind it).
-				// Calling it for every rejected candidate instead would
-				// make a long, newline-free command (one credential-named
-				// match after another, as in a repeated-flag command
-				// string) quadratic: each match would rescan everything
-				// before it looking for a "\n" that is never there.
-				if h.valStart < len(value) && (value[h.valStart] == '|' || value[h.valStart] == '>') {
-					if headerEnd, bodyEnd, isBlock := blockScalarSpan(value, h.valStart, lineIndent(value, h.start)); isBlock {
-						b.WriteString(value[pos:headerEnd])
-						pos = headerEnd
-						if bodyEnd > headerEnd {
-							*removed = append(*removed, value[headerEnd:bodyEnd])
-							b.WriteString(redactedBlockScalarBody(value[headerEnd:bodyEnd]))
-							pos = bodyEnd
-						}
-						continue
+				// blockScalarHeader is strict before lines is asked for the
+				// key's column, so a near miss ("api_key: |x") costs no
+				// line lookup, and lines answers in amortized constant time.
+				if headerEnd, isBlock := blockScalarHeader(value, h.valStart, lines); isBlock {
+					bodyEnd := blockBodyEnd(value, headerEnd, lines.column(h.start))
+					b.WriteString(value[pos:headerEnd])
+					pos = headerEnd
+					if bodyEnd > headerEnd {
+						*removed = append(*removed, value[headerEnd:bodyEnd])
+						b.WriteString(redactedBlockScalarBody(value[headerEnd:bodyEnd]))
+						pos = bodyEnd
 					}
+					continue
 				}
 				if strings.Contains(h.sep, "\n") && startsAssignmentHead(value, h.valStart) {
 					// h's colon has nothing after it but a newline: its
@@ -743,21 +738,16 @@ func redactColonAssignments(value string, removed *[]string) string {
 	return b.String()
 }
 
-// blockScalarSpan recognizes a YAML block scalar value starting at
+// blockScalarHeader recognizes a YAML block scalar header starting at
 // valStart: "|" or ">", an optional chomping indicator ("-" or "+") and
 // a single-digit indentation indicator, in either order, then nothing
 // but blanks or a "#" comment to the end of the line ("api_key: |-",
-// "api_key: >2", "api_key: |2-"). keyIndent is the credential name's own
-// line indentation (from lineIndent), the threshold a block scalar's
-// content must be indented past. headerEnd is the offset just past the
-// indicator's own line; bodyEnd is the offset past every blank line and
-// every line indented more than keyIndent that follows, the block's
-// content, which colonValue cannot see because it stops at the first
-// newline. ok is false when valStart does not start a block scalar, so
-// the caller falls back to colonValue.
-func blockScalarSpan(value string, valStart, keyIndent int) (headerEnd, bodyEnd int, ok bool) {
+// "api_key: >2", "api_key: |2-"). headerEnd is the offset just past the
+// header's line, where the block's content starts. ok is false for
+// anything else, including "|x", so the caller falls back to colonValue.
+func blockScalarHeader(value string, valStart int, lines *lineIndex) (headerEnd int, ok bool) {
 	if valStart >= len(value) || (value[valStart] != '|' && value[valStart] != '>') {
-		return 0, 0, false
+		return 0, false
 	}
 	i := valStart + 1
 	for n := 0; n < 2 && i < len(value) && isBlockScalarIndicator(value[i]); n++ {
@@ -767,56 +757,87 @@ func blockScalarSpan(value string, valStart, keyIndent int) (headerEnd, bodyEnd 
 		i++
 	}
 	if i < len(value) && value[i] == '#' {
-		for i < len(value) && value[i] != '\n' && value[i] != '\r' {
-			i++
-		}
-	}
-	if i < len(value) && value[i] != '\n' && value[i] != '\r' {
-		return 0, 0, false
+		i = lines.lineEnd(i)
 	}
 	if i < len(value) && value[i] == '\r' {
 		i++
 	}
-	if i < len(value) && value[i] == '\n' {
+	if i < len(value) && value[i] != '\n' {
+		return 0, false
+	}
+	if i < len(value) {
 		i++
 	}
-	headerEnd = i
-	for i < len(value) {
-		lineStart := i
-		lineEnd := lineStart
-		for lineEnd < len(value) && value[lineEnd] != '\n' {
-			lineEnd++
-		}
-		line := strings.TrimSuffix(value[lineStart:lineEnd], "\r")
-		indent := 0
-		for indent < len(line) && (line[indent] == ' ' || line[indent] == '\t') {
-			indent++
-		}
-		if indent < len(line) && indent <= keyIndent {
-			break
-		}
-		i = lineEnd
-		if i < len(value) && value[i] == '\n' {
-			i++
-		}
-	}
-	return headerEnd, i, true
+	return i, true
 }
 
 func isBlockScalarIndicator(c byte) bool {
 	return c == '-' || c == '+' || (c >= '1' && c <= '9')
 }
 
-// lineIndent returns the number of leading blanks on the line containing
-// pos. For a credential name's own position, colonValueStop has already
-// confirmed every byte back to the start of the line is a blank. It scans
-// backward to the previous newline, so call it only when pos is known to
-// start a genuine block scalar (redactColonAssignments checks that first):
-// calling it for every rejected candidate in a long, newline-free value
-// would make redaction of that value quadratic.
-func lineIndent(value string, pos int) int {
-	lineStart := strings.LastIndexByte(value[:pos], '\n') + 1
-	return pos - lineStart
+// blockBodyEnd returns the offset past the block value starting at
+// start: every following line that is blank or indented more than
+// keyIndent, the key's own column. It reads each body line once and
+// only the indentation of the line that ends the block, so the caller,
+// which resumes after the block, stays linear.
+func blockBodyEnd(value string, start, keyIndent int) int {
+	i := start
+	for i < len(value) {
+		j := i
+		for j < len(value) && (value[j] == ' ' || value[j] == '\t') {
+			j++
+		}
+		if j < len(value) && value[j] != '\n' && value[j] != '\r' && j-i <= keyIndent {
+			break
+		}
+		if k := strings.IndexByte(value[j:], '\n'); k >= 0 {
+			i = j + k + 1
+		} else {
+			i = len(value)
+		}
+	}
+	return i
+}
+
+// lineIndex answers line questions about value for positions that only
+// move forward, in amortized constant time: scanning back to the start
+// of the line, or ahead to its end, once per candidate would make a
+// long line of candidates ("api_key: |x api_key: |x ...") quadratic.
+type lineIndex struct {
+	value     string
+	scanned   int // value[:scanned] has been searched for line starts
+	lineStart int // the start of the line holding scanned
+	nextNL    int // the first '\n' at or after the last lineEnd query
+}
+
+func newLineIndex(value string) *lineIndex { return &lineIndex{value: value, nextNL: -1} }
+
+// column returns pos's offset from the start of its line: every byte
+// before it on that line, blank or not, so a key after "- " or after
+// other text on its line ("x api_key: |") counts that text too. That
+// is the indentation YAML compares a block's content against.
+func (l *lineIndex) column(pos int) int {
+	if pos < l.scanned {
+		return pos - (strings.LastIndexByte(l.value[:pos], '\n') + 1)
+	}
+	if i := strings.LastIndexByte(l.value[l.scanned:pos], '\n'); i >= 0 {
+		l.lineStart = l.scanned + i + 1
+	}
+	l.scanned = pos
+	return pos - l.lineStart
+}
+
+// lineEnd returns the offset of the first '\n' at or after pos, or
+// len(value) when there is none.
+func (l *lineIndex) lineEnd(pos int) int {
+	if l.nextNL < pos {
+		if i := strings.IndexByte(l.value[pos:], '\n'); i >= 0 {
+			l.nextNL = pos + i
+		} else {
+			l.nextNL = len(l.value)
+		}
+	}
+	return l.nextNL
 }
 
 // redactedBlockScalarBody is a YAML block scalar's content, replaced by
