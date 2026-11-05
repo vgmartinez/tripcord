@@ -33,9 +33,7 @@ tcf_468158193e18223b	TC-CFG-009	apollographql/apollo-client-integrations	TP	Copi
 tcf_c123668ba5ea5448	TC-CFG-009	apollographql/apollo-client-integrations	accepted-risk	Copilot setup downloads docs.instructions.md from the main branch of the org skills repo; it is agent input, not executed code.	2026-11-05
 tcf_57cd7d8c0f03b542	TC-CFG-006	arch-hdl-lang/arch-com	accepted-risk	Stop hook runs doc-sync-check.sh by an absolute home path; a copy is committed under codex hooks, but the path is not the checkout.	2026-11-05
 tcf_677ce613bd9bfa9d	TC-CFG-006	arch-hdl-lang/arch-com	accepted-risk	PostToolUse hook runs test-on-src-edit.sh by an absolute home path; a copy is committed under codex hooks, but the path is not the checkout.	2026-11-05
-tcf_8fa38e8c05bc9ae0	TC-CFG-011	beep-effect/beep-effect	FP	U+200B sits inside path placeholders next to a yaml extension and hides no text, so nothing is concealed.	2026-11-05
 tcf_0ca6135e518113fe	TC-CFG-009	chrxh/alien	accepted-risk	Copilot setup installs the vendor CUDA keyring deb by version with no checksum, then installs signed packages from that repo.	2026-11-05
-tcf_6c7475401e68e9cb	TC-CFG-011	coveo/ui-kit	FP	U+200B sits before a code fence so the nested fence stays open, and it hides no text.	2026-11-05
 tcf_e33c8cedf0f4eced	TC-CFG-002	dermotduffy/advanced-camera-card	TP	VS Code task Vite runs a yarn watch build on folderOpen, so opening the folder executes it with no explicit action.	2026-11-05
 tcf_16ac1bae0f625ac0	TC-CFG-009	dsccommunity/SqlServerDsc	accepted-risk	Copilot setup adds the vendor apt signing key fetched over https with no fingerprint check, then installs signed packages.	2026-11-05
 tcf_9b9af0f371523f23	TC-CFG-004	egregore-labs/egregore	TP	The shared allow list contains Bash, which pre-approves every shell command.	2026-11-05
@@ -80,7 +78,6 @@ tcf_a1772d03942cb3da	TC-CFG-004	obophenotype/uberon	TP	The shared allow list con
 tcf_d08a6388c7a19334	TC-CFG-009	obophenotype/uberon	accepted-risk	Copilot setup downloads a version-tagged ROBOT jar release with no checksum; the tag is not a commit pin but is not latest.	2026-11-05
 tcf_e4d5791f17fe5082	TC-CFG-009	obophenotype/uberon	accepted-risk	Copilot setup downloads the ROBOT wrapper script from a version tag path and runs it, with no checksum or commit pin.	2026-11-05
 tcf_b4fd4ce19c91624b	TC-CFG-006	ojuschugh1/sqz	TP	Windsurf preToolUse terminal hook runs a locally built debug binary under a home directory, which is not committed.	2026-11-05
-tcf_8b86d432c1be9562	TC-CFG-011	owid/etl	FP	The code points are literal values in a dict of characters to strip, and they hide no text.	2026-11-05
 tcf_e40b6cea366e690d	TC-CFG-002	owid/etl	TP	VS Code task Sync VS Code extensions runs make vsce-sync on folderOpen, so opening the folder executes it with no explicit action.	2026-11-05
 tcf_1dc362695ace346f	TC-CFG-009	pail23/stiebel_eltron_isg_component	TP	Devcontainer postCreateCommand pipes an unversioned uv install script into sh with no checksum.	2026-11-05
 tcf_0a41d82009225785	TC-CFG-006	pegasi-ai/reins	TP	PreToolUse Write hook runs node on pre-tool-use.js under a home directory, and that file is not committed.	2026-11-04
