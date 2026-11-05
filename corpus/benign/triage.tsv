@@ -33,6 +33,7 @@ tcf_468158193e18223b	TC-CFG-009	apollographql/apollo-client-integrations	TP	Copi
 tcf_c123668ba5ea5448	TC-CFG-009	apollographql/apollo-client-integrations	accepted-risk	Copilot setup downloads docs.instructions.md from the main branch of the org skills repo; it is agent input, not executed code.	2026-11-05
 tcf_57cd7d8c0f03b542	TC-CFG-006	arch-hdl-lang/arch-com	accepted-risk	Stop hook runs doc-sync-check.sh by an absolute home path; a copy is committed under codex hooks, but the path is not the checkout.	2026-11-05
 tcf_677ce613bd9bfa9d	TC-CFG-006	arch-hdl-lang/arch-com	accepted-risk	PostToolUse hook runs test-on-src-edit.sh by an absolute home path; a copy is committed under codex hooks, but the path is not the checkout.	2026-11-05
+tcf_8fa38e8c05bc9ae0	TC-CFG-011	beep-effect/beep-effect	FP	U+200B sits inside path placeholders next to a yaml extension and hides no text, so nothing is concealed.	2026-11-05
 tcf_0ca6135e518113fe	TC-CFG-009	chrxh/alien	accepted-risk	Copilot setup installs the vendor CUDA keyring deb by version with no checksum, then installs signed packages from that repo.	2026-11-05
 tcf_e33c8cedf0f4eced	TC-CFG-002	dermotduffy/advanced-camera-card	TP	VS Code task Vite runs a yarn watch build on folderOpen, so opening the folder executes it with no explicit action.	2026-11-05
 tcf_16ac1bae0f625ac0	TC-CFG-009	dsccommunity/SqlServerDsc	accepted-risk	Copilot setup adds the vendor apt signing key fetched over https with no fingerprint check, then installs signed packages.	2026-11-05
