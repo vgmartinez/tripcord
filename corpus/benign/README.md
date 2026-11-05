@@ -94,6 +94,27 @@ The file changes only through a pull request.
 GITHUB_TOKEN=... go run ./scripts/benign-repos -out corpus/benign/repos.lock -batch 8 -partial
 ```
 
+Code search returns mostly repositories under 50 stars, so its deep
+pages add few rows. `-discover N` reads window `N` of a fixed list of
+repository-search queries instead (`stars:` ranges with `fork:false
+archived:false` and a recent `pushed:` date), sorted by stars, at most
+`-pages` pages of 100. Each repository not already in the lock is
+checked with GraphQL for the root forms of the paths above on its
+default branch (`.claude/settings.json`, `.claude/settings.local.json`,
+`CLAUDE.md`, `.mcp.json`, `.cursor`, `AGENTS.md`, `.vscode/tasks.json`,
+`.vscode/mcp.json`, `.github/copilot-instructions.md`,
+`.github/workflows/copilot-setup-steps.yml`, `.devcontainer.json`,
+`.devcontainer/devcontainer.json`, `.codex/config.toml`, `GEMINI.md`,
+and `.gemini/settings.json`). The star, archive, and fork filters and
+the row rules are the same. A row already in the lock is not checked,
+so its SHA and harnesses never change. `crawl.state` is not used.
+Running a window again skips what it added, so an interrupted crawl
+resumes by running the windows again from 0.
+
+```sh
+GITHUB_TOKEN=... go run ./scripts/benign-repos -discover 0 -pages 2
+```
+
 `triage.tsv` is the review of findings on that list. Its columns are
 the finding fingerprint, the rule id, `owner/repo`, a verdict (`TP`,
 `FP`, or `accepted-risk`), the reason, and the date. A row is added

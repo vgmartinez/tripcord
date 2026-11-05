@@ -1,9 +1,11 @@
 // Command benign-repos builds corpus/benign/repos.lock from the GitHub
-// code search API. It does not download repository contents. A run
-// merges into the lock already at -out. Rows already there keep their
-// commit SHA unless -repin is set.
+// code search API, or with -discover from one repository-search window.
+// It does not download repository contents. A run merges into the lock
+// already at -out. Rows already there keep their commit SHA unless
+// -repin is set; -discover never changes them.
 //
 //	GITHUB_TOKEN=... go run ./scripts/benign-repos [-out corpus/benign/repos.lock] [-target 1000] [-batch 8] [-min-harness 40] [-only h1,h2]
+//	GITHUB_TOKEN=... go run ./scripts/benign-repos -discover 0 [-pages 10]
 package main
 
 import (
@@ -28,11 +30,13 @@ func main() {
 	partial := flag.Bool("partial", false, "exit 0 when the batch ends before the target")
 	repin := flag.Bool("repin", false, "replace the commit SHA of a repository already in the lock")
 	onlyList := flag.String("only", "", "comma-separated harnesses to search in this run; empty searches all")
+	discover := flag.Int("discover", -1, "read this repository-search window instead of code search; -1 uses code search")
+	pages := flag.Int("pages", 10, "repository-search pages to read in the -discover window, 1 to 10")
 	flag.Parse()
 	token := os.Getenv("GITHUB_TOKEN")
 	only, onlyOK := parseOnly(*onlyList)
-	if token == "" || *target < 1 || *batch < 0 || *minHarness < 0 || !onlyOK || flag.NArg() > 0 {
-		fmt.Fprintln(os.Stderr, "usage: GITHUB_TOKEN=... benign-repos [-out corpus/benign/repos.lock] [-target 1000] [-batch 8] [-min-harness 40] [-only h1,h2] [-partial] [-repin]")
+	if token == "" || *target < 1 || *batch < 0 || *minHarness < 0 || !onlyOK || *pages < 1 || *pages > 10 || flag.NArg() > 0 {
+		fmt.Fprintln(os.Stderr, "usage: GITHUB_TOKEN=... benign-repos [-out corpus/benign/repos.lock] [-target 1000] [-batch 8] [-min-harness 40] [-only h1,h2] [-partial] [-repin] [-discover N [-pages 10]]")
 		os.Exit(2)
 	}
 	existing, err := readExisting(*out)
@@ -54,6 +58,9 @@ func main() {
 	}
 	client.Log = log
 	when := time.Now().UTC()
+	if *discover >= 0 {
+		os.Exit(runDiscover(ctx, client, *discover, *pages, *target, *out, *statePath, existing, cursors, when, log))
+	}
 	res, err := benign.Build(ctx, client, benign.Options{
 		Target:        *target,
 		Now:           when,
@@ -101,6 +108,31 @@ func main() {
 	}
 	fmt.Fprintf(os.Stderr, "size distribution: small %d, medium %d, large %d\n", bands["small"], bands["medium"], bands["large"])
 	os.Exit(benign.ExitCode(res, *partial))
+}
+
+// runDiscover reads one repository-search window and writes what it
+// found, even when the window stopped early. crawl.state is rewritten
+// unchanged. The exit status is 1 when the window stopped early.
+func runDiscover(ctx context.Context, client *benign.Client, window, pages, target int, out, statePath string, existing []benign.Repo, cursors []benign.Cursor, when time.Time, log func(string)) int {
+	repos, err := benign.Discover(ctx, client, benign.DiscoverOptions{
+		Window:   window,
+		Pages:    pages,
+		Target:   target,
+		Now:      when,
+		Existing: existing,
+	}, log)
+	if repos != nil {
+		if werr := writeProgress(out, statePath, repos, cursors, when, len(existing)); werr != nil {
+			fmt.Fprintln(os.Stderr, "benign-repos:", werr)
+			return 1
+		}
+		fmt.Fprintf(os.Stderr, "wrote %d repositories to %s from discover window %d\n", len(repos), out, window)
+	}
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "benign-repos: discover window stopped early:", err)
+		return 1
+	}
+	return 0
 }
 
 func parseOnly(list string) ([]string, bool) {
