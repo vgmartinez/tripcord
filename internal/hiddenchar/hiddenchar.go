@@ -102,13 +102,14 @@ func Scan(b []byte) (model.HiddenChars, bool) {
 // emoji ZWJ sequence: the code points around it, skipping U+FE0F and
 // skin tones U+1F3FB-U+1F3FF, are both Extended_Pictographic.
 //
-// An isolated U+200B, U+200C, or U+200D is not counted when it is not
-// between two letters or digits. A zero-width character is also not
-// counted when it is the entire contents of a quoted string, or when it
-// sits in a bracket character class that only lists zero-width
-// characters and escapes. Tags, bidi controls, a run of zero-width
-// characters, a zero-width character inside a word, and U+2060 or
-// U+FEFF anywhere else stay counted.
+// An isolated U+200B, U+200C, or U+200D is not counted only when both
+// neighbors are whitespace, a line boundary, or the edge of a quote or
+// a code fence. A zero-width character is also not counted inside a
+// quoted string or a bracket class whose contents are only zero-width
+// characters. A character next to punctuation, after a dot, before a
+// word, or at the end of a word stays counted, as do tags, bidi
+// controls, zero-width runs, and U+2060 or U+FEFF outside a strip
+// literal.
 func countedAt(b []byte, i int) bool {
 	r, size := utf8.DecodeRune(b[i:])
 	if Class(r) == "" {
@@ -120,7 +121,7 @@ func countedAt(b []byte, i int) bool {
 	if Class(r) != ZeroWidth {
 		return true
 	}
-	if listedLiteral(b, i, size) {
+	if stripLiteral(b, i) {
 		return false
 	}
 	if r != 0x200B && r != 0x200C && r != 0x200D {
@@ -129,7 +130,7 @@ func countedAt(b []byte, i int) bool {
 	if zeroWidthRun(b, i, size) {
 		return true
 	}
-	return betweenWord(b, i, size)
+	return !quietSide(b, i, false) || !quietSide(b, i+size, true)
 }
 
 func emojiJoiner(b []byte, i, size int) bool {
@@ -138,26 +139,47 @@ func emojiJoiner(b []byte, i, size int) bool {
 	return before && after
 }
 
-// listedLiteral reports a zero-width character written as data: the
-// whole of a quoted string, or one member of a bracket class that lists
-// zero-width characters to strip.
-func listedLiteral(b []byte, i, size int) bool {
-	return quotedLiteral(b, i, size) || stripClass(b, i)
+// stripLiteral reports a zero-width character written as data: the
+// quoted string or bracket class that holds it contains only zero-width
+// characters.
+func stripLiteral(b []byte, i int) bool {
+	return quotedStrip(b, i) || stripClass(b, i)
 }
 
-func quotedLiteral(b []byte, i, size int) bool {
-	prev, psize := utf8.DecodeLastRune(b[:i])
-	next, nsize := utf8.DecodeRune(b[i+size:])
+func quotedStrip(b []byte, i int) bool {
+	start, end := zwSpan(b, i)
+	prev, psize := utf8.DecodeLastRune(b[:start])
+	next, nsize := utf8.DecodeRune(b[end:])
 	if psize == 0 || nsize == 0 || prev != next {
 		return false
 	}
 	return prev == '"' || prev == '\'' || prev == '`'
 }
 
-// stripClass reports whether i is inside a [...] class on this line
-// whose other contents are zero-width characters, spaces, commas, or
-// backslash escapes. A class that also holds letters is not one: that
-// is a word, or a markdown link, and the character stays counted.
+// zwSpan is the byte range of the zero-width run that contains i.
+func zwSpan(b []byte, i int) (start, end int) {
+	start = i
+	for start > 0 {
+		r, size := utf8.DecodeLastRune(b[:start])
+		if size == 0 || Class(r) != ZeroWidth {
+			break
+		}
+		start -= size
+	}
+	end = i
+	for end < len(b) {
+		r, size := utf8.DecodeRune(b[end:])
+		if size == 0 || Class(r) != ZeroWidth {
+			break
+		}
+		end += size
+	}
+	return start, end
+}
+
+// stripClass reports whether i sits in a [...] class on this line whose
+// contents are only zero-width characters. A class that also holds
+// letters is a word or a markdown link, and the character stays counted.
 func stripClass(b []byte, i int) bool {
 	lineStart := bytes.LastIndexByte(b[:i], '\n') + 1
 	lineEnd := len(b)
@@ -176,80 +198,22 @@ func stripClass(b []byte, i int) bool {
 	if closeRel < 0 {
 		return false
 	}
-	return stripClassBody(b[open+1 : i+closeRel])
-}
-
-func stripClassBody(body []byte) bool {
+	body := b[open+1 : i+closeRel]
 	if len(body) == 0 {
 		return false
 	}
-	for i := 0; i < len(body); {
-		r, size := utf8.DecodeRune(body[i:])
-		if r == utf8.RuneError && size == 1 {
+	for j := 0; j < len(body); {
+		r, size := utf8.DecodeRune(body[j:])
+		if size == 0 || Class(r) != ZeroWidth {
 			return false
 		}
-		if Class(r) == ZeroWidth || r == ' ' || r == '\t' || r == ',' {
-			i += size
-			continue
-		}
-		if r != '\\' {
-			return false
-		}
-		n := escapeLen(body[i:])
-		if n == 0 {
-			return false
-		}
-		i += n
+		j += size
 	}
 	return true
 }
 
-func escapeLen(b []byte) int {
-	if len(b) < 2 || b[0] != '\\' {
-		return 0
-	}
-	r, size := utf8.DecodeRune(b[1:])
-	rest := b[1+size:]
-	switch r {
-	case 'u':
-		if hexRun(rest, 4) {
-			return 1 + size + 4
-		}
-		return 0
-	case 'U':
-		if hexRun(rest, 8) {
-			return 1 + size + 8
-		}
-		return 0
-	case 'x':
-		if hexRun(rest, 2) {
-			return 1 + size + 2
-		}
-		return 0
-	default:
-		if r == utf8.RuneError && size == 1 {
-			return 0
-		}
-		return 1 + size
-	}
-}
-
-func hexRun(b []byte, n int) bool {
-	if len(b) < n {
-		return false
-	}
-	for i := 0; i < n; i++ {
-		c := b[i]
-		if c < '0' || (c > '9' && c < 'A') || (c > 'F' && c < 'a') || c > 'f' {
-			return false
-		}
-	}
-	return true
-}
-
-// zeroWidthRun reports a neighbor that is itself a zero-width character,
-// so this one is part of a run. A run stays counted even when it is not
-// inside a word.
+// zeroWidthRun reports a neighbor that is itself a zero-width character.
+// A run stays counted unless the whole run is a strip literal.
 func zeroWidthRun(b []byte, i, size int) bool {
 	prev, psize := utf8.DecodeLastRune(b[:i])
 	if psize > 0 && Class(prev) == ZeroWidth {
@@ -259,18 +223,57 @@ func zeroWidthRun(b []byte, i, size int) bool {
 	return nsize > 0 && Class(next) == ZeroWidth
 }
 
-// betweenWord reports two neighbors that are each a letter or a digit.
-func betweenWord(b []byte, i, size int) bool {
-	prev, psize := utf8.DecodeLastRune(b[:i])
-	next, nsize := utf8.DecodeRune(b[i+size:])
-	if psize == 0 || nsize == 0 {
+// quietSide reports a neighbor that is whitespace, a line boundary, a
+// quote, or the edge of a code fence (three or more ` or ~). forward
+// reads the rune at i; otherwise it reads the rune that ends at i.
+func quietSide(b []byte, i int, forward bool) bool {
+	var r rune
+	var size int
+	if forward {
+		if i >= len(b) {
+			return true
+		}
+		r, size = utf8.DecodeRune(b[i:])
+	} else {
+		if i <= 0 {
+			return true
+		}
+		r, size = utf8.DecodeLastRune(b[:i])
+	}
+	if r == utf8.RuneError && size == 1 {
 		return false
 	}
-	return wordRune(prev) && wordRune(next)
+	if unicode.IsSpace(r) || r == '"' || r == '\'' {
+		return true
+	}
+	if r != '`' && r != '~' {
+		return false
+	}
+	return fenceRun(b, i, r, forward) >= 3
 }
 
-func wordRune(r rune) bool {
-	return unicode.IsLetter(r) || unicode.IsDigit(r)
+func fenceRun(b []byte, i int, marker rune, forward bool) int {
+	n := 0
+	if forward {
+		for j := i; j < len(b); {
+			r, size := utf8.DecodeRune(b[j:])
+			if r != marker {
+				break
+			}
+			n++
+			j += size
+		}
+		return n
+	}
+	for j := i; j > 0; {
+		r, size := utf8.DecodeLastRune(b[:j])
+		if r != marker {
+			break
+		}
+		n++
+		j -= size
+	}
+	return n
 }
 
 func skipEmojiMods(b []byte, forward bool) rune {

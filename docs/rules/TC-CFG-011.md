@@ -33,20 +33,22 @@ A U+200D between two Extended_Pictographic characters is a normal emoji
 ZWJ sequence and is not reported. U+FE0F and skin tones
 (U+1F3FB-U+1F3FF) may sit between the joiner and either character, so
 sequences such as 🏳️‍🌈 and 🐈‍⬛ are quiet. A U+200D between two letters
-or digits is reported.
+or digits is reported, and so is one next to punctuation.
 
-An isolated U+200B, U+200C, or U+200D is not reported when it is not
-between two letters or digits and is not part of a run of zero-width
-characters. A zero-width character (including U+2060 and U+FEFF) is
-also not reported when a quoted string contains only that character,
-or when it sits in a bracket character class that lists zero-width
-characters to strip, such as a dict of characters to remove. The
-escape text `\u200b` is six ASCII characters and is not itself a
-hidden code point.
+An isolated U+200B, U+200C, or U+200D is not reported only when both
+neighbors are whitespace, a line boundary, or the edge of a quote
+(`"`, `'`) or a code fence of at least three backticks or tildes, and
+it is not part of a run of zero-width characters. A quoted string or a
+bracket class whose contents are only zero-width characters is a strip
+literal and is not reported, including U+2060 and U+FEFF written that
+way. The escape text `\u200b` is six ASCII characters and is not itself
+a hidden code point.
 
 Still reported, at high: tag characters, bidi controls, a run of
-zero-width characters, a zero-width character between two letters or
-digits, and U+2060 or U+FEFF anywhere else in the text.
+zero-width characters, a zero-width character inside a word, a
+zero-width character next to punctuation, one after a dot or before a
+word, one at the end of a word, and U+2060 or U+FEFF outside a strip
+literal.
 
 Not reported:
 
@@ -55,13 +57,10 @@ Not reported:
 - User-scope files.
 - `SKILL.md` outside the three skill directories, including
   `docs/SKILL.md` and a Claude plugin `skills/` directory.
-- One U+200B, U+200C, or U+200D that does not sit between two letters
-  or digits and is not next to another zero-width character, such as
-  a path placeholder whose U+200B sits between an ellipsis and
-  `.yaml`, or a U+200B on the line before a code fence.
-- A code literal that lists a zero-width character: a quoted string
-  whose only content is that character, or a bracket character class
-  used to strip them. The examples below write the escape; the file
+- One U+200B, U+200C, or U+200D between whitespace, or at the start of
+  a line immediately before a code fence.
+- A strip literal: a quoted string or a bracket class made only of
+  zero-width characters. The examples below write the escape; the file
   holds the raw character.
 
 ## Evidence
@@ -109,12 +108,17 @@ Use the stan\u200bdard formatter.
 Do not ign\u200bore a failing test.
 ```
 
+```
+Open the .\u200benv file. See evil\u200b.com. Leave the mark on ok\u200b.
+```
+
 Not reported: a file that starts with a byte order mark and has no
-other hidden code point. Also not reported, an isolated U+200B outside
-a word and a literal that lists the character:
+other hidden code point. Also not reported, a U+200B whose neighbors
+are a line boundary and a code fence, and a literal that lists the
+character:
 
 ```
-See `notes/item-…\u200b.yaml`.
+\u200b```
 ```
 
 ```

@@ -19,13 +19,14 @@
 # characters is not counted; U+FE0F and skin tones may sit beside it.
 # U+200E/U+200F marks are not counted.
 #
-# An isolated U+200B, U+200C, or U+200D is not counted when it is not
-# between two letters or digits and is not part of a run of zero-width
-# characters. A zero-width character that is the entire contents of a
-# quoted string, or that sits in a bracket character class listing
-# those characters, is a code literal and is not counted. Tags, bidi
-# controls, zero-width runs, a zero-width character inside a word, and
-# U+2060 or U+FEFF in prose stay counted.
+# An isolated U+200B, U+200C, or U+200D is not counted only when both
+# neighbors are whitespace, a line boundary, or the edge of a quote or
+# a code fence of three or more backticks or tildes, and it is not part
+# of a zero-width run. A quoted string or bracket class made only of
+# zero-width characters is a strip literal and is not counted. A
+# zero-width character next to punctuation, after a dot, before a word,
+# or at the end of a word stays counted. Tags, bidi controls, zero-width
+# runs, and U+2060 or U+FEFF outside a strip literal stay counted.
 #
 # The excerpt names each run's code point, line, and column (code
 # points from 1), never the text the run hides or spells: a tag run is

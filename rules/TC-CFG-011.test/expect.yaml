@@ -7,6 +7,9 @@ positivos:
   agents-tag-smuggle: high
   agents-word-split: high
   agents-zero-width-run: high
+  agents-zwsp-after-dot: high
+  agents-zwsp-end-of-word: high
+  agents-zwsp-punctuation: high
   agents-zwj-nonemoji: high
   claude-local-file: high
   claude-rules-dir: high
