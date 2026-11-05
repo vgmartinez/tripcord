@@ -10,12 +10,12 @@
 # archived and not a fork. The list is stratified by harness and by
 # repository size (small is under 1 MB, medium is under 10 MB, and
 # large is the rest) and targets 1000 repositories.
-# This copy is partial: 756 of 1000 repositories.
+# This copy is partial: 757 of 1000 repositories.
 # Every harness has at least one row.
 # A resumable crawl fills the list in.
 # v0 doesn't ship until it reaches at least 1,000 repositories with a minimum per harness (#41).
-# Harness counts: agents 50, claude 93, codex 70, copilot 131, cursor 102, devcontainer 122, gemini 74, mcp 70, vscode 57.
-# Size bands: small 98, medium 213, large 445.
+# Harness counts: agents 50, claude 94, codex 70, copilot 131, cursor 102, devcontainer 122, gemini 74, mcp 70, vscode 57.
+# Size bands: small 98, medium 214, large 445.
 # Columns, tab-separated: owner/repo, 40-character commit SHA of the
 # default branch HEAD at generation time, SPDX license (NOASSERTION
 # when the API reports none), harnesses (comma-separated), size band
@@ -354,6 +354,7 @@ eclipse-milo/milo	979222f7a43a7718ba1dd1876628d9db48ee8e12	EPL-2.0	copilot	large
 edrlab/thorium-reader	b00cee5e73381bc9ff4390ebabfa9da7f87de581	BSD-3-Clause	vscode	large	2026-11-04
 egraphs-good/egglog	6c3a0c910247f616e6d17b2c3923a757948a7841	MIT	claude	large	2026-11-04
 egregore-labs/egregore	d570d103df64518ad56ea864c334aae0fc0c787c	MIT	codex	medium	2026-11-04
+elamaunt/GDShrapt	aa790ae824a7c8fa3acbaba86d820c1afa33ed04	Apache-2.0	claude	medium	2026-11-05
 elbelicojackson-hue/haking-code-	5d6d0eb5fe08634c6db557f7388b51ad138a00dc	NOASSERTION	gemini	large	2026-11-04
 elementor/elementor	8bb7564a3aafec7392a8a46eacaec0756284a73b	GPL-3.0	cursor	large	2026-11-04
 epicweb-dev/epicflare	f68b3109ec0873f66efb3ad4c32c14606176befd	NOASSERTION	cursor	medium	2026-11-04
