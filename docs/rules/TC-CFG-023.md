@@ -84,6 +84,9 @@ pack patch. Every other advisory ships in the monthly release.
 | TCA-2026-0010 | npm `@samanhappy/mcphub` | >=0.9.10, <1.1.8 | 1.1.8 | moderate |
 | TCA-2026-0011 | npm `@aborruso/ckan-mcp-server` | <0.4.112 | 0.4.112 | low, reported high |
 | TCA-2026-0012 | npm `@bytebase/dbhub` | <0.22.6 | 0.22.6 | moderate, reported high |
+| TCA-2026-0013 | npm `@tsparticles/mcp-server` | <4.3.1 | 4.3.1 | high |
+| TCA-2026-0014 | npm `@tsparticles/mcp-server` | <4.3.1 | 4.3.1 | high |
+| TCA-2026-0015 | npm `@tsparticles/mcp-server` | <4.3.2 | 4.3.2 | moderate |
 
 prefab-ui is a library. It matches only when the argv names it, for
 example `--with prefab-ui==0.20.2`. A transitive dependency of another

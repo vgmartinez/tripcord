@@ -253,6 +253,69 @@
       ],
       "added": "tripcord/core@2026.11",
       "reviewed": "2026-11-04"
+    },
+    {
+      "id": "TCA-2026-0013",
+      "aliases": ["CVE-2026-76892", "GHSA-4p8p-pjpq-2w7h"],
+      "summary": "@tsparticles/mcp-server before 4.3.1 parses an HTTP request body outside the error handler, so malformed JSON exits the process",
+      "severity": "high",
+      "affected": [
+        {
+          "ecosystem": "npm",
+          "name": "@tsparticles/mcp-server",
+          "ranges": [{"fixed": "4.3.1"}]
+        }
+      ],
+      "refs": [
+        "https://nvd.nist.gov/vuln/detail/CVE-2026-76892",
+        "https://github.com/tsparticles/tsparticles/security/advisories/GHSA-4p8p-pjpq-2w7h",
+        "https://github.com/tsparticles/tsparticles/commit/25fb70e7f527a91568adaef576570289083f243b",
+        "https://github.com/tsparticles/tsparticles/releases/tag/v4.3.1"
+      ],
+      "added": "tripcord/core@2026.11",
+      "reviewed": "2026-11-05"
+    },
+    {
+      "id": "TCA-2026-0014",
+      "aliases": ["CVE-2026-63655", "GHSA-447x-qqwf-m7xq"],
+      "summary": "@tsparticles/mcp-server before 4.3.1 buffers an HTTP POST body with no size limit",
+      "severity": "high",
+      "affected": [
+        {
+          "ecosystem": "npm",
+          "name": "@tsparticles/mcp-server",
+          "ranges": [{"fixed": "4.3.1"}]
+        }
+      ],
+      "refs": [
+        "https://nvd.nist.gov/vuln/detail/CVE-2026-63655",
+        "https://github.com/tsparticles/tsparticles/security/advisories/GHSA-447x-qqwf-m7xq",
+        "https://github.com/tsparticles/tsparticles/commit/7b3a9488d4201fe9ddd5fec05f4a2ae65d3627ea",
+        "https://github.com/tsparticles/tsparticles/releases/tag/v4.3.1"
+      ],
+      "added": "tripcord/core@2026.11",
+      "reviewed": "2026-11-05"
+    },
+    {
+      "id": "TCA-2026-0015",
+      "aliases": ["CVE-2026-76893", "GHSA-h7c4-q426-7jh9"],
+      "summary": "@tsparticles/mcp-server before 4.3.2 reuses one HTTP transport, so the first client initialize blocks later clients",
+      "severity": "moderate",
+      "affected": [
+        {
+          "ecosystem": "npm",
+          "name": "@tsparticles/mcp-server",
+          "ranges": [{"fixed": "4.3.2"}]
+        }
+      ],
+      "refs": [
+        "https://nvd.nist.gov/vuln/detail/CVE-2026-76893",
+        "https://github.com/tsparticles/tsparticles/security/advisories/GHSA-h7c4-q426-7jh9",
+        "https://github.com/tsparticles/tsparticles/commit/d3b5672bd61bb847abfa21193c34eabf7aba6896",
+        "https://github.com/tsparticles/tsparticles/releases/tag/v4.3.2"
+      ],
+      "added": "tripcord/core@2026.11",
+      "reviewed": "2026-11-05"
     }
   ]
 }
