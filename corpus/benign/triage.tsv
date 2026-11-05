@@ -21,27 +21,27 @@ tcf_9655fe0b339aeb2d	TC-CFG-009	OGKevin/kobo.koplugin	accepted-risk	Copilot setu
 tcf_f32f7b066cf14dbe	TC-CFG-009	OGKevin/kobo.koplugin	TP	Copilot setup installs the latest StyLua release binary with no version pin and no checksum.	2026-11-05
 tcf_8df0a5fbae42cd73	TC-CFG-005	OpenRouterLabs/spawn	TP	Shared Claude settings set defaultMode to bypassPermissions, so tool calls are not prompted.	2026-11-05
 tcf_63a30a721a6e8b11	TC-CFG-009	Particular/docs.particular.net	FP	Copilot setup only appends a remote version.json to a file used as a cache key; the downloaded data is never executed.	2026-11-05
-tcf_0b52f38618246bb7	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	accepted-risk	The magic server is started as cmd /c with npx or uvx and an unpinned package; the shell layer is the Windows launch idiom.	2026-11-05
-tcf_4f22b21e9063e4a7	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	accepted-risk	The redis-mcp server is started as cmd /c with npx or uvx and an unpinned package; the shell layer is the Windows launch idiom.	2026-11-05
-tcf_58cafaa2544749ce	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	accepted-risk	The docker server is started as cmd /c with npx or uvx and an unpinned package; the shell layer is the Windows launch idiom.	2026-11-05
-tcf_5b1f73d276444e77	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	accepted-risk	The Sequential Thinking server is started as cmd /c with npx or uvx and an unpinned package; the shell layer is the Windows launch idiom.	2026-11-05
-tcf_7b683b6787cfdc49	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	accepted-risk	The filesystem server is started as cmd /c with npx or uvx and an unpinned package; the shell layer is the Windows launch idiom.	2026-11-05
-tcf_804372f7da507a26	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	accepted-risk	The time-mcp server is started as cmd /c with npx or uvx and an unpinned package; the shell layer is the Windows launch idiom.	2026-11-05
-tcf_8541c72facbb86c7	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	accepted-risk	The Shrimp Task Manager server is started as cmd /c with npx or uvx and an unpinned package; the shell layer is the Windows launch idiom.	2026-11-05
-tcf_a4093d959110e4a2	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	accepted-risk	The Context7 server is started as cmd /c with npx or uvx and an unpinned package; the shell layer is the Windows launch idiom.	2026-11-05
-tcf_aacc2872cc6f2d2c	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	accepted-risk	The chrome-devtools server is started as cmd /c with npx or uvx and an unpinned package; the shell layer is the Windows launch idiom.	2026-11-05
-tcf_c0d4d661ca4cf722	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	accepted-risk	The playwright server is started as cmd /c with npx or uvx and an unpinned package; the shell layer is the Windows launch idiom.	2026-11-05
-tcf_e768fcec857d59d9	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	accepted-risk	The github server is started as cmd /c with npx or uvx and an unpinned package; the shell layer is the Windows launch idiom.	2026-11-05
-tcf_e942251483d74761	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	accepted-risk	The magic-ui server is started as cmd /c with npx or uvx and an unpinned package; the shell layer is the Windows launch idiom.	2026-11-05
-tcf_fbdbb1938fbd11d0	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	accepted-risk	The everything-search server is started as cmd /c with npx or uvx and an unpinned package; the shell layer is the Windows launch idiom.	2026-11-05
-tcf_fe872dfb25bd0717	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	accepted-risk	The mysql server is started as cmd /c with npx or uvx and an unpinned package; the shell layer is the Windows launch idiom.	2026-11-05
+tcf_0b52f38618246bb7	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	FP	The magic server is cmd /c npx of one package with no inline script, so the shell only wraps a normal launch.	2026-11-05
+tcf_4f22b21e9063e4a7	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	FP	The redis-mcp server is cmd /c npx of one package with no inline script, so the shell only wraps a normal launch.	2026-11-05
+tcf_58cafaa2544749ce	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	FP	The docker server is cmd /c npx of one package with no inline script, so the shell only wraps a normal launch.	2026-11-05
+tcf_5b1f73d276444e77	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	FP	The Sequential Thinking server is cmd /c npx of one package with no inline script, so the shell only wraps a normal launch.	2026-11-05
+tcf_7b683b6787cfdc49	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	FP	The filesystem server is cmd /c npx of one package with no inline script, so the shell only wraps a normal launch.	2026-11-05
+tcf_804372f7da507a26	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	FP	The time-mcp server is cmd /c npx of one package with no inline script, so the shell only wraps a normal launch.	2026-11-05
+tcf_8541c72facbb86c7	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	FP	The Shrimp Task Manager server is cmd /c npx of one package with no inline script, so the shell only wraps a normal launch.	2026-11-05
+tcf_a4093d959110e4a2	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	FP	The Context7 server is cmd /c npx of one package with no inline script, so the shell only wraps a normal launch.	2026-11-05
+tcf_aacc2872cc6f2d2c	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	FP	The chrome-devtools server is cmd /c npx of one package with no inline script, so the shell only wraps a normal launch.	2026-11-05
+tcf_c0d4d661ca4cf722	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	FP	The playwright server is cmd /c npx of one package with no inline script, so the shell only wraps a normal launch.	2026-11-05
+tcf_e768fcec857d59d9	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	FP	The github server is cmd /c npx of one package with no inline script, so the shell only wraps a normal launch.	2026-11-05
+tcf_e942251483d74761	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	FP	The magic-ui server is cmd /c npx of one package with no inline script, so the shell only wraps a normal launch.	2026-11-05
+tcf_fbdbb1938fbd11d0	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	FP	The everything-search server is cmd /c uvx of one package with no inline script, so the shell only wraps a normal launch.	2026-11-05
+tcf_fe872dfb25bd0717	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	FP	The mysql server is cmd /c npx of one package with no inline script, so the shell only wraps a normal launch.	2026-11-05
 tcf_67a552ca1f4f5508	TC-CFG-008	TheOrcDev/repostars	TP	Cursor afterFileEdit hook runs pnpm dlx on an unpinned ultracite package, fetching and running registry code on each edit.	2026-11-05
 tcf_23e2406348ec0229	TC-CFG-009	TimSoethout/goodwe-sems-home-assistant	accepted-risk	Copilot setup pipes an install script from a version tag path into sh with no checksum; tag-pinned, not commit-pinned.	2026-11-05
 tcf_4517b21450be67be	TC-CFG-004	YoshiiRyo1/document-templates-for-aws	TP	The shared allow list contains Bash, which pre-approves every shell command apart from a short deny list.	2026-11-05
 tcf_7d217c0d09caec81	TC-CFG-009	acai-sh/cli	TP	Devcontainer postCreateCommand pipes an unversioned remote install script into bash with no checksum.	2026-11-05
-tcf_85e8dbbe1a4da4fa	TC-CFG-003	adobe/spectrum-design-data	accepted-risk	MCP server runs sh -c with a fixed cd into sdk then exec ferrograph; the shell form is real but the command is fully visible.	2026-11-05
+tcf_85e8dbbe1a4da4fa	TC-CFG-003	adobe/spectrum-design-data	FP	sh -c only changes into sdk and then execs ferrograph mcp, one fixed launch with no inline script.	2026-11-05
 tcf_0e4f0d42c03c7357	TC-CFG-003	ahang1598/doubao-workbuddy-qwenwork-skills	TP	sh -c makes bin/utp executable, strips its macOS quarantine flag, then runs it; that binary is not committed.	2026-11-05
-tcf_e965340a6c926a6c	TC-CFG-003	ahang1598/doubao-workbuddy-qwenwork-skills	accepted-risk	Disabled codex_app entry runs a launcher script through cmd /c from a cwd inside a home plugin cache; shell form fired correctly.	2026-11-05
+tcf_e965340a6c926a6c	TC-CFG-003	ahang1598/doubao-workbuddy-qwenwork-skills	FP	The disabled codex_app entry is cmd /c calling one local launcher script, so the shell only wraps a normal launch.	2026-11-05
 tcf_05f53c880600075f	TC-CFG-003	ahmed3elshaer/everything-claude-code-mobile	TP	The ios-memory server runs node -e inline code that searches home plugin caches for a start script and requires it.	2026-11-05
 tcf_6cd1a8ffed81c592	TC-CFG-003	ahmed3elshaer/everything-claude-code-mobile	TP	The kmp-context server runs node -e inline code that searches home plugin caches for a start script and requires it.	2026-11-05
 tcf_c79e19ccb6c54989	TC-CFG-003	ahmed3elshaer/everything-claude-code-mobile	TP	The mobile-memory server runs node -e inline code that searches home plugin caches for a start script and requires it.	2026-11-05
@@ -55,26 +55,26 @@ tcf_6c7475401e68e9cb	TC-CFG-011	coveo/ui-kit	accepted-risk	Two U+200B code point
 tcf_e33c8cedf0f4eced	TC-CFG-002	dermotduffy/advanced-camera-card	TP	VS Code task Vite runs a yarn watch build on folderOpen, so opening the folder executes it with no explicit action.	2026-11-05
 tcf_16ac1bae0f625ac0	TC-CFG-009	dsccommunity/SqlServerDsc	accepted-risk	Copilot setup adds the vendor apt signing key fetched over https with no fingerprint check, then installs signed packages.	2026-11-05
 tcf_9b9af0f371523f23	TC-CFG-004	egregore-labs/egregore	TP	The shared allow list contains Bash, which pre-approves every shell command.	2026-11-05
-tcf_309031ffa3a2450e	TC-CFG-003	gaoconggit/SharpPad	accepted-risk	Playwright MCP is started as cmd /c npx with an unpinned latest package; the shell layer is the Windows npx idiom.	2026-11-05
-tcf_6ef9e9953c8ec527	TC-CFG-003	gaoconggit/SharpPad	accepted-risk	Playwright MCP is started as cmd /c npx with an unpinned latest package; the shell layer is the Windows npx idiom.	2026-11-05
+tcf_309031ffa3a2450e	TC-CFG-003	gaoconggit/SharpPad	FP	In .cursor/mcp.json, Playwright is cmd /c npx of one package with no inline script, so the shell only wraps a normal launch.	2026-11-05
+tcf_6ef9e9953c8ec527	TC-CFG-003	gaoconggit/SharpPad	FP	In .mcp.json, Playwright is cmd /c npx of one package with no inline script, so the shell only wraps a normal launch.	2026-11-05
 tcf_1252856550575c30	TC-CFG-009	geneontology/go-ontology	TP	Copilot setup clones a third-party scripts repo at its default branch and puts it on PATH, with no commit pin.	2026-11-05
 tcf_d08a6388c7a19334	TC-CFG-009	geneontology/go-ontology	accepted-risk	Copilot setup downloads a version-tagged ROBOT jar release with no checksum; the tag is not a commit pin but is not latest.	2026-11-05
 tcf_e4d5791f17fe5082	TC-CFG-009	geneontology/go-ontology	accepted-risk	Copilot setup downloads the ROBOT wrapper script from a version tag path and runs it, with no checksum or commit pin.	2026-11-05
 tcf_04f3401367c76f81	TC-CFG-015	getsentry/warden	accepted-risk	The allow list pre-approves WebFetch of the npm site for package lookups; that site is a public read-back channel.	2026-11-05
-tcf_29c698b0e8e46329	TC-CFG-003	hackers-pub/hackerspub	accepted-risk	Sentry MCP in opencode.json runs bash -c that checks for a home config file and then execs sentry-mcp; fixed visible command.	2026-11-05
-tcf_5e19dc7dd11ba9e5	TC-CFG-003	hackers-pub/hackerspub	accepted-risk	Sentry MCP in settings.json runs bash -c that checks for a home config file and then execs sentry-mcp; fixed visible command.	2026-11-05
-tcf_6b84a963defb14f5	TC-CFG-003	hackers-pub/hackerspub	accepted-risk	Sentry MCP in config.toml runs bash -c that checks for a home config file and then execs sentry-mcp; fixed visible command.	2026-11-05
-tcf_fdd8aeb82fd08c05	TC-CFG-003	hackers-pub/hackerspub	accepted-risk	Sentry MCP in .mcp.json runs bash -c that checks for a home config file and then execs sentry-mcp; fixed visible command.	2026-11-05
-tcf_291df84d035e2bfa	TC-CFG-003	hashgraph-online/awesome-codex-plugins	accepted-risk	zsh -lc runs python3 on one of two local MCP scripts; neither script is committed in this catalog copy.	2026-11-05
+tcf_29c698b0e8e46329	TC-CFG-003	hackers-pub/hackerspub	FP	In opencode.json, bash -c checks a home config file and then execs sentry-mcp, one fixed launch with no inline script.	2026-11-05
+tcf_5e19dc7dd11ba9e5	TC-CFG-003	hackers-pub/hackerspub	FP	In settings.json, bash -c checks a home config file and then execs sentry-mcp, one fixed launch with no inline script.	2026-11-05
+tcf_6b84a963defb14f5	TC-CFG-003	hackers-pub/hackerspub	FP	In config.toml, bash -c checks a home config file and then execs sentry-mcp, one fixed launch with no inline script.	2026-11-05
+tcf_fdd8aeb82fd08c05	TC-CFG-003	hackers-pub/hackerspub	FP	In .mcp.json, bash -c checks a home config file and then execs sentry-mcp, one fixed launch with no inline script.	2026-11-05
+tcf_291df84d035e2bfa	TC-CFG-003	hashgraph-online/awesome-codex-plugins	FP	zsh -lc runs python3 on one local script path, a single normal launch with no inline shell script.	2026-11-05
 tcf_5ef654382a87e9df	TC-CFG-003	hashgraph-online/awesome-codex-plugins	FP	bash runs the committed run-mailagent-mcp.sh with no -c and no inline code; that script execs a version-pinned npx package.	2026-11-05
 tcf_70089f509d2bdc6f	TC-CFG-003	hashgraph-online/awesome-codex-plugins	TP	powershell with ExecutionPolicy Bypass runs a ps1 script from the user profile directory, outside the repository.	2026-11-05
 tcf_8f4a4163a0bdab3b	TC-CFG-003	hashgraph-online/awesome-codex-plugins	TP	bash -c inline script searches env roots, global npm, and home plugin caches for mcp-server.sh and execs the newest one found.	2026-11-05
 tcf_99bd3a5571eea19d	TC-CFG-003	hashgraph-online/awesome-codex-plugins	TP	powershell with ExecutionPolicy Bypass runs a start ps1 script that is not committed in this catalog copy.	2026-11-05
-tcf_bb4536341174354b	TC-CFG-003	hashgraph-online/awesome-codex-plugins	accepted-risk	bash -lc runs uvx with an unpinned rag-reviewer package; the shell wrapper is fixed and visible, the package is not pinned.	2026-11-05
-tcf_bc363e173a5da93f	TC-CFG-003	hashgraph-online/awesome-codex-plugins	accepted-risk	bash runs scripts/run-mailagent-mcp.sh, but this catalog copy does not commit that script, so what runs cannot be reviewed here.	2026-11-05
+tcf_bb4536341174354b	TC-CFG-003	hashgraph-online/awesome-codex-plugins	FP	bash -lc runs uvx of one package, a single fixed launch with no inline script.	2026-11-05
+tcf_bc363e173a5da93f	TC-CFG-003	hashgraph-online/awesome-codex-plugins	FP	bash runs run-mailagent-mcp.sh with no -c and no inline code, so the shell only starts one named script.	2026-11-05
 tcf_cea2571b518ef62d	TC-CFG-003	hashgraph-online/awesome-codex-plugins	TP	caw-execution runs node -e inline code that imports a server module from the Codex plugin cache in the home directory.	2026-11-05
 tcf_de6fbbaffd7e95f0	TC-CFG-003	hashgraph-online/awesome-codex-plugins	TP	powershell with ExecutionPolicy Bypass runs node on a js file from the user profile directory, outside the repository.	2026-11-05
-tcf_ed848e2991d015bb	TC-CFG-003	hashgraph-online/awesome-codex-plugins	accepted-risk	bash runs a start.sh under the plugin root; the script is not committed in this catalog copy, so it cannot be reviewed here.	2026-11-05
+tcf_ed848e2991d015bb	TC-CFG-003	hashgraph-online/awesome-codex-plugins	FP	bash runs start.sh under the plugin root with no -c and no inline code, so the shell only starts one named script.	2026-11-05
 tcf_fc8d8d52ef32eb60	TC-CFG-003	hashgraph-online/awesome-codex-plugins	TP	codex-agents-workflow runs node -e inline code that imports a server module from the Codex plugin cache in the home directory.	2026-11-05
 tcf_edfe7a5c14cd7335	TC-CFG-005	itai-gendler/pdd-kit	TP	Shared Codex config sets sandbox_mode to danger-full-access, together with approval_policy never.	2026-11-05
 tcf_2debe79303bf4114	TC-CFG-003	j5ik2o/okite-ai	TP	zsh -lc rewrites HOME and runs uvx from an unpinned git source, so the MCP server code is fetched at launch with no commit pin.	2026-11-05
@@ -90,7 +90,7 @@ tcf_80c24f41809f8231	TC-CFG-005	nicepkg/vsync	TP	Shared Claude settings set defa
 tcf_c9062f95e1bd0a56	TC-CFG-004	nicepkg/vsync	TP	The shared allow list contains Bash, which pre-approves every shell command.	2026-11-05
 tcf_a1772d03942cb3da	TC-CFG-004	obophenotype/uberon	TP	The shared allow list contains Bash, which pre-approves every shell command.	2026-11-05
 tcf_b4fd4ce19c91624b	TC-CFG-006	ojuschugh1/sqz	TP	Windsurf preToolUse terminal hook runs a locally built debug binary under a home directory, which is not committed.	2026-11-05
-tcf_b04f7aaae2f8a869	TC-CFG-003	opendatahub-io/opendatahub-operator	accepted-risk	bash -c changes into the committed cmd/mcp-server directory and runs go run; fixed visible command on committed code.	2026-11-05
+tcf_b04f7aaae2f8a869	TC-CFG-003	opendatahub-io/opendatahub-operator	FP	bash -c changes into the committed mcp-server directory and runs go run, one fixed launch with no inline script.	2026-11-05
 tcf_8b86d432c1be9562	TC-CFG-011	owid/etl	accepted-risk	Line 137 is a Python dict naming the invisible characters to strip, with the literal characters as values; nothing is hidden.	2026-11-05
 tcf_e40b6cea366e690d	TC-CFG-002	owid/etl	TP	VS Code task Sync VS Code extensions runs make vsce-sync on folderOpen, so opening the folder executes it with no explicit action.	2026-11-05
 tcf_1dc362695ace346f	TC-CFG-009	pail23/stiebel_eltron_isg_component	TP	Devcontainer postCreateCommand pipes an unversioned uv install script into sh with no checksum.	2026-11-05
@@ -111,10 +111,10 @@ tcf_6264f61d82848293	TC-CFG-005	poteto/noodle	accepted-risk	Opt-in edit profile 
 tcf_7f797a09d477eaae	TC-CFG-002	project-oak/oak	TP	VS Code task Generate rust-project runs nix develop with just gen-rust-project on folderOpen, so opening the folder executes it with no explicit action.	2026-11-05
 tcf_5c241512bb48cea8	TC-CFG-009	sillsdev/FieldWorks	TP	Copilot setup shallow-clones three helper repos, including liblcm source, at their default branches with no commit pin.	2026-11-05
 tcf_cb0a6481df322fa3	TC-CFG-002	sillsdev/FieldWorks	TP	VS Code task Setup: Colorize Worktree runs a committed ps1 script on folderOpen, so opening the folder executes it with no explicit action.	2026-11-05
-tcf_f15b060bd8a1000f	TC-CFG-003	sillsdev/FieldWorks	accepted-risk	winforms-mcp is started as cmd /c npx -y with an unpinned package; the shell layer is the Windows npx launch idiom.	2026-11-05
-tcf_073db7946fad5d29	TC-CFG-003	stella/stella	accepted-risk	sh -c changes to the git top level and runs bun on a committed MCP script; the shell form is real but runs committed code.	2026-11-05
-tcf_4338b4dd4a8cf063	TC-CFG-003	tam159/next-role	accepted-risk	sh -lc execs npx -y with an unpinned dbhub package and a DSN built from env vars; fixed visible command, unpinned package.	2026-11-05
-tcf_af4d869bebdaa397	TC-CFG-003	tam159/next-role	accepted-risk	sh -lc sources the local env file and execs npx -y with an unpinned dbhub package; fixed visible command, unpinned package.	2026-11-05
+tcf_f15b060bd8a1000f	TC-CFG-003	sillsdev/FieldWorks	FP	winforms-mcp is cmd /c npx of one package with no inline script, so the shell only wraps a normal launch.	2026-11-05
+tcf_073db7946fad5d29	TC-CFG-003	stella/stella	FP	sh -c moves to the git top level and runs bun on one committed script, a single launch with no inline code.	2026-11-05
+tcf_4338b4dd4a8cf063	TC-CFG-003	tam159/next-role	FP	sh -lc execs npx of one package with a DSN from env vars, a single launch with no inline script.	2026-11-05
+tcf_af4d869bebdaa397	TC-CFG-003	tam159/next-role	FP	sh -lc sources the local env file and then execs npx of one package, a single launch with no inline script.	2026-11-05
 tcf_d03a42609e945e03	TC-CFG-004	the-palindrome/ml-knowledge-graph	TP	The shared allow list contains Bash(*), which pre-approves every shell command.	2026-11-05
 tcf_2aa58bf29d0f17ef	TC-CFG-009	timdeschryver/Sandbox	TP	Devcontainer onCreateCommand pipes an unversioned Aspire install script into bash with no checksum.	2026-11-05
 tcf_c309dac0cdc8d372	TC-CFG-009	tractorjuice/arc-kit	TP	Devcontainer postCreateCommand pipes an unversioned Claude install script into bash with no checksum.	2026-11-05
