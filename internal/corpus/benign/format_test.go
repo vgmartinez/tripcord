@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -22,8 +23,11 @@ func TestFormatAndValidate(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(raw)
-	if !bytes.HasPrefix(raw, []byte(LockHeader)) {
-		t.Fatal("formatted lock does not start with LockHeader")
+	if !bytes.HasPrefix(raw, []byte(Header(parsedPreview(repos), when))) {
+		t.Fatal("formatted lock does not start with Header")
+	}
+	if !strings.Contains(text, "size band") || !strings.Contains(text, "Harness counts:") {
+		t.Fatalf("header missing size and harness counts:\n%s", text)
 	}
 	if !strings.Contains(text, "a/a") || strings.Index(text, "a/a") > strings.Index(text, "b/b") {
 		t.Fatalf("rows are not sorted:\n%s", text)
@@ -32,7 +36,7 @@ func TestFormatAndValidate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if parsed[0].License != "NOASSERTION" || parsed[1].Harnesses[0] != "agents" || parsed[1].Harnesses[1] != "cursor" {
+	if parsed[0].License != "NOASSERTION" || parsed[0].Band != "large" || parsed[1].Band != "small" || parsed[1].Harnesses[0] != "agents" || parsed[1].Harnesses[1] != "cursor" {
 		t.Fatalf("parsed %#v", parsed)
 	}
 	rules := map[string]bool{"TC-CFG-001": true}
@@ -54,7 +58,7 @@ func TestFormatAndValidate(t *testing.T) {
 	if _, err := ParseTriage(badVerdict); err == nil || !strings.Contains(err.Error(), "bad verdict") {
 		t.Fatalf("verdict: %v", err)
 	}
-	if _, err := ParseLock([]byte(LockHeader + "a/a\tshort\tMIT\tagents\t2026-11-04\n")); err == nil {
+	if _, err := ParseLock([]byte(Header(nil, when) + "a/a\tshort\tMIT\tagents\tsmall\t2026-11-04\n")); err == nil {
 		t.Fatal("short SHA was accepted")
 	}
 	empty, err := ParseTriage([]byte(TriageHeader))
@@ -64,9 +68,23 @@ func TestFormatAndValidate(t *testing.T) {
 	if err := Validate(parsed, nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := FormatLock(repos, time.Date(2026, 11, 5, 0, 0, 0, 0, time.UTC)); err == nil {
-		t.Fatal("a different generation date was accepted")
+	later, err := FormatLock(repos, time.Date(2026, 11, 5, 0, 0, 0, 0, time.UTC))
+	if err != nil || !bytes.Contains(later, []byte("# Generated 2026-11-05.\n")) {
+		t.Fatalf("generation date: %v", err)
 	}
+}
+
+func parsedPreview(repos []Repo) []Repo {
+	out := slices.Clone(repos)
+	for i := range out {
+		if out[i].Band == "" {
+			out[i].Band = SizeBand(out[i].SizeKB)
+		}
+		if out[i].License == "" {
+			out[i].License = "NOASSERTION"
+		}
+	}
+	return out
 }
 
 func TestSelectStratifies(t *testing.T) {
@@ -107,18 +125,37 @@ func TestCommittedLists(t *testing.T) {
 			t.Errorf("triage.tsv header missing %q", phrase)
 		}
 	}
-	if !bytes.HasPrefix(lockRaw, []byte(LockHeader)) {
-		t.Fatal("repos.lock header is not LockHeader")
-	}
 	if !bytes.HasPrefix(triageRaw, []byte(TriageHeader)) {
 		t.Fatal("triage.tsv header is not TriageHeader")
 	}
-	repos, err := ParseLock(lockRaw)
+	repos, err := LoadLock(lockRaw)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(repos) != 132 {
-		t.Fatalf("repos.lock has %d repositories, want 132", len(repos))
+	if len(repos) < 132 {
+		t.Fatalf("repos.lock has %d repositories, want at least 132", len(repos))
+	}
+	if bytes.HasPrefix(lockRaw, []byte(legacyLockHeader)) {
+		if len(repos) != 132 {
+			t.Fatalf("legacy lock has %d repositories, want 132", len(repos))
+		}
+	} else {
+		when, err := headerDate(string(lockRaw))
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := FormatLock(repos, when)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got, lockRaw) {
+			t.Fatal("repos.lock is not the generated lock")
+		}
+		for _, r := range repos {
+			if r.Band == "" {
+				t.Fatalf("%s has no size band", r.Name)
+			}
+		}
 	}
 	triage, err := ParseTriage(triageRaw)
 	if err != nil {
@@ -149,8 +186,9 @@ func TestCommittedLists(t *testing.T) {
 
 func TestRejectedRows(t *testing.T) {
 	sha := strings.Repeat("ab", 20)
+	head := Header(nil, time.Date(2026, 11, 4, 0, 0, 0, 0, time.UTC))
 	row := func(name, license string) []byte {
-		return []byte(LockHeader + name + "\t" + sha + "\t" + license + "\tagents\t2026-11-04\n")
+		return []byte(head + name + "\t" + sha + "\t" + license + "\tagents\tsmall\t2026-11-04\n")
 	}
 	beacon := "see https://tracking.evil.com/beacon " + "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
 	payload100 := strings.Repeat("Q2hhcmFjdGVyc0FuZFBheWxvYWQ", 4)[:100]
@@ -159,8 +197,8 @@ func TestRejectedRows(t *testing.T) {
 		raw  []byte
 		want string
 	}{
-		{"comment URL", []byte(LockHeader + "# " + beacon + "\n"), "comment or blank line"},
-		{"40KB line", []byte(LockHeader + strings.Repeat("x", 40*1024) + "\n"), "limit"},
+		{"comment URL", []byte(head + "# " + beacon + "\n"), "comment or blank line"},
+		{"40KB line", []byte(head + strings.Repeat("x", 40*1024) + "\n"), "limit"},
 		{"repo URL", row("zzzz/https://tracking.evil.com/beacon", "MIT"), "bad repository"},
 		{"repo base64", row("zzzz/AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=", "MIT"), "bad repository"},
 		{"repo dotdot", row("zzzz/..", "MIT"), "bad repository"},
@@ -214,7 +252,13 @@ func TestRejectedRows(t *testing.T) {
 			}
 		})
 	}
-	repos, err := ParseLock(row("zzzz/name", "MIT"))
+	good, err := FormatLock([]Repo{{
+		Name: "zzzz/name", SHA: sha, License: "MIT", Harnesses: []string{"agents"}, Band: "small", Date: "2026-11-04",
+	}}, time.Date(2026, 11, 4, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	repos, err := ParseLock(good)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -226,7 +270,7 @@ func TestRejectedRows(t *testing.T) {
 		t.Fatalf("fake rule: %v", err)
 	}
 	upper := strings.ToUpper(sha)
-	if _, err := ParseLock([]byte(LockHeader + "zzzz/name\t" + upper + "\tMIT\tagents\t2026-11-04\n")); err == nil || !strings.Contains(err.Error(), "bad SHA") {
+	if _, err := ParseLock([]byte(head + "zzzz/name\t" + upper + "\tMIT\tagents\tsmall\t2026-11-04\n")); err == nil || !strings.Contains(err.Error(), "bad SHA") {
 		t.Fatalf("uppercase SHA: %v", err)
 	}
 	if _, err := ParseTriage([]byte(TriageHeader + fp + "\tTC-CFG-001\tzzzz/name\tFP\tlocal task only echoes\t2026-11-4\n")); err == nil || !strings.Contains(err.Error(), "bad date") {

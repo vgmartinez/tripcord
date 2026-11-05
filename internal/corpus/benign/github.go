@@ -234,22 +234,7 @@ func (c *Client) hydrateBatch(ctx context.Context, names []string) ([]Meta, erro
 				out = append(out, Meta{Name: name, Missing: true})
 				continue
 			}
-			m := Meta{
-				Name:     node.NameWithOwner,
-				Fork:     node.IsFork,
-				Archived: node.IsArchived,
-				Stars:    node.StargazerCount,
-			}
-			if node.DiskUsage != nil {
-				m.SizeKB = *node.DiskUsage
-			}
-			if node.LicenseInfo != nil {
-				m.License = node.LicenseInfo.SPDX
-			}
-			if node.DefaultBranchRef != nil {
-				m.SHA = node.DefaultBranchRef.Target.OID
-			}
-			out = append(out, m)
+			out = append(out, metaFrom(*node))
 		}
 		return out, nil
 	}

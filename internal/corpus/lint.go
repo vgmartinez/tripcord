@@ -210,7 +210,7 @@ func validateBenignIndex(root, rel, path string, data []byte) []Finding {
 	switch rel {
 	case "benign/repos.lock":
 		var repos []benign.Repo
-		repos, err = benign.ParseLock(data)
+		repos, err = benign.LoadLock(data)
 		if err == nil {
 			err = benign.Validate(repos, nil, nil)
 		}
@@ -234,7 +234,7 @@ func validateTriageRows(triagePath string, rows []benign.Triage) error {
 	if err != nil {
 		return fmt.Errorf("repos.lock: %w", err)
 	}
-	repos, err := benign.ParseLock(lockRaw)
+	repos, err := benign.LoadLock(lockRaw)
 	if err != nil {
 		return err
 	}
