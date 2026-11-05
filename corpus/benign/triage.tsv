@@ -49,9 +49,9 @@ tcf_468158193e18223b	TC-CFG-009	apollographql/apollo-client-integrations	TP	Copi
 tcf_c123668ba5ea5448	TC-CFG-009	apollographql/apollo-client-integrations	accepted-risk	Copilot setup downloads docs.instructions.md from the main branch of the org skills repo; it is agent input, not executed code.	2026-11-05
 tcf_57cd7d8c0f03b542	TC-CFG-006	arch-hdl-lang/arch-com	accepted-risk	Stop hook runs doc-sync-check.sh by an absolute home path; a copy is committed under codex hooks, but the path is not the checkout.	2026-11-05
 tcf_677ce613bd9bfa9d	TC-CFG-006	arch-hdl-lang/arch-com	accepted-risk	PostToolUse hook runs test-on-src-edit.sh by an absolute home path; a copy is committed under codex hooks, but the path is not the checkout.	2026-11-05
-tcf_8fa38e8c05bc9ae0	TC-CFG-011	beep-effect/beep-effect	accepted-risk	Four U+200B code points sit between an ellipsis and a yaml extension in path placeholders; they hide no text.	2026-11-05
+tcf_8fa38e8c05bc9ae0	TC-CFG-011	beep-effect/beep-effect	FP	U+200B sits inside path placeholders next to a yaml extension and hides no text, so nothing is concealed.	2026-11-05
 tcf_0ca6135e518113fe	TC-CFG-009	chrxh/alien	accepted-risk	Copilot setup installs the vendor CUDA keyring deb by version with no checksum, then installs signed packages from that repo.	2026-11-05
-tcf_6c7475401e68e9cb	TC-CFG-011	coveo/ui-kit	accepted-risk	Two U+200B code points sit before triple backticks to keep a nested code fence from closing; they hide no text.	2026-11-05
+tcf_6c7475401e68e9cb	TC-CFG-011	coveo/ui-kit	FP	U+200B sits before a code fence so the nested fence stays open, and it hides no text.	2026-11-05
 tcf_e33c8cedf0f4eced	TC-CFG-002	dermotduffy/advanced-camera-card	TP	VS Code task Vite runs a yarn watch build on folderOpen, so opening the folder executes it with no explicit action.	2026-11-05
 tcf_16ac1bae0f625ac0	TC-CFG-009	dsccommunity/SqlServerDsc	accepted-risk	Copilot setup adds the vendor apt signing key fetched over https with no fingerprint check, then installs signed packages.	2026-11-05
 tcf_9b9af0f371523f23	TC-CFG-004	egregore-labs/egregore	TP	The shared allow list contains Bash, which pre-approves every shell command.	2026-11-05
@@ -76,22 +76,31 @@ tcf_cea2571b518ef62d	TC-CFG-003	hashgraph-online/awesome-codex-plugins	TP	caw-ex
 tcf_de6fbbaffd7e95f0	TC-CFG-003	hashgraph-online/awesome-codex-plugins	TP	powershell with ExecutionPolicy Bypass runs node on a js file from the user profile directory, outside the repository.	2026-11-05
 tcf_ed848e2991d015bb	TC-CFG-003	hashgraph-online/awesome-codex-plugins	FP	bash runs start.sh under the plugin root with no -c and no inline code, so the shell only starts one named script.	2026-11-05
 tcf_fc8d8d52ef32eb60	TC-CFG-003	hashgraph-online/awesome-codex-plugins	TP	codex-agents-workflow runs node -e inline code that imports a server module from the Codex plugin cache in the home directory.	2026-11-05
+tcf_1630b6e93bff8d62	TC-CFG-005	itai-gendler/pdd-kit	TP	Shared Codex config sets approval_policy to never, so commands run with no prompt.	2026-11-05
+tcf_8df0a5fbae42cd73	TC-CFG-005	itai-gendler/pdd-kit	TP	Shared Claude settings set defaultMode to bypassPermissions, so tool calls are not prompted.	2026-11-05
 tcf_edfe7a5c14cd7335	TC-CFG-005	itai-gendler/pdd-kit	TP	Shared Codex config sets sandbox_mode to danger-full-access, together with approval_policy never.	2026-11-05
 tcf_2debe79303bf4114	TC-CFG-003	j5ik2o/okite-ai	TP	zsh -lc rewrites HOME and runs uvx from an unpinned git source, so the MCP server code is fetched at launch with no commit pin.	2026-11-05
+tcf_1630b6e93bff8d62	TC-CFG-005	kdlbs/kandev	TP	Shared Codex config sets approval_policy to never, so commands run with no prompt.	2026-11-05
 tcf_5e464d6e4fe0e121	TC-CFG-009	kernel/kernel-images	accepted-risk	Devcontainer onCreateCommand trusts a vendor apt key fetched over https with no fingerprint check, then installs kraftkit.	2026-11-05
 tcf_04fef26c5771d1f0	TC-CFG-003	kr8tiv-ai/Jarvis	TP	powershell with ExecutionPolicy Bypass runs a ps1 at an absolute path in the author's home directory, not the checkout.	2026-11-05
 tcf_5f1ccfc60fcda901	TC-CFG-002	ksylvan/fabric-mcp	TP	VS Code task Set up environment runs make bootstrap on folderOpen, so opening the folder executes it with no explicit action.	2026-11-05
 tcf_dcd0a50f8ae94522	TC-CFG-009	kurotu/VRCQuestTools	accepted-risk	Copilot setup trusts the vendor Unity Hub apt key fetched over https with no fingerprint check, then installs unityhub.	2026-11-05
 tcf_02a105e48ff6f529	TC-CFG-004	monarch-initiative/mondo	TP	The shared allow list contains Bash, which pre-approves every shell command.	2026-11-05
+tcf_1252856550575c30	TC-CFG-009	monarch-initiative/mondo	TP	Copilot setup clones a third-party scripts repo at its default branch and puts it on PATH, with no commit pin.	2026-11-05
+tcf_d08a6388c7a19334	TC-CFG-009	monarch-initiative/mondo	accepted-risk	Copilot setup downloads a version-tagged ROBOT jar release with no checksum; the tag is not a commit pin but is not latest.	2026-11-05
+tcf_e4d5791f17fe5082	TC-CFG-009	monarch-initiative/mondo	accepted-risk	Copilot setup downloads the ROBOT wrapper script from a version tag path and runs it, with no checksum or commit pin.	2026-11-05
 tcf_724103cf38493a9e	TC-CFG-005	mturac/everything-openai-codex	accepted-risk	Opt-in yolo profile sets approval_policy never with a workspace-write sandbox; it applies only when that profile is chosen.	2026-11-05
 tcf_8f82cb12a6847b94	TC-CFG-008	mturac/everything-openai-codex	accepted-risk	Cursor beforeShellExecution hook runs npx on a version-pinned block-no-verify package fetched from the registry at hook time.	2026-11-05
 tcf_5bb773c9366a887f	TC-CFG-009	mvdbos/php-spider	TP	Copilot setup downloads the latest act release binary and runs it, with no version pin and no checksum.	2026-11-05
 tcf_80c24f41809f8231	TC-CFG-005	nicepkg/vsync	TP	Shared Claude settings set defaultMode to bypassPermissions, so tool calls are not prompted.	2026-11-05
 tcf_c9062f95e1bd0a56	TC-CFG-004	nicepkg/vsync	TP	The shared allow list contains Bash, which pre-approves every shell command.	2026-11-05
+tcf_1252856550575c30	TC-CFG-009	obophenotype/uberon	TP	Copilot setup clones a third-party scripts repo at its default branch and puts it on PATH, with no commit pin.	2026-11-05
 tcf_a1772d03942cb3da	TC-CFG-004	obophenotype/uberon	TP	The shared allow list contains Bash, which pre-approves every shell command.	2026-11-05
+tcf_d08a6388c7a19334	TC-CFG-009	obophenotype/uberon	accepted-risk	Copilot setup downloads a version-tagged ROBOT jar release with no checksum; the tag is not a commit pin but is not latest.	2026-11-05
+tcf_e4d5791f17fe5082	TC-CFG-009	obophenotype/uberon	accepted-risk	Copilot setup downloads the ROBOT wrapper script from a version tag path and runs it, with no checksum or commit pin.	2026-11-05
 tcf_b4fd4ce19c91624b	TC-CFG-006	ojuschugh1/sqz	TP	Windsurf preToolUse terminal hook runs a locally built debug binary under a home directory, which is not committed.	2026-11-05
 tcf_b04f7aaae2f8a869	TC-CFG-003	opendatahub-io/opendatahub-operator	FP	bash -c changes into the committed mcp-server directory and runs go run, one fixed launch with no inline script.	2026-11-05
-tcf_8b86d432c1be9562	TC-CFG-011	owid/etl	accepted-risk	Line 137 is a Python dict naming the invisible characters to strip, with the literal characters as values; nothing is hidden.	2026-11-05
+tcf_8b86d432c1be9562	TC-CFG-011	owid/etl	FP	The code points are literal values in a dict of characters to strip, and they hide no text.	2026-11-05
 tcf_e40b6cea366e690d	TC-CFG-002	owid/etl	TP	VS Code task Sync VS Code extensions runs make vsce-sync on folderOpen, so opening the folder executes it with no explicit action.	2026-11-05
 tcf_1dc362695ace346f	TC-CFG-009	pail23/stiebel_eltron_isg_component	TP	Devcontainer postCreateCommand pipes an unversioned uv install script into sh with no checksum.	2026-11-05
 tcf_0a41d82009225785	TC-CFG-006	pegasi-ai/reins	TP	PreToolUse Write hook runs node on pre-tool-use.js under a home directory, and that file is not committed.	2026-11-04
@@ -107,6 +116,7 @@ tcf_fc756c591a364179	TC-CFG-006	pegasi-ai/reins	TP	PreToolUse MultiEdit hook run
 tcf_6ea40d6b8f3ce667	TC-CFG-009	pola-rs/r-polars	TP	Devcontainer updateContentCommand pipes the latest savvy-cli installer into sh with no version pin or checksum.	2026-11-05
 tcf_d29dc15be528f80c	TC-CFG-009	pola-rs/r-polars	TP	Devcontainer updateContentCommand pipes the latest air installer into sh with no version pin or checksum.	2026-11-05
 tcf_e368596f79743484	TC-CFG-009	pola-rs/r-polars	TP	Copilot setup pipes the latest savvy-cli installer into sh with no version pin or checksum.	2026-11-05
+tcf_1630b6e93bff8d62	TC-CFG-005	poteto/noodle	TP	Shared Codex config sets approval_policy to never, so commands run with no prompt.	2026-11-05
 tcf_6264f61d82848293	TC-CFG-005	poteto/noodle	accepted-risk	Opt-in edit profile sets sandbox_mode danger-full-access; it applies only when chosen, but then nothing is sandboxed.	2026-11-05
 tcf_7f797a09d477eaae	TC-CFG-002	project-oak/oak	TP	VS Code task Generate rust-project runs nix develop with just gen-rust-project on folderOpen, so opening the folder executes it with no explicit action.	2026-11-05
 tcf_5c241512bb48cea8	TC-CFG-009	sillsdev/FieldWorks	TP	Copilot setup shallow-clones three helper repos, including liblcm source, at their default branches with no commit pin.	2026-11-05
@@ -115,6 +125,7 @@ tcf_f15b060bd8a1000f	TC-CFG-003	sillsdev/FieldWorks	FP	winforms-mcp is cmd /c np
 tcf_073db7946fad5d29	TC-CFG-003	stella/stella	FP	sh -c moves to the git top level and runs bun on one committed script, a single launch with no inline code.	2026-11-05
 tcf_4338b4dd4a8cf063	TC-CFG-003	tam159/next-role	FP	sh -lc execs npx of one package with a DSN from env vars, a single launch with no inline script.	2026-11-05
 tcf_af4d869bebdaa397	TC-CFG-003	tam159/next-role	FP	sh -lc sources the local env file and then execs npx of one package, a single launch with no inline script.	2026-11-05
+tcf_1630b6e93bff8d62	TC-CFG-005	the-palindrome/ml-knowledge-graph	TP	Shared Codex config sets approval_policy to never, so commands run with no prompt.	2026-11-05
 tcf_d03a42609e945e03	TC-CFG-004	the-palindrome/ml-knowledge-graph	TP	The shared allow list contains Bash(*), which pre-approves every shell command.	2026-11-05
 tcf_2aa58bf29d0f17ef	TC-CFG-009	timdeschryver/Sandbox	TP	Devcontainer onCreateCommand pipes an unversioned Aspire install script into bash with no checksum.	2026-11-05
 tcf_c309dac0cdc8d372	TC-CFG-009	tractorjuice/arc-kit	TP	Devcontainer postCreateCommand pipes an unversioned Claude install script into bash with no checksum.	2026-11-05
