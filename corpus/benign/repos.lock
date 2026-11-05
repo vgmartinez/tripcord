@@ -20,7 +20,7 @@
 # default branch HEAD at generation time, SPDX license (NOASSERTION
 # when the API reports none), harnesses (comma-separated), size band
 # (small, medium, or large), date (YYYY-MM-DD).
-# Generated 2026-11-04.
+# Generated 2026-11-05.
 # This file changes only through a pull request.
 1A7432/loreweaver	a31ae10805a6b8564a17a2cbc5d0da791f939a9c	MIT	cursor	large	2026-11-04
 1Password/SCAM	ce2761e8530142521360e23cce66a9e24cd1b3e5	MIT	agents	large	2026-11-04
