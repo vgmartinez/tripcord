@@ -98,6 +98,7 @@ func CheckRoots(roots ...Root) ([]Finding, error) {
 		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
 			return nil, fmt.Errorf("%s: not a real directory", root)
 		}
+		vc := newVendorCheck(root, abs)
 		err = filepath.WalkDir(abs, func(p string, d fs.DirEntry, walkErr error) error {
 			if walkErr != nil {
 				return walkErr
@@ -123,7 +124,15 @@ func CheckRoots(roots ...Root) ([]Finding, error) {
 			// under any other root is an ordinary fixture.
 			index := corpusBenignIndex(abs, rel)
 			content := (r.Defs == nil || !r.Defs(rel)) && !index
-			out = append(out, inspect(root, rel, info, p, content, index)...)
+			// A vendored snippet is third-party text kept verbatim, so
+			// the hosts it names stay real. Its provenance is checked
+			// against repos.lock and THIRD_PARTY_NOTICES instead, and
+			// every other check still runs.
+			vend := vendored(abs, rel)
+			out = append(out, inspect(root, rel, info, p, content, index, !vend)...)
+			if vend && info.Mode().IsRegular() {
+				out = append(out, vc.check(rel, p)...)
+			}
 			if info.IsDir() && info.Mode()&os.ModeSymlink != 0 {
 				return fs.SkipDir
 			}
@@ -131,6 +140,9 @@ func CheckRoots(roots ...Root) ([]Finding, error) {
 		})
 		if err != nil {
 			return nil, err
+		}
+		if filepath.Base(abs) == "corpus" {
+			out = append(out, vc.finish()...)
 		}
 	}
 	slices.SortFunc(out, func(a, b Finding) int {
@@ -164,7 +176,7 @@ func corpusBenignIndex(rootAbs, rel string) bool {
 	}
 }
 
-func inspect(root, rel string, info fs.FileInfo, p string, content, index bool) []Finding {
+func inspect(root, rel string, info fs.FileInfo, p string, content, index, hosts bool) []Finding {
 	mode := info.Mode()
 	if mode&os.ModeSymlink != 0 {
 		return []Finding{{Root: root, Path: rel, Kind: KindSymlink, Detail: "symlink"}}
@@ -196,7 +208,7 @@ func inspect(root, rel string, info fs.FileInfo, p string, content, index bool) 
 		out = append(out, Finding{Root: root, Path: rel, Kind: KindSpecial, Detail: err.Error()})
 		return out
 	}
-	out = append(out, scanBytes(root, rel, data, content)...)
+	out = append(out, scanBytes(root, rel, data, content, hosts)...)
 	if index {
 		out = append(out, validateBenignIndex(root, rel, p, data)...)
 	}
@@ -252,12 +264,12 @@ func validateTriageRows(triagePath string, rows []benign.Triage) error {
 	return benign.Validate(repos, rows, rules)
 }
 
-func scanBytes(root, rel string, data []byte, content bool) []Finding {
+func scanBytes(root, rel string, data []byte, content, hosts bool) []Finding {
 	var out []Finding
 	if bytesHasShebang(data) {
 		out = append(out, Finding{Root: root, Path: rel, Kind: KindShebang, Detail: "first line"})
 	}
-	out = append(out, scanText(root, rel, string(data), content)...)
+	out = append(out, scanText(root, rel, string(data), content, hosts)...)
 	arc := txtar.Parse(data)
 	seen := map[string]struct{}{}
 	for _, f := range arc.Files {

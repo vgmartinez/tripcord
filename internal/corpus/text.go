@@ -73,11 +73,13 @@ var testNets []*net.IPNet
 
 // scanText runs the text checks. Without content, the file is a
 // definition or a doc: only the secret and fetch-and-exec checks run.
-func scanText(root, rel, text string, content bool) []Finding {
+// Without hosts, no host finding is reported; a fetch-and-exec line
+// still counts a non-reserved host.
+func scanText(root, rel, text string, content, hosts bool) []Finding {
 	var out []Finding
 	seenHost := map[string]bool{}
 	addHost := func(host string) {
-		if !content || host == "" || seenHost[host] {
+		if !content || !hosts || host == "" || seenHost[host] {
 			return
 		}
 		seenHost[host] = true
