@@ -15,6 +15,15 @@ func run(r rune, line, col, n int) model.HiddenRun {
 }
 
 func TestScan(t *testing.T) {
+	var alt strings.Builder
+	for i := 0; i < 200; i++ {
+		if i%2 == 0 {
+			alt.WriteRune('\u200B')
+		} else {
+			alt.WriteRune('\u200C')
+		}
+	}
+	stego := alt.String()
 	cases := []struct {
 		name  string
 		in    string
@@ -48,6 +57,9 @@ func TestScan(t *testing.T) {
 		{"single backtick", "\n\u200B`\n", []model.HiddenRun{run(0x200B, 2, 1, 1)}, 1, 1, true},
 		{"quoted literals", "\"\u200B\" '\u200C' `\u200D` \"\uFEFF\"", nil, 0, 0, true},
 		{"strip class", "[\u200B\u200C\u200D]", nil, 0, 0, true},
+		{"quoted repeat", "\"\u200B\u200B\"", []model.HiddenRun{run(0x200B, 1, 2, 2)}, 1, 2, true},
+		{"quoted stego", "note: \"" + stego + "\" end", []model.HiddenRun{run(0x200B, 1, 8, 200)}, 1, 200, true},
+		{"bracket stego", "[" + stego + "]", []model.HiddenRun{run(0x200B, 1, 2, 200)}, 1, 200, true},
 		{"strip class escape", "[\\u200b\uFEFF]", []model.HiddenRun{run(0xFEFF, 1, 8, 1)}, 1, 1, true},
 		{"in-word quoted", "\"a\u200Bb\"", []model.HiddenRun{run(0x200B, 1, 3, 1)}, 1, 1, true},
 		{"class with a word", "[ign\u200Bore]", []model.HiddenRun{run(0x200B, 1, 5, 1)}, 1, 1, true},

@@ -104,12 +104,13 @@ func Scan(b []byte) (model.HiddenChars, bool) {
 //
 // An isolated U+200B, U+200C, or U+200D is not counted only when both
 // neighbors are whitespace, a line boundary, or the edge of a quote or
-// a code fence. A zero-width character is also not counted inside a
-// quoted string or a bracket class whose contents are only zero-width
-// characters. A character next to punctuation, after a dot, before a
-// word, or at the end of a word stays counted, as do tags, bidi
-// controls, zero-width runs, and U+2060 or U+FEFF outside a strip
-// literal.
+// a code fence. A strip literal is also not counted: a quoted string or
+// bracket class made only of zero-width characters, at most 8 of them,
+// with no code point repeated. A longer run or a repeated code point
+// stays counted, including inside quotes or brackets. A character next
+// to punctuation, after a dot, before a word, or at the end of a word
+// stays counted, as do tags, bidi controls, and U+2060 or U+FEFF
+// outside a strip literal.
 func countedAt(b []byte, i int) bool {
 	r, size := utf8.DecodeRune(b[i:])
 	if Class(r) == "" {
@@ -139,9 +140,10 @@ func emojiJoiner(b []byte, i, size int) bool {
 	return before && after
 }
 
-// stripLiteral reports a zero-width character written as data: the
-// quoted string or bracket class that holds it contains only zero-width
-// characters.
+// stripLiteral reports a zero-width character written as a short list of
+// distinct characters to strip: the quoted string or bracket class that
+// holds it contains only zero-width characters, at most 8, with no code
+// point repeated.
 func stripLiteral(b []byte, i int) bool {
 	return quotedStrip(b, i) || stripClass(b, i)
 }
@@ -153,7 +155,34 @@ func quotedStrip(b []byte, i int) bool {
 	if psize == 0 || nsize == 0 || prev != next {
 		return false
 	}
-	return prev == '"' || prev == '\'' || prev == '`'
+	if prev != '"' && prev != '\'' && prev != '`' {
+		return false
+	}
+	return distinctStrip(b[start:end])
+}
+
+// distinctStrip reports a span of at most 8 zero-width code points with
+// no repeated code point. A longer span or a repeated code point is a
+// run, not a list of characters to strip.
+func distinctStrip(span []byte) bool {
+	var seen []rune
+	for j := 0; j < len(span); {
+		r, size := utf8.DecodeRune(span[j:])
+		if size == 0 || Class(r) != ZeroWidth {
+			return false
+		}
+		for _, prev := range seen {
+			if prev == r {
+				return false
+			}
+		}
+		seen = append(seen, r)
+		if len(seen) > 8 {
+			return false
+		}
+		j += size
+	}
+	return len(seen) > 0
 }
 
 // zwSpan is the byte range of the zero-width run that contains i.
@@ -198,18 +227,7 @@ func stripClass(b []byte, i int) bool {
 	if closeRel < 0 {
 		return false
 	}
-	body := b[open+1 : i+closeRel]
-	if len(body) == 0 {
-		return false
-	}
-	for j := 0; j < len(body); {
-		r, size := utf8.DecodeRune(body[j:])
-		if size == 0 || Class(r) != ZeroWidth {
-			return false
-		}
-		j += size
-	}
-	return true
+	return distinctStrip(b[open+1 : i+closeRel])
 }
 
 // zeroWidthRun reports a neighbor that is itself a zero-width character.

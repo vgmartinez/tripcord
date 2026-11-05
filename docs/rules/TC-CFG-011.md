@@ -40,9 +40,11 @@ neighbors are whitespace, a line boundary, or the edge of a quote
 (`"`, `'`) or a code fence of at least three backticks or tildes, and
 it is not part of a run of zero-width characters. A quoted string or a
 bracket class whose contents are only zero-width characters is a strip
-literal and is not reported, including U+2060 and U+FEFF written that
-way. The escape text `\u200b` is six ASCII characters and is not itself
-a hidden code point.
+literal and is not reported when that span has at most 8 code points
+and no code point repeats, including U+2060 and U+FEFF written that
+way. A longer span or a repeated code point is a run and is reported.
+The escape text `\u200b` is six ASCII characters and is not itself a
+hidden code point.
 
 Still reported, at high: tag characters, bidi controls, a run of
 zero-width characters, a zero-width character inside a word, a
@@ -60,8 +62,9 @@ Not reported:
 - One U+200B, U+200C, or U+200D between whitespace, or at the start of
   a line immediately before a code fence.
 - A strip literal: a quoted string or a bracket class made only of
-  zero-width characters. The examples below write the escape; the file
-  holds the raw character.
+  zero-width characters, at most 8 of them, with no code point
+  repeated. The examples below write the escape; the file holds the
+  raw character.
 
 ## Evidence
 

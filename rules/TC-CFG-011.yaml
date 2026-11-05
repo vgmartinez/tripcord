@@ -23,7 +23,9 @@
 # neighbors are whitespace, a line boundary, or the edge of a quote or
 # a code fence of three or more backticks or tildes, and it is not part
 # of a zero-width run. A quoted string or bracket class made only of
-# zero-width characters is a strip literal and is not counted. A
+# zero-width characters is a strip literal and is not counted when that
+# span has at most 8 code points and no code point repeats. A longer
+# span or a repeated code point is a run and stays counted. A
 # zero-width character next to punctuation, after a dot, before a word,
 # or at the end of a word stays counted. Tags, bidi controls, zero-width
 # runs, and U+2060 or U+FEFF outside a strip literal stay counted.
