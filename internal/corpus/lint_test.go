@@ -110,6 +110,39 @@ func TestFetchInDecodedStrings(t *testing.T) {
 			body:   "-- .devcontainer/devcontainer.json --\n{\"postCreateCommand\": \"curl https://aspire.dev/install.sh | bash\"}\n",
 			detail: cmd,
 		},
+		{
+			name: "line comment",
+			body: `{
+  // install
+  "postCreateCommand": "curl https://aspire.dev/install.sh | bash"
+}
+`,
+			detail: cmd,
+		},
+		{
+			name: "block comment",
+			body: `{
+  /* install */
+  "postCreateCommand": "curl https://aspire.dev/install.sh | bash"
+}
+`,
+			detail: cmd,
+		},
+		{
+			name: "trailing comma",
+			body: `{
+  "postCreateCommand": "curl https://aspire.dev/install.sh | bash",
+}
+`,
+			detail: cmd,
+		},
+		{
+			name: "truncated",
+			body: `{
+  "postCreateCommand": "curl https://aspire.dev/install.sh \u007c bash"
+`,
+			detail: cmd,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -154,36 +187,45 @@ func TestFetchInDecodedStrings(t *testing.T) {
 
 func TestDecodedFetchIsCorpusOnly(t *testing.T) {
 	t.Parallel()
-	body := []byte("{\"postCreateCommand\": \"curl https://aspire.dev/install.sh | bash\"}\n")
-	for _, root := range []string{"corpus", "rules"} {
-		t.Run(root, func(t *testing.T) {
-			t.Parallel()
-			dir := filepath.Join(t.TempDir(), root)
-			writeFile(t, filepath.Join(dir, "case.txtar"), body, 0o644)
-			got, err := Check(dir)
-			if err != nil {
-				t.Fatal(err)
-			}
-			var fetch bool
-			var host bool
-			for _, f := range got {
-				switch f.Kind {
-				case KindFetch:
-					fetch = true
-				case KindHost:
-					host = f.Detail == "aspire.dev"
-				default:
-					t.Errorf("unexpected %s: %s", f.Kind, f.Detail)
+	bodies := map[string]string{
+		"json": "{\"postCreateCommand\": \"curl https://aspire.dev/install.sh | bash\"}\n",
+		"jsonc": `{
+  // install
+  "postCreateCommand": "curl https://aspire.dev/install.sh | bash"
+}
+`,
+	}
+	for name, body := range bodies {
+		for _, root := range []string{"corpus", "rules"} {
+			t.Run(root+"/"+name, func(t *testing.T) {
+				t.Parallel()
+				dir := filepath.Join(t.TempDir(), root)
+				writeFile(t, filepath.Join(dir, "case.txtar"), []byte(body), 0o644)
+				got, err := Check(dir)
+				if err != nil {
+					t.Fatal(err)
 				}
-			}
-			if !host {
-				t.Fatalf("host check did not see aspire.dev: %#v", got)
-			}
-			wantFetch := root == "corpus"
-			if fetch != wantFetch {
-				t.Fatalf("fetch-exec reported=%v, want %v\n%#v", fetch, wantFetch, got)
-			}
-		})
+				var fetch bool
+				var host bool
+				for _, f := range got {
+					switch f.Kind {
+					case KindFetch:
+						fetch = true
+					case KindHost:
+						host = f.Detail == "aspire.dev"
+					default:
+						t.Errorf("unexpected %s: %s", f.Kind, f.Detail)
+					}
+				}
+				if !host {
+					t.Fatalf("host check did not see aspire.dev: %#v", got)
+				}
+				wantFetch := root == "corpus"
+				if fetch != wantFetch {
+					t.Fatalf("fetch-exec reported=%v, want %v\n%#v", fetch, wantFetch, got)
+				}
+			})
+		}
 	}
 }
 
