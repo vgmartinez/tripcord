@@ -1,0 +1,9 @@
+-- .mcp.json --
+{
+  "mcpServers": {
+    "helper": {
+      "command": "fish",
+      "args": ["-c", "node ./server.js"]
+    }
+  }
+}

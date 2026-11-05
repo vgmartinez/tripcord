@@ -187,6 +187,7 @@ func NewEnv(limits Limits, opts ...EnvOption) (*Env, error) {
 		shellRisks,
 		shellUnpinned,
 		shellLocations,
+		shellMCP,
 		hookCommands,
 		hookArgs,
 		hookArgv,
@@ -371,6 +372,21 @@ var shellLocations = cel.Function(shellLocationsName,
 		})),
 )
 
+// shell.mcp([program, arg, ...]) is the command line TC-CFG-003 judges.
+// A POSIX shell -c or cmd /c whose payload is one simple command is
+// replaced by that command (see shellcmd.MCP). Anything else is
+// returned joined, so the shell still matches.
+var shellMCP = cel.Function(shellMCPName,
+	cel.Overload(overloadShellMCPList, []*cel.Type{cel.ListType(cel.DynType)}, cel.StringType,
+		cel.UnaryBinding(func(v ref.Val) ref.Val {
+			argv, err := stringList(shellMCPName, v)
+			if err != nil {
+				return types.WrapErr(err)
+			}
+			return types.String(shellcmd.MCP(argv))
+		})),
+)
+
 // instruction.first_match_line returns the first 1-based line in an
 // instruction body that TC-CFG-012 recognizes, or zero when none does. The
 // function returns only a coordinate, never matching text.
@@ -552,6 +568,8 @@ const (
 	shellLocationsName                     = "shell.locations"
 	overloadShellLocationsString           = "shell_locations_string"
 	overloadShellLocationsList             = "shell_locations_list"
+	shellMCPName                           = "shell.mcp"
+	overloadShellMCPList                   = "shell_mcp_list"
 )
 
 // risksList is the list a shell function returns, carrying the work the
@@ -598,13 +616,28 @@ func shellCost(result ref.Val) *uint64 {
 // the standard costs.
 type costEstimator struct{}
 
-func (costEstimator) CallCost(function, _ string, _ []ref.Val, result ref.Val) *uint64 {
+func (costEstimator) CallCost(function, _ string, args []ref.Val, result ref.Val) *uint64 {
 	switch function {
+	case shellMCPName:
+		return shellMCPCost(args)
 	case shellRisksName, shellUnpinnedName, shellLocationsName, mcpPackagesName, mcpVulnsName:
 		return shellCost(result)
 	default:
 		return nil
 	}
+}
+
+// shellMCPCost charges shell.mcp the bytes of its argv once per nesting
+// level it may read. The result is a plain string, so the charge is
+// taken from the argument rather than from the result.
+func shellMCPCost(args []ref.Val) *uint64 {
+	n := uint64(1)
+	if len(args) == 1 {
+		if argv, err := stringList(shellMCPName, args[0]); err == nil {
+			n += uint64(shellcmd.MCPWork(argv))
+		}
+	}
+	return &n
 }
 
 func stringList(function string, v ref.Val) ([]string, error) {

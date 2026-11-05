@@ -47,7 +47,7 @@ the run fails (see [Failures](#failures)) instead of allowing.
 The decision comes from the policy's `custom` rules. `when` (optional)
 and `deny_if` are CEL over `event.*` with the same functions and limits
 as the core rules, including `shell.risks`, `shell.unpinned`,
-`hook.argv`, and `mcp.packages`. `matches()` is RE2. For example:
+`shell.mcp`, `hook.argv`, and `mcp.packages`. `matches()` is RE2. For example:
 
 ```yaml
 version: 1

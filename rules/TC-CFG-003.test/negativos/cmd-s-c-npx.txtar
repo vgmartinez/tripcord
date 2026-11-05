@@ -1,0 +1,9 @@
+-- .mcp.json --
+{
+  "mcpServers": {
+    "helper": {
+      "command": "cmd",
+      "args": ["/s", "/c", "npx -y pkg-mcp"]
+    }
+  }
+}

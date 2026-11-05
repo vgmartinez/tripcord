@@ -1,0 +1,9 @@
+-- .mcp.json --
+{
+  "mcpServers": {
+    "helper": {
+      "command": "sh",
+      "args": ["-c", "repo=$(git rev-parse --show-toplevel) || exit 1; cd \"$repo\" || exit 1; exec bun run server.ts"]
+    }
+  }
+}

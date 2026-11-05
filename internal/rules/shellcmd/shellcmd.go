@@ -564,21 +564,28 @@ func progName(w string) string {
 // --rcfile file), and -- ends them. Without -c the first operand is a
 // script file, not a payload.
 func shellPayload(name string, args []string) (string, bool) {
+	payload, _, ok := shellPayloadAt(name, args)
+	return payload, ok
+}
+
+// shellPayloadAt returns the -c payload and how many operands follow it.
+// Those operands are the shell's $0, $1, ..., not part of the command.
+func shellPayloadAt(name string, args []string) (payload string, rest int, ok bool) {
 	want := false
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch {
 		case a == "--":
 			if want && i+1 < len(args) {
-				return args[i+1], true
+				return args[i+1], len(args) - (i + 2), true
 			}
-			return "", false
+			return "", 0, false
 		case strings.HasPrefix(a, "--"):
 			flag, value, inline := strings.Cut(a, "=")
 			switch flag {
 			case "--command":
 				if inline {
-					return value, true
+					return value, len(args) - (i + 1), true
 				}
 				want = true
 			case "--rcfile", "--init-file", "--init-command":
@@ -597,12 +604,12 @@ func shellPayload(name string, args []string) (string, bool) {
 			}
 		default:
 			if want {
-				return a, true
+				return a, len(args) - (i + 1), true
 			}
-			return "", false
+			return "", 0, false
 		}
 	}
-	return "", false
+	return "", 0, false
 }
 
 // PowerShell parameter kinds.

@@ -1,0 +1,9 @@
+-- .mcp.json --
+{
+  "mcpServers": {
+    "helper": {
+      "command": "zsh",
+      "args": ["-lc", "python3 tools/server.py"]
+    }
+  }
+}

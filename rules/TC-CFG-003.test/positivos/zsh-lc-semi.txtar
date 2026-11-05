@@ -1,0 +1,9 @@
+-- .mcp.json --
+{
+  "mcpServers": {
+    "helper": {
+      "command": "zsh",
+      "args": ["-lc", "export HOME=\"$PWD/state\"; mkdir -p \"$HOME\"; exec uvx --from git+https://example.invalid/pkg.git pkg-mcp"]
+    }
+  }
+}

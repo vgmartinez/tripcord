@@ -25,6 +25,20 @@
 # node server.js --filter 'a|sh', does not. The pipe is found by
 # shell.risks, with the exemption TC-CFG-001 uses (./x.sh | sh).
 #
+# shell.mcp unwraps a shell wrapper before that test. cmd /c, sh -c,
+# bash -c, and the same with a path, .exe, or flag cluster (-lc, /s /c)
+# are replaced by the inner command when that command is one simple
+# program, or cd <dir> && that program. env, sudo, exec, command, and
+# assignments are dropped first, as they are for shell.risks. The inner
+# command is then judged by the same shell and inline-interpreter test,
+# so bash -c 'npx pkg' and sh -c 'exec node server.js' do not match,
+# while bash -c 'node -e ...' still does. A pipe, a semicolon or ||, an
+# extra &&, a substitution, a redirection, or a downloader (curl, wget,
+# and the other names shell.risks treats as downloaders) is not simple
+# and stays matched. bash script.sh is not rewritten: the rule does not
+# look at the filesystem, so it cannot tell a committed script from any
+# other path.
+#
 id: TC-CFG-003
 pack: tripcord/core
 title: "MCP server launched through a shell, a pipe to sh, or an inline interpreter"
@@ -37,8 +51,8 @@ when: |
     has(payload.command) && (
       [
         type(payload.command) == string ?
-          ([payload.command] + hook.args(payload)).join(" ") :
-        type(payload.command) == list && config.harness == "opencode" && payload.command.all(a, type(a) == string) ? payload.command.join(" ") : ""
+          shell.mcp([payload.command] + hook.args(payload)) :
+        type(payload.command) == list && config.harness == "opencode" && payload.command.all(a, type(a) == string) ? shell.mcp(payload.command) : ""
       ].exists(h, h.matches(r'''(?i)^\s*(?:[^\s]*[/\\])?(?:(?:(?:ba|z|da|k|a|c|tc|fi)?sh|cmd|powershell|pwsh)(?:\.exe)?(?:\s|$)|python(?:3(?:\.[0-9]+)?)?(?:\.exe)?(?:\s+-[^\sm]\S*)*?\s+-c(?:\s|$)|node(?:\.exe)?(?:\s+-[^\se]\S*)*?\s+(?:-e|--eval)(?:\s|$)|(?:perl|ruby)(?:\.exe)?(?:\s+-[^\se]\S*)*?\s+-e(?:\s|$)|deno(?:\.exe)?\s+eval(?:\s|$))''')) ||
       (type(payload.command) == string && "pipe" in shell.risks(payload.command))
     )

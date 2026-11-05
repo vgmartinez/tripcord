@@ -1,0 +1,9 @@
+-- .mcp.json --
+{
+  "mcpServers": {
+    "helper": {
+      "command": "/usr/bin/bash",
+      "args": ["-lc", "uvx pkg-mcp"]
+    }
+  }
+}

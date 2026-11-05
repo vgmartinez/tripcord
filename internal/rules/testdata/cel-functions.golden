@@ -54,6 +54,7 @@ mcp.vulns
 replace
 reverse
 shell.locations
+shell.mcp
 shell.risks
 shell.unpinned
 size

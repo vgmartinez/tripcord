@@ -1,0 +1,9 @@
+-- .mcp.json --
+{
+  "mcpServers": {
+    "helper": {
+      "command": "cmd.exe",
+      "args": ["/c", "uvx notes-mcp"]
+    }
+  }
+}
