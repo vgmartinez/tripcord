@@ -77,7 +77,7 @@ const TriageHeader = `# corpus/benign/triage.tsv
 # Triage decisions for findings on the benign corpus. There are no rows yet.
 # This file changes only through a pull request.
 # Columns, tab-separated:
-# fingerprint: the finding fingerprint (tcf_ and 16 lowercase hex digits). Unique in this file.
+# fingerprint: the finding fingerprint (tcf_ and 16 lowercase hex digits). Unique per repository.
 # rule id: a TC rule id that is listed in rules/REGISTRY, such as TC-CFG-001.
 # repo: owner/repo. Every value must appear in repos.lock.
 # verdict: TP, FP, or accepted-risk.
@@ -363,7 +363,7 @@ func ParseRegistry(data []byte) (map[string]bool, error) {
 
 // Validate checks the lock and triage invariants: column shape is
 // enforced by the parsers, then this checks SHA and verdict values,
-// sorted unique repositories, unique fingerprints, that every triage
+// sorted unique repositories, unique repository and fingerprint pairs, that every triage
 // rule id is in rules, and that every triage repository is in the lock.
 // rules may be nil only when triage has no rows.
 func Validate(repos []Repo, triage []Triage, rules map[string]bool) error {
@@ -382,15 +382,16 @@ func Validate(repos []Repo, triage []Triage, rules map[string]bool) error {
 		}
 		prev = r.Name
 	}
-	fps := map[string]bool{}
+	fps := map[[2]string]bool{}
 	for i, row := range triage {
 		if err := checkTriage(row); err != nil {
 			return fmt.Errorf("triage %d: %w", i+1, err)
 		}
-		if fps[row.Fingerprint] {
-			return fmt.Errorf("duplicate fingerprint %s", row.Fingerprint)
+		key := [2]string{row.Repo, row.Fingerprint}
+		if fps[key] {
+			return fmt.Errorf("duplicate fingerprint %s in repository %s", row.Fingerprint, row.Repo)
 		}
-		fps[row.Fingerprint] = true
+		fps[key] = true
 		if rules == nil || !rules[row.RuleID] {
 			return fmt.Errorf("rule %s is not in the registry", row.RuleID)
 		}

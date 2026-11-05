@@ -46,8 +46,14 @@ func TestFormatAndValidate(t *testing.T) {
 	if err := Validate(parsed, triage, rules); err != nil {
 		t.Fatal(err)
 	}
+	otherRepo := triage[0]
+	otherRepo.Repo = "b/b"
+	if err := Validate(parsed, []Triage{triage[0], otherRepo}, rules); err != nil {
+		t.Fatalf("same fingerprint in two repositories: %v", err)
+	}
 	dup := append([]Triage{triage[0]}, triage[0])
-	if err := Validate(parsed, dup, rules); err == nil || !strings.Contains(err.Error(), "duplicate fingerprint") {
+	err = Validate(parsed, dup, rules)
+	if err == nil || !strings.Contains(err.Error(), "duplicate fingerprint tcf_c761c03b24e7b179 in repository a/a") {
 		t.Fatalf("duplicate fingerprint: %v", err)
 	}
 	missing := []Triage{{Fingerprint: "tcf_ae4bd8fa3ea4035c", RuleID: "TC-CFG-001", Repo: "z/z", Verdict: VerdictTP, Reason: "reviewed as a local task", Date: "2026-11-04"}}
