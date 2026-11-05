@@ -10,12 +10,12 @@
 # archived and not a fork. The list is stratified by harness and by
 # repository size (small is under 1 MB, medium is under 10 MB, and
 # large is the rest) and targets 1000 repositories.
-# This copy is partial: 753 of 1000 repositories.
+# This copy is partial: 755 of 1000 repositories.
 # Every harness has at least one row.
 # A resumable crawl fills the list in.
 # v0 doesn't ship until it reaches at least 1,000 repositories with a minimum per harness (#41).
-# Harness counts: agents 50, claude 93, codex 67, copilot 131, cursor 102, devcontainer 122, gemini 74, mcp 70, vscode 57.
-# Size bands: small 98, medium 213, large 442.
+# Harness counts: agents 50, claude 93, codex 69, copilot 131, cursor 102, devcontainer 122, gemini 74, mcp 70, vscode 57.
+# Size bands: small 98, medium 213, large 444.
 # Columns, tab-separated: owner/repo, 40-character commit SHA of the
 # default branch HEAD at generation time, SPDX license (NOASSERTION
 # when the API reports none), harnesses (comma-separated), size band
@@ -171,6 +171,7 @@ PeonPing/openpeon	b0727d5abefc882982c4c7349bd1a8c45b1b73b1	MIT	claude	medium	202
 PhpCodeArcheology/PhpCodeArcheology	0d2484fdfaa2ac81c5c3355b1a54d7498fba28b1	MIT	mcp	medium	2026-11-04
 PierreKieffer/http-tanker	abee53e6f6ee931dfecb5fc62955150c578ac2f6	BSD-2-Clause	mcp	large	2026-11-04
 PlagueHO/CosmosDB	a5b2d10dd1697ffdca0a5c84a777be8c84629b39	MIT	vscode	medium	2026-11-04
+PostHog/posthog	cb939bbce6248413bb01db9b051e9badfbc36a38	NOASSERTION	codex	large	2026-11-05
 PrayerfulDrop/ESPHome-Guition-ESP32-S3-4848S040	1212f2355b7f68296d99785c3138a52f07e1a854	GPL-3.0	claude	large	2026-11-04
 PrimeIntellect-ai/prime-envs	7a5651c9a32c345c5f19d53d604929b178dfbf3b	Apache-2.0	cursor	large	2026-11-04
 ProjectSidewalk/SidewalkWebpage	9f03b1f88838aedc54124dd554d524f6d4bf4919	MIT	copilot	large	2026-11-04
@@ -243,6 +244,7 @@ alla2001/material-painter	87af97a1e6e25e7e8ee4817a8669de62e6b176ce	GPL-3.0	mcp	l
 altasoft/DomainPrimitives	13784375c5302cccfc872ce3be2ec6e8b6da9355	MIT	claude	medium	2026-11-04
 amitfin/oref_alert	8e720f74b87c16665db7ac191b01135cf0654a8a	MIT	devcontainer	medium	2026-11-04
 anthropics/claude-for-legal	4a6c651889c97cc9140580363c73e0eb17379c2b	Apache-2.0	mcp	medium	2026-11-04
+apache/magpie	17abc4c8c6137f466b60bf698dd2684618e32358	Apache-2.0	codex	large	2026-11-05
 apache/skywalking-banyandb	525b69e35d7f0183a144a67fd53a503e99ed054f	Apache-2.0	mcp	large	2026-11-04
 aperoc/toolkami	f73d8da52b8bfef1d42294222dc840e8c9c7c4da	Apache-2.0	cursor	medium	2026-11-04
 apollographql/apollo-client-integrations	3a5653c592d6426a5ee5491997c5ce377160a2e9	MIT	copilot	medium	2026-11-04
