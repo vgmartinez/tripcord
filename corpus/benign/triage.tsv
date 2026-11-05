@@ -21,20 +21,20 @@ tcf_9655fe0b339aeb2d	TC-CFG-009	OGKevin/kobo.koplugin	accepted-risk	Copilot setu
 tcf_f32f7b066cf14dbe	TC-CFG-009	OGKevin/kobo.koplugin	TP	Copilot setup installs the latest StyLua release binary with no version pin and no checksum.	2026-11-05
 tcf_8df0a5fbae42cd73	TC-CFG-005	OpenRouterLabs/spawn	TP	Shared Claude settings set defaultMode to bypassPermissions, so tool calls are not prompted.	2026-11-05
 tcf_63a30a721a6e8b11	TC-CFG-009	Particular/docs.particular.net	FP	Copilot setup only appends a remote version.json to a file used as a cache key; the downloaded data is never executed.	2026-11-05
-tcf_0b52f38618246bb7	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	FP	The magic server is cmd /c npx of one package with no inline script, so the shell only wraps a normal launch.	2026-11-05
-tcf_4f22b21e9063e4a7	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	FP	The redis-mcp server is cmd /c npx of one package with no inline script, so the shell only wraps a normal launch.	2026-11-05
+tcf_164cdb3d35b8b620	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	FP	The redis-mcp server is cmd /c npx of one package with no inline script, so the shell only wraps a normal launch.	2026-11-05
+tcf_39141ef6d45e427a	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	FP	The mysql server is cmd /c npx of one package with no inline script, so the shell only wraps a normal launch.	2026-11-05
 tcf_58cafaa2544749ce	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	FP	The docker server is cmd /c npx of one package with no inline script, so the shell only wraps a normal launch.	2026-11-05
 tcf_5b1f73d276444e77	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	FP	The Sequential Thinking server is cmd /c npx of one package with no inline script, so the shell only wraps a normal launch.	2026-11-05
+tcf_6efefa28faeb1c6c	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	FP	The github server is cmd /c npx of one package with no inline script, so the shell only wraps a normal launch.	2026-11-05
 tcf_7b683b6787cfdc49	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	FP	The filesystem server is cmd /c npx of one package with no inline script, so the shell only wraps a normal launch.	2026-11-05
 tcf_804372f7da507a26	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	FP	The time-mcp server is cmd /c npx of one package with no inline script, so the shell only wraps a normal launch.	2026-11-05
 tcf_8541c72facbb86c7	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	FP	The Shrimp Task Manager server is cmd /c npx of one package with no inline script, so the shell only wraps a normal launch.	2026-11-05
+tcf_8e941d3e8b7ec0e2	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	FP	The magic server is cmd /c npx of one package with no inline script, so the shell only wraps a normal launch.	2026-11-05
 tcf_a4093d959110e4a2	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	FP	The Context7 server is cmd /c npx of one package with no inline script, so the shell only wraps a normal launch.	2026-11-05
 tcf_aacc2872cc6f2d2c	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	FP	The chrome-devtools server is cmd /c npx of one package with no inline script, so the shell only wraps a normal launch.	2026-11-05
 tcf_c0d4d661ca4cf722	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	FP	The playwright server is cmd /c npx of one package with no inline script, so the shell only wraps a normal launch.	2026-11-05
-tcf_e768fcec857d59d9	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	FP	The github server is cmd /c npx of one package with no inline script, so the shell only wraps a normal launch.	2026-11-05
 tcf_e942251483d74761	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	FP	The magic-ui server is cmd /c npx of one package with no inline script, so the shell only wraps a normal launch.	2026-11-05
 tcf_fbdbb1938fbd11d0	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	FP	The everything-search server is cmd /c uvx of one package with no inline script, so the shell only wraps a normal launch.	2026-11-05
-tcf_fe872dfb25bd0717	TC-CFG-003	Prorise-cool/Claude-Code-Multi-Agent	FP	The mysql server is cmd /c npx of one package with no inline script, so the shell only wraps a normal launch.	2026-11-05
 tcf_67a552ca1f4f5508	TC-CFG-008	TheOrcDev/repostars	TP	Cursor afterFileEdit hook runs pnpm dlx on an unpinned ultracite package, fetching and running registry code on each edit.	2026-11-05
 tcf_23e2406348ec0229	TC-CFG-009	TimSoethout/goodwe-sems-home-assistant	accepted-risk	Copilot setup pipes an install script from a version tag path into sh with no checksum; tag-pinned, not commit-pinned.	2026-11-05
 tcf_4517b21450be67be	TC-CFG-004	YoshiiRyo1/document-templates-for-aws	TP	The shared allow list contains Bash, which pre-approves every shell command apart from a short deny list.	2026-11-05
@@ -74,7 +74,7 @@ tcf_bb4536341174354b	TC-CFG-003	hashgraph-online/awesome-codex-plugins	FP	bash -
 tcf_bc363e173a5da93f	TC-CFG-003	hashgraph-online/awesome-codex-plugins	FP	bash runs run-mailagent-mcp.sh with no -c and no inline code, so the shell only starts one named script.	2026-11-05
 tcf_cea2571b518ef62d	TC-CFG-003	hashgraph-online/awesome-codex-plugins	TP	caw-execution runs node -e inline code that imports a server module from the Codex plugin cache in the home directory.	2026-11-05
 tcf_de6fbbaffd7e95f0	TC-CFG-003	hashgraph-online/awesome-codex-plugins	TP	powershell with ExecutionPolicy Bypass runs node on a js file from the user profile directory, outside the repository.	2026-11-05
-tcf_ed848e2991d015bb	TC-CFG-003	hashgraph-online/awesome-codex-plugins	FP	bash runs start.sh under the plugin root with no -c and no inline code, so the shell only starts one named script.	2026-11-05
+tcf_ea2f1808d3bbe3ff	TC-CFG-003	hashgraph-online/awesome-codex-plugins	FP	bash runs start.sh under the plugin root with no -c and no inline code, so the shell only starts one named script.	2026-11-05
 tcf_fc8d8d52ef32eb60	TC-CFG-003	hashgraph-online/awesome-codex-plugins	TP	codex-agents-workflow runs node -e inline code that imports a server module from the Codex plugin cache in the home directory.	2026-11-05
 tcf_1630b6e93bff8d62	TC-CFG-005	itai-gendler/pdd-kit	TP	Shared Codex config sets approval_policy to never, so commands run with no prompt.	2026-11-05
 tcf_8df0a5fbae42cd73	TC-CFG-005	itai-gendler/pdd-kit	TP	Shared Claude settings set defaultMode to bypassPermissions, so tool calls are not prompted.	2026-11-05
@@ -123,8 +123,8 @@ tcf_5c241512bb48cea8	TC-CFG-009	sillsdev/FieldWorks	TP	Copilot setup shallow-clo
 tcf_cb0a6481df322fa3	TC-CFG-002	sillsdev/FieldWorks	TP	VS Code task Setup: Colorize Worktree runs a committed ps1 script on folderOpen, so opening the folder executes it with no explicit action.	2026-11-05
 tcf_f15b060bd8a1000f	TC-CFG-003	sillsdev/FieldWorks	FP	winforms-mcp is cmd /c npx of one package with no inline script, so the shell only wraps a normal launch.	2026-11-05
 tcf_073db7946fad5d29	TC-CFG-003	stella/stella	FP	sh -c moves to the git top level and runs bun on one committed script, a single launch with no inline code.	2026-11-05
-tcf_4338b4dd4a8cf063	TC-CFG-003	tam159/next-role	FP	sh -lc execs npx of one package with a DSN from env vars, a single launch with no inline script.	2026-11-05
-tcf_af4d869bebdaa397	TC-CFG-003	tam159/next-role	FP	sh -lc sources the local env file and then execs npx of one package, a single launch with no inline script.	2026-11-05
+tcf_28e01361a4f2d2c1	TC-CFG-003	tam159/next-role	FP	sh -lc sources the local env file and then execs npx of one package, a single launch with no inline script.	2026-11-05
+tcf_c12dd857fe65aa91	TC-CFG-003	tam159/next-role	FP	sh -lc execs npx of one package with a DSN from env vars, a single launch with no inline script.	2026-11-05
 tcf_1630b6e93bff8d62	TC-CFG-005	the-palindrome/ml-knowledge-graph	TP	Shared Codex config sets approval_policy to never, so commands run with no prompt.	2026-11-05
 tcf_d03a42609e945e03	TC-CFG-004	the-palindrome/ml-knowledge-graph	TP	The shared allow list contains Bash(*), which pre-approves every shell command.	2026-11-05
 tcf_2aa58bf29d0f17ef	TC-CFG-009	timdeschryver/Sandbox	TP	Devcontainer onCreateCommand pipes an unversioned Aspire install script into bash with no checksum.	2026-11-05
