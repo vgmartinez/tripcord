@@ -269,8 +269,19 @@ func scanBytes(root, rel string, data []byte, content, hosts bool) []Finding {
 	if bytesHasShebang(data) {
 		out = append(out, Finding{Root: root, Path: rel, Kind: KindShebang, Detail: "first line"})
 	}
-	out = append(out, scanText(root, rel, string(data), content, hosts)...)
 	arc := txtar.Parse(data)
+	// Decoded JSON and YAML strings are checked only under corpus/.
+	// A rules fixture quotes the command the rule matches, often on a
+	// real host, and a fetch-and-exec finding cannot be allowlisted.
+	// The raw line check still runs everywhere.
+	var decoded []string
+	if filepath.Base(root) == "corpus" {
+		decoded = configStrings(data)
+		for _, f := range arc.Files {
+			decoded = append(decoded, configStrings(f.Data)...)
+		}
+	}
+	out = append(out, scanText(root, rel, string(data), content, hosts, decoded)...)
 	seen := map[string]struct{}{}
 	for _, f := range arc.Files {
 		cleaned, err := txtar.Rel(f.Name)

@@ -74,8 +74,11 @@ var testNets []*net.IPNet
 // scanText runs the text checks. Without content, the file is a
 // definition or a doc: only the secret and fetch-and-exec checks run.
 // Without hosts, no host finding is reported; a fetch-and-exec line
-// still counts a non-reserved host.
-func scanText(root, rel, text string, content, hosts bool) []Finding {
+// still counts a non-reserved host. decoded holds JSON and YAML string
+// values with escapes already applied. Their lines get the
+// fetch-and-exec check too, so a pipe inside a quoted command is not
+// hidden by the quotes. Callers pass decoded only for a corpus root.
+func scanText(root, rel, text string, content, hosts bool, decoded []string) []Finding {
 	var out []Finding
 	seenHost := map[string]bool{}
 	addHost := func(host string) {
@@ -104,12 +107,29 @@ func scanText(root, rel, text string, content, hosts bool) []Finding {
 			}
 		}
 	}
-	for _, line := range strings.Split(text, "\n") {
-		for _, host := range fetchArgHosts(line) {
-			addHost(host)
+	seenFetch := map[string]bool{}
+	checkLine := func(line string, hostsToo bool) {
+		if hostsToo {
+			for _, host := range fetchArgHosts(line) {
+				addHost(host)
+			}
 		}
-		if fetchLine(line) {
-			out = append(out, Finding{Root: root, Path: rel, Kind: KindFetch, Detail: clip(strings.TrimSpace(line))})
+		if !fetchLine(line) {
+			return
+		}
+		detail := clip(strings.TrimSpace(line))
+		if seenFetch[detail] {
+			return
+		}
+		seenFetch[detail] = true
+		out = append(out, Finding{Root: root, Path: rel, Kind: KindFetch, Detail: detail})
+	}
+	for _, line := range strings.Split(text, "\n") {
+		checkLine(line, true)
+	}
+	for _, s := range decoded {
+		for _, line := range strings.Split(s, "\n") {
+			checkLine(line, false)
 		}
 	}
 	return out
