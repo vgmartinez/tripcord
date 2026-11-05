@@ -1,0 +1,9 @@
+-- .mcp.json --
+{
+  "mcpServers": {
+    "tsparticles": {
+      "command": "npx",
+      "args": ["-y", "@tsparticles/mcp-server@4.3.2"]
+    }
+  }
+}

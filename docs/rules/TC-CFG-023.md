@@ -86,7 +86,7 @@ pack patch. Every other advisory ships in the monthly release.
 | TCA-2026-0012 | npm `@bytebase/dbhub` | <0.22.6 | 0.22.6 | moderate, reported high |
 | TCA-2026-0013 | npm `@tsparticles/mcp-server` | <4.3.1 | 4.3.1 | high |
 | TCA-2026-0014 | npm `@tsparticles/mcp-server` | <4.3.1 | 4.3.1 | high |
-| TCA-2026-0015 | npm `@tsparticles/mcp-server` | <4.3.2 | 4.3.2 | moderate, reported high |
+| TCA-2026-0015 | npm `@tsparticles/mcp-server` | <4.3.2 | 4.3.2 | moderate |
 
 prefab-ui is a library. It matches only when the argv names it, for
 example `--with prefab-ui==0.20.2`. A transitive dependency of another
