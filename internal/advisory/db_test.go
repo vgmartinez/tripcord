@@ -9,7 +9,7 @@ import (
 func TestSeedList(t *testing.T) {
 	t.Parallel()
 	db := loadSeed(t)
-	if db.Count() != 12 || db.LatestReview() != "2026-11-04" {
+	if db.Count() != 15 || db.LatestReview() != "2026-11-05" {
 		t.Fatalf("count %d reviewed %s", db.Count(), db.LatestReview())
 	}
 	hits, err := db.Match([]PackageRef{{
@@ -158,6 +158,42 @@ func TestMCPHubBounds(t *testing.T) {
 		if err != nil || len(hits) != 0 {
 			t.Fatalf("%s hits = %+v %v", version, hits, err)
 		}
+	}
+}
+
+func TestTSParticlesBounds(t *testing.T) {
+	t.Parallel()
+	db := loadSeed(t)
+	// 4.3.0 is the last release before the 4.3.1 fixes. 4.3.1 still shares
+	// one HTTP transport; 4.3.2 gives each session its own.
+	before := []string{"4.2.1", "4.3.0"}
+	for _, version := range before {
+		hits, err := db.Match([]PackageRef{{
+			Ecosystem: EcoNPM, Name: "@tsparticles/mcp-server", Kind: KindExact, Version: version,
+		}})
+		if err != nil || len(hits) != 3 {
+			t.Fatalf("%s hits = %+v %v", version, hits, err)
+		}
+	}
+	hits, err := db.Match([]PackageRef{{
+		Ecosystem: EcoNPM, Name: "@tsparticles/mcp-server", Kind: KindExact, Version: "4.3.1",
+	}})
+	if err != nil || len(hits) != 1 || hits[0].ID != "TCA-2026-0015" {
+		t.Fatalf("4.3.1 hits = %+v %v", hits, err)
+	}
+	for _, version := range []string{"4.3.2", "4.5.1"} {
+		hits, err = db.Match([]PackageRef{{
+			Ecosystem: EcoNPM, Name: "@tsparticles/mcp-server", Kind: KindExact, Version: version,
+		}})
+		if err != nil || len(hits) != 0 {
+			t.Fatalf("%s hits = %+v %v", version, hits, err)
+		}
+	}
+	hits, err = db.Match([]PackageRef{{
+		Ecosystem: EcoNPM, Name: "@tsparticles/mcp-server", Kind: KindUnpinned,
+	}})
+	if err != nil || len(hits) != 0 {
+		t.Fatalf("unpinned hits = %+v %v", hits, err)
 	}
 }
 
