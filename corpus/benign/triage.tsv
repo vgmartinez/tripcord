@@ -2,7 +2,7 @@
 # Triage decisions for findings on the benign corpus. There are no rows yet.
 # This file changes only through a pull request.
 # Columns, tab-separated:
-# fingerprint: the finding fingerprint (tcf_ and 16 lowercase hex digits). Unique in this file.
+# fingerprint: the finding fingerprint (tcf_ and 16 lowercase hex digits). Unique per repository.
 # rule id: a TC rule id that is listed in rules/REGISTRY, such as TC-CFG-001.
 # repo: owner/repo. Every value must appear in repos.lock.
 # verdict: TP, FP, or accepted-risk.
