@@ -1,0 +1,7 @@
+source: timdeschryver/Sandbox@efec08bd1fd94e4465d4056189bf50398fc40403:.vscode/tasks.json
+license: MIT
+-- .vscode/tasks.json --
+{
+	"version": "2.0.0",
+	"tasks": []
+}

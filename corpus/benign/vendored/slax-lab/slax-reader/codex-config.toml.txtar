@@ -1,0 +1,20 @@
+source: slax-lab/slax-reader@6fe1ebd95dfc1f2fbdef9834967732d0619a4761:.codex/config.toml
+license: Apache-2.0
+-- .codex/config.toml --
+default_permissions = "rulesync"
+approval_policy = "on-request"
+approvals_reviewer = "auto_review"
+
+[permissions.rulesync]
+extends = ":workspace"
+
+[permissions.rulesync.filesystem]
+":minimal" = "read"
+glob_scan_max_depth = 8
+
+[permissions.rulesync.filesystem.":workspace_roots"]
+"**/.env" = "deny"
+"**/.env.*" = "deny"
+"**/.dev.vars" = "deny"
+"**/.dev.vars.*" = "deny"
+".git/**" = "write"

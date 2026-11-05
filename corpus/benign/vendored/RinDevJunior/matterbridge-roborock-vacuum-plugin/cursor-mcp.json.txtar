@@ -1,0 +1,31 @@
+source: RinDevJunior/matterbridge-roborock-vacuum-plugin@e62916f0430885a4dcabb88e3e8352defca5193e:.cursor/mcp.json
+license: Apache-2.0
+-- .cursor/mcp.json --
+{
+	"mcpServers": {
+		"codegraph": {
+			"type": "stdio",
+			"command": "codegraph",
+			"args": ["serve", "--mcp", "--path", "/Volumes/ExternalSSD/code/matterbridge-roborock-vacuum-plugin"]
+		},
+		"codecov": {
+			"command": "npx",
+			"args": ["-y", "@egulatee/mcp-codecov"],
+			"env": {
+				"CODECOV_BASE_URL": "https://codecov.io",
+				"CODECOV_TOKEN": "${env:CODECOV_TOKEN}"
+			}
+		},
+		"serena": {
+			"type": "stdio",
+			"command": "serena",
+			"args": [
+				"start-mcp-server",
+				"--context",
+				"ide",
+				"--project",
+				"/Volumes/ExternalSSD/code/matterbridge-roborock-vacuum-plugin"
+			]
+		}
+	}
+}

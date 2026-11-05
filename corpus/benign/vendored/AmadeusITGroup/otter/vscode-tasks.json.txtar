@@ -1,0 +1,34 @@
+source: AmadeusITGroup/otter@1b5620f1376fcb9b40e04736813084c9b946fadb:.vscode/tasks.json
+license: BSD-3-Clause
+-- .vscode/tasks.json --
+// See https://go.microsoft.com/fwlink/?LinkId=733558
+// for the documentation about the tasks.json format
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "start demo app",
+      "type": "npm",
+      "script": "start",
+      "problemMatcher": [],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "watch-vscode-extension",
+      "type": "npm",
+      "path": "apps/vscode-extension",
+      "script": "watch:vscode-extension",
+      "problemMatcher": "$tsc-watch",
+      "isBackground": true,
+      "presentation": {
+        "reveal": "never"
+      },
+      "group": {
+        "kind": "build"
+      }
+    }
+  ]
+}

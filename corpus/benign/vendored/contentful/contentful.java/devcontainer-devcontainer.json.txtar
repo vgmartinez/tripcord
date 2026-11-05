@@ -1,0 +1,23 @@
+source: contentful/contentful.java@e0d2cc15d325cfd13bc6886fe32e80142d447fa5:.devcontainer/devcontainer.json
+license: Apache-2.0
+-- .devcontainer/devcontainer.json --
+{
+  "name": "contentful.java",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "..",
+    "args": {
+      "JAVA_VERSION": "${localEnv:JAVA_VERSION:8}"
+    }
+  },
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "remoteUser": "vscode",
+  "postCreateCommand": "./mvnw -B -q -DskipTests dependency:go-offline",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "redhat.java"
+      ]
+    }
+  }
+}

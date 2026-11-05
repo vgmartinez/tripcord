@@ -4,6 +4,9 @@ Copyright 2026 The Tripcord Authors
 This product is licensed under the Apache License, Version 2.0.
 See the LICENSE file.
 
+The files under corpus/benign/vendored/ are copied from third-party
+repositories and stay under their own licenses. See THIRD_PARTY_NOTICES.
+
 This product includes golang.org/x/text/unicode/norm, which is
 licensed under a BSD-style license:
 

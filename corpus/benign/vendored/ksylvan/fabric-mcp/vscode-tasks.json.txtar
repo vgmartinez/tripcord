@@ -1,0 +1,78 @@
+source: ksylvan/fabric-mcp@e4abafe5768c97ad2879e754ef7f06d8e440b96a:.vscode/tasks.json
+license: MIT
+-- .vscode/tasks.json --
+{
+	// See https://go.microsoft.com/fwlink/?LinkId=733558
+	// for the documentation about the tasks.json format
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Set up environment",
+			"type": "shell",
+			"command": "cd ${workspaceFolder} && make bootstrap",
+			"runOptions": { "runOn": "folderOpen" }
+		},
+		{
+			"label": "Run Test Suite",
+			"type": "shell",
+			"command": "cd ${workspaceFolder} && make test-fast",
+			"group": {
+				"kind": "test",
+				"isDefault": true
+			},
+			"problemMatcher": ["$python"],
+			"presentation": {
+				"reveal": "always"
+			}
+		},
+		{
+			"label": "Run Coverage",
+			"type": "shell",
+			"command": "cd ${workspaceFolder} && make coverage",
+			"group": {
+				"kind": "test",
+				"isDefault": true
+			},
+			"problemMatcher": ["$python"],
+			"presentation": {
+				"reveal": "always"
+			}
+		},
+		{
+			"label": "Run Linter",
+			"type": "shell",
+			"command": "cd ${workspaceFolder} && make lint",
+			"group": {
+				"kind": "test",
+				"isDefault": true
+			},
+			"presentation": {
+				"reveal": "always"
+			}
+		},
+		{
+			"label": "Run Formatter",
+			"type": "shell",
+			"command": "cd ${workspaceFolder} && make format",
+			"group": {
+				"kind": "test",
+				"isDefault": true
+			},
+			"presentation": {
+				"reveal": "always"
+			}
+		},
+		{
+			"label": "Reset Environment (delete .venv and all build artifacts)",
+			"type": "shell",
+			"command": "cd ${workspaceFolder} && make clean",
+			"group": {
+				"kind": "test",
+				"isDefault": true
+			},
+			"presentation": {
+				"reveal": "always"
+			}
+		}
+	]
+}

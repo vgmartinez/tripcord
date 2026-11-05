@@ -1,0 +1,22 @@
+source: mscraftsman/generative-ai@79222c1051aa1bb79fa6946a2eae851361431d8b:.gemini/settings.json
+license: Apache-2.0
+-- .gemini/settings.json --
+{
+  "model": {
+    "maxSessionTurns": -1
+  },
+  "telemetry": {
+    "enabled": false,
+    "target": "gcp"
+  },
+  "debug": false,
+  "experimental": {
+    "gemmaModelRouter": {
+      "enabled": true,
+      "classifier": {
+        "host": "http://localhost:9379",
+        "model": "gemma3-1b-gpu-custom"
+      }
+    }
+  }
+}

@@ -279,6 +279,8 @@ files outside `<ID>.test/` skip the host, IOC, and entropy checks. A
 finding that must stay, such as a real host a rule matches, needs a
 line in `internal/corpus/allowlist.tsv` with its reason; a stale line
 fails too, and a secret or fetch-and-exec finding can never be listed.
+Third-party benign snippets go in `corpus/benign/vendored/` with a
+`THIRD_PARTY_NOTICES` entry; see `corpus/benign/README.md`.
 
 Run one rule:
 

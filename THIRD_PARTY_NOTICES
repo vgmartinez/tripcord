@@ -1,0 +1,1460 @@
+THIRD_PARTY_NOTICES
+
+tripcord vendors short agent configuration files from public
+repositories under corpus/benign/vendored/ to measure false positives.
+Each file is reproduced unchanged from the repository at the commit
+named in its entry, except that the txtar format adds a final newline
+where the original had none. Those files stay under their original
+licenses. The rest of tripcord is under the Apache License 2.0; see
+LICENSE and NOTICE.
+
+Each entry names the repository, the commit, the SPDX license
+identifier, the license file it was checked against at that commit, the
+copyright line, and the vendored files. MIT, BSD-2-Clause, and
+BSD-3-Clause entries reproduce the repository's license file in full.
+An entry also reproduces the repository's NOTICE file when it has one.
+The Apache License 2.0 text is reproduced once at the end.
+
+================================================================================
+Repository: AmadeusITGroup/otter
+Commit: 1b5620f1376fcb9b40e04736813084c9b946fadb
+License: BSD-3-Clause
+License file: LICENSE
+Copyright: Copyright Amadeus SAS
+Files:
+  corpus/benign/vendored/AmadeusITGroup/otter/vscode-tasks.json.txtar
+--------------------------------------------------------------------------------
+Copyright Amadeus SAS
+
+Redistribution and use in source and binary forms, with or without modification,
+are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+this list of conditions and the following disclaimer in the documentation and/or
+other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its contributors
+may be used to endorse or promote products derived from this software without
+specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+================================================================================
+Repository: apache/magpie
+Commit: 17abc4c8c6137f466b60bf698dd2684618e32358
+License: Apache-2.0
+License file: LICENSE
+Copyright: Copyright 2026 The Apache Software Foundation
+Copyright: Copyright 2016-2026 The Apache Software Foundation
+Copyright: Copyright 2003-2026 The Apache Software Foundation
+Files:
+  corpus/benign/vendored/apache/magpie/codex-config.toml.txtar
+--------------------------------------------------------------------------------
+NOTICE:
+
+Apache Magpie
+Copyright 2026 The Apache Software Foundation
+
+This product includes software developed at
+The Apache Software Foundation (https://www.apache.org/).
+
+Portions of this product originated in other Apache Software Foundation
+projects. The required attribution lines from their NOTICE files are
+reproduced below.
+
+Apache Airflow
+Copyright 2016-2026 The Apache Software Foundation
+
+Apache Groovy
+Copyright 2003-2026 The Apache Software Foundation
+
+The Apache License 2.0 text is reproduced at the end of this file.
+
+================================================================================
+Repository: ArieGato/serilog-sinks-rabbitmq
+Commit: 3cf1d2f6ad0addde22254513548f539aeacd3513
+License: Apache-2.0
+License file: LICENSE
+Copyright: not stated in the license file, and the repository has no NOTICE file
+Files:
+  corpus/benign/vendored/ArieGato/serilog-sinks-rabbitmq/claude-settings.json.txtar
+--------------------------------------------------------------------------------
+The Apache License 2.0 text is reproduced at the end of this file.
+
+================================================================================
+Repository: awizemann/harness
+Commit: 3f58c077ded131cca71d75efb05c5d325f0ed18f
+License: MIT
+License file: LICENSE
+Copyright: Copyright (c) 2026 Alan Wizemann
+Files:
+  corpus/benign/vendored/awizemann/harness/gemini-settings.json.txtar
+--------------------------------------------------------------------------------
+MIT License
+
+Copyright (c) 2026 Alan Wizemann
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+================================================================================
+Repository: cometchat/cometchat-skills
+Commit: 8652f1ea41d12e5058123db1e4e6babef9c918f1
+License: MIT
+License file: LICENSE
+Copyright: Copyright (c) 2026 CometChat
+Files:
+  corpus/benign/vendored/cometchat/cometchat-skills/mcp.json.txtar
+--------------------------------------------------------------------------------
+MIT License
+
+Copyright (c) 2026 CometChat
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+================================================================================
+Repository: contentful/contentful.java
+Commit: e0d2cc15d325cfd13bc6886fe32e80142d447fa5
+License: Apache-2.0
+License file: LICENSE.txt
+Copyright: not stated in the license file, and the repository has no NOTICE file
+Files:
+  corpus/benign/vendored/contentful/contentful.java/devcontainer-devcontainer.json.txtar
+--------------------------------------------------------------------------------
+The Apache License 2.0 text is reproduced at the end of this file.
+
+================================================================================
+Repository: CyclopsMC/IntegratedDynamics
+Commit: 8ddd973e69fee18538ce532c25ca8907602b4f4d
+License: MIT
+License file: LICENSE.txt
+Copyright: Copyright (c) 2015 Cyclops
+Files:
+  corpus/benign/vendored/CyclopsMC/IntegratedDynamics/github-workflows-copilot-setup-steps.yml.txtar
+--------------------------------------------------------------------------------
+The MIT License (MIT)
+
+Copyright (c) 2015 Cyclops
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+================================================================================
+Repository: danielfernau/unifi-protect-video-downloader
+Commit: 3513691b034628350750671d2cda0b58344c76f8
+License: MIT
+License file: LICENSE
+Copyright: Copyright (c) 2020 Daniel Fernau, David Cramer and individual contributors.
+Files:
+  corpus/benign/vendored/danielfernau/unifi-protect-video-downloader/devcontainer-devcontainer.json.txtar
+--------------------------------------------------------------------------------
+MIT License
+
+Copyright (c) 2020 Daniel Fernau, David Cramer and individual contributors.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+================================================================================
+Repository: dart-lang/native
+Commit: 18386375888e370851e2f8851a2d7ca84273d6f5
+License: BSD-3-Clause
+License file: LICENSE
+Copyright: Copyright 2023, the Dart project authors.
+Files:
+  corpus/benign/vendored/dart-lang/native/gemini-settings.json.txtar
+--------------------------------------------------------------------------------
+Copyright 2023, the Dart project authors.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+    * Redistributions of source code must retain the above copyright
+      notice, this list of conditions and the following disclaimer.
+    * Redistributions in binary form must reproduce the above
+      copyright notice, this list of conditions and the following
+      disclaimer in the documentation and/or other materials provided
+      with the distribution.
+    * Neither the name of Google LLC nor the names of its
+      contributors may be used to endorse or promote products derived
+      from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+================================================================================
+Repository: depictio/depictio
+Commit: 12f4efa4f5de3515376d0386d3b388b3128c79b0
+License: MIT
+License file: LICENSE
+Copyright: Copyright (c) 2023-2026 Thomas Weber
+Files:
+  corpus/benign/vendored/depictio/depictio/claude-settings.json.txtar
+--------------------------------------------------------------------------------
+MIT License
+
+Copyright (c) 2023-2026 Thomas Weber
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+================================================================================
+Repository: ECarry/photography-website
+Commit: bb09fbb8d67111c3ef82d93338a53599282b63b9
+License: MIT
+License file: LICENSE
+Copyright: Copyright (c) 2024-present Sera
+Files:
+  corpus/benign/vendored/ECarry/photography-website/AGENTS.md.txtar
+--------------------------------------------------------------------------------
+MIT License
+
+Copyright (c) 2024-present Sera
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+================================================================================
+Repository: EdgeApp/edge-react-gui
+Commit: 300e8c59248925675e43d7d2dc32f9b5b726357d
+License: BSD-3-Clause
+License file: LICENSE
+Copyright: Copyright (c) 2017, Airbitz Inc (dba Edge)
+Files:
+  corpus/benign/vendored/EdgeApp/edge-react-gui/cursor-rules-component-export.mdc.txtar
+--------------------------------------------------------------------------------
+BSD 3-Clause License
+
+Copyright (c) 2017, Airbitz Inc (dba Edge)
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+* Redistributions of source code must retain the above copyright notice, this
+  list of conditions and the following disclaimer.
+
+* Redistributions in binary form must reproduce the above copyright notice,
+  this list of conditions and the following disclaimer in the documentation
+  and/or other materials provided with the distribution.
+
+* Neither the name of the copyright holder nor the names of its
+  contributors may be used to endorse or promote products derived from
+  this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+================================================================================
+Repository: HaxeFoundation/hashlink
+Commit: 708611fedfc2de716b7d3345a5d1f438eef80504
+License: MIT
+License file: LICENSE
+Copyright: Copyright (C)2015-2018 Haxe Foundation
+Files:
+  corpus/benign/vendored/HaxeFoundation/hashlink/github-workflows-copilot-setup-steps.yml.txtar
+--------------------------------------------------------------------------------
+Copyright (C)2015-2018 Haxe Foundation
+
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of this software and associated documentation files (the "Software"),
+to deal in the Software without restriction, including without limitation
+the rights to use, copy, modify, merge, publish, distribute, sublicense,
+and/or sell copies of the Software, and to permit persons to whom the
+Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+
+================================================================================
+Repository: hpcc-systems/hpcc-js-wasm
+Commit: be97c1e8e62eac8d8acf1dcb138a13fed81f6973
+License: Apache-2.0
+License file: LICENSE
+Copyright: not stated in the license file, and the repository has no NOTICE file
+Files:
+  corpus/benign/vendored/hpcc-systems/hpcc-js-wasm/vscode-tasks.json.txtar
+--------------------------------------------------------------------------------
+The Apache License 2.0 text is reproduced at the end of this file.
+
+================================================================================
+Repository: InsightSoftwareConsortium/ITK
+Commit: 10e0d8dbaa4a59d2d4c2e5c5d01655d3c6e681c1
+License: Apache-2.0
+License file: LICENSE
+Copyright: Copyright 1999-2019    Insight Software Consortium
+Copyright: Copyright 2020-present NumFOCUS
+Files:
+  corpus/benign/vendored/InsightSoftwareConsortium/ITK/github-workflows-copilot-setup-steps.yml.txtar
+--------------------------------------------------------------------------------
+NOTICE:
+
+ITK Software Licenses
+=====================
+
+The copyright of the Insight Toolkit (ITK) is held by:
+
+> Copyright 1999-2019    Insight Software Consortium
+>
+> Copyright 2020-present NumFOCUS
+
+This software is distributed under the Apache 2.0 License.
+
+See [LICENSE](../../LICENSE) file for details.
+
+Vendored third party software are copyrighted with licenses compatible with the Apache 2.0 License.
+For details, see the [licenses.md file](Documentation/docs/licenses.md).
+
+The Apache License 2.0 text is reproduced at the end of this file.
+
+================================================================================
+Repository: ivangrynenko/cursorrules
+Commit: 8f652d24057ca37feae1c4a7185662f5589b0f5c
+License: MIT
+License file: LICENSE
+Copyright: Copyright (c) 2025 ivangrynenko
+Files:
+  corpus/benign/vendored/ivangrynenko/cursorrules/cursor-rules-third-party-integration.mdc.txtar
+--------------------------------------------------------------------------------
+MIT License
+
+Copyright (c) 2025 ivangrynenko
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+================================================================================
+Repository: jpoley/flowspec
+Commit: 60d98afbe68676bf2fc7d3839a3dca1eef4edee7
+License: Apache-2.0
+License file: LICENSE
+Copyright: Copyright 2025 Peregrine Summit
+Files:
+  corpus/benign/vendored/jpoley/flowspec/mcp.json.txtar
+--------------------------------------------------------------------------------
+The Apache License 2.0 text is reproduced at the end of this file.
+
+================================================================================
+Repository: Kanevry/session-orchestrator
+Commit: 758cdac32f86c07eebdf69d8c284d9941eb178c1
+License: MIT
+License file: LICENSE
+Copyright: Copyright (c) 2025 Bernhard Goetzendorfer
+Files:
+  corpus/benign/vendored/Kanevry/session-orchestrator/mcp.json.txtar
+--------------------------------------------------------------------------------
+MIT License
+
+Copyright (c) 2025 Bernhard Goetzendorfer
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+NOTICE:
+
+Session Orchestrator
+Copyright (c) 2025-2026 Bernhard Goetzendorfer
+
+This product is licensed under the MIT License (see LICENSE).
+
+================================================================================
+Third-Party Attributions
+================================================================================
+
+This product includes material derived from `mattpocock/skills`
+(https://github.com/mattpocock/skills), used under the MIT License.
+
+Upstream: https://github.com/mattpocock/skills
+Commit:   90ea8eec03d4ae8f43427aaf6fe4722653561a42  (pinned, 2026-04-26)
+License:  MIT — Copyright (c) 2026 Matt Pocock
+
+The following files in this repository are vendored from `mattpocock/skills`
+at the commit above:
+
+  Byte-identical (verbatim) sub-files:
+    skills/architecture/LANGUAGE.md
+    skills/architecture/DEEPENING.md
+    skills/architecture/INTERFACE-DESIGN.md
+    skills/architecture/references/CONTEXT-FORMAT.md
+    skills/architecture/references/ADR-FORMAT.md
+
+  Adapted SKILL.md files (description and frontmatter re-tuned for our
+  trigger conventions; process body and structural content preserved):
+    skills/architecture/SKILL.md
+      (from improve-codebase-architecture/SKILL.md)
+    skills/architecture/references/domain-model.md
+      (from domain-model/SKILL.md; merged into skills/architecture/ as a
+      reference doc in 4.0.0 — the former skills/domain-model/ directory
+      is gone)
+    skills/ubiquitous-language/SKILL.md
+      (from ubiquitous-language/SKILL.md)
+      (removed in 4.0.0; attribution retained for the history of the
+      vendored content)
+
+Each adapted file still present in this repository carries
+`derived-from: mattpocock/skills@90ea8ee` and `license: MIT` in its YAML
+frontmatter for traceability.
+
+The MIT License notice from the upstream project is reproduced below in
+satisfaction of the "above copyright notice and this permission notice
+shall be included in all copies or substantial portions of the Software"
+condition:
+
+    MIT License
+
+    Copyright (c) 2026 Matt Pocock
+
+    Permission is hereby granted, free of charge, to any person obtaining a
+    copy of this software and associated documentation files (the "Software"),
+    to deal in the Software without restriction, including without limitation
+    the rights to use, copy, modify, merge, publish, distribute, sublicense,
+    and/or sell copies of the Software, and to permit persons to whom the
+    Software is furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in
+    all copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+    THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+    FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+    DEALINGS IN THE SOFTWARE.
+
+================================================================================
+Repository: kbialek/deye-inverter-mqtt
+Commit: d555fe046152208c5cb2e223d23fe644b5b17b80
+License: Apache-2.0
+License file: LICENSE
+Copyright: not stated in the license file, and the repository has no NOTICE file
+Files:
+  corpus/benign/vendored/kbialek/deye-inverter-mqtt/devcontainer-devcontainer.json.txtar
+--------------------------------------------------------------------------------
+The Apache License 2.0 text is reproduced at the end of this file.
+
+================================================================================
+Repository: ksylvan/fabric-mcp
+Commit: e4abafe5768c97ad2879e754ef7f06d8e440b96a
+License: MIT
+License file: LICENSE
+Copyright: Copyright (c) 2025 [Kayvan Sylvan](kayvan@sylvan.com)
+Files:
+  corpus/benign/vendored/ksylvan/fabric-mcp/vscode-tasks.json.txtar
+--------------------------------------------------------------------------------
+MIT License
+
+Copyright (c) 2025 [Kayvan Sylvan](kayvan@sylvan.com)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+================================================================================
+Repository: microsoft/lsprotocol
+Commit: 24d45ab059a174344c8de21672aa1c2f1be3c99f
+License: MIT
+License file: LICENSE
+Copyright: Copyright (c) Microsoft Corporation.
+Files:
+  corpus/benign/vendored/microsoft/lsprotocol/devcontainer-devcontainer.json.txtar
+--------------------------------------------------------------------------------
+    MIT License
+
+    Copyright (c) Microsoft Corporation.
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE
+
+================================================================================
+Repository: mojohaus/buildplan-maven-plugin
+Commit: 2fc5ad69ba9d0cf32f36412697df15bf1c880a73
+License: Apache-2.0
+License file: LICENSE
+Copyright: not stated in the license file, and the repository has no NOTICE file
+Files:
+  corpus/benign/vendored/mojohaus/buildplan-maven-plugin/AGENTS.md.txtar
+--------------------------------------------------------------------------------
+The Apache License 2.0 text is reproduced at the end of this file.
+
+================================================================================
+Repository: mscraftsman/generative-ai
+Commit: 79222c1051aa1bb79fa6946a2eae851361431d8b
+License: Apache-2.0
+License file: LICENSE
+Copyright: not stated in the license file, and the repository has no NOTICE file
+Files:
+  corpus/benign/vendored/mscraftsman/generative-ai/gemini-settings.json.txtar
+--------------------------------------------------------------------------------
+The Apache License 2.0 text is reproduced at the end of this file.
+
+================================================================================
+Repository: ngx-vest-forms/ngx-vest-forms
+Commit: 37feeac50b1883c82a6070828cc96892920d9363
+License: MIT
+License file: LICENSE
+Copyright: Copyright (c) 2024-2026 Brecht Billiet, Arjen Althoff
+Files:
+  corpus/benign/vendored/ngx-vest-forms/ngx-vest-forms/vscode-tasks.json.txtar
+--------------------------------------------------------------------------------
+MIT License
+
+Copyright (c) 2024-2026 Brecht Billiet, Arjen Althoff
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+================================================================================
+Repository: Nimblesite/Deslop
+Commit: b881abce07dd29ce83e828f32fbffe91ba7e1008
+License: MIT
+License file: LICENSE
+Copyright: Copyright (c) 2026 NIMBLESITE PTY LTD
+Files:
+  corpus/benign/vendored/Nimblesite/Deslop/AGENTS.md.txtar
+  corpus/benign/vendored/Nimblesite/Deslop/claude-settings.json.txtar
+  corpus/benign/vendored/Nimblesite/Deslop/devcontainer-devcontainer.json.txtar
+  corpus/benign/vendored/Nimblesite/Deslop/mcp.json.txtar
+--------------------------------------------------------------------------------
+MIT License
+
+Copyright (c) 2026 NIMBLESITE PTY LTD
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+================================================================================
+Repository: OpenRIAServices/OpenRiaServices
+Commit: 250529ff50dc1c1c05a2b22c8d5beb1359bd26c5
+License: Apache-2.0
+License file: LICENSE
+Copyright: Copyright 2013 The Outercurve Foundation
+Files:
+  corpus/benign/vendored/OpenRIAServices/OpenRiaServices/github-workflows-copilot-setup-steps.yml.txtar
+--------------------------------------------------------------------------------
+The Apache License 2.0 text is reproduced at the end of this file.
+
+================================================================================
+Repository: OpenRouterLabs/spawn
+Commit: bf65928704c64939b3def4d9b8573f1e412df393
+License: Apache-2.0
+License file: LICENSE
+Copyright: Copyright 2025 OpenRouter
+Files:
+  corpus/benign/vendored/OpenRouterLabs/spawn/claude-settings.json.txtar
+--------------------------------------------------------------------------------
+The Apache License 2.0 text is reproduced at the end of this file.
+
+================================================================================
+Repository: parcel-bundler/parcel
+Commit: 0256839dee32fcca0a0cfd72f48e70ab757fa8ec
+License: MIT
+License file: LICENSE
+Copyright: Copyright (c) 2017-present Devon Govett
+Files:
+  corpus/benign/vendored/parcel-bundler/parcel/devcontainer-devcontainer.json.txtar
+--------------------------------------------------------------------------------
+MIT License
+
+Copyright (c) 2017-present Devon Govett
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+================================================================================
+Repository: PierreKieffer/http-tanker
+Commit: abee53e6f6ee931dfecb5fc62955150c578ac2f6
+License: BSD-2-Clause
+License file: LICENSE
+Copyright: Copyright (c) 2022, Pierre Kieffer
+Files:
+  corpus/benign/vendored/PierreKieffer/http-tanker/mcp.json.txtar
+--------------------------------------------------------------------------------
+BSD 2-Clause License
+
+Copyright (c) 2022, Pierre Kieffer
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+================================================================================
+Repository: ponylang/ponylang-website
+Commit: 2fb2a83c8e196a4a023bfd56defba5504dd4cd78
+License: BSD-2-Clause
+License file: LICENSE.md
+Copyright: Copyright (c) 2014-2016, Causality Ltd.
+Files:
+  corpus/benign/vendored/ponylang/ponylang-website/AGENTS.md.txtar
+--------------------------------------------------------------------------------
+Copyright (c) 2014-2016, Causality Ltd.
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+================================================================================
+Repository: poteto/noodle
+Commit: 82d2921c52370f23f29086de81ccfb600939c037
+License: MIT
+License file: LICENSE
+Copyright: Copyright (c) 2026 Lauren Tan
+Files:
+  corpus/benign/vendored/poteto/noodle/codex-config.toml.txtar
+--------------------------------------------------------------------------------
+MIT License
+
+Copyright (c) 2026 Lauren Tan
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+================================================================================
+Repository: qualcomm/ai-hub-models
+Commit: 2baf871353016b3b7e602123a60cced6874a939f
+License: BSD-3-Clause
+License file: LICENSE
+Copyright: Copyright 2025 Qualcomm Technologies, Inc. and/or its subsidiaries.
+Files:
+  corpus/benign/vendored/qualcomm/ai-hub-models/claude-settings.json.txtar
+--------------------------------------------------------------------------------
+Copyright 2025 Qualcomm Technologies, Inc. and/or its subsidiaries.
+
+Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS “AS IS” AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+================================================================================
+Repository: remarkablegames/phaser-rpg
+Commit: b4b004c4785e7c3651d6b4b6b65f416b37dc8965
+License: MIT
+License file: LICENSE
+Copyright: Copyright (c) 2026 Menglin "Mark" Xu <mark@remarkablemark.org>
+Files:
+  corpus/benign/vendored/remarkablegames/phaser-rpg/AGENTS.md.txtar
+--------------------------------------------------------------------------------
+MIT License
+
+Copyright (c) 2026 Menglin "Mark" Xu <mark@remarkablemark.org>
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+================================================================================
+Repository: RinDevJunior/matterbridge-roborock-vacuum-plugin
+Commit: e62916f0430885a4dcabb88e3e8352defca5193e
+License: Apache-2.0
+License file: LICENSE
+Copyright: not stated in the license file, and the repository has no NOTICE file
+Files:
+  corpus/benign/vendored/RinDevJunior/matterbridge-roborock-vacuum-plugin/cursor-mcp.json.txtar
+--------------------------------------------------------------------------------
+The Apache License 2.0 text is reproduced at the end of this file.
+
+================================================================================
+Repository: sageox/ox
+Commit: 5515a3ebc10ad102e151937e52f2ec65287888fe
+License: MIT
+License file: LICENSE
+Copyright: Copyright (c) 2026 SageOx Inc.
+Files:
+  corpus/benign/vendored/sageox/ox/gemini-settings.json.txtar
+--------------------------------------------------------------------------------
+MIT License
+
+Copyright (c) 2026 SageOx Inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+================================================================================
+Repository: shang1219178163/flutter_templet_project
+Commit: 3880d33df94c24bab429f4b839cef85699626638
+License: MIT
+License file: LICENSE
+Copyright: Copyright (c) 2021 SoaringHeart
+Files:
+  corpus/benign/vendored/shang1219178163/flutter_templet_project/cursor-mcp.json.txtar
+--------------------------------------------------------------------------------
+MIT License
+
+Copyright (c) 2021 SoaringHeart
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+================================================================================
+Repository: slax-lab/slax-reader
+Commit: 6fe1ebd95dfc1f2fbdef9834967732d0619a4761
+License: Apache-2.0
+License file: LICENSE
+Copyright: Copyright 2026 The Slax Reader Contributors
+Files:
+  corpus/benign/vendored/slax-lab/slax-reader/codex-config.toml.txtar
+--------------------------------------------------------------------------------
+NOTICE:
+
+Copyright 2026 The Slax Reader Contributors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+The CLI in apps/cli and its imported documentation in docs/cli originate from
+slax-lab/slax-reader-cli, commit 9697ec2949049d2e7ef0258cd7b9b6df2142007a.
+They retain the upstream MIT license and slax-lab attribution. See
+apps/cli/LICENSE. This exception does not relicense the rest of the monorepo.
+
+The Apache License 2.0 text is reproduced at the end of this file.
+
+================================================================================
+Repository: slick/slick
+Commit: 7fb3ecacb94caf37091f810b662b736734a08cae
+License: BSD-2-Clause
+License file: LICENSE.txt
+Copyright: Copyright 2011-2021 Lightbend, Inc.
+Files:
+  corpus/benign/vendored/slick/slick/github-workflows-copilot-setup-steps.yml.txtar
+--------------------------------------------------------------------------------
+Copyright 2011-2021 Lightbend, Inc.
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+    * Redistributions of source code must retain the above copyright notice,
+      this list of conditions and the following disclaimer.
+
+    * Redistributions in binary form must reproduce the above copyright
+      notice, this list of conditions and the following disclaimer in the
+      documentation and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+
+================================================================================
+Repository: specs-feup/clava
+Commit: edc1ce62f15b71586b35d279a78ac01ee45e1b99
+License: Apache-2.0
+License file: LICENSE
+Copyright: Copyright 2017 SPeCS Lab
+Files:
+  corpus/benign/vendored/specs-feup/clava/github-workflows-copilot-setup-steps.yml.txtar
+--------------------------------------------------------------------------------
+The Apache License 2.0 text is reproduced at the end of this file.
+
+================================================================================
+Repository: stella/stella
+Commit: d6ab1d7b501c5af728a6af3852e7a0eb57c01234
+License: Apache-2.0
+License file: LICENSE
+Copyright: Copyright 2026 stella labs, s.r.o.
+Files:
+  corpus/benign/vendored/stella/stella/codex-config.toml.txtar
+--------------------------------------------------------------------------------
+NOTICE:
+
+stella
+Copyright 2026 stella labs, s.r.o.
+
+This product includes software developed at stella labs, s.r.o.
+(https://stll.app/).
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may
+not use this product except in compliance with the License. You may
+obtain a copy of the License in the LICENSE file at the root of this
+repository or at http://www.apache.org/licenses/LICENSE-2.0.
+
+Desktop dictation downloads the Parakeet Ultra speech model on request. The
+model is by Moondream, based on NVIDIA Parakeet TDT 0.6B v3, converted to GGUF
+by handy-computer, and licensed under CC BY 4.0
+(https://creativecommons.org/licenses/by/4.0/). stella does not modify it.
+
+Desktop dictation's design was informed by Hex
+(https://github.com/anomalyco/hex), MIT License.
+
+The Apache License 2.0 text is reproduced at the end of this file.
+
+================================================================================
+Repository: tam159/next-role
+Commit: 6f55dd7a4c38f8f750b8e1c8aea20b77067171ed
+License: MIT
+License file: LICENSE
+Copyright: Copyright (c) 2026 Tam Nguyen
+Files:
+  corpus/benign/vendored/tam159/next-role/cursor-mcp.json.txtar
+--------------------------------------------------------------------------------
+MIT License
+
+Copyright (c) 2026 Tam Nguyen
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+================================================================================
+Repository: tegojs/tego
+Commit: 246f18a7a4744c90bda7e5c1dc81e38f9208c88d
+License: Apache-2.0
+License file: LICENSE
+Copyright: Copyright [2023-2025] [Tego team]
+Files:
+  corpus/benign/vendored/tegojs/tego/cursor-rules-index.md.txtar
+--------------------------------------------------------------------------------
+The Apache License 2.0 text is reproduced at the end of this file.
+
+================================================================================
+Repository: thebnbrkr/agora-code
+Commit: 8a11ebd4c9cb8b09e22b6937315ed9e7dd879049
+License: Apache-2.0
+License file: LICENSE
+Copyright: not stated in the license file, and the repository has no NOTICE file
+Files:
+  corpus/benign/vendored/thebnbrkr/agora-code/gemini-settings.json.txtar
+--------------------------------------------------------------------------------
+The Apache License 2.0 text is reproduced at the end of this file.
+
+================================================================================
+Repository: timdeschryver/Sandbox
+Commit: efec08bd1fd94e4465d4056189bf50398fc40403
+License: MIT
+License file: LICENSE
+Copyright: Copyright (c) 2025 Tim Deschryver
+Files:
+  corpus/benign/vendored/timdeschryver/Sandbox/mcp.json.txtar
+  corpus/benign/vendored/timdeschryver/Sandbox/vscode-tasks.json.txtar
+--------------------------------------------------------------------------------
+MIT License
+
+Copyright (c) 2025 Tim Deschryver
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+================================================================================
+Repository: vendelieu/telegram-bot
+Commit: 1dbfd00f66ac587d63a031362b0737876e752b72
+License: Apache-2.0
+License file: LICENSE
+Copyright: not stated in the license file, and the repository has no NOTICE file
+Files:
+  corpus/benign/vendored/vendelieu/telegram-bot/AGENTS.md.txtar
+--------------------------------------------------------------------------------
+The Apache License 2.0 text is reproduced at the end of this file.
+
+================================================================================
+Repository: we-used-to-be/Guanmo-open
+Commit: 6dc8d87ad6631265fb48a78901d650c72bc4bdb9
+License: MIT
+License file: LICENSE
+Copyright: Copyright (c) 2026 Guanmo contributors
+Files:
+  corpus/benign/vendored/we-used-to-be/Guanmo-open/codex-config.toml.txtar
+--------------------------------------------------------------------------------
+MIT License
+
+Copyright (c) 2026 Guanmo contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+================================================================================
+License text: Apache-2.0
+--------------------------------------------------------------------------------
+                                 Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
+
+   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+
+   1. Definitions.
+
+      "License" shall mean the terms and conditions for use, reproduction,
+      and distribution as defined by Sections 1 through 9 of this document.
+
+      "Licensor" shall mean the copyright owner or entity authorized by
+      the copyright owner that is granting the License.
+
+      "Legal Entity" shall mean the union of the acting entity and all
+      other entities that control, are controlled by, or are under common
+      control with that entity. For the purposes of this definition,
+      "control" means (i) the power, direct or indirect, to cause the
+      direction or management of such entity, whether by contract or
+      otherwise, or (ii) ownership of fifty percent (50%) or more of the
+      outstanding shares, or (iii) beneficial ownership of such entity.
+
+      "You" (or "Your") shall mean an individual or Legal Entity
+      exercising permissions granted by this License.
+
+      "Source" form shall mean the preferred form for making modifications,
+      including but not limited to software source code, documentation
+      source, and configuration files.
+
+      "Object" form shall mean any form resulting from mechanical
+      transformation or translation of a Source form, including but
+      not limited to compiled object code, generated documentation,
+      and conversions to other media types.
+
+      "Work" shall mean the work of authorship, whether in Source or
+      Object form, made available under the License, as indicated by a
+      copyright notice that is included in or attached to the work
+      (an example is provided in the Appendix below).
+
+      "Derivative Works" shall mean any work, whether in Source or Object
+      form, that is based on (or derived from) the Work and for which the
+      editorial revisions, annotations, elaborations, or other modifications
+      represent, as a whole, an original work of authorship. For the purposes
+      of this License, Derivative Works shall not include works that remain
+      separable from, or merely link (or bind by name) to the interfaces of,
+      the Work and Derivative Works thereof.
+
+      "Contribution" shall mean any work of authorship, including
+      the original version of the Work and any modifications or additions
+      to that Work or Derivative Works thereof, that is intentionally
+      submitted to Licensor for inclusion in the Work by the copyright owner
+      or by an individual or Legal Entity authorized to submit on behalf of
+      the copyright owner. For the purposes of this definition, "submitted"
+      means any form of electronic, verbal, or written communication sent
+      to the Licensor or its representatives, including but not limited to
+      communication on electronic mailing lists, source code control systems,
+      and issue tracking systems that are managed by, or on behalf of, the
+      Licensor for the purpose of discussing and improving the Work, but
+      excluding communication that is conspicuously marked or otherwise
+      designated in writing by the copyright owner as "Not a Contribution."
+
+      "Contributor" shall mean Licensor and any individual or Legal Entity
+      on behalf of whom a Contribution has been received by Licensor and
+      subsequently incorporated within the Work.
+
+   2. Grant of Copyright License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      copyright license to reproduce, prepare Derivative Works of,
+      publicly display, publicly perform, sublicense, and distribute the
+      Work and such Derivative Works in Source or Object form.
+
+   3. Grant of Patent License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      (except as stated in this section) patent license to make, have made,
+      use, offer to sell, sell, import, and otherwise transfer the Work,
+      where such license applies only to those patent claims licensable
+      by such Contributor that are necessarily infringed by their
+      Contribution(s) alone or by combination of their Contribution(s)
+      with the Work to which such Contribution(s) was submitted. If You
+      institute patent litigation against any entity (including a
+      cross-claim or counterclaim in a lawsuit) alleging that the Work
+      or a Contribution incorporated within the Work constitutes direct
+      or contributory patent infringement, then any patent licenses
+      granted to You under this License for that Work shall terminate
+      as of the date such litigation is filed.
+
+   4. Redistribution. You may reproduce and distribute copies of the
+      Work or Derivative Works thereof in any medium, with or without
+      modifications, and in Source or Object form, provided that You
+      meet the following conditions:
+
+      (a) You must give any other recipients of the Work or
+          Derivative Works a copy of this License; and
+
+      (b) You must cause any modified files to carry prominent notices
+          stating that You changed the files; and
+
+      (c) You must retain, in the Source form of any Derivative Works
+          that You distribute, all copyright, patent, trademark, and
+          attribution notices from the Source form of the Work,
+          excluding those notices that do not pertain to any part of
+          the Derivative Works; and
+
+      (d) If the Work includes a "NOTICE" text file as part of its
+          distribution, then any Derivative Works that You distribute must
+          include a readable copy of the attribution notices contained
+          within such NOTICE file, excluding those notices that do not
+          pertain to any part of the Derivative Works, in at least one
+          of the following places: within a NOTICE text file distributed
+          as part of the Derivative Works; within the Source form or
+          documentation, if provided along with the Derivative Works; or,
+          within a display generated by the Derivative Works, if and
+          wherever such third-party notices normally appear. The contents
+          of the NOTICE file are for informational purposes only and
+          do not modify the License. You may add Your own attribution
+          notices within Derivative Works that You distribute, alongside
+          or as an addendum to the NOTICE text from the Work, provided
+          that such additional attribution notices cannot be construed
+          as modifying the License.
+
+      You may add Your own copyright statement to Your modifications and
+      may provide additional or different license terms and conditions
+      for use, reproduction, or distribution of Your modifications, or
+      for any such Derivative Works as a whole, provided Your use,
+      reproduction, and distribution of the Work otherwise complies with
+      the conditions stated in this License.
+
+   5. Submission of Contributions. Unless You explicitly state otherwise,
+      any Contribution intentionally submitted for inclusion in the Work
+      by You to the Licensor shall be under the terms and conditions of
+      this License, without any additional terms or conditions.
+      Notwithstanding the above, nothing herein shall supersede or modify
+      the terms of any separate license agreement you may have executed
+      with Licensor regarding such Contributions.
+
+   6. Trademarks. This License does not grant permission to use the trade
+      names, trademarks, service marks, or product names of the Licensor,
+      except as required for reasonable and customary use in describing the
+      origin of the Work and reproducing the content of the NOTICE file.
+
+   7. Disclaimer of Warranty. Unless required by applicable law or
+      agreed to in writing, Licensor provides the Work (and each
+      Contributor provides its Contributions) on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+      implied, including, without limitation, any warranties or conditions
+      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+      PARTICULAR PURPOSE. You are solely responsible for determining the
+      appropriateness of using or redistributing the Work and assume any
+      risks associated with Your exercise of permissions under this License.
+
+   8. Limitation of Liability. In no event and under no legal theory,
+      whether in tort (including negligence), contract, or otherwise,
+      unless required by applicable law (such as deliberate and grossly
+      negligent acts) or agreed to in writing, shall any Contributor be
+      liable to You for damages, including any direct, indirect, special,
+      incidental, or consequential damages of any character arising as a
+      result of this License or out of the use or inability to use the
+      Work (including but not limited to damages for loss of goodwill,
+      work stoppage, computer failure or malfunction, or any and all
+      other commercial damages or losses), even if such Contributor
+      has been advised of the possibility of such damages.
+
+   9. Accepting Warranty or Additional Liability. While redistributing
+      the Work or Derivative Works thereof, You may choose to offer,
+      and charge a fee for, acceptance of support, warranty, indemnity,
+      or other liability obligations and/or rights consistent with this
+      License. However, in accepting such obligations, You may act only
+      on Your own behalf and on Your sole responsibility, not on behalf
+      of any other Contributor, and only if You agree to indemnify,
+      defend, and hold each Contributor harmless for any liability
+      incurred by, or claims asserted against, such Contributor by reason
+      of your accepting any such warranty or additional liability.
+
+   END OF TERMS AND CONDITIONS
+
+   APPENDIX: How to apply the Apache License to your work.
+
+      To apply the Apache License to your work, attach the following
+      boilerplate notice, with the fields enclosed by brackets "[]"
+      replaced with your own identifying information. (Don't include
+      the brackets!)  The text should be enclosed in the appropriate
+      comment syntax for the file format. We also recommend that a
+      file or class name and description of purpose be included on the
+      same "printed page" as the copyright notice for easier
+      identification within third-party archives.
+
+   Copyright [yyyy] [name of copyright owner]
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.

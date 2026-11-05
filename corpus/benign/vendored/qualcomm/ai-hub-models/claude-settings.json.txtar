@@ -1,0 +1,56 @@
+source: qualcomm/ai-hub-models@2baf871353016b3b7e602123a60cced6874a939f:.claude/settings.json
+license: BSD-3-Clause
+-- .claude/settings.json --
+{
+  "permissions": {
+    "allow": [
+      "Bash(python *)",
+      "Bash(python3 *)",
+      "Bash(pre-commit *)",
+      "Bash(pip *)",
+      "Bash(pytest *)",
+      "Bash(git status *)",
+      "Bash(git log *)",
+      "Bash(git diff *)",
+      "Bash(git show *)",
+      "Bash(git branch *)",
+      "Bash(git checkout *)",
+      "Bash(git stash *)",
+      "Bash(git fetch *)",
+      "Bash(git merge-base *)",
+      "Bash(git rev-parse *)",
+      "Bash(git ls-files *)",
+      "Bash(gh *)",
+      "Bash(qai-hub-models *)",
+      "Bash(qai-hub-models)",
+      "Bash(qai-hub *)",
+      "Bash(qai-hub)",
+      "WebFetch(*)",
+      "Read(//tmp/claude/**)",
+      "Edit(//tmp/claude/**)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/check_bash_command.sh"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/check_tmpdir_permission.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

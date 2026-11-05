@@ -1,0 +1,7 @@
+source: EdgeApp/edge-react-gui@300e8c59248925675e43d7d2dc32f9b5b726357d:.cursor/rules/component-export.mdc
+license: BSD-3-Clause
+-- .cursor/rules/component-export.mdc --
+---
+description: Component exports for any modified files should follow the form: `export const Component: React.FC<Props> = props => {`
+alwaysApply: false
+---

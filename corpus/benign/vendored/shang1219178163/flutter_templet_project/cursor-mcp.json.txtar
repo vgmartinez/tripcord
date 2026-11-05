@@ -1,0 +1,21 @@
+source: shang1219178163/flutter_templet_project@3880d33df94c24bab429f4b839cef85699626638:.cursor/mcp.json
+license: MIT
+-- .cursor/mcp.json --
+{
+  "mcpServers": {
+    "dart": {
+      "command": "/Users/shang/fvm/versions/3.41.9/bin/dart",
+      "args": [
+        "mcp-server",
+        "--flutter-sdk",
+        "/Users/shang/fvm/versions/3.41.9",
+        "--dart-sdk",
+        "/Users/shang/fvm/versions/3.41.9/bin/cache/dart-sdk"
+      ],
+      "env": {
+        "FLUTTER_SDK": "/Users/shang/fvm/versions/3.41.9",
+        "DART_SDK": "/Users/shang/fvm/versions/3.41.9/bin/cache/dart-sdk"
+      }
+    }
+  }
+}

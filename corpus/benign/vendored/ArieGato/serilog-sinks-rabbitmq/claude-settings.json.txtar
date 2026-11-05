@@ -1,0 +1,22 @@
+source: ArieGato/serilog-sinks-rabbitmq@3cf1d2f6ad0addde22254513548f539aeacd3513:.claude/settings.json
+license: Apache-2.0
+-- .claude/settings.json --
+{
+  "permissions": {
+    "allow": [
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/check-coauthor.py\""
+          }
+        ]
+      }
+    ]
+  }
+}

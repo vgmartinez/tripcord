@@ -1,10 +1,12 @@
 # Benign corpus
 
-Agent configurations used to measure false positives live here as txtar
-fixtures. This directory has no fixtures in the pre-release.
+Agent configurations used to measure false positives live here. The
+only fixtures are the vendored snippets in `vendored/` (see
+[Vendored snippets](#vendored-snippets)).
 
-The defang rules are the same as for the malicious corpus. The lint
-walks all of `corpus/` and does not use the network.
+The defang rules are the same as for the malicious corpus, except that
+a vendored snippet keeps its real hosts. The lint walks all of
+`corpus/` and does not use the network.
 
 - No file is executable, a symlink, or a special file, and no file or
   txtar member starts with a shebang.
@@ -40,13 +42,59 @@ walks all of `corpus/` and does not use the network.
   the adapters' discovery predicates, plus a bare `mcp.json` at a
   workspace root.
 
-Fixtures are our own re-creations under Apache-2.0, with the work they
-refer to. CSA is background only and is never a dataset.
+Fixtures other than the vendored snippets are our own re-creations
+under Apache-2.0, with the work they refer to. A vendored snippet stays
+under its repository's license. CSA is background only and is never a
+dataset.
 MaliciousAgentSkillsBench labels and statistics may be cited under MIT
 and are never vendored.
 
 Benign reports are CI artifacts only. They are not committed in this
-directory, and neither is any fetched repository content.
+directory, and no fetched repository content is either, apart from the
+vendored snippets.
+
+## Vendored snippets
+
+`vendored/<owner>/<repo>/<name>.txtar` holds one agent config file,
+copied from a repository in `repos.lock` at its pinned commit. Only
+config files are vendored (`.claude/settings.json`, `.mcp.json`,
+`.cursor/mcp.json`, `.cursor/rules/`, `AGENTS.md`, `.vscode/tasks.json`,
+`.github/workflows/copilot-setup-steps.yml`,
+`.devcontainer/devcontainer.json`, `.codex/config.toml`, and
+`.gemini/settings.json`), never code, and only from a repository whose
+license file at that commit is MIT, BSD-2-Clause, BSD-3-Clause,
+Apache-2.0, or ISC. The file is unchanged, except that the txtar format
+adds a final newline where the original had none. The archive comment
+is exactly two lines:
+
+```
+source: owner/repo@<40-hex commit>:<path in the repository>
+license: <SPDX id>
+```
+
+and the archive has one member, named that path, so the source line
+names the file's blob on GitHub. `THIRD_PARTY_NOTICES` at the module root has one entry per repository
+with its commit, SPDX id, license file, copyright line, and vendored
+files, the license text where the license requires it, and the
+repository's NOTICE file when it has one.
+
+The corpus lint checks every vendored file: it is a `.txtar` with that
+header in the directory its source names, the license is on the list
+above, the repository and commit are a `repos.lock` row with the same
+license, and its `THIRD_PARTY_NOTICES` entry has the same commit and
+license and lists the file. An entry that lists a file that is not
+vendored fails too. The host check is the one defang rule a vendored
+snippet skips, because the hosts are part of the config being
+measured. The secret, entropy, IOC, and fetch-and-exec checks still
+run, so a snippet that would need a credential defanged, or that pipes
+a download into a shell, is not vendored.
+
+`TestVendoredBenign` in `cmd/tripcord` runs on every pull request. It
+scans each snippet at repository scope in s1 fingerprint mode, the way
+`make benign` scans a fetched repository, and fails on a high or
+critical finding with no `triage.tsv` row for that repository,
+fingerprint, and rule. A snippet is the same file the nightly scan
+reads, so its findings reuse that repository's triage rows.
 
 ## Repository index
 

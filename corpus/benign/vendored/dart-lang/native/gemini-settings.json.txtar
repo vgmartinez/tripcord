@@ -1,0 +1,13 @@
+source: dart-lang/native@18386375888e370851e2f8851a2d7ca84273d6f5:.gemini/settings.json
+license: BSD-3-Clause
+-- .gemini/settings.json --
+{
+  "mcpServers": {
+    "dart": {
+      "command": "dart",
+      "args": [
+        "mcp-server"
+      ]
+    }
+  }
+}

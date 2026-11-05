@@ -1,0 +1,12 @@
+source: Nimblesite/Deslop@b881abce07dd29ce83e828f32fbffe91ba7e1008:.claude/settings.json
+license: MIT
+-- .claude/settings.json --
+{
+  "autoMemoryEnabled": false,
+  "permissions": {
+    "deny": [
+      "Agent",
+      "Workflow"
+    ]
+  }
+}

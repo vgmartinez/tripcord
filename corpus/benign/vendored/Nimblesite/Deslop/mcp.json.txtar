@@ -1,0 +1,10 @@
+source: Nimblesite/Deslop@b881abce07dd29ce83e828f32fbffe91ba7e1008:.mcp.json
+license: MIT
+-- .mcp.json --
+{
+  "mcpServers": {
+    "too-many-cooks": {
+      "url": "http://localhost:4040/mcp"
+    }
+  }
+}

@@ -1,0 +1,31 @@
+source: microsoft/lsprotocol@24d45ab059a174344c8de21672aa1c2f1be3c99f:.devcontainer/devcontainer.json
+license: MIT
+-- .devcontainer/devcontainer.json --
+{
+	"name": "LSP Dev Container",
+	"build": {
+        "dockerfile": "./Dockerfile",
+        "context": ".."
+    },
+    "features": {
+		"ghcr.io/devcontainers/features/powershell:1": {
+			"version": "latest"
+		},
+		"ghcr.io/devcontainers/features/dotnet:1": {
+			"version": "latest"
+		}
+	},
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"esbenp.prettier-vscode",
+				"ms-python.python",
+				"ms-python.vscode-pylance",
+				"ms-python.black-formatter",
+				"ms-python.isort"
+			]
+		}
+	},
+	"onCreateCommand": "bash scripts/onCreateCommand.sh",
+	"postCreateCommand": "bash scripts/postCreateCommand.sh"
+}

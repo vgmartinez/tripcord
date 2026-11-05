@@ -1,0 +1,12 @@
+source: PierreKieffer/http-tanker@abee53e6f6ee931dfecb5fc62955150c578ac2f6:.mcp.json
+license: BSD-2-Clause
+-- .mcp.json --
+{
+  "mcpServers": {
+    "http-tanker": {
+      "type": "stdio",
+      "command": "go",
+      "args": ["run", ".", "--mcp"]
+    }
+  }
+}

@@ -1,0 +1,69 @@
+source: jpoley/flowspec@60d98afbe68676bf2fc7d3839a3dca1eef4edee7:.mcp.json
+license: Apache-2.0
+-- .mcp.json --
+{
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {},
+      "description": "GitHub API: repos, issues, PRs, code search, workflows"
+    },
+    "serena": {
+      "command": "uvx",
+      "args": ["--from", "git+https://github.com/oraios/serena", "serena-mcp-server", "--project", "${PWD}"],
+      "env": {},
+      "description": "LSP-grade code understanding & safe semantic edits"
+    },
+    "playwright-test": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp"],
+      "env": {},
+      "description": "Browser automation for testing and E2E workflows"
+    },
+    "trivy": {
+      "command": "npx",
+      "args": ["-y", "@aquasecurity/trivy-mcp"],
+      "env": {},
+      "description": "Container/IaC security scans and SBOM generation"
+    },
+    "semgrep": {
+      "command": "npx",
+      "args": ["-y", "@returntocorp/semgrep-mcp"],
+      "env": {},
+      "description": "SAST code scanning for security vulnerabilities"
+    },
+    "shadcn-ui": {
+      "command": "npx",
+      "args": ["-y", "@heilgar/shadcn-ui-mcp-server"],
+      "env": {},
+      "description": "shadcn/ui component library access and installation"
+    },
+    "chrome-devtools": {
+      "command": "npx",
+      "args": ["-y", "chrome-devtools-mcp@latest"],
+      "env": {},
+      "description": "Chrome DevTools Protocol server for browser inspection, performance analysis, and UI testing"
+    },
+    "backlog": {
+      "command": "backlog",
+      "args": ["mcp", "start"],
+      "env": {},
+      "description": "Backlog.md task management: create, update, search tasks with kanban board integration"
+    },
+    "flowspec-security": {
+      "command": "python",
+      "args": ["-m", "flowspec_cli.security.mcp_server"],
+      "env": {},
+      "description": "Flowspec Security Scanner: scan, triage, and fix security findings with AI assistance"
+    }
+  },
+  "_notes": {
+    "missing_mcps": [
+      "DAST (Dynamic Application Security Testing): No specific MCP server found - consider using OWASP ZAP directly",
+      "Binary Signing: No specific MCP server found - use cosign/sigstore CLI tools directly",
+      "IAST (Interactive Application Security Testing): No specific MCP server found"
+    ],
+    "installation": "MCP servers are installed automatically on first use via npx/uvx. Ensure Node.js and Python (uv) are installed."
+  }
+}
