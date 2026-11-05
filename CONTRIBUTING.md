@@ -131,14 +131,18 @@ Arguments are not read, so `cat ~/.ssh/config` is not a home program.
 It costs what `shell.risks` costs.
 
 `shell.mcp([program, arg, ...])` is the command line TC-CFG-003 judges.
-A POSIX shell `-c` or `cmd /c` (a path, `.exe`, or a flag cluster such
-as `-lc` or `/s /c`) whose payload is one simple command is replaced by
-that command, and the replacement is read again up to the same depth
-`shell.risks` follows. A simple command is one program and its
-arguments, or `cd <dir> &&` that command, after `env`, `sudo`, `exec`,
-`command`, and assignments are dropped. A pipe, `;`, `||`, an extra
-`&&`, a substitution, a redirection, or a downloader is left wrapped.
-It costs one unit per argv byte at each level it may read.
+A POSIX shell `-c` or `cmd /c`, `/k`, or `/r` (a path, `.exe`, or a
+flag cluster such as `-lc` or `/s /c`) whose payload is one simple
+command is replaced by that command, and the replacement is read again
+up to the same depth `shell.risks` follows. A simple command is one
+literal bare word or path and its arguments, or `cd <dir> &&` that
+command, after `env`, `sudo`, `exec`, `command`, and assignments are
+dropped. The payload is left wrapped when it contains `$`, `%`, a
+backtick, or `^`, and a `cmd` payload is left wrapped when `&`, `|`,
+`<`, or `>` remains after quotes are removed. A pipe, `;`, `||`, an
+extra `&&`, a substitution, a redirection, or a downloader the lexer
+sees is left wrapped too. It costs one unit per argv byte at each
+level it may read.
 
 `hook.commands(payload)` returns the string values of a hook's command
 fields (`command`, `exec`, `bash`, `powershell`, `commandWindows`,

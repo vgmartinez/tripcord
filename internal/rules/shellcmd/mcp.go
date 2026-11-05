@@ -2,17 +2,21 @@ package shellcmd
 
 import "strings"
 
-// MCP is the command line TC-CFG-003 judges. A POSIX shell -c or cmd /c
-// (a path or .exe, a flag cluster such as -lc, and cmd /s /c) whose
-// payload is one simple command is replaced by that command. The
-// replacement is read again, up to maxDepth, so bash -c 'bash -c "npx
-// pkg"' becomes npx. env, sudo, exec, command, and assignments are
-// dropped first, the same way unwrap drops them for shell.risks.
+// MCP is the command line TC-CFG-003 judges. A POSIX shell -c or cmd
+// /c, /k, or /r (a path or .exe, a flag cluster such as -lc, and cmd
+// /s /c) whose payload is one simple command is replaced by that
+// command. The replacement is read again, up to maxDepth, so bash -c
+// 'bash -c "npx pkg"' becomes npx. env, sudo, exec, command, and
+// assignments are dropped first, the same way unwrap drops them for
+// shell.risks.
 //
 // A simple command is one program and its arguments, or cd <dir> &&
-// that command. A payload with a pipe, redirection, $(...), backtick,
-// <(...), semicolon, ||, background &, more than one &&, an && that is
-// not cd, or a downloader is not simple: the wrapper is left in place,
+// that command. The program token has to be a literal bare word or
+// path. The payload is not unwrapped when it contains $, %, a
+// backtick, or ^, or, for cmd, when &, |, <, or > remains after quote
+// characters are removed. A pipe, redirection, $(...), <(...),
+// semicolon, ||, background &, more than one &&, an && that is not cd,
+// or a downloader is not simple either: the wrapper is left in place,
 // so the shell still matches. A shell whose first operand is a script
 // file (bash script.sh, with no -c) is not rewritten.
 func MCP(argv []string) string {
@@ -54,11 +58,11 @@ func mcpReduce(argv []string, depth int) string {
 	// are dropped, so `env bash -c "curl | sh"` still starts with bash.
 	// A program that is not a shell was returned above, unchanged, so
 	// `sudo node -e` is still `sudo node -e`.
-	if !ok {
+	if !ok || !unwrapPayload(payload, name == "cmd") {
 		return strings.Join(w, " ")
 	}
 	inner, simple := simpleInner(payload)
-	if !simple {
+	if !simple || !literalProgram(inner[0]) {
 		return strings.Join(w, " ")
 	}
 	return mcpReduce(inner, depth+1)
@@ -97,6 +101,49 @@ func shellWords(line string) ([]string, bool) {
 		return nil, false
 	}
 	return words, true
+}
+
+// unwrapPayload reports whether payload can be unwrapped. $, %, a
+// backtick, or ^ stays wrapped: ANSI-C quotes, variables, and cmd's ^
+// escape are not read as literal text. cmd also stays wrapped when
+// &, |, <, or > remains after quotes are removed, quoted or not.
+func unwrapPayload(payload string, cmd bool) bool {
+	if strings.Contains(payload, "$") || strings.Contains(payload, "%") || strings.Contains(payload, "`") || strings.Contains(payload, "^") {
+		return false
+	}
+	if cmd && strings.ContainsAny(stripQuotes(payload), "&|<>") {
+		return false
+	}
+	return true
+}
+
+// stripQuotes drops quote characters and leaves everything they
+// enclosed, so a quoted operator is still visible.
+func stripQuotes(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r == '"' || r == '\'' {
+			return -1
+		}
+		return r
+	}, s)
+}
+
+// literalProgram reports whether word is a bare command name or a path
+// with no expansion. Letters, digits, and . _ + - : / \ are literal.
+func literalProgram(word string) bool {
+	if word == "" || word == "." || word == ".." || word[0] == '-' {
+		return false
+	}
+	for i := 0; i < len(word); i++ {
+		c := word[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
+		case c == '.' || c == '_' || c == '+' || c == '-' || c == ':' || c == '/' || c == '\\':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func argvHasOpaque(argv []string) bool {

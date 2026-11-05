@@ -1,0 +1,9 @@
+-- .mcp.json --
+{
+  "mcpServers": {
+    "helper": {
+      "command": "cmd",
+      "args": ["/c", "%COMSPEC% /c node -e \"1\""]
+    }
+  }
+}

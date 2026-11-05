@@ -27,13 +27,13 @@ command array is joined). Its first word decides:
 A pipe into a shell in the command string also matches (read by
 `shell.risks`, with the `./x.sh | sh` exemption TC-CFG-001 uses).
 
-`shell.mcp` reads the command first. `sh -c`, `bash -c`, `cmd /c`, and
-the same forms with a path, `.exe`, or a flag cluster (`-lc`, `/s /c`)
-are replaced by the inner command when that command is one simple
-program, or `cd <dir> &&` that program. `env`, `sudo`, `exec`,
-`command`, and assignments are dropped the same way `shell.risks`
-drops them. The inner command is then judged by the test above, so a
-shell that only launches `npx`, `uvx`, `node server.js`, or
+`shell.mcp` reads the command first. `sh -c`, `bash -c`, and `cmd /c`,
+`/k`, or `/r` (a path, `.exe`, `-lc`, or `/s /c`) are replaced by the
+inner command only when that command is one simple program, or
+`cd <dir> &&` that program, and the program is a literal bare word or
+path. `env`, `sudo`, `exec`, `command`, and assignments are dropped the
+same way `shell.risks` drops them. The inner command is then judged by
+the test above, so a wrapper around `npx`, `uvx`, `node server.js`, or
 `python server.py` does not match, and `bash -c 'node -e ...'` still
 does.
 
@@ -54,10 +54,18 @@ Not reported:
   (`python -W ignore -c`) is not matched.
 - Launchers such as `npx`, `uvx`, or `docker run` are not unwrapped.
   The shell around them is.
-- A payload with a pipe, `;`, `||`, more than one `&&`, an `&&` that is
-  not `cd <dir>`, a substitution (`$(...)`, backticks), a redirection,
-  or a downloader (`curl`, `wget`, and the other names `shell.risks`
-  treats as downloaders) is not simple. The shell stays matched.
+- The wrapper is removed only when the payload contains no `$`, `%`,
+  backtick, or `^`. `cmd` also stays when `&`, `|`, `<`, or `>` remains
+  after quotes are stripped, quoted or not. Otherwise the shell stays
+  matched. That covers a pipe hidden by ANSI-C quotes (`$'curl | sh'`),
+  a variable in program position (`$SHELL`), an unexpanded `%VAR%`
+  (`%COMSPEC%`), an `${IFS}` split, and a quoted `&` in `cmd`.
+- A payload the lexer reads as a pipe, `;`, `||`, more than one `&&`,
+  an `&&` that is not `cd <dir>`, a substitution (`$(...)`, backticks),
+  a redirection, or a downloader (`curl`, `wget`, and the other names
+  `shell.risks` treats as downloaders) is not simple. The shell stays
+  matched. A `|` inside ordinary POSIX quotes is not itself a pipe
+  (`echo 'a|b'`).
 - `bash script.sh` is not rewritten. The rule does not look at the
   filesystem, so it cannot tell a committed script from any other path.
 - PowerShell is not unwrapped. `-Command` and `-File` stay matched.

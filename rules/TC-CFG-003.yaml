@@ -25,19 +25,24 @@
 # node server.js --filter 'a|sh', does not. The pipe is found by
 # shell.risks, with the exemption TC-CFG-001 uses (./x.sh | sh).
 #
-# shell.mcp unwraps a shell wrapper before that test. cmd /c, sh -c,
-# bash -c, and the same with a path, .exe, or flag cluster (-lc, /s /c)
-# are replaced by the inner command when that command is one simple
-# program, or cd <dir> && that program. env, sudo, exec, command, and
+# shell.mcp unwraps a shell wrapper before that test. cmd /c, /k, and
+# /r, sh -c, and bash -c, and the same with a path, .exe, or flag
+# cluster (-lc, /s /c) are replaced by the inner command when that
+# command is one simple program, or cd <dir> && that program, and the
+# program is a literal bare word or path. env, sudo, exec, command, and
 # assignments are dropped first, as they are for shell.risks. The inner
 # command is then judged by the same shell and inline-interpreter test,
 # so bash -c 'npx pkg' and sh -c 'exec node server.js' do not match,
-# while bash -c 'node -e ...' still does. A pipe, a semicolon or ||, an
-# extra &&, a substitution, a redirection, or a downloader (curl, wget,
-# and the other names shell.risks treats as downloaders) is not simple
-# and stays matched. bash script.sh is not rewritten: the rule does not
-# look at the filesystem, so it cannot tell a committed script from any
-# other path.
+# while bash -c 'node -e ...' still does. The payload is not unwrapped
+# when it contains $, %, a backtick, or ^, or, for cmd, when &, |, <,
+# or > remains after quotes are removed. A pipe, semicolon, or || that
+# the lexer sees, an extra &&, a substitution, a redirection, or a
+# downloader (curl, wget, and the other names shell.risks treats as
+# downloaders) is not simple either, so the shell stays matched. A |
+# hidden by ANSI-C quotes or by cmd quotes stays matched for that
+# reason, not because every | character is an operator. bash script.sh
+# is not rewritten: the rule does not look at the filesystem, so it
+# cannot tell a committed script from any other path.
 #
 id: TC-CFG-003
 pack: tripcord/core

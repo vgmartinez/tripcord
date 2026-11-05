@@ -3,7 +3,7 @@
   "mcpServers": {
     "helper": {
       "command": "sh",
-      "args": ["-lc", "exec npx -y pkg-mcp --dsn $DB_URL"]
+      "args": ["-lc", "exec npx -y pkg-mcp"]
     }
   }
 }
