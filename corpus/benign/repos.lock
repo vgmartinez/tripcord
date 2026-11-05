@@ -10,12 +10,12 @@
 # archived and not a fork. The list is stratified by harness and by
 # repository size (small is under 1 MB, medium is under 10 MB, and
 # large is the rest) and targets 1000 repositories.
-# This copy is partial: 755 of 1000 repositories.
+# This copy is partial: 756 of 1000 repositories.
 # Every harness has at least one row.
 # A resumable crawl fills the list in.
 # v0 doesn't ship until it reaches at least 1,000 repositories with a minimum per harness (#41).
-# Harness counts: agents 50, claude 93, codex 69, copilot 131, cursor 102, devcontainer 122, gemini 74, mcp 70, vscode 57.
-# Size bands: small 98, medium 213, large 444.
+# Harness counts: agents 50, claude 93, codex 70, copilot 131, cursor 102, devcontainer 122, gemini 74, mcp 70, vscode 57.
+# Size bands: small 98, medium 213, large 445.
 # Columns, tab-separated: owner/repo, 40-character commit SHA of the
 # default branch HEAD at generation time, SPDX license (NOASSERTION
 # when the API reports none), harnesses (comma-separated), size band
@@ -172,6 +172,7 @@ PhpCodeArcheology/PhpCodeArcheology	0d2484fdfaa2ac81c5c3355b1a54d7498fba28b1	MIT
 PierreKieffer/http-tanker	abee53e6f6ee931dfecb5fc62955150c578ac2f6	BSD-2-Clause	mcp	large	2026-11-04
 PlagueHO/CosmosDB	a5b2d10dd1697ffdca0a5c84a777be8c84629b39	MIT	vscode	medium	2026-11-04
 PostHog/posthog	cb939bbce6248413bb01db9b051e9badfbc36a38	NOASSERTION	codex	large	2026-11-05
+PostHog/posthog-foss	0f83bc01659f02de391f5a8dbcffbf298eadb103	MIT	codex	large	2026-11-05
 PrayerfulDrop/ESPHome-Guition-ESP32-S3-4848S040	1212f2355b7f68296d99785c3138a52f07e1a854	GPL-3.0	claude	large	2026-11-04
 PrimeIntellect-ai/prime-envs	7a5651c9a32c345c5f19d53d604929b178dfbf3b	Apache-2.0	cursor	large	2026-11-04
 ProjectSidewalk/SidewalkWebpage	9f03b1f88838aedc54124dd554d524f6d4bf4919	MIT	copilot	large	2026-11-04
