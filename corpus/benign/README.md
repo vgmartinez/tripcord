@@ -160,6 +160,13 @@ executed, and each tree is removed after its scan. Eight workers run at
 once; one repository gets five minutes and the run gets 35
 (`BENIGN_TIMEOUT`). A repository not scanned in time counts as failed.
 
+Every scan fingerprints in s1 mode, on any machine and in the nightly
+job: `TRIPCORD_FINGERPRINT_KEY` is removed from tripcord's environment,
+`HOME` points at the scan's temporary directory, and `CI` is set, so no
+fingerprint key is read or created. A finding whose evidence lost a
+secret to redaction would otherwise get a per-machine fingerprint, and
+its triage row would match only where it was minted.
+
 The report has:
 
 - `fp_per_repo` and `mean_fp_per_repo`: findings triaged `FP`, per

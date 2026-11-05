@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/vgmartinez/tripcord/internal/exitcode"
+	"github.com/vgmartinez/tripcord/internal/fpkey"
 )
 
 // Scanner scans one fetched tree.
@@ -26,13 +27,20 @@ type Scanner interface {
 // not be read, and those diagnostics are counted. The scan stops at
 // the directory's parent, so a tree under a Git work tree is never
 // widened to that repository.
+//
+// The scan always fingerprints in s1 mode. A finding whose evidence lost
+// a secret to redaction is fingerprinted with the fingerprint key, and
+// triage.tsv rows must match on every machine and in the nightly job, so
+// the host's TRIPCORD_FINGERPRINT_KEY and ~/.tripcord/fingerprint.key
+// are never used: the key variable is removed, HOME is the directory's
+// parent, which holds no key file, and CI is set so none is created.
 type Tripcord struct {
 	Bin string
 }
 
 func (t Tripcord) Scan(ctx context.Context, dir string) ([]Finding, int, error) {
 	cmd := exec.CommandContext(ctx, t.Bin, "scan", "-format", "json", "-scope", "repo", dir)
-	cmd.Env = append(os.Environ(), "GIT_CEILING_DIRECTORIES="+filepath.Dir(dir))
+	cmd.Env = scanEnv(os.Environ(), filepath.Dir(dir))
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -49,6 +57,21 @@ func (t Tripcord) Scan(ctx context.Context, dir string) ([]Finding, int, error) 
 		}
 	}
 	return ParseScan(&stdout)
+}
+
+// scanEnv is environ without the fingerprint key, HOME, or CI, plus
+// HOME and CI for an s1 scan and the Git ceiling at parent.
+func scanEnv(environ []string, parent string) []string {
+	env := make([]string, 0, len(environ)+3)
+	for _, kv := range environ {
+		name, _, _ := strings.Cut(kv, "=")
+		switch name {
+		case fpkey.EnvVar, "HOME", "CI", "GIT_CEILING_DIRECTORIES":
+			continue
+		}
+		env = append(env, kv)
+	}
+	return append(env, "HOME="+parent, "CI=true", "GIT_CEILING_DIRECTORIES="+parent)
 }
 
 // ParseScan reads tripcord's JSON Lines output: finding and diagnostic
