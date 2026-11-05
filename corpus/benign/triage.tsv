@@ -103,6 +103,7 @@ tcf_5c241512bb48cea8	TC-CFG-009	sillsdev/FieldWorks	TP	Copilot setup shallow-clo
 tcf_cb0a6481df322fa3	TC-CFG-002	sillsdev/FieldWorks	TP	VS Code task Setup: Colorize Worktree runs a committed ps1 script on folderOpen, so opening the folder executes it with no explicit action.	2026-11-05
 tcf_073db7946fad5d29	TC-CFG-003	stella/stella	FP	sh -c moves to the git top level and runs bun on one committed script, a single launch with no inline code.	2026-11-05
 tcf_28e01361a4f2d2c1	TC-CFG-003	tam159/next-role	FP	sh -lc sources the local env file and then execs npx of one package, a single launch with no inline script.	2026-11-05
+tcf_c12dd857fe65aa91	TC-CFG-003	tam159/next-role	FP	sh -lc execs npx of one package with a DSN from env vars, a single launch with no inline script.	2026-11-05
 tcf_1630b6e93bff8d62	TC-CFG-005	the-palindrome/ml-knowledge-graph	TP	Shared Codex config sets approval_policy to never, so commands run with no prompt.	2026-11-05
 tcf_d03a42609e945e03	TC-CFG-004	the-palindrome/ml-knowledge-graph	TP	The shared allow list contains Bash(*), which pre-approves every shell command.	2026-11-05
 tcf_2aa58bf29d0f17ef	TC-CFG-009	timdeschryver/Sandbox	TP	Devcontainer onCreateCommand pipes an unversioned Aspire install script into bash with no checksum.	2026-11-05
