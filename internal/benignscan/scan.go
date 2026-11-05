@@ -1,0 +1,102 @@
+package benignscan
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+
+	"github.com/vgmartinez/tripcord/internal/exitcode"
+)
+
+// Scanner scans one fetched tree.
+type Scanner interface {
+	Scan(ctx context.Context, dir string) (findings []Finding, diagnostics int, err error)
+}
+
+// Tripcord runs `tripcord scan -format json` on a directory. Exit codes
+// 0, 1, and 3 are a completed scan; 3 means some configuration could
+// not be read, and those diagnostics are counted. The scan stops at
+// the directory's parent, so a tree under a Git work tree is never
+// widened to that repository.
+type Tripcord struct {
+	Bin string
+}
+
+func (t Tripcord) Scan(ctx context.Context, dir string) ([]Finding, int, error) {
+	cmd := exec.CommandContext(ctx, t.Bin, "scan", "-format", "json", "-scope", "repo", dir)
+	cmd.Env = append(os.Environ(), "GIT_CEILING_DIRECTORIES="+filepath.Dir(dir))
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	var exit *exec.ExitError
+	if err != nil && !errors.As(err, &exit) {
+		return nil, 0, err
+	}
+	if exit != nil {
+		switch exitcode.Code(exit.ExitCode()) {
+		case exitcode.Findings, exitcode.Config:
+		default:
+			return nil, 0, fmt.Errorf("tripcord exit %d: %s", exit.ExitCode(), lastLine(stderr.String()))
+		}
+	}
+	return ParseScan(&stdout)
+}
+
+// ParseScan reads tripcord's JSON Lines output: finding and diagnostic
+// records. Any other record is an error, so a format change is noticed.
+func ParseScan(r io.Reader) ([]Finding, int, error) {
+	var findings []Finding
+	diags := 0
+	sc := bufio.NewScanner(r)
+	sc.Buffer(make([]byte, 0, 64<<10), 16<<20)
+	for sc.Scan() {
+		line := bytes.TrimSpace(sc.Bytes())
+		if len(line) == 0 {
+			continue
+		}
+		var rec struct {
+			Schema      string `json:"schema"`
+			Rule        string `json:"rule"`
+			Severity    string `json:"severity"`
+			Fingerprint string `json:"fingerprint"`
+			Location    struct {
+				Path string `json:"path"`
+			} `json:"location"`
+		}
+		if err := json.Unmarshal(line, &rec); err != nil {
+			return nil, 0, fmt.Errorf("tripcord output: %w", err)
+		}
+		switch rec.Schema {
+		case "tripcord.finding/v1":
+			if rec.Rule == "" || rec.Fingerprint == "" || rec.Severity == "" {
+				return nil, 0, fmt.Errorf("tripcord output: finding without rule, severity, or fingerprint")
+			}
+			findings = append(findings, Finding{Rule: rec.Rule, Severity: rec.Severity, Fingerprint: rec.Fingerprint, Path: rec.Location.Path})
+		case "tripcord.diagnostic/v1":
+			diags++
+		default:
+			return nil, 0, fmt.Errorf("tripcord output: unknown record schema %q", rec.Schema)
+		}
+	}
+	if err := sc.Err(); err != nil {
+		return nil, 0, err
+	}
+	return findings, diags, nil
+}
+
+func lastLine(s string) string {
+	s = strings.TrimSpace(s)
+	if i := strings.LastIndexByte(s, '\n'); i >= 0 {
+		return s[i+1:]
+	}
+	return s
+}

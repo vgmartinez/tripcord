@@ -4,7 +4,10 @@
 BINARY := bin/tripcord
 VERSION ?= dev
 
-.PHONY: build test lint fmt test-rule release-gate wiki
+BENIGN_REPORT ?= bin/benign-report.json
+BENIGN_TIMEOUT ?= 35m
+
+.PHONY: build test lint fmt test-rule release-gate wiki benign upstream-check
 
 build:
 	CGO_ENABLED=0 go build -trimpath -ldflags "-X main.version=$(VERSION)" -o $(BINARY) ./cmd/tripcord
@@ -23,6 +26,16 @@ fmt:
 wiki:
 	rm -rf bin/wiki
 	go run ./cmd/wikigen -out bin/wiki
+
+# benign is opt-in and uses the network. It shallow-fetches every pinned
+# commit in corpus/benign/repos.lock, scans it, and writes the report to
+# BENIGN_REPORT. It fails on a high finding with no triage.tsv row.
+benign: build
+	go run ./scripts/benign-scan -tripcord $(BINARY) -out $(BENIGN_REPORT) -timeout $(BENIGN_TIMEOUT)
+
+# upstream-check fails when a URL in schemas/upstream.lock changed.
+upstream-check:
+	go run ./scripts/upstream-check
 
 # release-gate fails while a feature a release depends on is missing.
 # It checks that this build has the `tripcord hook` the init --embed

@@ -1,0 +1,8 @@
+# schemas/upstream.lock
+# SHA-256 of the upstream schemas tripcord's adapters follow, by exact URL.
+# scripts/upstream-check fetches each URL and fails when the bytes no
+# longer hash to the value here, printing a diff against the same file at
+# the pinned commit. Update a row only after reviewing that diff.
+# Columns, tab-separated: name, URL, SHA-256, raw URL at the pinned commit.
+claude-code-settings.json	https://json.schemastore.org/claude-code-settings.json	f26f028ad94a1e2a28e9dad1f80832ab196a8e080bd3a7d7a32e6428a15e0611	https://raw.githubusercontent.com/SchemaStore/schemastore/bf7c6745505ccace5568dc0d7f4ae29647e9b41a/src/schemas/json/claude-code-settings.json
+devContainer.base.schema.json	https://raw.githubusercontent.com/devcontainers/spec/main/schemas/devContainer.base.schema.json	a0883c0405ff433db188849d458fb20b9c0d73e0ba1a6e44c1d83f3b485408dd	https://raw.githubusercontent.com/devcontainers/spec/d424cc157e9a110f3bf67d311b46c7306d5a465d/schemas/devContainer.base.schema.json

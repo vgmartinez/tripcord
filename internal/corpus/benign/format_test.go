@@ -125,8 +125,8 @@ func TestCommittedLists(t *testing.T) {
 			t.Errorf("triage.tsv header missing %q", phrase)
 		}
 	}
-	if !bytes.Equal(triageRaw, []byte(TriageHeader)) {
-		t.Fatal("triage.tsv is not TriageHeader")
+	if !bytes.HasPrefix(triageRaw, []byte(TriageHeader)) {
+		t.Fatal("triage.tsv header is not TriageHeader")
 	}
 	repos, err := LoadLock(lockRaw)
 	if err != nil {
@@ -160,6 +160,9 @@ func TestCommittedLists(t *testing.T) {
 	triage, err := ParseTriage(triageRaw)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(triage) != 14 {
+		t.Fatalf("triage.tsv has %d rows, want 14", len(triage))
 	}
 	regRaw, err := os.ReadFile(filepath.Join(root, "rules", "REGISTRY"))
 	if err != nil {

@@ -1,0 +1,53 @@
+name: benign-nightly
+
+# Scans every pinned repository in corpus/benign/repos.lock and checks
+# the upstream schema hashes in schemas/upstream.lock. Scheduled and
+# manual only: it fetches third-party trees, so it never runs on a pull
+# request. It reports through the job status and the artifact; it does
+# not open issues.
+on:
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: benign-nightly
+  cancel-in-progress: false
+
+jobs:
+  benign:
+    name: benign corpus and upstream schemas
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Upstream schema hashes
+        run: make upstream-check
+
+      # Runs even when the upstream check failed, so one drift does not
+      # hide the corpus result.
+      - name: Benign corpus scan
+        if: ${{ !cancelled() }}
+        run: make benign BENIGN_REPORT="$RUNNER_TEMP/benign-report.json"
+
+      - name: Upload report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: benign-report
+          path: ${{ runner.temp }}/benign-report.json
+          if-no-files-found: error
+          retention-days: 30
