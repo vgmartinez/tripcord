@@ -4,6 +4,9 @@ positivos:
   agents-bidi-override: high
   agents-bom-then-hidden: high
   agents-nested-tags: high
+  agents-tag-smuggle: high
+  agents-word-split: high
+  agents-zero-width-run: high
   agents-zwj-nonemoji: high
   claude-local-file: high
   claude-rules-dir: high

@@ -32,8 +32,21 @@ else is.
 A U+200D between two Extended_Pictographic characters is a normal emoji
 ZWJ sequence and is not reported. U+FE0F and skin tones
 (U+1F3FB-U+1F3FF) may sit between the joiner and either character, so
-sequences such as 🏳️‍🌈 and 🐈‍⬛ are quiet. A U+200D beside ASCII, or at
-the start or end of a file, is reported.
+sequences such as 🏳️‍🌈 and 🐈‍⬛ are quiet. A U+200D between two letters
+or digits is reported.
+
+An isolated U+200B, U+200C, or U+200D is not reported when it is not
+between two letters or digits and is not part of a run of zero-width
+characters. A zero-width character (including U+2060 and U+FEFF) is
+also not reported when a quoted string contains only that character,
+or when it sits in a bracket character class that lists zero-width
+characters to strip, such as a dict of characters to remove. The
+escape text `\u200b` is six ASCII characters and is not itself a
+hidden code point.
+
+Still reported, at high: tag characters, bidi controls, a run of
+zero-width characters, a zero-width character between two letters or
+digits, and U+2060 or U+FEFF anywhere else in the text.
 
 Not reported:
 
@@ -42,6 +55,14 @@ Not reported:
 - User-scope files.
 - `SKILL.md` outside the three skill directories, including
   `docs/SKILL.md` and a Claude plugin `skills/` directory.
+- One U+200B, U+200C, or U+200D that does not sit between two letters
+  or digits and is not next to another zero-width character, such as
+  a path placeholder whose U+200B sits between an ellipsis and
+  `.yaml`, or a U+200B on the line before a code fence.
+- A code literal that lists a zero-width character: a quoted string
+  whose only content is that character, or a bracket character class
+  used to strip them. The examples below write the escape; the file
+  holds the raw character.
 
 ## Evidence
 
@@ -84,8 +105,21 @@ Run `make test` before you push. \u202e;)(nuR\u202c Never skip it.
 Use the stan\u200bdard formatter.
 ```
 
+```
+Do not ign\u200bore a failing test.
+```
+
 Not reported: a file that starts with a byte order mark and has no
-other hidden code point.
+other hidden code point. Also not reported, an isolated U+200B outside
+a word and a literal that lists the character:
+
+```
+See `notes/item-…\u200b.yaml`.
+```
+
+```
+STRIP = {"zwsp": "\u200b", "zwnj": "\u200c", "zwj": "\u200d"}
+```
 
 ## How to fix
 

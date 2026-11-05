@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"path"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/vgmartinez/tripcord/internal/model"
@@ -100,17 +101,176 @@ func Scan(b []byte) (model.HiddenChars, bool) {
 // countedAt reports a hidden code point. U+200D is not counted inside an
 // emoji ZWJ sequence: the code points around it, skipping U+FE0F and
 // skin tones U+1F3FB-U+1F3FF, are both Extended_Pictographic.
+//
+// An isolated U+200B, U+200C, or U+200D is not counted when it is not
+// between two letters or digits. A zero-width character is also not
+// counted when it is the entire contents of a quoted string, or when it
+// sits in a bracket character class that only lists zero-width
+// characters and escapes. Tags, bidi controls, a run of zero-width
+// characters, a zero-width character inside a word, and U+2060 or
+// U+FEFF anywhere else stay counted.
 func countedAt(b []byte, i int) bool {
 	r, size := utf8.DecodeRune(b[i:])
 	if Class(r) == "" {
 		return false
 	}
-	if r != 0x200D {
+	if r == 0x200D && emojiJoiner(b, i, size) {
+		return false
+	}
+	if Class(r) != ZeroWidth {
 		return true
 	}
+	if listedLiteral(b, i, size) {
+		return false
+	}
+	if r != 0x200B && r != 0x200C && r != 0x200D {
+		return true
+	}
+	if zeroWidthRun(b, i, size) {
+		return true
+	}
+	return betweenWord(b, i, size)
+}
+
+func emojiJoiner(b []byte, i, size int) bool {
 	before := pictographic(skipEmojiMods(b[:i], false))
 	after := pictographic(skipEmojiMods(b[i+size:], true))
-	return !before || !after
+	return before && after
+}
+
+// listedLiteral reports a zero-width character written as data: the
+// whole of a quoted string, or one member of a bracket class that lists
+// zero-width characters to strip.
+func listedLiteral(b []byte, i, size int) bool {
+	return quotedLiteral(b, i, size) || stripClass(b, i)
+}
+
+func quotedLiteral(b []byte, i, size int) bool {
+	prev, psize := utf8.DecodeLastRune(b[:i])
+	next, nsize := utf8.DecodeRune(b[i+size:])
+	if psize == 0 || nsize == 0 || prev != next {
+		return false
+	}
+	return prev == '"' || prev == '\'' || prev == '`'
+}
+
+// stripClass reports whether i is inside a [...] class on this line
+// whose other contents are zero-width characters, spaces, commas, or
+// backslash escapes. A class that also holds letters is not one: that
+// is a word, or a markdown link, and the character stays counted.
+func stripClass(b []byte, i int) bool {
+	lineStart := bytes.LastIndexByte(b[:i], '\n') + 1
+	lineEnd := len(b)
+	if rel := bytes.IndexByte(b[i:], '\n'); rel >= 0 {
+		lineEnd = i + rel
+	}
+	openRel := bytes.LastIndexByte(b[lineStart:i], '[')
+	if openRel < 0 {
+		return false
+	}
+	open := lineStart + openRel
+	if bytes.Contains(b[open+1:i], []byte{']'}) {
+		return false
+	}
+	closeRel := bytes.IndexByte(b[i:lineEnd], ']')
+	if closeRel < 0 {
+		return false
+	}
+	return stripClassBody(b[open+1 : i+closeRel])
+}
+
+func stripClassBody(body []byte) bool {
+	if len(body) == 0 {
+		return false
+	}
+	for i := 0; i < len(body); {
+		r, size := utf8.DecodeRune(body[i:])
+		if r == utf8.RuneError && size == 1 {
+			return false
+		}
+		if Class(r) == ZeroWidth || r == ' ' || r == '\t' || r == ',' {
+			i += size
+			continue
+		}
+		if r != '\\' {
+			return false
+		}
+		n := escapeLen(body[i:])
+		if n == 0 {
+			return false
+		}
+		i += n
+	}
+	return true
+}
+
+func escapeLen(b []byte) int {
+	if len(b) < 2 || b[0] != '\\' {
+		return 0
+	}
+	r, size := utf8.DecodeRune(b[1:])
+	rest := b[1+size:]
+	switch r {
+	case 'u':
+		if hexRun(rest, 4) {
+			return 1 + size + 4
+		}
+		return 0
+	case 'U':
+		if hexRun(rest, 8) {
+			return 1 + size + 8
+		}
+		return 0
+	case 'x':
+		if hexRun(rest, 2) {
+			return 1 + size + 2
+		}
+		return 0
+	default:
+		if r == utf8.RuneError && size == 1 {
+			return 0
+		}
+		return 1 + size
+	}
+}
+
+func hexRun(b []byte, n int) bool {
+	if len(b) < n {
+		return false
+	}
+	for i := 0; i < n; i++ {
+		c := b[i]
+		if c < '0' || (c > '9' && c < 'A') || (c > 'F' && c < 'a') || c > 'f' {
+			return false
+		}
+	}
+	return true
+}
+
+// zeroWidthRun reports a neighbor that is itself a zero-width character,
+// so this one is part of a run. A run stays counted even when it is not
+// inside a word.
+func zeroWidthRun(b []byte, i, size int) bool {
+	prev, psize := utf8.DecodeLastRune(b[:i])
+	if psize > 0 && Class(prev) == ZeroWidth {
+		return true
+	}
+	next, nsize := utf8.DecodeRune(b[i+size:])
+	return nsize > 0 && Class(next) == ZeroWidth
+}
+
+// betweenWord reports two neighbors that are each a letter or a digit.
+func betweenWord(b []byte, i, size int) bool {
+	prev, psize := utf8.DecodeLastRune(b[:i])
+	next, nsize := utf8.DecodeRune(b[i+size:])
+	if psize == 0 || nsize == 0 {
+		return false
+	}
+	return wordRune(prev) && wordRune(next)
+}
+
+func wordRune(r rune) bool {
+	return unicode.IsLetter(r) || unicode.IsDigit(r)
 }
 
 func skipEmojiMods(b []byte, forward bool) rune {

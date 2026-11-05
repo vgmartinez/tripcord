@@ -1,0 +1,9 @@
+-- .claude/skills/strip-marks/SKILL.md --
+# Strip marks
+
+```python
+DROP = {"zwsp": "​", "zwnj": "‌", "zwj": "‍", "bom": "﻿"}
+pattern = re.compile("[​‌‍]")
+```
+
+Keep the visible words.

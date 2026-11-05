@@ -1,0 +1,9 @@
+-- .github/agents/review.agent.md --
+---
+name: review
+---
+A nested fence stays open when a mark sits on its own line before the fence.
+
+​```text
+echo hello
+​```
