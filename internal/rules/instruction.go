@@ -21,6 +21,12 @@ var (
 	instructionGapPrep  = regexp.MustCompile(`(?i)^(?:from|in|of|on|at|into|inside|within|via|through|using|with|for)$`)
 	instructionGapDet   = regexp.MustCompile(`(?i)^(?:the|all|your|my|our|this|these|any|every|each|its|their|those|a|an)$`)
 	instructionGapPlain = regexp.MustCompile(`^[A-Za-z][A-Za-z']*$`)
+	// A secret value names what is read, not where it is stored. Outside a
+	// direct object of a read verb it needs a local path after it.
+	instructionSecretValue = regexp.MustCompile(`(?i)^(?:environment[ \t]+variables?|credentials|secrets?|api[_ ]?keys?|tokens?|passwords?|private[ \t]+key)$`)
+	instructionStoredPrep  = regexp.MustCompile(`(?i)^(?:from|in|inside|within|under|of)$`)
+	instructionLocalPath   = regexp.MustCompile(`^(?:~/|\$\{?HOME\}?/|\.{1,2}/|/|\.[\p{L}\p{N}_]|[\p{L}\p{N}_.-]+/)`)
+	instructionRedirect    = regexp.MustCompile(`(?:^|[^-])>`)
 	// "access token" and "access key" are compound nouns, not the verb.
 	instructionAccessCompound = regexp.MustCompile(`(?i)^[ \t]*(?:tokens?|keys?)\b`)
 	instructionOpenPR         = regexp.MustCompile(`(?i)^[ \t]+(?:a[ \t]+)?(?:pull[ \t]+request|pr)\b`)
@@ -68,14 +74,16 @@ func instructionMatchLine(content string) int {
 				if (verb == "curl" || verb == "wget") && instructionSecret.MatchString(instructionCurlNoise.ReplaceAllString(clause, " ")) {
 					return line + 1
 				}
-				// echo "..." prints a string. access token/key is a noun.
-				if verb == "echo" && echoQuoted(clause) {
+				if verb == "echo" {
+					if instructionEchoSecret(clause) {
+						return line + 1
+					}
 					continue
 				}
 				if verb == "access" && instructionAccessCompound.MatchString(clause) {
 					continue
 				}
-				if instructionGapTarget(clause, 0, false) {
+				if instructionGapTarget(clause, 0, false, instructionAcquire(verb)) {
 					return line + 1
 				}
 			}
@@ -115,24 +123,83 @@ func stripInstructionHidden(text string) string {
 // and its target. Every skipped token counts, including a determiner.
 const instructionWordGap = 6
 
+// instructionHit is a secret at the head of a phrase. value is set when it
+// names the secret itself (an API key, a token) rather than where secrets
+// are stored (.env, ~/.ssh, process.env, GITHUB_TOKEN). tail follows it.
+type instructionHit struct {
+	at, blocked, value bool
+	tail               string
+}
+
 func instructionDirectSecret(text string) bool {
-	at, blocked := instructionHead(text)
-	return at && !blocked
+	h := instructionHead(text)
+	return h.at && !h.blocked
 }
 
 // instructionHead reports whether a secret is the direct object of text.
 // blocked is set when that secret is followed by a documentation modifier,
 // which ends the search instead of letting the gap walk past it.
-func instructionHead(text string) (at, blocked bool) {
+func instructionHead(text string) instructionHit {
 	text = instructionObject.ReplaceAllString(text, "")
 	secret := instructionSecret.FindStringIndex(text)
 	if secret == nil || secret[0] != 0 {
-		return false, false
+		return instructionHit{}
 	}
-	if instructionModifier.MatchString(text[secret[1]:]) {
-		return true, true
+	tail := text[secret[1]:]
+	return instructionHit{
+		at:      true,
+		blocked: instructionModifier.MatchString(tail),
+		value:   instructionSecretValue.MatchString(strings.TrimRight(text[:secret[1]], " \t")),
+		tail:    tail,
 	}
-	return true, false
+}
+
+// instructionStored reports whether a secret value is read from a local
+// path: "API key from the .env file", "credentials in ~/.config". A
+// person, product, URL, or UI ("from 1Password", "in Notion", "at
+// https://...") is where a credential is obtained, not a file the agent
+// opens.
+func instructionStored(tail string) bool {
+	word, rest := firstInstructionWord(tail)
+	if !instructionStoredPrep.MatchString(word) {
+		return false
+	}
+	for {
+		word, rest = firstInstructionWord(rest)
+		if !instructionGapDet.MatchString(word) {
+			break
+		}
+	}
+	word = strings.TrimLeft(word, "`'\"")
+	return !strings.Contains(word, "://") && instructionLocalPath.MatchString(word)
+}
+
+// instructionAcquire reports verbs that as often mean obtaining a
+// credential or opening a page ("Get an API key at ...", "Access the
+// secret manager UI") as reading one. Their object must say where the
+// secret is stored.
+func instructionAcquire(verb string) bool {
+	switch strings.Join(strings.Fields(verb), " ") {
+	case "get", "retrieve", "access", "look up":
+		return true
+	default:
+		return false
+	}
+}
+
+// instructionEchoSecret matches echo of a secret value. echo prints its
+// operands: a quoted literal, a path such as .env, or output redirected
+// with > is written, not read.
+func instructionEchoSecret(clause string) bool {
+	trimmed := strings.TrimLeft(clause, " \t")
+	if strings.HasPrefix(trimmed, `"`) || strings.HasPrefix(trimmed, "'") || strings.HasPrefix(trimmed, "`") {
+		return false
+	}
+	if instructionRedirect.MatchString(clause) {
+		return false
+	}
+	h := instructionHead(clause)
+	return h.at && !h.blocked && h.value
 }
 
 // instructionGapTarget matches a secret that is the direct object, or
@@ -140,13 +207,15 @@ func instructionHead(text string) (at, blocked bool) {
 // phrase. A negation, a clause word, a documentation word, or a token
 // that is not a plain word stops the walk. A preposition after a content
 // word also stops, so a later secret is not picked up out of a new phrase.
-func instructionGapTarget(text string, skipped int, sawContent bool) bool {
-	at, blocked := instructionHead(text)
-	if blocked {
+// Once a word other than a determiner is skipped, or for an acquire
+// verb, a secret value must be followed by a local path.
+func instructionGapTarget(text string, skipped int, widened, strict bool) bool {
+	h := instructionHead(text)
+	if h.blocked {
 		return false
 	}
-	if at {
-		return true
+	if h.at {
+		return !h.value || (!widened && !strict) || instructionStored(h.tail)
 	}
 	if skipped >= instructionWordGap {
 		return false
@@ -159,22 +228,17 @@ func instructionGapTarget(text string, skipped int, sawContent bool) bool {
 	case instructionGapStop.MatchString(word) || instructionModifier.MatchString(word):
 		return false
 	case instructionGapDet.MatchString(word):
-		return instructionGapTarget(rest, skipped+1, sawContent)
+		return instructionGapTarget(rest, skipped+1, widened, strict)
 	case instructionGapPrep.MatchString(word):
-		if sawContent {
+		if widened {
 			return false
 		}
-		return instructionGapTarget(rest, skipped+1, false)
+		return instructionGapTarget(rest, skipped+1, true, strict)
 	case instructionGapPlain.MatchString(word):
-		return instructionGapTarget(rest, skipped+1, true)
+		return instructionGapTarget(rest, skipped+1, true, strict)
 	default:
 		return false
 	}
-}
-
-func echoQuoted(text string) bool {
-	text = strings.TrimLeft(text, " \t")
-	return strings.HasPrefix(text, `"`) || strings.HasPrefix(text, "'") || strings.HasPrefix(text, "`")
 }
 
 func firstInstructionWord(text string) (string, string) {
