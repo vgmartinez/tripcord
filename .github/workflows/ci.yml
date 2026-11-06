@@ -627,8 +627,28 @@ jobs:
           cache: false
 
       # v2.0.1. Pinned by commit so a moved tag cannot change the checker.
+      # Five attempts. The delay grows only after a failure, so the first
+      # success does not sleep. A module cache is not used: it would keep
+      # a different install environment than this empty setup-go cache.
       - name: Install go-licenses
-        run: go install github.com/google/go-licenses/v2@3e084b0caf710f7bfead967567539214f598c0a2
+        shell: bash
+        run: |
+          set -euo pipefail
+          module="github.com/google/go-licenses/v2@3e084b0caf710f7bfead967567539214f598c0a2"
+          attempt=1
+          delay=1
+          while true; do
+            if go install "$module"; then
+              exit 0
+            fi
+            if [ "$attempt" -ge 5 ]; then
+              echo "go install ${module} failed after ${attempt} attempts" >&2
+              exit 1
+            fi
+            sleep "$delay"
+            attempt=$((attempt + 1))
+            delay=$((delay * 2))
+          done
 
       # Allowlist: anything else, including AGPL, GPL, SSPL, and unknown
       # licenses, fails. GOROOT is set so go-licenses recognizes the
@@ -750,12 +770,14 @@ jobs:
           persist-credentials: false
 
       # v1.7.12. The tarball is pinned by its release checksum.
+      # Five retries on any transfer error. The checksum still runs
+      # before the binary does. curl's own delay grows between retries.
       - name: actionlint
         shell: bash
         run: |
           set -euo pipefail
           archive="${RUNNER_TEMP}/actionlint.tar.gz"
-          curl -fsSL -o "$archive" https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          curl --retry 5 --retry-all-errors --connect-timeout 10 -fsSL -o "$archive" https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
           echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  ${archive}" | sha256sum -c -
           tar -xzf "$archive" -C "$RUNNER_TEMP" actionlint
           "$RUNNER_TEMP/actionlint" -version
@@ -805,12 +827,14 @@ jobs:
           shellcheck embed-out/.tripcord/bootstrap.sh
 
       # v1.7.12. The tarball is pinned by its release checksum.
+      # Five retries on any transfer error. The checksum still runs
+      # before the binary does. curl's own delay grows between retries.
       - name: actionlint generated workflows
         shell: bash
         run: |
           set -euo pipefail
           archive="${RUNNER_TEMP}/actionlint.tar.gz"
-          curl -fsSL -o "$archive" https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          curl --retry 5 --retry-all-errors --connect-timeout 10 -fsSL -o "$archive" https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
           echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  ${archive}" | sha256sum -c -
           tar -xzf "$archive" -C "$RUNNER_TEMP" actionlint
           "$RUNNER_TEMP/actionlint" embed-out/.github/workflows/*.yml
