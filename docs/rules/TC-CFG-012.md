@@ -35,8 +35,8 @@ quiet.
 
 Reported when the verb is `read`, `cat`, `cp`, `copy`, `open`, `load`,
 `source`, `printenv`, `print`, `dump`, `collect`, `extract`, `show`,
-`curl`, `wget`, `type`, or `Get-Content`, and its direct object names
-one of these:
+`curl`, `wget`, `type`, `Get-Content`, `access`, `echo`, `get`,
+`retrieve`, or `look up`, and its object names one of these:
 
 | Target | Counts | Does not count |
 | --- | --- | --- |
@@ -54,9 +54,23 @@ that only reaches `printenv` later (`run printenv`) does not count.
 
 Between a verb and its object, the matcher allows curl/wget flags, one
 URL, one or more determiners (`the`, `all`, `your`, `any`, `every`,
-`each`, `its`, `their`, `those`, and the rest), `contents of` /
+`each`, `its`, `their`, `those`, `a`, `an`, and the rest), `contents of` /
 `values of`, and one quote, backtick, `@`, or PowerShell `$env:`
-prefix. It does not skip arbitrary prose. `curl` and `wget` also match
+prefix. Up to 6 further words may sit in that same noun phrase. Every
+skipped token counts toward the 6. The walk stops at a negation or a
+new clause (`not`, `never`, `if`, `when`, `and`, `before`, and the
+rest), at a copula, auxiliary, or clause connective (`is`, `won't`,
+`can`, `despite`, `because`, and the rest), at a documentation word, and at a token that
+is not a plain word, a determiner, or a preposition. A hyphenated token
+is not a plain word, so `.env.example`, `docs/security.md`, and
+`whitespace-delimited` are not skipped. A preposition after a content word
+also stops the walk: `read config via process.env` stays quiet, and
+`read the service account credentials` matches. A secret followed by a
+documentation modifier still does not count, and the walk does not
+continue past it. `echo` of a quoted string prints that string.
+`access token` and `access key`, with nothing between the words, are
+compound nouns. The verb still has to start the line, and the target
+has to be on that same line. `curl` and `wget` also match
 when a secret appears anywhere later in the same clause, so a flag
 value such as `-d @.env` still counts. Authorization and user flags
 (`-H`, `--header`, `-u`, `--user`, `--oauth2-bearer`) and plain
