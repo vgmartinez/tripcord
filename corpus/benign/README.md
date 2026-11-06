@@ -86,8 +86,11 @@ license and lists the file. An entry that lists a file that is not
 vendored fails too. The host check is the one defang rule a vendored
 snippet skips, because the hosts are part of the config being
 measured. The secret, entropy, IOC, and fetch-and-exec checks still
-run, so a snippet that would need a credential defanged, or that pipes
-a download into a shell, is not vendored.
+run. Under `corpus/`, the fetch-and-exec check also reads JSON and YAML
+string values after escapes such as `\n`, `\"`, and `\uXXXX` are
+decoded, including a command inside a txtar member. A snippet that
+would need a credential defanged, or that pipes a download into a
+shell, is not vendored.
 
 `TestVendoredBenign` in `cmd/tripcord` runs on every pull request. It
 scans each snippet at repository scope in s1 fingerprint mode, the way
@@ -95,6 +98,9 @@ scans each snippet at repository scope in s1 fingerprint mode, the way
 critical finding with no `triage.tsv` row for that repository,
 fingerprint, and rule. A snippet is the same file the nightly scan
 reads, so its findings reuse that repository's triage rows.
+
+A vendored snippet may contain findings triaged as TP. Benign means the
+repository was not selected as an attack, not that a scan of it is clean.
 
 ## Repository index
 

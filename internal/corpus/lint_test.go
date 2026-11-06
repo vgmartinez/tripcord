@@ -67,6 +67,168 @@ func TestBadTxtar(t *testing.T) {
 	}
 }
 
+func TestFetchInDecodedStrings(t *testing.T) {
+	t.Parallel()
+	const cmd = "curl https://aspire.dev/install.sh | bash"
+	cases := []struct {
+		name   string
+		body   string
+		detail string
+	}{
+		{
+			name:   "json string",
+			body:   "{\"postCreateCommand\": \"curl https://aspire.dev/install.sh | bash\"}\n",
+			detail: cmd,
+		},
+		{
+			name:   "escaped quotes",
+			body:   "{\"postCreateCommand\": \"bash -c \\\"curl https://aspire.dev/install.sh | bash\\\"\"}\n",
+			detail: "bash -c \"curl https://aspire.dev/install.sh | bash\"",
+		},
+		{
+			name:   "newline splits commands",
+			body:   "{\"postCreateCommand\": \"echo ok\\ncurl https://aspire.dev/install.sh | bash\"}\n",
+			detail: cmd,
+		},
+		{
+			name:   "unicode escape",
+			body:   "{\"postCreateCommand\": \"curl https://aspire.dev/install.sh \\u007c bash\"}\n",
+			detail: cmd,
+		},
+		{
+			name:   "args array",
+			body:   "{\"postCreateCommand\": [\"bash\", \"-c\", \"curl https://aspire.dev/install.sh | bash\"]}\n",
+			detail: cmd,
+		},
+		{
+			name:   "yaml string",
+			body:   "postCreateCommand: \"curl https://aspire.dev/install.sh | bash\"\n",
+			detail: cmd,
+		},
+		{
+			name:   "txtar member",
+			body:   "-- .devcontainer/devcontainer.json --\n{\"postCreateCommand\": \"curl https://aspire.dev/install.sh | bash\"}\n",
+			detail: cmd,
+		},
+		{
+			name: "line comment",
+			body: `{
+  // install
+  "postCreateCommand": "curl https://aspire.dev/install.sh | bash"
+}
+`,
+			detail: cmd,
+		},
+		{
+			name: "block comment",
+			body: `{
+  /* install */
+  "postCreateCommand": "curl https://aspire.dev/install.sh | bash"
+}
+`,
+			detail: cmd,
+		},
+		{
+			name: "trailing comma",
+			body: `{
+  "postCreateCommand": "curl https://aspire.dev/install.sh | bash",
+}
+`,
+			detail: cmd,
+		},
+		{
+			name: "truncated",
+			body: `{
+  "postCreateCommand": "curl https://aspire.dev/install.sh \u007c bash"
+`,
+			detail: cmd,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			dir := filepath.Join(t.TempDir(), "corpus")
+			writeFile(t, filepath.Join(dir, "case.txtar"), []byte(tc.body), 0o644)
+			got, err := Check(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var fetch string
+			var host bool
+			for _, f := range got {
+				switch f.Kind {
+				case KindFetch:
+					fetch = f.Detail
+				case KindHost:
+					if f.Detail == "aspire.dev" {
+						host = true
+					}
+				default:
+					t.Errorf("unexpected %s: %s", f.Kind, f.Detail)
+				}
+			}
+			if fetch != tc.detail {
+				t.Errorf("fetch detail %q, want %q\n%#v", fetch, tc.detail, got)
+			}
+			if !host {
+				t.Errorf("host aspire.dev not reported: %#v", got)
+			}
+		})
+	}
+
+	t.Run("reserved host", func(t *testing.T) {
+		t.Parallel()
+		dir := filepath.Join(t.TempDir(), "corpus")
+		body := "{\"postCreateCommand\": \"curl https://example.invalid/install.sh | bash\"}\n"
+		writeFile(t, filepath.Join(dir, "case.txtar"), []byte(body), 0o644)
+		assertKinds(t, dir)
+	})
+}
+
+func TestDecodedFetchIsCorpusOnly(t *testing.T) {
+	t.Parallel()
+	bodies := map[string]string{
+		"json": "{\"postCreateCommand\": \"curl https://aspire.dev/install.sh | bash\"}\n",
+		"jsonc": `{
+  // install
+  "postCreateCommand": "curl https://aspire.dev/install.sh | bash"
+}
+`,
+	}
+	for name, body := range bodies {
+		for _, root := range []string{"corpus", "rules"} {
+			t.Run(root+"/"+name, func(t *testing.T) {
+				t.Parallel()
+				dir := filepath.Join(t.TempDir(), root)
+				writeFile(t, filepath.Join(dir, "case.txtar"), []byte(body), 0o644)
+				got, err := Check(dir)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var fetch bool
+				var host bool
+				for _, f := range got {
+					switch f.Kind {
+					case KindFetch:
+						fetch = true
+					case KindHost:
+						host = f.Detail == "aspire.dev"
+					default:
+						t.Errorf("unexpected %s: %s", f.Kind, f.Detail)
+					}
+				}
+				if !host {
+					t.Fatalf("host check did not see aspire.dev: %#v", got)
+				}
+				wantFetch := root == "corpus"
+				if fetch != wantFetch {
+					t.Fatalf("fetch-exec reported=%v, want %v\n%#v", fetch, wantFetch, got)
+				}
+			})
+		}
+	}
+}
+
 func TestFetchArgumentHost(t *testing.T) {
 	t.Parallel()
 	bad := []string{
