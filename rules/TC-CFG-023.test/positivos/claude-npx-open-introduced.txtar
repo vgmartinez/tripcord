@@ -1,0 +1,9 @@
+-- .mcp.json --
+{
+  "mcpServers": {
+    "open": {
+      "command": "npx",
+      "args": ["-y", "open@7.2.0"]
+    }
+  }
+}

@@ -9,7 +9,7 @@ import (
 func TestSeedList(t *testing.T) {
 	t.Parallel()
 	db := loadSeed(t)
-	if db.Count() != 15 || db.LatestReview() != "2026-11-05" {
+	if db.Count() != 16 || db.LatestReview() != "2026-11-06" {
 		t.Fatalf("count %d reviewed %s", db.Count(), db.LatestReview())
 	}
 	hits, err := db.Match([]PackageRef{{
@@ -194,6 +194,58 @@ func TestTSParticlesBounds(t *testing.T) {
 	}})
 	if err != nil || len(hits) != 0 {
 		t.Fatalf("unpinned hits = %+v %v", hits, err)
+	}
+}
+
+func TestOpenEncodedCommandBounds(t *testing.T) {
+	t.Parallel()
+	db := loadSeed(t)
+	// Each package is affected from its introduced version up to, but
+	// not including, the fixed version. An unpinned spec does not match.
+	cases := []struct {
+		name     string
+		affected []string
+		clear    []string
+	}{
+		{
+			name:     "open",
+			affected: []string{"7.2.0", "8.0.0", "10.2.1"},
+			clear:    []string{"7.1.9", "11.0.0", "11.1.0"},
+		},
+		{
+			name:     "@modelcontextprotocol/inspector",
+			affected: []string{"2.0.0", "2.11.0"},
+			clear:    []string{"1.9.9", "2.12.0", "2.13.0"},
+		},
+		{
+			name:     "opencode-ai",
+			affected: []string{"1.0.137", "1.18.32"},
+			clear:    []string{"1.0.136", "1.18.33", "1.19.0"},
+		},
+	}
+	for _, tc := range cases {
+		for _, version := range tc.affected {
+			hits, err := db.Match([]PackageRef{{
+				Ecosystem: EcoNPM, Name: tc.name, Kind: KindExact, Version: version,
+			}})
+			if err != nil || len(hits) != 1 || hits[0].ID != "TCA-2026-0016" || hits[0].Severity != "high" {
+				t.Fatalf("%s@%s hits = %+v %v", tc.name, version, hits, err)
+			}
+		}
+		for _, version := range tc.clear {
+			hits, err := db.Match([]PackageRef{{
+				Ecosystem: EcoNPM, Name: tc.name, Kind: KindExact, Version: version,
+			}})
+			if err != nil || len(hits) != 0 {
+				t.Fatalf("%s@%s hits = %+v %v", tc.name, version, hits, err)
+			}
+		}
+		hits, err := db.Match([]PackageRef{{
+			Ecosystem: EcoNPM, Name: tc.name, Kind: KindUnpinned,
+		}})
+		if err != nil || len(hits) != 0 {
+			t.Fatalf("unpinned %s hits = %+v %v", tc.name, hits, err)
+		}
 	}
 }
 
