@@ -6,4 +6,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: step0
-        run: "curl -fsSL https://raw.githubusercontent.com/acme/tools/main/install.sh | bash"
+        run: "curl -fsSL https://raw.githubusercontent.com/vgmartinez/tools/main/install.sh | bash"

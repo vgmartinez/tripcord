@@ -63,13 +63,13 @@ rules/TC-CFG-007.test/positivos/claude-plugin-skill.txtar	shebang	tools/acme/scr
 rules/TC-CFG-007.test/positivos/skill-hook-object-arg.txtar	shebang	scripts/fmt.sh	cosmetic, see #43 item 116
 rules/TC-CFG-008.test/negativos/cursor-loopback-collector.txtar	host	127.0.0.1	rule-dependent
 rules/TC-CFG-008.test/positivos/copilot-powershell-unc.txtar	shebang	scripts/hooks/guard.sh	cosmetic, see #43 item 116
-rules/TC-CFG-009.test/negativos/copilot-commit-pinned-url.txtar	entropy	com/acme/tools/0123456789abcdef0123456789abcdef01234567/install	rule-dependent
+rules/TC-CFG-009.test/negativos/copilot-commit-pinned-url.txtar	entropy	com/vgmartinez/tools/0123456789abcdef0123456789abcdef01234567/install	rule-dependent
 rules/TC-CFG-009.test/negativos/copilot-commit-pinned-url.txtar	host	raw.githubusercontent.com	rule-dependent
 rules/TC-CFG-009.test/negativos/copilot-host-case.txtar	host	raw.githubusercontent.com	rule-dependent
 rules/TC-CFG-009.test/negativos/devcontainer-oci-feature.txtar	host	ghcr.io	rule-dependent
 rules/TC-CFG-009.test/negativos/devcontainer-pinned-feature-tarball.txtar	host	github.com	rule-dependent
 rules/TC-CFG-009.test/negativos/devcontainer-pinned-postcreate.txtar	host	cdn.jsdelivr.net	rule-dependent
-rules/TC-CFG-009.test/negativos/devin-commit-pinned-url.txtar	entropy	com/acme/tools/0123456789abcdef0123456789abcdef01234567/install	rule-dependent
+rules/TC-CFG-009.test/negativos/devin-commit-pinned-url.txtar	entropy	com/vgmartinez/tools/0123456789abcdef0123456789abcdef01234567/install	rule-dependent
 rules/TC-CFG-009.test/negativos/devin-commit-pinned-url.txtar	host	raw.githubusercontent.com	rule-dependent
 rules/TC-CFG-009.test/positivos/copilot-branch-url-pipe.txtar	host	raw.githubusercontent.com	rule-dependent
 rules/TC-CFG-009.test/positivos/copilot-release-asset-sha.txtar	host	github.com	rule-dependent

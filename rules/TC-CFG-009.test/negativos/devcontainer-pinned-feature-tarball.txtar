@@ -1,6 +1,6 @@
 -- .devcontainer/devcontainer.json --
 {
   "features": {
-    "https://github.com/acme/features/raw/0123456789abcdef0123456789abcdef01234567/feature.tgz": {}
+    "https://github.com/vgmartinez/features/raw/abababababababababababababababababababab/feature.tgz": {}
   }
 }
