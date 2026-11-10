@@ -24,6 +24,9 @@ order:
 | Token shapes | private key blocks, `AKIA…`, AWS secret keys, `ghp_…`, `github_pat_…`, `glpat-…`, `sk-…`, `sk_live_…`, `xox?-…`, `xapp-…`, `npm_…`, `hf_…`, `ya29.…`, `AIza…`, JWTs, `bearer X`, Slack webhook URLs | `secretPatterns` |
 | An assignment to a credential name, `=` or `:` | `SECRET_KEY=X`, `api_key: X`, `"api_key": X` | `RedactAssignments`, `CredentialName` |
 | A YAML block scalar, nested mapping, or comment gap under a credential name, as a whole | `api_key: \|-` then `  X`, `token:` then `  "pw":X`, `token: # secret` then `  X` | `redactColonAssignments` (`blockScalarHeader`, `nestedMappingStart`, `commentGapStart`) |
+| A YAML value that continues on later lines: a quoted scalar that closes later, or a more-indented line after the value, a comment, or a commented-out key | `token: "q" # c` then `  X`, `token: "abc` then `  X"`, `# token: # c` then `  X` | `redactColonAssignments` (`valueContinuation`, `multilineQuotedValue`, `commentHeadBodyEnd`) |
+| The word `password` or `passwd` and the word after it (netrc) | `machine h login u password X`, `setup password X` | `RedactToolFlags` (`redactPasswordWords`) |
+| `-p X` in a command that also names a user (`-u`, `-U`, `-l`, `--user`, `--username`, `--login`, or a `login` subcommand), for any tool | `docker login -u bot -p X`, `regcli --user bot -p X` | `RedactToolFlags` (`redactUserContextPassword`) |
 
 A shell line continuation (`\` and a newline) between a flag, a header,
 or `bearer` and its value is skipped, as the shell deletes it.
@@ -40,6 +43,21 @@ including the header and every gap comment, and replaces the whole
 span through the indented body with one marker. A `#` with nothing
 indented after it is the value itself.
 
+A key that starts its line (after blanks and `- `) also owns the
+more-indented lines after its value: `token: "q" # c` followed by
+`  X` redacts `X`, and a quoted scalar is read with YAML's rules (a
+`\"` or a `''` does not close it) through a closing quote on a later
+line. A key inside a shell command keeps the text after it. A
+commented-out key whose header comment is followed by content redacts
+the first content line and the lines indented deeper than it, since
+the original key's indentation is unknown. `-p X` is not redacted
+without a user in the command, so `mkdir -p`, `cp -p`, `ssh -p 22`, and
+`docker run -p 8080:80` keep their value, and a port mapping is never
+redacted. `password` matches only as a whole word: `--password-stdin`,
+`db_password`, and `password: x` are other classes. The word after
+`password` in free text (`echo password reset`) is redacted too: a
+hidden word costs less than a leaked password.
+
 The home directory classes (S5 to S7) are not redactor patterns but path
 folding: the running user's home directory is shown as `~` in every
 error (`foldHome` in `cmd/tripcord`, matched case-insensitively on
@@ -53,7 +71,15 @@ keys, and fingerprints are built from sanitized text. An entry that
 lost a value to redaction carries a `sig:` discriminator, so two
 different secrets in the same place keep distinct fingerprints
 (`fingerprintMode` `s1` or `k1`; see [fingerprint.md](fingerprint.md)).
-Every sink then redacts again.
+Every sink then redacts again, in `redactFinding`, the one function
+every sink and `output.PublishFinding` publish a finding through. An
+evidence key is a JSON array that includes the entry's command, and
+JSON escaping (`\n`, `\"`, `\u`) hides what the redactor keys on, so
+`redactFinding` decodes a key that is JSON, redacts each string in it as
+plain text, and encodes it again only when one changed. A test fills
+every plain string field of a finding with a sentinel and fails when
+`redactFinding` or `PublishFinding` leaves it, so a field added without
+redaction cannot ship.
 
 ## Output inventory
 

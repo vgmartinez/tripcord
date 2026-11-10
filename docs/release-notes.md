@@ -2,6 +2,31 @@
 
 ## v0 (unreleased)
 
+### More secret shapes are redacted, in evidence keys too
+
+JSON and JSONL output carry the evidence key of a finding, which
+includes the full command of a hook or setup step, and some secrets
+stayed in it. These are now redacted in every format (text, JSON, JSONL,
+SARIF, Markdown, annotations): a YAML value that continues on later
+lines (a quoted value, a comment, then a more-indented line; a quoted
+scalar that closes on a later line; a commented-out key followed by its
+value), a netrc line (`machine h login u password X`, also in a
+copilot-setup-steps `run:` block), the word after `password`, and `-p X`
+in a command that names a user. The sink also decodes the key and
+redacts each string in it, instead of the JSON text, which hid the
+shapes behind `\n` and `\"`.
+
+Fingerprints change only for an entry whose command carried one of these
+shapes. Its key and fingerprint are built from the sanitized command,
+which before still held the secret, so the fingerprint depended on it
+(under `s1`, rotating it changed the fingerprint). It is now redacted
+before it is hashed, so under `s1` the fingerprint no longer depends on
+the secret. Every other fingerprint is unchanged: the 95 corpus
+directories scan to byte-identical JSONL. The sink itself never changes
+a fingerprint, since it is computed before the sink runs. As with the
+section below, this lands before the first release, so a baseline keyed
+by a fingerprint of one of these entries is recorded once.
+
 ### Fingerprints of secret-bearing entries change
 
 Findings on a configuration entry that lost a value to redaction (a
