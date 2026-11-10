@@ -96,7 +96,14 @@ func (e *bootstrapEnv) run(t *testing.T, args ...string) (int, string) {
 // since harnesses parse stdout.
 func (e *bootstrapEnv) runSplit(t *testing.T, args ...string) (int, string, string) {
 	t.Helper()
-	cmd := exec.Command("sh", append([]string{filepath.Join(e.repo, BootstrapPath)}, args...)...)
+	return e.runShell(t, "sh", args...)
+}
+
+// runShell is runSplit with an explicit interpreter. The hook line init
+// writes is bash, which takes the builtin uid and platform path.
+func (e *bootstrapEnv) runShell(t *testing.T, shell string, args ...string) (int, string, string) {
+	t.Helper()
+	cmd := exec.Command(shell, append([]string{filepath.Join(e.repo, BootstrapPath)}, args...)...)
 	cmd.Env = append([]string{
 		"PATH=" + e.stubs + string(os.PathListSeparator) + os.Getenv("PATH"),
 		"HOME=" + t.TempDir(),
@@ -144,7 +151,7 @@ func TestBootstrapScriptHasNoUnpinnedFetch(t *testing.T) {
 			t.Errorf("bootstrap.sh contains %q", banned)
 		}
 	}
-	for _, want := range []string{"set -eu", "TRIPCORD_VERSION='0.1.0'", `"$cp_tool" "$cached" "$copy"`, `got="$(sha256_of "$copy")"`, `run_copy "$copy" hook "$@"`} {
+	for _, want := range []string{"set -eu", "TRIPCORD_VERSION='0.1.0'", `"$cp_tool" "$cached" "$copy"`, `got="$(sha256_of "$copy")"`, `run_bin "$copy" hook "$@"`, "no longer matches the binary that was verified"} {
 		if !strings.Contains(script, want) {
 			t.Errorf("bootstrap.sh lacks %q", want)
 		}
@@ -494,7 +501,7 @@ func TestBootstrapSwapBetweenHashAndExec(t *testing.T) {
 		switch {
 		case code == 0 && e.ran(t) != "":
 			ok++
-		case code == 2 && (strings.Contains(stderr, "not the pinned") || strings.Contains(stderr, "cannot copy the cached tripcord")):
+		case code == 2 && (strings.Contains(stderr, "not the pinned") || strings.Contains(stderr, "cannot copy the cached tripcord") || strings.Contains(stderr, "changed while it was being verified") || strings.Contains(stderr, "no longer matches")):
 			refused++
 		default:
 			close(stop)
@@ -587,6 +594,136 @@ func TestBootstrapNixToolLookup(t *testing.T) {
 	nix := strings.Index(script, `if nix_tools_safe &&`)
 	if standard < 0 || nix < standard {
 		t.Fatalf("tool lookup is not standard paths before safe Nix: standard=%d nix=%d", standard, nix)
+	}
+}
+
+// TestBootstrapHookRefusesChangedBinary verifies the cached binary, then
+// replaces it. hook must exit 2 and run nothing: a new inode with the
+// same bytes, an in-place edit, and a different program. It must not
+// hash the replacement and run it.
+func TestBootstrapHookRefusesChangedBinary(t *testing.T) {
+	const evilBinary = "#!/bin/sh\n: >\"$TRIPCORD_TEST_EVIL\"\n"
+	hookArgs := []string{"hook", "--harness", "claude", "--event", HookEvent}
+	refuse := func(t *testing.T, e *bootstrapEnv) {
+		t.Helper()
+		code, stdout, stderr := e.runSplit(t, hookArgs...)
+		if code != 2 || stdout != "" || !strings.Contains(stderr, "no longer matches the binary that was verified") || e.ran(t) != "" {
+			t.Fatalf("exit %d, stdout %q, stderr %q", code, stdout, stderr)
+		}
+	}
+	t.Run("same bytes new inode", func(t *testing.T) {
+		e := newBootstrapEnv(t, nil)
+		e.putCache(t, fakeBinary)
+		if code, out := e.run(t, "install"); code != 0 {
+			t.Fatalf("install: exit %d: %s", code, out)
+		}
+		if err := os.Remove(e.args); err != nil {
+			t.Fatal(err)
+		}
+		dir := filepath.Dir(e.cached())
+		write(t, dir, "twin", fakeBinary)
+		mustChmod(t, filepath.Join(dir, "twin"), 0o755)
+		if err := os.Rename(filepath.Join(dir, "twin"), e.cached()); err != nil {
+			t.Fatal(err)
+		}
+		refuse(t, e)
+	})
+	t.Run("modified in place", func(t *testing.T) {
+		e := newBootstrapEnv(t, nil)
+		e.putCache(t, fakeBinary)
+		if code, out := e.run(t, "install"); code != 0 {
+			t.Fatalf("install: exit %d: %s", code, out)
+		}
+		if err := os.Remove(e.args); err != nil {
+			t.Fatal(err)
+		}
+		f, err := os.OpenFile(e.cached(), os.O_APPEND|os.O_WRONLY, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.WriteString("# changed\n"); err != nil {
+			t.Fatal(err)
+		}
+		if err := f.Close(); err != nil {
+			t.Fatal(err)
+		}
+		refuse(t, e)
+	})
+	t.Run("swapped program", func(t *testing.T) {
+		e := newBootstrapEnv(t, nil)
+		e.putCache(t, fakeBinary)
+		evilRan := filepath.Join(t.TempDir(), "evil-ran")
+		e.extraEnv = []string{"TRIPCORD_TEST_EVIL=" + evilRan}
+		if code, out := e.run(t, "install"); code != 0 {
+			t.Fatalf("install: exit %d: %s", code, out)
+		}
+		if err := os.Remove(e.args); err != nil && !errors.Is(err, os.ErrNotExist) {
+			t.Fatal(err)
+		}
+		dir := filepath.Dir(e.cached())
+		write(t, dir, "evil", evilBinary)
+		mustChmod(t, filepath.Join(dir, "evil"), 0o755)
+		if err := os.Rename(filepath.Join(dir, "evil"), e.cached()); err != nil {
+			t.Fatal(err)
+		}
+		refuse(t, e)
+		if _, err := os.Stat(evilRan); err == nil {
+			t.Fatal("the swapped-in binary ran")
+		}
+	})
+}
+
+// TestBootstrapBashHookRefusesSwappedBinary covers the interpreter the
+// harness actually runs. bash takes the builtin uid and platform path,
+// then the same stat check: a same-bytes replacement is a new inode, so
+// hook exits 2 and does not run it.
+func TestBootstrapBashHookRefusesSwappedBinary(t *testing.T) {
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("bash is not installed")
+	}
+	e := newBootstrapEnv(t, nil)
+	e.putCache(t, fakeBinary)
+	if code, stdout, stderr := e.runShell(t, "bash", "install"); code != 0 {
+		t.Fatalf("install: exit %d: %s%s", code, stdout, stderr)
+	}
+	if err := os.Remove(e.args); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Dir(e.cached())
+	write(t, dir, "twin", fakeBinary)
+	mustChmod(t, filepath.Join(dir, "twin"), 0o755)
+	if err := os.Rename(filepath.Join(dir, "twin"), e.cached()); err != nil {
+		t.Fatal(err)
+	}
+	code, stdout, stderr := e.runShell(t, "bash", "hook", "--harness", "claude", "--event", HookEvent)
+	if code != 2 || stdout != "" || !strings.Contains(stderr, "no longer matches the binary that was verified") || e.ran(t) != "" {
+		t.Fatalf("exit %d, stdout %q, stderr %q", code, stdout, stderr)
+	}
+}
+
+// TestBootstrapHookHotPathRunsVerifiedFile: after verification, hook
+// runs the cached file itself. The first unverified hook still runs a
+// private copy.
+func TestBootstrapHookHotPathRunsVerifiedFile(t *testing.T) {
+	e := newBootstrapEnv(t, map[string]string{hostPlatform(t): sum(selfPathBinary)})
+	e.putCache(t, selfPathBinary)
+	hookArgs := []string{"hook", "--harness", "claude", "--event", HookEvent}
+	if code, out := e.run(t, hookArgs...); code != 0 {
+		t.Fatalf("first hook: exit %d: %s", code, out)
+	}
+	first := strings.TrimSpace(e.ran(t))
+	runs := filepath.Join(e.cache, "tripcord", ".run")
+	if first == e.cached() || filepath.Dir(filepath.Dir(first)) != runs {
+		t.Fatalf("unverified hook ran %q, want a private copy under %s", first, runs)
+	}
+	if err := os.Remove(e.args); err != nil {
+		t.Fatal(err)
+	}
+	if code, out := e.run(t, hookArgs...); code != 0 {
+		t.Fatalf("verified hook: exit %d: %s", code, out)
+	}
+	if got := strings.TrimSpace(e.ran(t)); got != e.cached() {
+		t.Fatalf("verified hook ran %q, want %s", got, e.cached())
 	}
 }
 

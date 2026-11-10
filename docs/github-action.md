@@ -73,7 +73,9 @@ whose head repository differs from its base repository skips both the
 SARIF upload and the comment and emits a warning. A missing SARIF file,
 for example when the scan exits 3 before writing the report, warns that
 the file is missing. A read-only token warns that the token cannot
-upload code scanning results. None of these cases fails the job.
+upload code scanning results. When the token's identity cannot be read,
+the action posts no comment and edits no existing comment, and warns.
+None of these cases fails the job.
 
 ```yaml
 - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -88,7 +90,8 @@ upload code scanning results. None of these cases fails the job.
 `path` defaults to `.`. As above, a path inside a Git repository scans
 that repository from its git root. `upload-sarif` defaults to `true`.
 Set `comment: true` to create or update a marked Markdown comment on
-pull-request events.
+pull-request events. When the token's identity cannot be read, the
+action posts no comment and edits no existing comment.
 
 A job that calls the composite action directly needs
 `security-events: write` when SARIF upload is enabled and

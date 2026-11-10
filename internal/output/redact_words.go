@@ -36,6 +36,7 @@ func redactPasswordWords(command string) (string, []string) {
 	var b strings.Builder
 	var spans literalSpans
 	spansFound := false
+	quotes := indexEscapedQuotes(command)
 	pos, written := 0, 0
 	for pos < len(command) {
 		m := passwordWordHead.FindStringSubmatchIndex(command[pos:])
@@ -44,11 +45,16 @@ func redactPasswordWords(command string) (string, []string) {
 		}
 		wordStart, sepEnd := pos+m[4], pos+m[1]
 		pos = sepEnd
-		loc := passwordWordValue.FindStringIndex(command[sepEnd:])
-		if loc == nil {
-			continue
+		var body string
+		if alt, ok := quotes.at(command, sepEnd); ok {
+			body = alt
+		} else {
+			loc := passwordWordValue.FindStringIndex(command[sepEnd:])
+			if loc == nil {
+				continue
+			}
+			body = command[sepEnd : sepEnd+loc[1]]
 		}
-		body := command[sepEnd : sepEnd+loc[1]]
 		if placeholderSecret(body) {
 			continue
 		}
@@ -96,22 +102,100 @@ func hasUserContext(words []string) bool {
 }
 
 // passwordShortValue reports whether value after "-p" is a secret: not a
-// flag, a placeholder, or a port mapping.
-func passwordShortValue(value string) bool {
+// flag, a placeholder, or, when keepPort is set, a port mapping. keepPort
+// is only for docker run and podman run (and their container run forms).
+// Any other command that names a user redacts the value even when it
+// contains ":", so "ssh -l alice -p deadbeef:22" does not pass as a port.
+func passwordShortValue(value string, keepPort bool) bool {
 	inner := unquote(value)
-	isPortMapping := strings.Contains(inner, ":") && portMapping.MatchString(inner)
-	return inner != "" && !strings.HasPrefix(inner, "-") && !placeholderSecret(inner) && !isPortMapping
+	if keepPort && strings.Contains(inner, ":") && portMapping.MatchString(inner) {
+		return false
+	}
+	return inner != "" && !strings.HasPrefix(inner, "-") && !placeholderSecret(inner)
 }
 
 // passwordArgValue is passwordShortValue for an argv element. The element
 // after a "password" word is a secret even when it has a port mapping's
 // shape.
-func passwordArgValue(value string, afterWord bool) bool {
+func passwordArgValue(value string, afterWord, keepPort bool) bool {
 	if !afterWord {
-		return passwordShortValue(value)
+		return passwordShortValue(value, keepPort)
 	}
 	inner := unquote(value)
 	return inner != "" && !strings.HasPrefix(inner, "-") && !placeholderSecret(inner)
+}
+
+// isContainerRun reports whether words invoke docker run or podman run,
+// including "docker container run" and "podman container run". A wrapper
+// or a path (sudo docker, /usr/bin/podman) still counts. docker login
+// does not.
+func isContainerRun(words []string) bool {
+	for i := 0; i < len(words); i++ {
+		prev := ""
+		if i > 0 {
+			prev = words[i-1]
+		}
+		name := toolWordName(prev, words[i])
+		if name != "docker" && name != "podman" {
+			continue
+		}
+		if containerRunAfter(words[i+1:]) {
+			return true
+		}
+	}
+	return false
+}
+
+// containerRunAfter reports whether the words after the tool name are a
+// run subcommand. Global options may sit between the tool and run
+// ("docker -H host run"); a different subcommand ("login", "build") does
+// not.
+func containerRunAfter(words []string) bool {
+	for i := 0; i < len(words); {
+		w := strings.ToLower(strings.Trim(words[i], `"'`))
+		switch {
+		case w == "run":
+			return true
+		case w == "container":
+			return containerThenRun(words[i+1:])
+		case optionTakesValue(w):
+			i += 2
+		case strings.HasPrefix(w, "-"):
+			i++
+		default:
+			return false
+		}
+	}
+	return false
+}
+
+func containerThenRun(words []string) bool {
+	for i := 0; i < len(words); {
+		w := strings.ToLower(strings.Trim(words[i], `"'`))
+		switch {
+		case w == "run":
+			return true
+		case optionTakesValue(w):
+			i += 2
+		case strings.HasPrefix(w, "-"):
+			i++
+		default:
+			return false
+		}
+	}
+	return false
+}
+
+// optionTakesValue reports whether flag is a docker or podman global
+// option that takes the next word as its argument, so that word is not
+// the subcommand. A flag with its value glued by "=" does not.
+func optionTakesValue(flag string) bool {
+	switch flag {
+	case "-h", "--host", "-c", "--context", "--config", "-l", "--log-level":
+		return true
+	default:
+		return false
+	}
 }
 
 var shortPasswordFlag = regexp.MustCompile(`(^|\s)(-p)((?:\s|` + lineContinuation + `)+)`)
@@ -119,9 +203,11 @@ var shortPasswordFlag = regexp.MustCompile(`(^|\s)(-p)((?:\s|` + lineContinuatio
 // redactUserContextPassword redacts the value of "-p" in a command
 // segment that also names a user (-u, -U, -l, --user, --username,
 // --login, or a login subcommand): "docker login -u bot -p X", "regcli
-// --user bot -p X". Without a user next to it, -p is left alone (mkdir
-// -p, cp -p, ssh -p 22, docker run -p 80:80). It returns the raw values
-// it removed.
+// --user bot -p X", "ssh -l alice -p deadbeef:22". Without a user next
+// to it, -p is left alone (mkdir -p, cp -p, ssh -p 22, docker run -p
+// 80:80). A value containing ":" is still kept when the command is
+// docker run or podman run, including container run, because that -p
+// publishes a port. It returns the raw values it removed.
 func redactUserContextPassword(segment string) (string, []string) {
 	if !strings.Contains(segment, "-p") {
 		return segment, nil
@@ -133,8 +219,10 @@ func redactUserContextPassword(segment string) (string, []string) {
 	if !hasUserContext(words) {
 		return segment, nil
 	}
+	keepPort := isContainerRun(words)
 	var removed []string
 	var b strings.Builder
+	quotes := indexEscapedQuotes(segment)
 	pos, written := 0, 0
 	for pos < len(segment) {
 		m := shortPasswordFlag.FindStringSubmatchIndex(segment[pos:])
@@ -143,12 +231,17 @@ func redactUserContextPassword(segment string) (string, []string) {
 		}
 		sepEnd := pos + m[1]
 		pos = sepEnd
-		loc := secretFlagSpaceValue.FindStringIndex(segment[sepEnd:])
-		if loc == nil {
-			continue
+		var body string
+		if alt, ok := quotes.at(segment, sepEnd); ok {
+			body = alt
+		} else {
+			loc := secretFlagSpaceValue.FindStringIndex(segment[sepEnd:])
+			if loc == nil {
+				continue
+			}
+			body = segment[sepEnd : sepEnd+loc[1]]
 		}
-		body := segment[sepEnd : sepEnd+loc[1]]
-		if !passwordShortValue(body) {
+		if !passwordShortValue(body, keepPort) {
 			continue
 		}
 		removed = append(removed, unquote(body))
@@ -170,13 +263,14 @@ func redactArgvPasswordWords(argv []string) ([]string, []string) {
 	out := append([]string(nil), argv...)
 	var removed []string
 	userContext := hasUserContext(argv)
+	keepPort := isContainerRun(argv)
 	for i := 0; i+1 < len(argv); i++ {
 		word := strings.ToLower(strings.Trim(argv[i], `"'`))
 		isPasswordWord := word == "password" || word == "passwd"
 		if !isPasswordWord && (!userContext || argv[i] != "-p") {
 			continue
 		}
-		if value := argv[i+1]; passwordArgValue(value, isPasswordWord) {
+		if value := argv[i+1]; passwordArgValue(value, isPasswordWord, keepPort) {
 			removed = append(removed, unquote(value))
 			out[i+1] = quoteLike(value, redactedMarker)
 			i++

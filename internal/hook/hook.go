@@ -15,6 +15,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"os"
+	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"time"
@@ -110,11 +113,18 @@ type Call struct {
 	// Input is the tool's input object. Only command, path, and URL
 	// fields are kept.
 	Input map[string]any
-	// Command and Paths, when set, are used as given (Cursor
-	// beforeShellExecution and beforeReadFile carry them at top level).
+	// Command, when set, is used as given (Cursor beforeShellExecution
+	// carries it at top level).
 	Command string
-	Paths   []string
-	Kind    model.EventKind
+	// Paths, including Cursor beforeReadFile's file_path, are cleaned
+	// and made absolute against Dir before the policy runs.
+	Paths []string
+	// Dir is the directory a relative tool path is resolved against:
+	// the hook JSON's cwd, or a project root when the harness sends
+	// one and no cwd. Empty uses the process working directory, and
+	// only when a path is relative.
+	Dir  string
+	Kind model.EventKind
 }
 
 var (
@@ -139,7 +149,6 @@ func (c Call) Event(raw []byte, now time.Time) model.Event {
 		Session: model.EventSession{ID: c.SessionID},
 		Tool:    c.Tool,
 		Command: c.Command,
-		Paths:   slices.Clone(c.Paths),
 		Kind:    c.Kind,
 	}
 	if ev.Session.ID == "" {
@@ -150,11 +159,13 @@ func (c Call) Event(raw []byte, now time.Time) model.Event {
 			ev.Command = s
 		}
 	}
+	rawPaths := slices.Clone(c.Paths)
 	for _, k := range pathKeys {
-		if s, ok := c.Input[k].(string); ok && s != "" && !slices.Contains(ev.Paths, s) {
-			ev.Paths = append(ev.Paths, s)
+		if s, ok := c.Input[k].(string); ok && s != "" {
+			rawPaths = append(rawPaths, s)
 		}
 	}
+	ev.Paths = normalizeToolPaths(rawPaths, c.Dir, runtime.GOOS == "windows")
 	if s, ok := c.Input[urlKey].(string); ok && s != "" {
 		n := model.NetEvent{URL: s}
 		if u, err := url.Parse(s); err == nil {
@@ -166,6 +177,95 @@ func (c Call) Event(raw []byte, now time.Time) model.Event {
 		ev.Kind = kindOf(c.Tool, ev)
 	}
 	return ev
+}
+
+// normalizeToolPaths cleans each path and makes a relative path
+// absolute against dir (the process working directory when dir is
+// empty). The result uses forward slashes. On Windows, ASCII letters
+// are lowercased, because the filesystem does not distinguish them;
+// other platforms keep case. Duplicate paths are dropped.
+func normalizeToolPaths(paths []string, dir string, windows bool) []string {
+	if len(paths) == 0 {
+		return nil
+	}
+	base := ""
+	for _, p := range paths {
+		p = strings.TrimSpace(p)
+		if p != "" && !pathKeepsURL(p) && !filepath.IsAbs(p) {
+			base = toolBase(dir)
+			break
+		}
+	}
+	var out []string
+	for _, p := range paths {
+		n := cleanToolPath(p, base, windows)
+		if n == "" || slices.Contains(out, n) {
+			continue
+		}
+		out = append(out, n)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func toolBase(dir string) string {
+	dir = strings.TrimSpace(dir)
+	if dir == "" {
+		wd, err := os.Getwd()
+		if err != nil {
+			return ""
+		}
+		return wd
+	}
+	dir = filepath.Clean(dir)
+	if filepath.IsAbs(dir) {
+		return dir
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		return dir
+	}
+	return filepath.Clean(filepath.Join(wd, dir))
+}
+
+// pathKeepsURL reports a value filepath.Clean would damage. Clean
+// collapses "://" to ":/", so "https://user:secret@host" becomes a
+// string the redactor does not recognize, and a policy error then
+// prints the secret. Those values are not filesystem paths.
+func pathKeepsURL(p string) bool {
+	return strings.Contains(p, "://")
+}
+
+// cleanToolPath is one tool path after normalization. base is already
+// absolute when a working directory could be resolved; a relative path
+// with an empty base is cleaned and left relative. A value that carries
+// a URL is returned unchanged (see pathKeepsURL).
+func cleanToolPath(p, base string, windows bool) string {
+	p = strings.TrimSpace(p)
+	if p == "" || pathKeepsURL(p) {
+		return p
+	}
+	p = filepath.Clean(p)
+	if base != "" && !filepath.IsAbs(p) {
+		p = filepath.Clean(filepath.Join(base, p))
+	}
+	p = filepath.ToSlash(p)
+	if windows {
+		p = asciiLower(p)
+	}
+	return p
+}
+
+func asciiLower(s string) string {
+	b := []byte(s)
+	for i, c := range b {
+		if c >= 'A' && c <= 'Z' {
+			b[i] = c + ('a' - 'A')
+		}
+	}
+	return string(b)
 }
 
 func kindOf(tool string, ev model.Event) model.EventKind {

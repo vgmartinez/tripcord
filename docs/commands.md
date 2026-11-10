@@ -47,7 +47,7 @@ It does not execute repository content. The full reference, including
 | `--secrets`, `--all` | Reserved for secret scanning, which lands in v1. Currently exits 3. |
 | `--harness` | Comma-separated adapter ids from [Harness adapters](adapters/README.md). Empty means autodetect. |
 | `--scope repo\|user\|managed\|all` | `repo` (default) does not read the home directory or system settings. `user` and `managed` read those locations and skip the repository. `all` reads every scope. |
-| `--format text\|json\|jsonl\|sarif\|md\|gha` | Default `text`. `json` and `jsonl` both write one `tripcord.finding/v1` document per line. `sarif` is SARIF 2.1.0. `md` is Markdown. `gha` is GitHub Actions workflow commands. Help text lists `text`, `json`, `sarif`, `md`, and `gha`; `jsonl` is accepted as well. |
+| `--format text\|json\|jsonl\|sarif\|md\|gha` | Default `text`. `json` and `jsonl` both write one `tripcord.finding/v1` document per line. `sarif` is SARIF 2.1.0. `md` is Markdown. `gha` is GitHub Actions workflow commands. Help text lists `text`, `json`, `jsonl`, `sarif`, `md`, and `gha`. |
 | `--output path\|-` | Write to a new private (`0600`) local file, or `-` for stdout (default). A symlink is rejected. The destination is replaced only after the result is complete. |
 | `--since git-ref` | Repository files that differ between the ref and `HEAD`. The ref must not start with `-`. Untracked files and uncommitted edits are not included. Requires Git. Implies `--base` with the same ref. |
 | `--base git-ref` | Also compare a Tripcord embed with the ref's and report one the change removes, re-pins, or drops a harness from (TC-CFG-016). Requires Git. Must equal `--since` when both are given; not allowed with `--staged`. |
@@ -87,7 +87,7 @@ exiting 3 or 4. See [hook](hook.md).
 ## `tripcord preopen`
 
 `tripcord preopen <git-url|path>` takes the `scan` flags except
-`--since`, and `--scope` must be `repo`. It ignores the fetched
+`--since` and `--staged`, and `--scope` must be `repo`. It ignores the fetched
 repository's own `.tripcord` policy. See [preopen](preopen.md).
 
 ## `tripcord pr-context`

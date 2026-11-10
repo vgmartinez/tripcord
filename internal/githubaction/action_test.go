@@ -205,6 +205,55 @@ func TestTripcordActionContract(t *testing.T) {
 	})
 }
 
+func TestActionRejectsBinaryNewline(t *testing.T) {
+	var tool actionStep
+	for _, step := range parseAction(t).Runs.Steps {
+		if step.ID == "tool" {
+			tool = step
+		}
+	}
+	if tool.Run == "" {
+		t.Fatal("action has no tool step")
+	}
+	for _, tc := range []struct {
+		name, binary string
+	}{
+		{name: "line feed", binary: "/tmp/tripcord\ninjected=1"},
+		{name: "carriage return", binary: "/tmp/tripcord\rinjected=1"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			output := filepath.Join(t.TempDir(), "output")
+			cmd := exec.Command("bash", "-c", tool.Run)
+			cmd.Env = append(os.Environ(), "TRIPCORD_BINARY="+tc.binary, "TRIPCORD_BUILT=", "GITHUB_OUTPUT="+output)
+			out, err := cmd.CombinedOutput()
+			if exitCode(t, err) == 0 || !strings.Contains(string(out), "binary contains a newline") {
+				t.Fatalf("exit error %v\n%s", err, out)
+			}
+			raw, readErr := os.ReadFile(output)
+			if readErr != nil && !os.IsNotExist(readErr) {
+				t.Fatal(readErr)
+			}
+			if strings.Contains(string(raw), "injected=") || strings.Contains(string(raw), "\npath=") {
+				t.Fatalf("GITHUB_OUTPUT = %q", raw)
+			}
+		})
+	}
+	output := filepath.Join(t.TempDir(), "output")
+	cmd := exec.Command("bash", "-c", tool.Run)
+	cmd.Env = append(os.Environ(), "TRIPCORD_BINARY=/tmp/tripcord", "GITHUB_OUTPUT="+output)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("plain binary: %v\n%s", err, out)
+	}
+	raw, err := os.ReadFile(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) != "path=/tmp/tripcord\n" {
+		t.Fatalf("GITHUB_OUTPUT = %q", raw)
+	}
+}
+
 func TestActionRejectsMissingOrEmptyPath(t *testing.T) {
 	action := parseAction(t)
 	var check actionStep
@@ -260,6 +309,10 @@ func TestActionRejectsMissingOrEmptyPath(t *testing.T) {
 		}
 	})
 	t.Run("unreadable directory", func(t *testing.T) {
+		// Root can read a mode-000 directory, so the check would not fail.
+		if runningAsRoot() {
+			t.Skip("euid is 0")
+		}
 		dir := t.TempDir()
 		if err := os.Chmod(dir, 0); err != nil {
 			t.Fatal(err)
@@ -682,6 +735,13 @@ func TestActionScanComparesWithPullRequestBase(t *testing.T) {
 		exit, out := run(t, strings.Repeat("b", 40))
 		if exit != "exit-code=3" || !strings.Contains(out, "fetch-depth: 0") {
 			t.Fatalf("%s\n%s", exit, out)
+		}
+	})
+	t.Run("base workflow command data", func(t *testing.T) {
+		_, out := run(t, "abc%def\n::error::injected\r")
+		want := "::error::tripcord base commit abc%25def%0A::error::injected%0D is not in the checkout"
+		if !strings.Contains(out, want) || strings.Contains(out, "\n::error::injected") || strings.Contains(out, "\r") {
+			t.Fatalf("crafted base = %q\nwant %q", out, want)
 		}
 	})
 }

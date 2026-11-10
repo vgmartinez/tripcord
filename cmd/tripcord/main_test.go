@@ -230,6 +230,17 @@ func TestScanSecretsAndAllDoNotScan(t *testing.T) {
 	}
 }
 
+func TestScanHelpListsJSONL(t *testing.T) {
+	t.Parallel()
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"scan", "--help"}, &stdout, &stderr); code != int(exitcode.OK) {
+		t.Fatalf("exit code = %d, stderr = %q", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "text, json, jsonl, sarif, md, or gha") {
+		t.Fatalf("help = %q", stdout.String())
+	}
+}
+
 func TestScanHelpMarksSecretFlagsAsV1(t *testing.T) {
 	t.Parallel()
 	for _, arg := range []string{"--help", "-h"} {

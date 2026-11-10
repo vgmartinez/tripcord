@@ -1,8 +1,9 @@
 // Command tripcord is the Tripcord command-line interface.
 //
-// Hook mode (hook.go) never compiles the core rule pack unless the
-// policy needs its catalog, so it cold-starts inside the hook latency
-// budget (p95 under 25 ms; see TestHookColdStartBudget).
+// Hook mode (hook.go) never compiles the core rule pack. A lock uses
+// the pack index (ids, severities, harnesses) instead of the compiled
+// expressions, so a locked policy stays inside the hook latency budget
+// (p95 under 25 ms; see TestHookColdStartBudget).
 package main
 
 import (
@@ -290,6 +291,14 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 			writeString(stderr, "tripcord scan: staged scan blocked the commit; bypass only with git commit --no-verify\n")
 		}
 		return code
+	}
+	if !repoRoot(root) {
+		switch {
+		case opts.since != "":
+			return target.configError(stderr, errors.New("--since requires a Git repository"))
+		case opts.base != "":
+			return target.configError(stderr, errors.New("--base requires a Git repository"))
+		}
 	}
 	target.root, target.policyRoot = root, root
 	target.gitRoot = root
@@ -703,7 +712,7 @@ func parseCommandFlags(cmd flagCommand, args []string, stdout io.Writer) (scanOp
 	flags.BoolVar(&opts.all, "all", false, "(v1) not available")
 	flags.StringVar(&opts.harnesses, "harness", "", "comma-separated harnesses; default autodetect")
 	flags.StringVar(&opts.scope, "scope", "repo", "repo, user, managed, or all")
-	flags.StringVar(&opts.format, "format", "text", "text, json, sarif, md, or gha")
+	flags.StringVar(&opts.format, "format", "text", "text, json, jsonl, sarif, md, or gha")
 	flags.StringVar(&opts.output, "output", "-", "output path or - for stdout")
 	flags.StringVar(&opts.since, "since", "", "files changed between the ref and HEAD; requires git")
 	flags.StringVar(&opts.base, "base", "", "base revision of a change: also report a Tripcord embed the change removes or weakens (TC-CFG-016); requires git. --since implies it")
@@ -753,6 +762,8 @@ func parseCommandFlags(cmd flagCommand, args []string, stdout io.Writer) (scanOp
 	switch {
 	case cmd == preopenCommand && flags.NArg() != 1:
 		return opts, errors.New("preopen takes exactly one git URL or local path")
+	case cmd == preopenCommand && opts.staged:
+		return opts, errors.New("--staged is not available: preopen scans the fetched tree, not a Git index")
 	case opts.staged:
 		opts.path = "."
 		if flags.NArg() > 0 {
@@ -864,10 +875,17 @@ func scanRoot(scanPath string) (string, error) {
 		if errors.As(err, &pathErr) {
 			err = pathErr.Err
 		}
+		if errors.Is(err, syscall.ELOOP) {
+			return "", fmt.Errorf("scan path %q: symbolic link loop", output.Message(foldHome(scanPath)))
+		}
 		return "", fmt.Errorf("scan path %q: %w", output.Message(foldHome(scanPath)), err)
 	}
 	if !info.IsDir() {
-		absolute = filepath.Dir(absolute)
+		dir := filepath.Dir(absolute)
+		if gitRoot(dir) == "" {
+			return "", fmt.Errorf("scan path %q is a file outside a Git repository; pass a directory to scan it", output.Message(foldHome(scanPath)))
+		}
+		absolute = dir
 	}
 	if root := gitRoot(absolute); root != "" {
 		return root, nil
