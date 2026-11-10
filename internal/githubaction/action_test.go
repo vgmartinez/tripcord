@@ -2,6 +2,7 @@ package githubaction_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"os"
 	"os/exec"
@@ -671,4 +672,168 @@ func TestActionScanComparesWithPullRequestBase(t *testing.T) {
 			t.Fatalf("%s\n%s", exit, out)
 		}
 	})
+}
+
+// TestCommentUpsertUsesTokenIdentity runs the action's comment script.
+// A marked comment is updated only when its author is the authenticated
+// token: github-actions[bot], another app, or a user. Another bot is left
+// alone even when the login string matches.
+func TestCommentUpsertUsesTokenIdentity(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Fatal("node is not installed")
+	}
+	var script string
+	for _, step := range parseAction(t).Runs.Steps {
+		if strings.Contains(step.With["script"], "tripcord-report") {
+			script = step.With["script"]
+		}
+	}
+	if script == "" {
+		t.Fatal("action has no report comment script")
+	}
+	if strings.Contains(script, `comment.user.type === "Bot"`) {
+		t.Fatal("comment upsert still accepts any bot")
+	}
+	if !strings.Contains(script, "users.getAuthenticated") {
+		t.Fatal("comment upsert does not look up the token identity")
+	}
+
+	markdown := filepath.Join(t.TempDir(), "report.md")
+	if err := os.WriteFile(markdown, []byte("report body\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	const marker = "<!-- tripcord-report -->"
+	comment := func(id int, login string, userID int, kind string) map[string]any {
+		return map[string]any{
+			"id":   id,
+			"body": marker + "\nold",
+			"user": map[string]any{"login": login, "id": userID, "type": kind},
+		}
+	}
+	actions := comment(10, "github-actions[bot]", 41898282, "Bot")
+	dependabot := comment(11, "dependabot[bot]", 49699333, "Bot")
+	human := comment(12, "octocat", 1, "User")
+	spoofed := comment(13, "github-actions[bot]", 1, "Bot")
+	app := comment(14, "my-app[bot]", 99, "Bot")
+
+	run := func(t *testing.T, me map[string]any, comments []map[string]any) []map[string]any {
+		t.Helper()
+		dir := t.TempDir()
+		scriptPath := filepath.Join(dir, "script.js")
+		fixturePath := filepath.Join(dir, "fixture.json")
+		if err := os.WriteFile(scriptPath, []byte(script), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		raw, err := json.Marshal(map[string]any{"markdown": markdown, "me": me, "comments": comments})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(fixturePath, raw, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		harness := `
+const fs = require("fs");
+const script = fs.readFileSync(process.argv[1], "utf8");
+const fixture = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const calls = [];
+const core = { warning(message) { calls.push({ op: "warning", message }); } };
+const context = { payload: { pull_request: { number: 7 } }, repo: { owner: "acme", repo: "tools" } };
+const github = {
+  paginate: async () => fixture.comments,
+  rest: {
+    users: { getAuthenticated: async () => ({ data: fixture.me }) },
+    issues: {
+      updateComment: async (args) => { calls.push({ op: "update", id: args.comment_id }); },
+      createComment: async (args) => { calls.push({ op: "create", body: args.body }); },
+    },
+  },
+};
+process.env.TRIPCORD_MARKDOWN = fixture.markdown;
+process.env.TRIPCORD_HEAD_REPO = "";
+process.env.TRIPCORD_BASE_REPO = "";
+const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+new AsyncFunction("core", "context", "github", "process", script)(core, context, github, process)
+  .then(() => process.stdout.write(JSON.stringify(calls)))
+  .catch((err) => { console.error(err); process.exit(1); });
+`
+		cmd := exec.Command("node", "-e", harness, scriptPath, fixturePath)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("comment script: %v\n%s", err, out)
+		}
+		var calls []map[string]any
+		if err := json.Unmarshal(out, &calls); err != nil {
+			t.Fatalf("calls %s: %v", out, err)
+		}
+		return calls
+	}
+	ops := func(calls []map[string]any) []string {
+		t.Helper()
+		var got []string
+		for _, call := range calls {
+			switch call["op"] {
+			case "update":
+				got = append(got, "update:"+jsonNumber(t, call["id"]))
+			case "create":
+				body, _ := call["body"].(string)
+				if !strings.HasPrefix(body, marker+"\n") || !strings.Contains(body, "report body") {
+					t.Fatalf("create body = %q", body)
+				}
+				got = append(got, "create")
+			case "warning":
+				got = append(got, "warning")
+			default:
+				t.Fatalf("call = %#v", call)
+			}
+		}
+		return got
+	}
+	assertOps := func(t *testing.T, me map[string]any, comments []map[string]any, want ...string) {
+		t.Helper()
+		got := ops(run(t, me, comments))
+		if strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Fatalf("ops = %v, want %v", got, want)
+		}
+	}
+
+	t.Run("github-actions bot", func(t *testing.T) {
+		assertOps(t,
+			map[string]any{"login": "github-actions[bot]", "id": 41898282, "type": "Bot"},
+			[]map[string]any{dependabot, human, spoofed, actions},
+			"update:10",
+		)
+	})
+	t.Run("authenticated app", func(t *testing.T) {
+		assertOps(t,
+			map[string]any{"login": "my-app[bot]", "id": 99, "type": "Bot"},
+			[]map[string]any{actions, app},
+			"update:14",
+		)
+	})
+	t.Run("authenticated user", func(t *testing.T) {
+		assertOps(t,
+			map[string]any{"login": "octocat", "id": 1, "type": "User"},
+			[]map[string]any{actions, human},
+			"update:12",
+		)
+	})
+	t.Run("someone else's comment is not edited", func(t *testing.T) {
+		assertOps(t,
+			map[string]any{"login": "github-actions[bot]", "id": 41898282, "type": "Bot"},
+			[]map[string]any{dependabot, human, spoofed},
+			"create",
+		)
+	})
+	t.Run("missing identity", func(t *testing.T) {
+		assertOps(t, map[string]any{}, []map[string]any{actions}, "warning")
+	})
+}
+
+func jsonNumber(t *testing.T, v any) string {
+	t.Helper()
+	raw, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(raw)
 }
