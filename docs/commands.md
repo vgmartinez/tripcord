@@ -9,6 +9,7 @@ tripcord scan [PATH] [flags]
 tripcord pr-context [flags]
 tripcord preopen <git-url|path> [flags]
 tripcord init [PATH] [--embed] [--harness h,...] [flags]
+tripcord hook --harness <claude|cursor|copilot> --event <e> [--on-failure block|error]
 ```
 
 `version` prints the link-time version, or `dev` when it was not set.

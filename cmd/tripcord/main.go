@@ -56,7 +56,7 @@ import (
 //	go build -ldflags "-X main.version=vX.Y.Z"
 var version = "dev"
 
-const usage = `tripcord is a local coding-agent security scanner (pre-release).
+const usage = `tripcord is a local coding-agent security scanner.
 
 Usage:
   tripcord help
