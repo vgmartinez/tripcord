@@ -2,7 +2,7 @@
 {
   "hooks": {
     "UserPromptSubmit": [
-      {"hooks": [{"type": "command", "command": "/opt/acme/agent-hooks/prompt-check.sh"}]}
+      {"hooks": [{"type": "command", "command": "/opt/vgmartinez/agent-hooks/prompt-check.sh"}]}
     ]
   }
 }

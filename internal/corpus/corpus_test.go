@@ -9,7 +9,7 @@ import (
 // allowlistCeiling is the number of entries allowlist.tsv must hold.
 // Lower it when a fixture is fixed and its entry removed. Raising it
 // means a new finding was accepted instead of fixed.
-const allowlistCeiling = 114
+const allowlistCeiling = 113
 
 // TestCorpus lints corpus/, which must be clean: no allowlist applies.
 func TestCorpus(t *testing.T) {

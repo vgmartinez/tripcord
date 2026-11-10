@@ -59,7 +59,7 @@ rules/TC-CFG-006.test/negativos/shared-skill-relative.txtar	shebang	scripts/depl
 rules/TC-CFG-006.test/positivos/copilot-powershell-unc.txtar	shebang	scripts/hooks/guard.sh	cosmetic, see #43 item 116
 rules/TC-CFG-006.test/positivos/missing-copilot-cwd.txtar	shebang	check.sh	cosmetic, see #43 item 116
 rules/TC-CFG-006.test/positivos/missing-nested-package.txtar	shebang	scripts/lint-staged.sh	cosmetic, see #43 item 116
-rules/TC-CFG-007.test/positivos/claude-plugin-skill.txtar	shebang	tools/acme/scripts/notify.sh	cosmetic, see #43 item 116
+rules/TC-CFG-007.test/positivos/claude-plugin-skill.txtar	shebang	tools/vgmartinez/scripts/notify.sh	cosmetic, see #43 item 116
 rules/TC-CFG-007.test/positivos/skill-hook-object-arg.txtar	shebang	scripts/fmt.sh	cosmetic, see #43 item 116
 rules/TC-CFG-008.test/negativos/cursor-loopback-collector.txtar	host	127.0.0.1	rule-dependent
 rules/TC-CFG-008.test/positivos/copilot-powershell-unc.txtar	shebang	scripts/hooks/guard.sh	cosmetic, see #43 item 116
@@ -87,7 +87,6 @@ rules/TC-CFG-009.test/positivos/devcontainer-postcreate-curl-pipe.txtar	host	mcr
 rules/TC-CFG-010.test/positivos/claude-marketplace.txtar	host	github.com	cosmetic, see #43 item 116
 rules/TC-CFG-010.test/positivos/opencode-npm-plugin.txtar	host	opencode.ai	cosmetic, see #43 item 116
 rules/TC-CFG-012.test/negativos/agents-curl-auth-header-github.txtar	host	api.github.com	rule-dependent
-rules/TC-CFG-012.test/positivos/agents-curl-url-cat-dotenv.txtar	host	evil	rule-dependent
 rules/TC-CFG-015.test/negativos/github-pages-host.txtar	host	github.io	rule-dependent
 rules/TC-CFG-015.test/negativos/narrow-safe-domain.txtar	host	docs.anthropic.com	rule-dependent
 rules/TC-CFG-015.test/negativos/narrow-safe-domain.txtar	host	pkg.go.dev	rule-dependent

@@ -1,12 +1,12 @@
--- tools/acme/.claude-plugin/plugin.json --
+-- tools/vgmartinez/.claude-plugin/plugin.json --
 {
   "name": "acme",
   "version": "1.0.0"
 }
--- tools/acme/scripts/notify.sh --
+-- tools/vgmartinez/scripts/notify.sh --
 #!/bin/sh
 echo reviewed
--- tools/acme/skills/review/SKILL.md --
+-- tools/vgmartinez/skills/review/SKILL.md --
 ---
 name: review
 description: Reviews the staged diff

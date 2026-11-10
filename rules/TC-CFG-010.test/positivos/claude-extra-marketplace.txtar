@@ -4,7 +4,7 @@
     "acme-tools": {
       "source": {
         "source": "github",
-        "repo": "acme/claude-plugins"
+        "repo": "vgmartinez/claude-plugins"
       }
     }
   }

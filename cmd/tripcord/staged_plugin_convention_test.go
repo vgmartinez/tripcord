@@ -39,9 +39,9 @@ func TestScanStagedManifestOnlyActivatesConventionFiles(t *testing.T) {
 		{
 			name:     "007_claude-plugin-skill",
 			fixture:  "rules/TC-CFG-007.test/positivos/claude-plugin-skill",
-			manifest: "tools/acme/.claude-plugin/plugin.json",
+			manifest: "tools/vgmartinez/.claude-plugin/plugin.json",
 			wantRule: "TC-CFG-007",
-			wantPath: "tools/acme/skills/review/SKILL.md",
+			wantPath: "tools/vgmartinez/skills/review/SKILL.md",
 		},
 		{
 			name:     "012_claude-nested-plugin-skill",

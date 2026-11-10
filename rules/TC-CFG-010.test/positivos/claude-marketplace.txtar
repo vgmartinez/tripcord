@@ -7,7 +7,7 @@
   "plugins": [
     {
       "name": "fmt",
-      "source": "https://github.com/acme/fmt-plugin.git"
+      "source": "https://github.com/vgmartinez/fmt-plugin.git"
     }
   ]
 }

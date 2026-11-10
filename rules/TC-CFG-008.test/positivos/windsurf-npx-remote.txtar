@@ -3,7 +3,7 @@
   "hooks": {
     "pre_run_command": [
       {
-        "command": "npx -y @acme/windsurf-guard@latest"
+        "command": "npx -y @vgmartinez/windsurf-guard@latest"
       }
     ]
   }

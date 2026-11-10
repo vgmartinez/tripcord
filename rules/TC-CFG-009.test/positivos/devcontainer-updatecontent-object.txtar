@@ -2,6 +2,6 @@
 {
   "updateContentCommand": {
     "deps": "npm ci",
-    "tools": "npx -y @acme/bootstrap"
+    "tools": "npx -y @vgmartinez/bootstrap"
   }
 }
