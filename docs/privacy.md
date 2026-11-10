@@ -138,10 +138,14 @@ Nothing from an event or an excerpt. `scan` writes only the report it
 was asked for (stdout or `--output`) and, outside CI, the per-machine
 fingerprint key (`~/.tripcord/fingerprint.key`). `scan --staged`
 removes its temporary tree, and `preopen` its clone. The hook writes
-nothing; `bootstrap.sh` runs a private copy of the binary from the
-cache's `.run` directory and removes it. `init` writes only its wiring
-and merges into existing settings files, keeping the user's own
-content.
+nothing. `bootstrap.sh` `install` and `session-start`, and a `hook`
+that has not been verified yet, run a private copy of the binary from
+the cache's `.run` directory and remove it. A later `hook` whose
+verification record still matches runs the cached file and does not
+write. The record is the file's identity and the pinned digest, written
+by `install`, `session-start`, or that first hook. `init` writes only
+its wiring and merges into existing settings files, keeping the user's
+own content.
 
 ## `privacy.redact`
 
@@ -187,4 +191,6 @@ and `TestDiscoverHookHeavyBudget` in the CI perf job, hold redaction to
 linear cost on long lines of near-miss candidates.
 `cmd/tripcord/redaction_persist_unix_test.go` checks that scan, the hook
 through `bootstrap.sh`, and init leave no canary in the repository,
-`HOME`, the cache, or `TMPDIR`, and an empty `.run` directory.
+`HOME`, the cache, or `TMPDIR`, and an empty `.run` directory. The
+verification record in the cache is the file identity and the pinned
+digest, not an event.

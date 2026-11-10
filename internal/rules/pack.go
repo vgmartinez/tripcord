@@ -65,6 +65,14 @@ func (p *Pack) LatestAdvisoryReview() string {
 // directories and other non-YAML files are ignored. All problems are
 // reported together.
 func LoadPack(fsys fs.FS, source string, env *Env) (*Pack, error) {
+	return loadPack(fsys, source, env, true)
+}
+
+// loadPack loads the pack at the root of fsys. compile reports whether
+// rule expressions are compiled. The hook's lock checks use the
+// uncompiled index: they read ids, severities, and harnesses, and they
+// never evaluate a core rule.
+func loadPack(fsys fs.FS, source string, env *Env, compile bool) (*Pack, error) {
 	raw, err := readLimited(fsys, ManifestFile, maxManifestBytes)
 	if err != nil {
 		return nil, wrap(source, err)
@@ -99,9 +107,12 @@ func LoadPack(fsys fs.FS, source string, env *Env) (*Pack, error) {
 		return nil, wrap(source, err)
 	}
 	pack := &Pack{Ref: ref, Source: source, Registry: reg}
-	db, err := loadAdvisories(fsys, source)
-	if err != nil {
-		errs = append(errs, err)
+	if compile {
+		db, err := loadAdvisories(fsys, source)
+		if err != nil {
+			errs = append(errs, err)
+		}
+		pack.Advisories = db
 	}
 	seen := map[string]bool{}
 	for _, entry := range entries {
@@ -119,7 +130,7 @@ func LoadPack(fsys fs.FS, source string, env *Env) (*Pack, error) {
 			continue
 		}
 		id := strings.TrimSuffix(name, ".yaml")
-		rule, err := loadRule(fsys, name, id, ref, reg, env)
+		rule, err := loadRule(fsys, name, id, ref, reg, env, compile)
 		if err != nil {
 			errs = append(errs, wrap(file, err))
 			continue
@@ -135,9 +146,8 @@ func LoadPack(fsys fs.FS, source string, env *Env) (*Pack, error) {
 	if len(errs) > 0 {
 		return nil, errors.Join(errs...)
 	}
-	pack.Advisories = db
-	if db != nil && env != nil {
-		env.SetAdvisories(db)
+	if pack.Advisories != nil && env != nil {
+		env.SetAdvisories(pack.Advisories)
 	}
 	return pack, nil
 }
@@ -157,7 +167,7 @@ func loadAdvisories(fsys fs.FS, source string) (*advisory.DB, error) {
 	return db, nil
 }
 
-func loadRule(fsys fs.FS, name, id string, ref PackRef, reg *Registry, env *Env) (*Rule, error) {
+func loadRule(fsys fs.FS, name, id string, ref PackRef, reg *Registry, env *Env, compile bool) (*Rule, error) {
 	if !ValidID(id) {
 		return nil, fmt.Errorf("file name must be <ID>.yaml with a rule id such as TC-CFG-001")
 	}
@@ -181,6 +191,9 @@ func loadRule(fsys fs.FS, name, id string, ref PackRef, reg *Registry, env *Env)
 		return nil, fmt.Errorf("%s is not in %s; append it as active", id, RegistryFile)
 	case entry.Status == StatusRetired:
 		return nil, fmt.Errorf("%s is retired in %s; rule ids are never reused", id, RegistryFile)
+	}
+	if !compile {
+		return indexRule(spec, ref)
 	}
 	return Compile(spec, ref, env)
 }

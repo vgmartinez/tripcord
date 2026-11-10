@@ -67,12 +67,19 @@ func (e *embedE2E) cached() string {
 }
 
 // fillCache copies content into the bootstrap cache as the binary.
+// Replacing the file drops any verification record: the new bytes have
+// not been verified, so the next hook checks them in full. A record left
+// in place would mean the file changed after verification, which hook
+// refuses without running.
 func (e *embedE2E) fillCache(t *testing.T, content []byte) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(e.cached()), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(e.cached(), content, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(filepath.Dir(e.cached()), "verified")); err != nil && !errors.Is(err, os.ErrNotExist) {
 		t.Fatal(err)
 	}
 }
