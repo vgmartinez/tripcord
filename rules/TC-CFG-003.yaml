@@ -40,9 +40,50 @@
 # downloader (curl, wget, and the other names shell.risks treats as
 # downloaders) is not simple either, so the shell stays matched. A |
 # hidden by ANSI-C quotes or by cmd quotes stays matched for that
-# reason, not because every | character is an operator. bash script.sh
-# is not rewritten: the rule does not look at the filesystem, so it
-# cannot tell a committed script from any other path.
+# reason, not because every | character is an operator.
+#
+# config.repo_script is that filesystem check, made by scriptcheck
+# after discovery. It is true only for a repository server whose
+# command is a shell wrapper around files that resolve inside the
+# scanned tree: bash script.sh, bash -c 'exec "$(git rev-parse
+# --show-toplevel)/scripts/x.sh"', the same git toplevel assigned to
+# repo and then bun run, powershell -File ./script.ps1, and a short
+# loader (set -a, set +a, source or . of one relative path, chmod +x
+# of one relative path, xattr -d of one relative path) whose last
+# command is one known launcher or a relative file. The signal checks
+# where that file is. A script inside the tree is not inspected for
+# content. A launcher with no file is only npx, bunx, uvx, uv, pipx,
+# pnpm dlx, yarn dlx, npm exec, npm dlx, or bun x. Any other bare
+# program stays matched. A $ in program position is not expanded, so
+# ${X:-rm} stays matched. cd, pushd, env -C, sudo -D, sudo --chdir,
+# and any --cwd or --chdir wrapper stay matched. The one cd that is
+# followed is a repository-root cd, and only when all of these hold.
+# The git command is exactly V=$(git rev-parse --show-toplevel) or
+# cd "$(git rev-parse --show-toplevel)": no other git arguments, no
+# git -C, --git-dir, or --work-tree, and no environment prefix
+# (GIT_DIR, GIT_WORK_TREE, any GIT_*, or any other VAR=) on that line
+# or exported earlier in the command. The cd uses that same variable,
+# double-quoted, and the variable is not reassigned between the
+# assignment and the cd. Between that cd and the exec there is no
+# other cd, pushd, -C, --chdir, or --cwd. The script is still
+# relative, inside the tree, has no .., and is not a symlink that
+# leaves the tree. || exit 1 after the assignment or the cd is that
+# same form. Any other variant leaves repo_script false. The only dotenv
+# names are .env, .env.local, and .env.claude. Under set -a one of
+# those does not have to be in the tree. When it is, and when the same
+# file is sourced without set -a, every line has to be blank, a
+# comment (#...), or KEY=VALUE. KEY matches [A-Za-z_][A-Za-z0-9_]* and
+# may be prefixed by "export ". VALUE must not contain $, a backtick,
+# ;, &, |, <, >, a newline inside quotes, or a trailing backslash. A
+# symlink that resolves outside the tree, a file that cannot be read,
+# and a file larger than 64 KiB leave repo_script false. Any other
+# sourced path is an ordinary file and has to be in the tree. A
+# launcher with only
+# plain $NAME or ${NAME} arguments (exec npx -y pkg --dsn "$DSN") is
+# the same wrapper. A fetch, a pipe, a command substitution, an inline
+# interpreter, a path that leaves the tree, and a symlink that resolves
+# outside it stay matched. User and managed servers are never
+# repo_script.
 #
 id: TC-CFG-003
 pack: tripcord/core
@@ -52,6 +93,7 @@ harness: [claude, codex, copilot, cursor, gemini, opencode, windsurf, vscode]
 files: ["**"]
 when: |
   config.kind == "mcp-server" &&
+    !config.repo_script &&
     (!has(payload.type) || (type(payload.type) == string && payload.type in ["", "stdio", "local"])) &&
     has(payload.command) && (
       [

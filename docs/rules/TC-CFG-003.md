@@ -47,6 +47,39 @@ Not reported:
 - A shell wrapper around one simple launch:
   `cmd /c npx -y pkg`, `bash -lc 'uvx pkg'`,
   `sh -c 'cd sdk && exec tool mcp'`.
+- A repository server whose command is a shell wrapper around a file
+  that resolves inside the scanned tree (`config.repo_script`):
+  `bash scripts/run.sh`, `bash ${CLAUDE_PLUGIN_ROOT}/scripts/launch`,
+  `bash -c 'exec "$(git rev-parse --show-toplevel)/scripts/x.sh"'`,
+  `powershell -File ./scripts/start.ps1`, or a short loader whose last
+  command is one known launcher (`set -a && source .env && npx -y pkg`).
+  The signal checks the script's location. A script inside the tree is
+  not inspected for content. The one `cd` that is followed is a
+  repository-root `cd`, and only when all of these hold: the git
+  command is exactly `V=$(git rev-parse --show-toplevel)` or
+  `cd "$(git rev-parse --show-toplevel)"`, with no other git
+  arguments, no `git -C`, `--git-dir`, or `--work-tree`, and no
+  environment prefix (`GIT_DIR`, `GIT_WORK_TREE`, any `GIT_*`, or any
+  other `VAR=`) on that line or exported earlier in the command; the
+  `cd` uses that same variable, double-quoted, and the variable is
+  not reassigned between the assignment and the `cd`; between that
+  `cd` and the exec there is no other `cd`, `pushd`, `-C`,
+  `--chdir`, or `--cwd`; and the script is still relative, inside the
+  tree, has no `..`, and is not a symlink that leaves the tree.
+  `|| exit 1` after the assignment or the `cd` is that same form.
+  Any other variant stays matched. The launchers that may name no file are
+  `npx`, `bunx`, `uvx`, `uv`, `pipx`, `pnpm dlx`, `yarn dlx`,
+  `npm exec`, `npm dlx`, and `bun x`.
+  The only dotenv names are `.env`, `.env.local`, and `.env.claude`.
+  Under `set -a`, one of those that is not in the tree is still that
+  wrapper. When the file is in the tree, with or without `set -a`, it
+  is that wrapper only when every line is blank, a comment (`#...`),
+  or `KEY=VALUE`, with `KEY` matching `[A-Za-z_][A-Za-z0-9_]*` and an
+  optional `export ` prefix, and the value containing no `$`,
+  backtick, `;`, `&`, `|`, `<`, `>`, newline inside quotes, or
+  trailing backslash. Any other sourced path has to be in the tree.
+  A plain `$NAME` or `${NAME}` in a launcher argument is still that
+  wrapper.
 
 ## Limits
 
@@ -66,9 +99,43 @@ Not reported:
   `shell.risks` treats as downloaders) is not simple. The shell stays
   matched. A `|` inside ordinary POSIX quotes is not itself a pipe
   (`echo 'a|b'`).
-- `bash script.sh` is not rewritten. The rule does not look at the
-  filesystem, so it cannot tell a committed script from any other path.
-- PowerShell is not unwrapped. `-Command` and `-File` stay matched.
+- `cd`, `pushd`, `env -C`, `sudo -D`, `sudo --chdir`, and any
+  `--cwd` or `--chdir` wrapper stay matched. A relative script after
+  `cd` is not resolved against the directory the shell enters, so a
+  decoy script at the repository root does not hide `bash run.sh` or
+  `./run.sh`. The one `cd` that is followed is a repository-root
+  `cd`, and only when all of these hold: the git command is exactly
+  `V=$(git rev-parse --show-toplevel)` or
+  `cd "$(git rev-parse --show-toplevel)"`, with no other git
+  arguments, no `git -C`, `--git-dir`, or `--work-tree`, and no
+  environment prefix (`GIT_DIR`, `GIT_WORK_TREE`, any `GIT_*`, or any
+  other `VAR=`) on that line or exported earlier in the command; the
+  `cd` uses that same variable, double-quoted, and the variable is
+  not reassigned between the assignment and the `cd`; between that
+  `cd` and the exec there is no other `cd`, `pushd`, `-C`,
+  `--chdir`, or `--cwd`; and the script is still relative, inside the
+  tree, has no `..`, and is not a symlink that leaves the tree.
+  `|| exit 1` after the assignment or the `cd` is that same form.
+  Any other variant stays matched. The path is resolved from the
+  repository root.
+- A `$` in program position is not expanded. `${X:-rm}` stays matched.
+  `rm`, `notes-mcp`, and `evil-mcp "$TOKEN"` stay matched, including
+  when the loader is separated by newlines.
+- `bash script.sh` stays matched when that script is missing from the
+  scanned tree, leaves it through `..` or an absolute path, or is a
+  symlink that resolves outside it. The same is true of a fetched
+  script and of `powershell -Command` or `-EncodedCommand`.
+  `powershell -File` of a script that resolves inside the tree does
+  not match.
+- A sourced `.env`, `.env.local`, or `.env.claude` that is present
+  stays matched when a line is not blank, a comment, or a strict
+  `KEY=VALUE`, when the value contains `$`, a backtick, `;`, `&`,
+  `|`, `<`, `>`, a newline inside quotes, or a trailing backslash,
+  when the file is a symlink that resolves outside the tree, when it
+  cannot be read, or when it is larger than 64 KiB. Under `set -a`,
+  one of those three that is not in the tree does not match. The same
+  file sourced without `set -a` stays matched when it is missing.
+  No other name is a dotenv.
 
 ## Examples
 

@@ -1,0 +1,11 @@
+-- .mcp.json --
+{
+  "mcpServers": {
+    "helper": {
+      "command": "bash",
+      "args": ["-c", "set -a && source .env && node -e \"fetch(1)\""]
+    }
+  }
+}
+-- .env --
+TOKEN=local

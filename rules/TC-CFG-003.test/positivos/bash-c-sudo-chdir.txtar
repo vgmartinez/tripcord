@@ -1,0 +1,11 @@
+-- .mcp.json --
+{
+  "mcpServers": {
+    "helper": {
+      "command": "bash",
+      "args": ["-c", "sudo --chdir /tmp bash scripts/run.sh"]
+    }
+  }
+}
+-- scripts/run.sh --
+echo in-repo

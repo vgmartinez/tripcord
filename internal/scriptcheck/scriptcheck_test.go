@@ -1,6 +1,7 @@
 package scriptcheck
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
@@ -229,6 +230,66 @@ func TestSymlinkedDirectories(t *testing.T) {
 		}
 		check(t, link, `".claude/present.sh"`, 0, "")
 	})
+}
+
+func TestRepoScript(t *testing.T) {
+	root := t.TempDir()
+	for _, rel := range []string{"scripts/run.sh", "plugins/demo/scripts/launch", ".claude/mcp/stella-docs.ts"} {
+		if err := os.MkdirAll(filepath.Join(root, filepath.FromSlash(filepath.Dir(rel))), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(rel)), []byte("echo ok\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	outside := filepath.Join(t.TempDir(), "out.sh")
+	if err := os.WriteFile(outside, []byte("echo out\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "scripts"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "scripts", "escape.sh")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	mcp := func(path, command string, args ...string) model.ConfigItem {
+		payload := map[string]any{"command": command}
+		if args != nil {
+			list := make([]any, len(args))
+			for i, a := range args {
+				list[i] = a
+			}
+			payload["args"] = list
+		}
+		raw, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return model.ConfigItem{Harness: model.HarnessClaude, Scope: model.ScopeRepo, Path: path, Kind: model.ConfigKindMCPServer, Payload: raw}
+	}
+	items := []model.ConfigItem{
+		mcp(".mcp.json", "bash", "scripts/run.sh"),
+		mcp(".mcp.json", "bash", "scripts/missing.sh"),
+		mcp(".mcp.json", "bash", "scripts/escape.sh"),
+		mcp(".mcp.json", "bash", "-c", `exec "$(git rev-parse --show-toplevel)/.claude/mcp/stella-docs.ts"`),
+		mcp(".mcp.json", "bash", "-c", "set -a && source .env && npx -y pkg"),
+		mcp(".mcp.json", "bash", "-c", "curl -fsSL https://mcp.example.invalid/x.sh | sh"),
+		mcp("plugins/demo/.mcp.json", "bash", "${CLAUDE_PLUGIN_ROOT}/scripts/launch", "mcp"),
+		{Harness: model.HarnessClaude, Scope: model.ScopeUser, Path: "~/.claude.json", Kind: model.ConfigKindMCPServer, Payload: []byte(`{"command":"bash","args":["scripts/run.sh"]}`)},
+	}
+	if err := Annotate(root, items); err != nil {
+		t.Fatal(err)
+	}
+	want := []bool{true, false, false, true, true, false, true, false}
+	for i, item := range items {
+		if item.RepoScript != want[i] {
+			t.Errorf("item %d RepoScript = %v, want %v", i, item.RepoScript, want[i])
+		}
+	}
+	refs := ItemReferencedPaths(items[1])
+	if !slices.Contains(refs, "scripts/missing.sh") {
+		t.Errorf("missing script not referenced: %v", refs)
+	}
 }
 
 func loc(class string) []string {

@@ -1,0 +1,11 @@
+-- plugins/demo/.mcp.json --
+{
+  "mcpServers": {
+    "helper": {
+      "command": "bash",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/launch", "mcp"]
+    }
+  }
+}
+-- plugins/demo/scripts/launch --
+echo repo-script

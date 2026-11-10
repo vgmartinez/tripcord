@@ -157,6 +157,45 @@ required before tagging. Tagging is Victor's. Pull request CI checks
 only that each pin is a full sha and an ancestor of the commit under
 test. See [Release gate](init.md#release-gate).
 
+### TC-CFG-003 and a repository's own scripts
+
+`config.repo_script` quiets TC-CFG-003 when a repository MCP server is
+a shell wrapper around a file in the scanned tree, or around a known
+package runner (`npx`, `bunx`, `uvx`, `uv`, `pipx`, `pnpm dlx`,
+`yarn dlx`, `npm exec`, `npm dlx`, `bun x`). The signal checks the
+script's location. A script inside the tree is not inspected for
+content.
+
+Anything else stays a finding: a bare program that is not in that
+list (`rm`, `notes-mcp`, `evil-mcp "$TOKEN"`), a `$` in program
+position (`${X:-rm}`, which is not rewritten to its default), the
+same loader written with newlines, `cd` or `pushd` before a relative
+script, and `env -C`, `sudo -D`, `sudo --chdir`, or any `--cwd` or
+`--chdir` wrapper. The one `cd` that is followed is a repository-root
+`cd`, and only when all of these hold: the git command is exactly
+`V=$(git rev-parse --show-toplevel)` or
+`cd "$(git rev-parse --show-toplevel)"`, with no other git arguments,
+no `git -C`, `--git-dir`, or `--work-tree`, and no environment prefix
+(`GIT_DIR`, `GIT_WORK_TREE`, any `GIT_*`, or any other `VAR=`) on that
+line or exported earlier in the command; the `cd` uses that same
+variable, double-quoted, and the variable is not reassigned between
+the assignment and the `cd`; between that `cd` and the exec there is
+no other `cd`, `pushd`, `-C`, `--chdir`, or `--cwd`; and the script is
+still relative, inside the tree, has no `..`, and is not a symlink
+that leaves the tree. `|| exit 1` after the assignment or the `cd` is
+that same form. Any other variant stays a finding. The path is
+resolved from the repository root.
+
+The only dotenv names are `.env`, `.env.local`, and `.env.claude`.
+Under `set -a` one of those may be absent. When the file is in the
+tree, with or without `set -a`, every line has to be blank, a comment,
+or `KEY=VALUE` (`KEY` matches `[A-Za-z_][A-Za-z0-9_]*`, with an
+optional `export ` prefix; the value has no `$`, backtick, `;`, `&`,
+`|`, `<`, `>`, newline inside quotes, or trailing backslash). A
+symlink that leaves the tree, a file that cannot be read, and a file
+larger than 64 KiB stay findings. Any other sourced path has to be in
+the tree, and its bytes are not read.
+
 ### Known gaps
 
 - `main` has no required status checks. A pull request can merge

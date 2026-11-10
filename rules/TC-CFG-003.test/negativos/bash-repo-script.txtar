@@ -1,0 +1,11 @@
+-- .mcp.json --
+{
+  "mcpServers": {
+    "helper": {
+      "command": "bash",
+      "args": ["scripts/run.sh"]
+    }
+  }
+}
+-- scripts/run.sh --
+echo repo-script

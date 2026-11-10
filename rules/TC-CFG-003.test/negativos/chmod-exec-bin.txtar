@@ -1,0 +1,11 @@
+-- qwenwork/experts/app/.mcp.json --
+{
+  "mcpServers": {
+    "helper": {
+      "command": "/bin/sh",
+      "args": ["-c", "chmod +x ./bin/utp >/dev/null 2>&1; xattr -d com.apple.quarantine ./bin/utp >/dev/null 2>&1; exec ./bin/utp mcp serve"]
+    }
+  }
+}
+-- qwenwork/experts/app/bin/utp --
+echo repo-script

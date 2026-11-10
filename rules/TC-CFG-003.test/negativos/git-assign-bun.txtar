@@ -1,0 +1,6 @@
+-- .codex/config.toml --
+[mcp_servers.docs]
+command = "sh"
+args = ["-c", "repo=$(git rev-parse --show-toplevel) || exit 1; cd \"$repo\" || exit 1; exec bun run .claude/mcp/stella-docs.ts"]
+-- .claude/mcp/stella-docs.ts --
+console.log("repo-script")
