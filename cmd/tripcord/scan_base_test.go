@@ -64,7 +64,6 @@ const (
 	titleRemoved  = "This change removes Tripcord's guard"
 	titleMissing  = "Tripcord embed is missing part of its guard"
 	titleChanged  = "Tripcord guard was edited"
-	titleStale    = "Tripcord guard was written by an older Tripcord"
 	titleDropped  = "This change drops a harness from the Tripcord embed"
 	titleRepinned = "This change re-pins Tripcord"
 )
@@ -174,7 +173,7 @@ func TestScanSinceReportsBootstrapTamper(t *testing.T) {
 		forgeDigest(t, repo)
 		commitAll(t, repo)
 		code, got := guardFindings(t, repo, "--since", "HEAD~1")
-		if want := []guardFinding{{embedded.BootstrapPath, titleStale}}; code != int(exitcode.Findings) || !slices.Equal(got, want) {
+		if want := []guardFinding{{embedded.BootstrapPath, titleChanged}}; code != int(exitcode.Findings) || !slices.Equal(got, want) {
 			t.Fatalf("exit %d\ngot  %v\nwant %v", code, got, want)
 		}
 	})

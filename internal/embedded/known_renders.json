@@ -1,0 +1,44 @@
+{
+  "schema": "tripcord.known-renders/v1",
+  "pins": {
+    "6a1279565e9e41e9dec163e6bedf07f2647a2c67": {
+      "bootstrap": [
+        "0cf9af017e227227d23dbed2883efae42cb23014b306241976cadcc5b60d45ba",
+        "1fe0edbf1e039cdba4dac4f99d35efc4f8fb912574cbf9725d43318aaecdf9ce",
+        "4109c307c39c1823ed8761e6cc400fef36da76a40f62333bc81bc2b5898eb99f",
+        "98be53385476e3462bd7232eb8fefc5835b2d431251b6173131f1ac9875c3efc",
+        "fba86ebfcbfc683759a324788cc4b7404e4c83aa8e62c644c61b42b83d16c9ee"
+      ],
+      "workflow": [
+        "6ef351fb130faceb732d9dc8fe2576bc7d402bb1c8d0e43ccf5bd41bcec5f60f"
+      ],
+      "hooks": {
+        "claude/PreToolUse": [
+          "3ce2977b6677c2e831268759e813283b13613620fcfd8dae7a73116f458912ef",
+          "7b26bc6d65b3c6705ec8aff6e78db7f36041f56ad9472ed3b5ad5f1b7f68cdf3"
+        ],
+        "claude/SessionStart": [
+          "2a43a6768d77210aa384bc246184f3d34e2383284683b5477585e0987e797e96",
+          "3c2b4d1858b4e8afc5cac4838025edb3a8838804765573a3671e99d277f0372d"
+        ],
+        "copilot/preToolUse": [
+          "162e8cb9c8b2cda4fdecf270ed3040da649e788761d0feee700189c6aa5b6fe0",
+          "866c9bd3649002c1256c7d2d641f131e405ad732309b96b77ec462fb96c7866a"
+        ],
+        "copilot/sessionStart": [
+          "f5d43cbc60daa916c8625aca341397decf39f554067a2e2c617667de096dac2d"
+        ],
+        "cursor/preToolUse": [
+          "099ab6e4a2a8732bdb2ce27626d4bc638f6b315e1c6455fe107da92581595edb",
+          "95c73d22ad8031613847db070e09acc50f53feb7f8aa37eb91df44144f44c5da"
+        ],
+        "cursor/sessionStart": [
+          "abe6517009e5da8733eb7c6989230a1b3fe7a5de725ff4a8d352ce3c0278f48f"
+        ]
+      },
+      "copilotStep": [
+        "591047426ca45077ff170cb8c7b8bb8d7b5d722679189ce064ba23236df25a73"
+      ]
+    }
+  }
+}

@@ -35,8 +35,25 @@
 #               to match a tampered bootstrap.sh still reports changed.
 #               A symlinked .tripcord or bootstrap.sh is changed too.
 #               Files are hashed with CRLF normalized to LF.
-#   stale       it matches the SHA-256 embed.json records but not what
-#               this build of init renders: an older Tripcord wrote it.
+#               It is also changed when it matches the SHA-256
+#               embed.json records but breaks an invariant every
+#               Tripcord version keeps (internal/embedded/invariants.go),
+#               or is a render this scanner never compiled although
+#               tripcord.yml pins a writer it knows (the writer witness).
+#   outdated    (low) it matches embed.json and is a render an earlier
+#               init under a known pin wrote (known_renders.json), or
+#               tripcord.yml pins an earlier WorkflowPin.
+#   unverified  (low) it matches embed.json and keeps every invariant,
+#               but this scanner cannot tell who wrote it: a newer
+#               Tripcord, an embed.json schema it does not know, or a
+#               pin a CI scan cannot check.
+#   pin-unknown tripcord.yml pins a tripcord-pr.yml commit that is not
+#               WorkflowPin or a KnownWorkflowPins entry, in a local or
+#               pre-commit scan. A release scanner reads it as
+#               unverified only when embed.json's version is a later
+#               release and tripcord.yml is what embed.json records.
+#   pin-malformed tripcord.yml does not call this repository's
+#               tripcord-pr.yml at a full commit SHA.
 #   unreadable  the file cannot be read or does not parse.
 #
 # With a base revision (scan --since or --base, which the reusable
@@ -46,7 +63,9 @@
 #   removed     the base had the file or a Tripcord hook and the change
 #               removes it, including removing the whole embed.
 #   dropped     the change drops a harness from embed.json.
-#   repinned    the change changes the pinned version or a checksum. A
+#   repinned    the change changes the pinned version, a checksum, the
+#               embed.json schema, or the tripcord.yml workflow pin (even
+#               to the workflow --executing-workflow says runs). A
 #               consistent re-pin of embed.json and bootstrap.sh is the
 #               one bootstrap edit the head tree alone cannot tell from
 #               a release update, so it needs review.
@@ -146,11 +165,26 @@ severity_when:
     when: |
       has(payload.setting) && payload.setting == "tripcordGuard" && has(payload.state) && payload.state == "changed"
     fix: "Restore the file with `tripcord init --embed --force` using the pins recorded in .tripcord/embed.json, and review who changed it. bootstrap.sh, tripcord.yml, the Copilot setup step, and the hook entries must stay exactly as init writes them; edits to embed.json's digests do not make an edited file pass."
-  - severity: high
+  - severity: low
     title: "Tripcord guard was written by an older Tripcord"
     when: |
-      has(payload.setting) && payload.setting == "tripcordGuard" && has(payload.state) && payload.state == "stale"
+      has(payload.setting) && payload.setting == "tripcordGuard" && has(payload.state) && payload.state == "outdated"
     fix: "Rerun `tripcord init --embed --force` with the same --version and --sha256 pins to rewrite the guard in this release's form, and commit the result."
+  - severity: low
+    title: "Tripcord could not verify this part of the guard"
+    when: |
+      has(payload.setting) && payload.setting == "tripcordGuard" && has(payload.state) && payload.state == "unverified"
+    fix: "Scan locally with the latest Tripcord (`tripcord scan`): this scanner is older than the embed, or runs in CI, where the pull request picks the workflow that scans it. Every invariant this scanner knows still holds."
+  - severity: high
+    title: "Tripcord workflow pins an unknown commit"
+    when: |
+      has(payload.setting) && payload.setting == "tripcordGuard" && has(payload.state) && payload.state == "pin-unknown"
+    fix: "If a newer Tripcord than this scanner wrote this embed, upgrade Tripcord and rescan; otherwise restore .github/workflows/tripcord.yml with `tripcord init --embed --force`. The reusable workflow is pinned to a commit this scanner cannot vouch for."
+  - severity: high
+    title: "Tripcord workflow pin is not a commit SHA"
+    when: |
+      has(payload.setting) && payload.setting == "tripcordGuard" && has(payload.state) && payload.state == "pin-malformed"
+    fix: "Restore .github/workflows/tripcord.yml with `tripcord init --embed --force`: its job must call vgmartinez/tripcord/.github/workflows/tripcord-pr.yml at a full 40-character commit SHA, not a branch, tag, short SHA, or another workflow."
   - severity: high
     title: "Tripcord guard file cannot be read"
     when: |

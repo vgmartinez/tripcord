@@ -240,7 +240,8 @@ func TestCheckBootstrapTampering(t *testing.T) {
 
 // TestCheckForgedManifestDigest edits bootstrap.sh and records its new
 // digest in embed.json. The file is still compared with the script
-// rendered from the recorded pin, so it is reported, as stale.
+// rendered from the recorded pin, so it is reported: the checksum gate
+// invariant (B4) fails.
 func TestCheckForgedManifestDigest(t *testing.T) {
 	dir := embed(t)
 	replace(t, dir, BootstrapPath, `[ "$got" != "$want" ]`, `false`)
@@ -249,7 +250,7 @@ func TestCheckForgedManifestDigest(t *testing.T) {
 		t.Fatal(err)
 	}
 	replace(t, dir, ManifestPath, digest(Bootstrap(testPin)), digest(raw))
-	want := []guardHit{{model.SurfaceGeneric, BootstrapPath, subjectBootstrap, StateStale}}
+	want := []guardHit{{model.SurfaceGeneric, BootstrapPath, subjectBootstrap, StateChanged}}
 	if got := check(t, dir); !slices.Equal(got, want) {
 		t.Fatalf("hits = %+v, want %+v", got, want)
 	}
@@ -281,7 +282,7 @@ func TestCheckStaleHook(t *testing.T) {
 	replace(t, dir, ManifestPath, e.SHA256(), hookDigest(e.Event, anyNode(n)))
 	replace(t, dir, ClaudeSettingsPath, `"PreToolUse": [`, `"PreToolUse": [`+old+`,`)
 	write(t, dir, ClaudeSettingsPath, strings.Replace(readFile(t, dir, ClaudeSettingsPath), ",\n      {\n        \"matcher\": \"*\"", ",\n      {\n        \"matcher\": \"removed\"", 1))
-	want := []guardHit{{model.HarnessClaude, ClaudeSettingsPath, "PreToolUse", StateStale}}
+	want := []guardHit{{model.HarnessClaude, ClaudeSettingsPath, "PreToolUse", StateChanged}}
 	if got := check(t, dir); !slices.Equal(got, want) {
 		t.Fatalf("hits = %+v, want %+v", got, want)
 	}

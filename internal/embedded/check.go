@@ -7,6 +7,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/vgmartinez/tripcord/internal/adapters"
 	"github.com/vgmartinez/tripcord/internal/adapters/kit"
 	"github.com/vgmartinez/tripcord/internal/model"
+	"github.com/vgmartinez/tripcord/internal/project"
 )
 
 // Guard states a TC-CFG-016 item reports.
@@ -25,9 +27,24 @@ const (
 	// writes for the recorded pin, and from what the manifest records,
 	// or bootstrap.sh, embed.json, or .tripcord is a symlink.
 	StateChanged = "changed"
-	// StateStale: it is what the manifest records, but not what this
-	// build of init writes: an older Tripcord wrote it.
+	// StateStale is no longer reported: a render the manifest records
+	// that this build does not write is outdated, unverified, or changed.
 	StateStale = "stale"
+	// StateOutdated: an older Tripcord wrote it (a render compiled into
+	// known_renders.json that is not current), or tripcord.yml pins an
+	// earlier WorkflowPin (KnownWorkflowPins).
+	StateOutdated = "outdated"
+	// StateUnverified: it is what the manifest records and keeps every
+	// invariant, but this scanner cannot tell who wrote it: a newer
+	// Tripcord, most likely, or a pin a CI scan cannot check.
+	StateUnverified = "unverified"
+	// StatePinUnknown: tripcord.yml pins a tripcord-pr.yml commit that is
+	// neither WorkflowPin nor in KnownWorkflowPins, in a trusted scan.
+	StatePinUnknown = "pin-unknown"
+	// StatePinMalformed: tripcord.yml does not pin
+	// vgmartinez/tripcord/.github/workflows/tripcord-pr.yml at a full
+	// commit SHA.
+	StatePinMalformed = "pin-malformed"
 	// StateUnreadable: the file could not be read or parsed.
 	StateUnreadable = "unreadable"
 	// StateRemoved: the base revision had it and this change removes it.
@@ -80,6 +97,20 @@ const (
 	subjectPolicy        = "policy"
 	subjectPolicyLocal   = "policy-local"
 	subjectGitattributes = "gitattributes"
+	subjectWorkflowPin   = "workflow-pin"
+)
+
+// ScanContext is where a scan runs, which decides how far a tripcord.yml
+// pin this scanner does not know can be trusted.
+type ScanContext int
+
+const (
+	// ContextTrusted is a local or pre-commit scan, run by a scanner the
+	// user installed: an unknown pin is pin-unknown (high).
+	ContextTrusted ScanContext = iota
+	// ContextCI is a scan inside a workflow, whose scanner the scanned
+	// change itself may have chosen: an unknown pin is unverified (low).
+	ContextCI
 )
 
 // CheckOptions selects what Check compares.
@@ -114,6 +145,17 @@ type CheckOptions struct {
 	// through one, however it looks, so it is hashed as its raw bytes
 	// with no uniform-CRLF leniency at all.
 	IndexTree bool
+	// Context is where the scan runs. The zero value is trusted.
+	Context ScanContext
+	// Executing is the reusable workflow a CI scan runs inside
+	// (--executing-workflow). It accepts a tripcord.yml pin equal to its
+	// SHA only when the base pins the same commit; it never accepts a
+	// pin change, and never upgrades or suppresses anything else.
+	Executing *WorkflowRef
+	// ScannerVersion is this scanner's version (main.version). Only a
+	// release version (ReleaseVersion) lets a trusted scan read an
+	// unknown pin from a newer embed as unverified.
+	ScannerVersion string
 }
 
 // file is one file read for the check. state is "" when raw was read.
@@ -136,6 +178,9 @@ type revision struct {
 	// manifestOK is true when embed.json parses as a manifest with a
 	// valid pin.
 	manifestOK bool
+	// futureSchema is true when that manifest's schema is a later
+	// tripcord.embed/vN than this scanner writes.
+	futureSchema bool
 	// blob is true when every file here was read as a git blob (the
 	// base revision, always, or the head with CheckOptions.IndexTree):
 	// no checkout filter ran, so CRLF is never given uniform-autocrlf
@@ -160,8 +205,29 @@ func newRevision(blob bool, read func(rel string) (file, error)) (*revision, err
 	}
 	if m := t.files[ManifestPath]; m.state == "" {
 		t.manifest, t.manifestOK = parseManifest(m.raw)
+		if !t.manifestOK {
+			t.manifest, t.manifestOK = parseFutureManifest(m.raw)
+			t.futureSchema = t.manifestOK
+		}
 	}
 	return t, nil
+}
+
+var futureSchema = regexp.MustCompile(`^tripcord\.embed/v([1-9][0-9]{0,5})$`)
+
+// parseFutureManifest reads an embed.json whose schema is a later
+// tripcord.embed/vN, as far as v1's fields go, so a newer embed still
+// gets every invariant, pin, and witness check this scanner has.
+func parseFutureManifest(raw []byte) (Manifest, bool) {
+	var m Manifest
+	if err := json.Unmarshal(raw, &m); err != nil || m.Pin().Validate() != nil {
+		return Manifest{}, false
+	}
+	match := futureSchema.FindStringSubmatch(m.Schema)
+	if match == nil || match[1] == "1" {
+		return Manifest{}, false
+	}
+	return m, true
 }
 
 func isSymlink(root, rel string) bool {
@@ -319,7 +385,7 @@ func Check(root string, opts CheckOptions) ([]model.ConfigItem, error) {
 			base = nil
 		}
 	}
-	c := &checker{head: head, base: base, only: opts.Only}
+	c := &checker{head: head, base: base, only: opts.Only, opts: opts}
 	active := base != nil || head.embedded()
 	if !active {
 		if left := head.leftovers(); left.any() {
@@ -332,6 +398,7 @@ func Check(root string, opts CheckOptions) ([]model.ConfigItem, error) {
 		c.ownFile(subjectBootstrap, BootstrapPath, func(m Manifest) []byte { return Bootstrap(m.Pin()) })
 		if c.leftover == nil || c.leftover.workflow {
 			c.ownFile(subjectWorkflow, WorkflowPath, func(Manifest) []byte { return Workflow() })
+			c.workflowPin()
 		}
 		if c.leftover == nil {
 			c.gitattributes()
@@ -431,6 +498,7 @@ type checker struct {
 	// harnesses those pieces name, not harnesses nothing wired.
 	leftover *leftover
 	only     []model.Harness
+	opts     CheckOptions
 	items    []model.ConfigItem
 	err      error
 }
@@ -485,6 +553,8 @@ func (c *checker) manifest() {
 	case !c.head.manifestOK:
 		c.add(model.SurfaceGeneric, ManifestPath, subjectManifest, "", StateUnreadable, f.raw, nil)
 		return
+	case c.head.futureSchema:
+		c.add(model.SurfaceGeneric, ManifestPath, subjectManifest, "", StateUnverified, f.raw, map[string]string{"reason": "unknown-schema", "schema": c.head.manifest.Schema})
 	}
 	if c.base == nil || !c.base.manifestOK {
 		return
@@ -499,7 +569,7 @@ func (c *checker) manifest() {
 	if len(dropped) > 0 {
 		c.add(model.SurfaceGeneric, ManifestPath, subjectHarnesses, "", StateDropped, f.raw, map[string]string{"harnesses": strings.Join(dropped, ",")})
 	}
-	if was.Version != now.Version || !maps.Equal(was.SHA256, now.SHA256) {
+	if was.Schema != now.Schema || was.Version != now.Version || !maps.Equal(was.SHA256, now.SHA256) {
 		c.add(model.SurfaceGeneric, ManifestPath, subjectPin, "", StateRepinned, f.raw, map[string]string{"from": was.Version, "to": now.Version})
 	}
 }
@@ -517,11 +587,182 @@ func (c *checker) ownFile(subject, path string, render func(Manifest) []byte) {
 	case f.state != "":
 		c.add(model.SurfaceGeneric, path, subject, "", StateUnreadable, nil, nil)
 	case c.head.manifestOK:
-		want := digest(render(c.head.manifest))
-		if state := compare(digest(c.head.contentBytes(f.raw)), want, c.head.manifest.recordedFile(path, "")); state != "" {
-			c.add(model.SurfaceGeneric, path, subject, "", state, f.raw, nil)
+		content := c.head.contentBytes(f.raw)
+		r := rendered{got: digest(content), want: digest(render(c.head.manifest)), recorded: c.head.manifest.recordedFile(path, "")}
+		switch path {
+		case BootstrapPath:
+			r.template, r.pick = BootstrapTemplateDigest(content), func(s RenderSet) []string { return s.Bootstrap }
+			r.invariant = func() string { return bootstrapInvariant(content, &c.head.manifest) }
+		case WorkflowPath:
+			r.template, r.pick = WorkflowTemplateDigest(content), func(s RenderSet) []string { return s.Workflow }
+			r.invariant = func() string { return workflowInvariant(content) }
+		}
+		if state, extra := c.classify(r); state != "" {
+			c.add(model.SurfaceGeneric, path, subject, "", state, f.raw, extra)
 		}
 	}
+}
+
+// rendered is one file, hook entry, or step the check compares with
+// what init writes.
+type rendered struct {
+	got, want, recorded string
+	// template is got with what varies by pin replaced (got itself for
+	// hooks and the step); pick selects its surface of a RenderSet.
+	template string
+	pick     func(RenderSet) []string
+	// invariant is the first invariant got breaks, or "".
+	invariant func() string
+}
+
+// classify is the state of r, and the payload it adds:
+//
+//   - got is want: "" (OK).
+//   - got is not what the manifest records: changed. Every init writes
+//     exactly what it records, whatever its version, so this is an edit.
+//   - got breaks an invariant: changed, with the invariant's id.
+//   - got's template is current (only the pin or version differ): "";
+//     the manifest pin and workflowPin judge those.
+//   - got is a render an earlier init with a known pin wrote: outdated.
+//   - tripcord.yml pins a known writer, which never wrote got: changed,
+//     invariant witness. TestTemplateChangeNeedsRepin keeps every
+//     template change on a new pin, so this holds.
+//   - otherwise a writer this scanner does not know, most likely a
+//     newer Tripcord, wrote got: unverified.
+func (c *checker) classify(r rendered) (string, map[string]string) {
+	switch {
+	case r.got == r.want:
+		return "", nil
+	case r.recorded == "" || r.got != r.recorded:
+		return StateChanged, nil
+	}
+	if r.invariant != nil {
+		if id := r.invariant(); id != "" {
+			return StateChanged, map[string]string{"invariant": id}
+		}
+	}
+	switch {
+	case r.pick != nil && slices.Contains(r.pick(CurrentRenders()), r.template):
+		return "", nil
+	case r.pick != nil && historical(r.template, r.pick):
+		return StateOutdated, nil
+	case c.knownWriter():
+		return StateChanged, map[string]string{"invariant": InvariantWriterWitness}
+	}
+	return StateUnverified, map[string]string{"reason": "unknown-render"}
+}
+
+// knownWriter reports whether the head's tripcord.yml pins a writer this
+// scanner knows, or cannot be read for a pin, which is treated the same.
+func (c *checker) knownWriter() bool {
+	pins, ok := c.head.workflowPins()
+	if !ok || len(pins) == 0 {
+		return true
+	}
+	for _, uses := range pins {
+		pin, ok := pinOf(uses)
+		if !ok || knownPin(pin) {
+			return true
+		}
+	}
+	return false
+}
+
+// workflowPins are the uses: values of tripcord.yml's jobs that call a
+// reusable workflow. ok is false when the file is missing or does not
+// parse.
+func (t *revision) workflowPins() ([]string, bool) {
+	f := t.files[WorkflowPath]
+	if f.state != "" {
+		return nil, false
+	}
+	wf, ok := parseWorkflow(t.contentBytes(f.raw))
+	if !ok {
+		return nil, false
+	}
+	var out []string
+	for _, j := range wf.jobs {
+		if j.uses != "" {
+			out = append(out, j.uses)
+		}
+	}
+	return out, true
+}
+
+// pinOf is the commit SHA of a well-formed reusable-workflow reference.
+func pinOf(uses string) (string, bool) {
+	sha, ok := strings.CutPrefix(uses, project.Repository+"/"+ReusableWorkflowPath+"@")
+	return sha, ok && IsCommitSHA(sha)
+}
+
+// workflowPin judges each tripcord.yml pin. A pin that differs from the
+// base's is repinned whatever it is, --executing-workflow included.
+func (c *checker) workflowPin() {
+	f := c.head.files[WorkflowPath]
+	pins, ok := c.head.workflowPins()
+	if !ok || f.linked {
+		return
+	}
+	var basePins []string
+	if c.base != nil {
+		basePins, _ = c.base.workflowPins()
+	}
+	report := func(state string, extra map[string]string) {
+		c.add(model.SurfaceGeneric, WorkflowPath, subjectWorkflowPin, "", state, f.raw, extra)
+	}
+	if c.base != nil && len(basePins) > 0 && !slices.Equal(basePins, pins) {
+		report(StateRepinned, map[string]string{"from": strings.Join(basePins, ","), "to": strings.Join(pins, ",")})
+		return
+	}
+	if len(pins) == 0 {
+		report(StatePinMalformed, map[string]string{"uses": ""})
+		return
+	}
+	for _, uses := range pins {
+		pin, ok := pinOf(uses)
+		switch {
+		case !ok:
+			report(StatePinMalformed, map[string]string{"uses": uses})
+			return
+		case pin == WorkflowPin:
+			continue
+		case slices.Contains(KnownWorkflowPins, pin):
+			report(StateOutdated, map[string]string{"pin": pin})
+			return
+		case c.opts.Context == ContextCI:
+			if c.opts.Executing != nil && c.opts.Executing.SHA == pin && slices.Contains(basePins, uses) {
+				continue
+			}
+			report(StateUnverified, map[string]string{"pin": pin, "reason": "ci-unknown-pin"})
+			return
+		case c.newerEmbed():
+			report(StateUnverified, map[string]string{"pin": pin, "reason": "newer-embed"})
+			return
+		default:
+			report(StatePinUnknown, map[string]string{"pin": pin})
+			return
+		}
+	}
+}
+
+// newerEmbed reports whether a trusted scan may read an unknown pin as a
+// newer Tripcord's: this scanner is a release, embed.json's version is a
+// later release, and tripcord.yml is what embed.json records. A lie in
+// the version gains nothing at hook time: bootstrap.sh runs only a binary
+// whose SHA-256 is the pinned sum (B3, B4), and a version that does not
+// exist fails closed.
+func (c *checker) newerEmbed() bool {
+	scanner := ReleaseVersion(c.opts.ScannerVersion)
+	if scanner == "" || !c.head.manifestOK {
+		return false
+	}
+	embed := ReleaseVersion(c.head.manifest.Version)
+	if embed == "" || CompareVersions(embed, scanner) <= 0 {
+		return false
+	}
+	recorded := c.head.manifest.recordedFile(WorkflowPath, "")
+	f := c.head.files[WorkflowPath]
+	return recorded != "" && f.state == "" && digest(c.head.contentBytes(f.raw)) == recorded
 }
 
 // contentBytes is raw with CRLF normalized to LF, unless t.blob: a git
@@ -602,19 +843,6 @@ func (c *checker) gitattributes() {
 	}
 }
 
-// compare is "" when got is want, stale when got is what the manifest
-// recorded and that is not want, and changed otherwise.
-func compare(got, want, recorded string) string {
-	switch {
-	case got == want:
-		return ""
-	case recorded != "" && got == recorded:
-		return StateStale
-	default:
-		return StateChanged
-	}
-}
-
 func (c *checker) hookHarness(h model.Harness) {
 	path := HookPath(h)
 	f := c.head.files[path]
@@ -629,42 +857,58 @@ func (c *checker) hookHarness(h model.Harness) {
 	}
 	for _, e := range HookEntries(h) {
 		var state string
+		var extra map[string]string
 		switch {
 		case !f.exists():
 			state = c.absent(c.base != nil && c.base.hadTripcordHook(h, e.Event))
 		case !parsed:
 			state = StateUnreadable
 		default:
-			state = entryState(e, hooks, recorded[e.Event])
-			if state == StateMissing {
-				state = c.absent(c.base != nil && c.base.hadTripcordHook(h, e.Event))
+			var match *node
+			state, match = entryState(e, hooks, recorded[e.Event])
+			switch {
+			case match != nil:
+				state, extra = c.classify(rendered{
+					got: hookDigest(e.Event, match), want: e.SHA256(), recorded: recorded[e.Event],
+					template:  hookDigest(e.Event, match),
+					pick:      func(s RenderSet) []string { return s.Hooks[hookKey(h, e.Event)] },
+					invariant: func() string { return hookInvariant(h, e.Event, match) },
+				})
+			case state == StateMissing && c.base != nil && c.base.hadTripcordHook(h, e.Event):
+				state = StateRemoved
+			case state == StateMissing && c.head.manifestOK && recorded[e.Event] == "" && e.Event != preToolEvent(h):
+				// M1: a newer writer may drop an event it does not
+				// record; the pre-tool guard is the floor every
+				// version writes.
+				state, extra = StateUnverified, map[string]string{"reason": "unrecorded-event"}
 			}
 		}
 		if state != "" {
-			c.add(h, path, e.Event, e.Event, state, f.raw, nil)
+			c.add(h, path, e.Event, e.Event, state, f.raw, extra)
 		}
 	}
 }
 
 // entryState is "" when hooks.<e.Event> holds an entry identical to e.
-// An entry whose digest the manifest records, when that is not e's, is
-// stale; any other entry that names tripcord is changed.
-func entryState(e HookEntry, hooks map[string]any, recorded string) string {
+// Otherwise match is the entry whose digest the manifest records, when
+// that is not e's, for classify to judge; any other entry that names
+// tripcord is changed, and none is missing.
+func entryState(e HookEntry, hooks map[string]any, recorded string) (state string, match *node) {
 	list, _ := hooks[e.Event].([]any)
-	state := StateMissing
+	state = StateMissing
 	for _, v := range list {
 		n := anyNode(v)
 		if n.equal(e.entry) {
-			return ""
+			return "", nil
 		}
 		switch {
-		case recorded != "" && recorded != e.SHA256() && hookDigest(e.Event, n) == recorded:
-			state = StateStale
+		case match == nil && recorded != "" && recorded != e.SHA256() && hookDigest(e.Event, n) == recorded:
+			match = n
 		case state == StateMissing && namesTripcord(n):
 			state = StateChanged
 		}
 	}
-	return state
+	return state, match
 }
 
 func hookDigest(event string, n *node) string {
@@ -687,22 +931,35 @@ func (c *checker) setupStep() {
 	want := copilotStep().digest()
 	recorded := c.head.manifest.recordedFile(CopilotSetupStepsPath, copilotStepName)
 	state := StateMissing
+	var match *yaml.Node
 	for _, step := range steps {
 		if isCopilotStep(step) {
 			return
 		}
 		n := yamlNode(step)
 		switch {
-		case recorded != "" && recorded != want && n.digest() == recorded:
-			state = StateStale
+		case match == nil && recorded != "" && recorded != want && n.digest() == recorded:
+			match = step
 		case state == StateMissing && namesTripcord(n):
 			state = StateChanged
 		}
 	}
-	if state == StateMissing {
+	var extra map[string]string
+	switch {
+	case match != nil:
+		state, extra = c.classify(rendered{
+			got: yamlNode(match).digest(), want: want, recorded: recorded,
+			template:  yamlNode(match).digest(),
+			pick:      func(s RenderSet) []string { return s.CopilotStep },
+			invariant: func() string { return stepInvariant(match) },
+		})
+		if state == "" {
+			return
+		}
+	case state == StateMissing:
 		state = c.absent(baseHad)
 	}
-	c.add(model.HarnessCopilot, CopilotSetupStepsPath, subjectStep, "", state, f.raw, nil)
+	c.add(model.HarnessCopilot, CopilotSetupStepsPath, subjectStep, "", state, f.raw, extra)
 }
 
 func (t *revision) hasTripcordStep() bool {

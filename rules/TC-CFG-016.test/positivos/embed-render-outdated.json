@@ -1,0 +1,16 @@
+[
+  {
+    "harness": "claude",
+    "scope": "repo",
+    "path": ".claude/settings.json",
+    "sha256": "a066e47f29b28cb08ab16050e96bd1db80b994a52b073c884684fea4e2f5fabc",
+    "kind": "permissions",
+    "payload": {
+      "event": "SessionStart",
+      "key": "[\"tripcordGuard\",\"SessionStart\"]",
+      "setting": "tripcordGuard",
+      "state": "outdated",
+      "subject": "SessionStart"
+    }
+  }
+]
