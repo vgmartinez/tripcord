@@ -72,6 +72,11 @@ to `s1`. See
 
 ### Known gaps
 
+- `init --embed` does not write cloud-agent setup files (Cursor
+  `environment.json`, Copilot `copilot-setup-steps.yml`, Devin
+  `blueprint.yaml`) unless `--cloud-setup` is set. That flag is a known
+  gap: `bootstrap.sh install` downloads nothing, and v0 has no download
+  channel. See [init](init.md).
 - [TC-CFG-013](rules/TC-CFG-013.md), an AI coding-agent workflow
   triggered by an event a non-collaborator can produce (`issues`,
   `issue_comment`, `discussion`, `discussion_comment`, or
