@@ -195,18 +195,24 @@ bash .tripcord/bootstrap.sh session-start [--harness claude|cursor|copilot]
 bash .tripcord/bootstrap.sh hook --harness <h> --event <e> [--on-failure block|error]
 ```
 
-The bootstrap never downloads or installs anything. Every mode copies
-the binary at
+The bootstrap never downloads or installs anything. `install` and
+`session-start` copy the binary at
 `${XDG_CACHE_HOME:-$HOME/.cache}/tripcord/<version>/<os-arch>/tripcord`
 into a new directory of mode `0700` under
-`${XDG_CACHE_HOME:-$HOME/.cache}/tripcord/.run/`, checks the copy
-against the SHA-256 pinned for the running platform, and runs the copy
+`${XDG_CACHE_HOME:-$HOME/.cache}/tripcord/.run/`, check the copy
+against the SHA-256 pinned for the running platform, and run the copy
 by absolute path. The file that runs is the file that was hashed, so
 replacing the cached binary between the check and the run does not
-work. `install` and `session-start` then run `tripcord scan --config`
-on the repository and remove the copy; `hook` runs `tripcord hook`
-with its arguments. The script waits for it so an execution failure can
-report that a `noexec` mount is a likely cause, then removes the copy.
+work. They then record that cached file's device, inode, size, mtime,
+and ctime in `verified` in the same directory, mode `0400`, and run
+`tripcord scan --config` on the repository. `hook`, when that record
+still matches the cached file, runs the cached file directly and does
+not copy or hash it. When the record is missing, `hook` does this
+verification once. When the file's identity changed, or the record is
+not a private regular file, `hook` exits 2 and runs nothing until
+`install` or `session-start` verifies it again. The script waits for
+the binary so an execution failure can report that a `noexec` mount is
+a likely cause, then removes a private copy.
 
 The tools that decide what runs (`sha256sum` or, on macOS, `shasum`,
 and `find`, `id`, `cp`, `mktemp`, `uname`, and the others the script
@@ -238,6 +244,10 @@ It fails closed. Each of these exits 2 with `tripcord bootstrap:
 
 - no binary in the cache (the reason names the path to fill);
 - a binary with another SHA-256 (the reason names both digests);
+- a cached binary whose device, inode, size, mtime, or ctime no longer
+  matches the `verified` record, or a cached binary that is group- or
+  world-writable (`hook` only: it does not re-hash, and it runs nothing
+  until `install` or `session-start`);
 - a binary that is a symlink or not a regular file;
 - a binary without the execute bit (`chmod 0755` it), rather than the
   shell's 126; or a binary that still cannot execute, for which a
