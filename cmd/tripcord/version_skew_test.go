@@ -28,10 +28,14 @@ func withScannerVersion(t *testing.T, v string) {
 	t.Cleanup(func() { version = saved })
 }
 
+// scanLocally is the remediation both the unverified and the outdated
+// findings carry, in the fix every format prints.
+const scanLocally = "scan locally with the latest Tripcord"
+
 // skewFinding is a TC-CFG-016 finding scan reported.
 type skewFinding struct {
-	path, title string
-	severity    model.Severity
+	path, title, fix string
+	severity         model.Severity
 }
 
 func skewScan(t *testing.T, args ...string) []skewFinding {
@@ -48,7 +52,7 @@ func skewScan(t *testing.T, args ...string) []skewFinding {
 		var f model.Finding
 		mustJSON(t, line, &f)
 		if f.Rule == "TC-CFG-016" {
-			out = append(out, skewFinding{f.Location.Path, f.Title, f.Severity})
+			out = append(out, skewFinding{f.Location.Path, f.Title, f.Fix, f.Severity})
 		}
 	}
 	return out
@@ -120,7 +124,26 @@ func TestVersionSkewNewerEmbedHasNoHigh(t *testing.T) {
 			if len(got) == 0 {
 				t.Fatal("newer embed: no unverified findings; is the embed newer at all?")
 			}
+			assertScanLocally(t, got)
+			if name == "trusted older release" {
+				code, stdout, stderr := runCLI(t, "scan", "--format", "text", repo)
+				if code != int(exitcode.OK) || !strings.Contains(stdout, scanLocally) {
+					t.Fatalf("text: exit %d\n%s\n%s", code, stdout, stderr)
+				}
+			}
 		})
+	}
+}
+
+// assertScanLocally fails unless every finding's remediation, the fix
+// text, JSON, and the other formats print, tells the reader to scan
+// locally with the latest Tripcord. Unverified and outdated share it.
+func assertScanLocally(t *testing.T, got []skewFinding) {
+	t.Helper()
+	for _, f := range got {
+		if !strings.Contains(f.fix, scanLocally) {
+			t.Errorf("%s %q: fix %q does not contain %q", f.path, f.title, f.fix, scanLocally)
+		}
 	}
 }
 
@@ -148,9 +171,14 @@ func TestVersionSkewKnownPinIsOutdatedLow(t *testing.T) {
 	repo := embeddedBase(t)
 	edits(repinWorkflowTo(skewUnknownPin), rerecord)(t, repo)
 	got := skewScan(t, repo)
-	want := skewFinding{embedded.WorkflowPath, "Tripcord guard was written by another Tripcord version", model.SeverityLow}
-	if len(got) != 1 || got[0] != want {
+	want := skewFinding{path: embedded.WorkflowPath, title: "Tripcord guard was written by another Tripcord version", severity: model.SeverityLow}
+	if len(got) != 1 || got[0].path != want.path || got[0].title != want.title || got[0].severity != want.severity {
 		t.Fatalf("findings = %+v, want %+v", got, want)
+	}
+	assertScanLocally(t, got)
+	code, stdout, stderr := runCLI(t, "scan", "--format", "text", repo)
+	if code != int(exitcode.OK) || !strings.Contains(stdout, scanLocally) {
+		t.Fatalf("text: exit %d\n%s\n%s", code, stdout, stderr)
 	}
 }
 

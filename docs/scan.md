@@ -85,8 +85,11 @@ using `s1`. The key is never printed. See
 | --- | --- |
 | 0 | No finding meets the effective threshold. |
 | 1 | At least one finding meets the effective threshold. |
-| 3 | Invalid flags or format, configuration/policy error, a Git ref `--since` cannot use, an invalid `--output` or `--policy` path, an invalid or unreadable fingerprint key (`TRIPCORD_FINGERPRINT_KEY` or `~/.tripcord/fingerprint.key` shorter than 16 bytes, not hex, an odd number of hex characters, corrupt, a symlink, or — on Unix — wrongly owned or too permissive; see [fingerprint.md](fingerprint.md#fail-closed-vs-s1-fallback)), unavailable v0 secret scan, unknown command, a staged scan interrupted after its tree exists, or an incomplete scan (below). `--help` exits 0. |
+| 3 | Invalid flags or format, configuration/policy error, a Git ref `--since` cannot use, an invalid `--output` or `--policy` path, an invalid or unreadable fingerprint key (`TRIPCORD_FINGERPRINT_KEY` or `~/.tripcord/fingerprint.key` shorter than 16 bytes, not hex, an odd number of hex characters, corrupt, a symlink, or — on Unix — wrongly owned or too permissive; see [fingerprint.md](fingerprint.md#fail-closed-vs-s1-fallback)), unavailable v0 secret scan, unknown command, a staged scan interrupted after its tree exists, or an incomplete scan (below). A malformed `--executing-workflow` is one of these configuration errors. `--help` exits 0. |
 | 4 | Internal error, or a failure to start Git or finish writing the output file. |
+
+`scan` does not return 2. Exit 2 stays the fail-closed result of
+`tripcord hook` and of `bootstrap.sh` when it has no verified binary.
 
 When an adapter cannot fully read the configuration (malformed, oversized,
 unsafe, or unreadable files, or walk limits reached), or a rule cannot be

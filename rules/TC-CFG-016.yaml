@@ -169,7 +169,7 @@ severity_when:
     title: "Tripcord guard was written by another Tripcord version"
     when: |
       has(payload.setting) && payload.setting == "tripcordGuard" && has(payload.state) && payload.state in ["outdated", "unverified"]
-    fix: "If the guard is outdated, rerun `tripcord init --embed --force` with the same --version and --sha256 pins and commit the result. If it is unverified, scan locally with the latest Tripcord (`tripcord scan`): this scanner is older than the embed, or runs in CI, where the pull request picks the workflow that scans it. Every invariant this scanner knows still holds either way."
+    fix: "Either way, scan locally with the latest Tripcord (`tripcord scan`): this scanner is older than the embed, or runs in CI, where the pull request picks the workflow that scans it. If the guard is outdated, also rerun `tripcord init --embed --force` with the same --version and --sha256 pins and commit the result. Every invariant this scanner knows still holds."
   - severity: high
     title: "Tripcord workflow pins an unknown commit"
     when: |

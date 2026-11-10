@@ -29,10 +29,11 @@ import (
 // SessionStart and PreToolUse, Cursor and Copilot preToolUse,
 // tripcord.yml, bootstrap.sh) and a missing copilot-setup-steps.yml,
 // which init writes only with --cloud-setup. That failure is the
-// point: no tag ships an embed its own CI flags. Moving this test from
-// the release gate into per-pull-request CI, passing, is the third PR of
-// the TC-CFG-016 version-skew rollout; its tracking issue is listed in
-// docs/release-notes.md ("TC-CFG-016 version skew").
+// point: no tag ships an embed its own CI flags. By the end of PR 3
+// this test must report 0 high, including copilot-setup-steps.yml on
+// an embed written without --cloud-setup. Moving it from the release
+// gate into per-pull-request CI, passing, is
+// https://github.com/vgmartinez/tripcord/issues/119.
 func TestVersionSkewCIScanner(t *testing.T) {
 	if os.Getenv("TRIPCORD_RELEASE_GATE") != "1" {
 		t.Log("release gate not requested; set TRIPCORD_RELEASE_GATE=1 (make release-gate) to build and run the CI scanner the generated tripcord.yml pins")

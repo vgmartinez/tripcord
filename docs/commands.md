@@ -71,8 +71,10 @@ hook runs `.tripcord/bootstrap.sh`, which runs the checksum-verified
 binary by absolute path, never a `tripcord` from `PATH`. Its `hook` mode
 runs `tripcord hook --on-failure block`. The bootstrap never downloads:
 it runs only the pinned binary from its cache, and exits 2, which
-blocks the call, without one. `--embed` needs a Git repository. A
-Copilot hook that times out lets the call through
+blocks the call, without one. A release build refuses a `--version`
+older than itself and exits 3, writing nothing; that check does not
+change the bootstrap's or the hook's exit 2. `--embed` needs a Git
+repository. A Copilot hook that times out lets the call through
 ([init](init.md)). TC-CFG-016 reports an embed that is missing, edited, or,
 against a pull request's base, removed or re-pinned. Details are in
 [init](init.md).
@@ -103,8 +105,8 @@ repository's own `.tripcord` policy. See [preopen](preopen.md).
 | --- | --- |
 | 0 | No finding meets the effective threshold. `--help` also exits 0. |
 | 1 | At least one finding meets the threshold, and the effective mode is `enforce`. |
-| 2 | `hook` blocked the tool call ([hook](hook.md#exit-codes)). `scan` does not return 2. |
-| 3 | Invalid flags or format, a policy or configuration error, a Git ref `--since` cannot use, an invalid `--output` or `--policy` path, a broken fingerprint key, `--secrets` or `--all`, an unknown command, or an incomplete scan. |
+| 2 | `hook` blocked the tool call ([hook](hook.md#exit-codes)), and `bootstrap.sh` when it has no verified binary. `scan` and `init` do not return 2. |
+| 3 | Invalid flags or format, a policy or configuration error, a Git ref `--since` cannot use, an invalid `--output` or `--policy` path, a broken fingerprint key, `--secrets` or `--all`, an unknown command, or an incomplete scan. A malformed `--executing-workflow` and an `init --version` older than a release build are configuration errors and exit 3. |
 | 4 | Internal error, or a failure to start Git or finish writing the output file. |
 
 An incomplete scan still writes the findings it could produce, prints one

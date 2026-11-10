@@ -64,7 +64,9 @@ A release build of `init` refuses a `--version` older than itself
 (exit 3, nothing written): that release's `bootstrap.sh` runs its own
 `scan --config`, which would then be an older TC-CFG-016 judging this
 newer embed. Run the older release's `init` to pin it. A development
-build (`dev`) does not check.
+build (`dev`) does not check. Exit 3 here is a configuration error.
+`init` does not return 2: `bootstrap.sh` with no verified binary, and
+`tripcord hook` when it blocks a call, still exit 2.
 
 Files written for every selection:
 
@@ -513,6 +515,10 @@ the cache by its SHA-256: verified, tampered, and missing.
 | 0 | Files written, unchanged, or a dry run. |
 | 3 | Invalid flags, a missing or malformed pin, a `--version` older than a release build of `init`, a `PATH` that is not a repository root (with `--embed`, not a Git repository), a symlink or non-regular target, or a file that cannot be merged. Nothing was written. |
 | 4 | Internal error, including a failure while writing. |
+
+`init` does not return 2. Exit 2 is the fail-closed result of
+`bootstrap.sh` and of `tripcord hook`, and the `--version` check does
+not change it.
 
 `init` does not create the fingerprint key; `tripcord scan` still
 creates it on first use ([fingerprint.md](fingerprint.md)).
