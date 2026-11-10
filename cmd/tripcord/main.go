@@ -1,8 +1,9 @@
 // Command tripcord is the Tripcord command-line interface.
 //
-// Hook mode (hook.go) never compiles the core rule pack unless the
-// policy needs its catalog, so it cold-starts inside the hook latency
-// budget (p95 under 25 ms; see TestHookColdStartBudget).
+// Hook mode (hook.go) never compiles the core rule pack. A lock uses
+// the pack index (ids, severities, harnesses) instead of the compiled
+// expressions, so a locked policy stays inside the hook latency budget
+// (p95 under 25 ms; see TestHookColdStartBudget).
 package main
 
 import (

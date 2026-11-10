@@ -210,6 +210,33 @@ type Rule struct {
 	Evidence string
 }
 
+// indexRule is Compile without the CEL programs. Severity, harness, and
+// pack are the fields a policy lock reads. When is nil.
+func indexRule(spec *Spec, manifest PackRef) (*Rule, error) {
+	if err := spec.Validate(); err != nil {
+		return nil, err
+	}
+	if manifest.Name == "" || manifest.Version == "" || spec.Pack != manifest.Name {
+		return nil, fmt.Errorf("pack %s does not match the manifest %s", spec.Pack, manifest)
+	}
+	sev, _ := model.ParseSeverity(spec.Severity)
+	harness := make([]model.Harness, len(spec.Harness))
+	for i, h := range spec.Harness {
+		harness[i] = model.Harness(h)
+	}
+	return &Rule{
+		ID:       spec.ID,
+		Pack:     manifest,
+		Title:    spec.Title,
+		Severity: sev,
+		Harness:  harness,
+		Files:    append([]string(nil), spec.Files...),
+		Fix:      spec.Fix,
+		Refs:     append([]string(nil), spec.Refs...),
+		Evidence: spec.Evidence,
+	}, nil
+}
+
 // Compile validates spec and compiles its when expression in env.
 // manifest is the pack the rule belongs to. spec.Pack must be that
 // pack's name; the compiled rule inherits manifest's version.
