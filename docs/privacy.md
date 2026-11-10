@@ -19,6 +19,7 @@ order:
 | `-u` / `--user` value of the form `user:pass` (S2) | `curl -u admin:X` | `RedactUserFlags` |
 | A tool's own short password or token flag (S2) | `sshpass -p X`, `redis-cli -a X`, `mysql -pX`, `docker login -p X`, `openssl -k X`, `vercel -t X` | `RedactToolFlags` |
 | A quoted value, as a whole (S3) | `--password "a b X"` | all flag and assignment classes |
+| A shell-escaped quoted value (`\"...\"`) | `echo "token: \"X\""`, `TOKEN=\"X\"`, `--password \"X\"` | `indexEscapedQuotes`, every value reader |
 | URL userinfo, with an empty username or percent-encoded too (S4) | `https://u:X@host`, `redis://:X@host`, `https://u:p%40X@host` | `RedactURLUserinfo` |
 | MCP argv with the value in the next element (S4) | `["--token", "X"]` | `RedactToolArgv` (source side) |
 | Token shapes | private key blocks, `AKIA…`, AWS secret keys, `ghp_…`, `github_pat_…`, `glpat-…`, `sk-…`, `sk_live_…`, `xox?-…`, `xapp-…`, `npm_…`, `hf_…`, `ya29.…`, `AIza…`, JWTs, `bearer X`, Slack webhook URLs | `secretPatterns` |
@@ -26,10 +27,13 @@ order:
 | A YAML block scalar, nested mapping, or comment gap under a credential name, as a whole | `api_key: \|-` then `  X`, `token:` then `  "pw":X`, `token: # secret` then `  X` | `redactColonAssignments` (`blockScalarHeader`, `nestedMappingStart`, `commentGapStart`) |
 | A YAML value that continues on later lines: a quoted scalar that closes later, or a more-indented line after the value, a comment, or a commented-out key | `token: "q" # c` then `  X`, `token: "abc` then `  X"`, `# token: # c` then `  X` | `redactColonAssignments` (`valueContinuation`, `multilineQuotedValue`, `commentHeadBodyEnd`) |
 | The word `password` or `passwd` and the word after it (netrc) | `machine h login u password X`, `setup password X` | `RedactToolFlags` (`redactPasswordWords`) |
-| `-p X` in a command that also names a user (`-u`, `-U`, `-l`, `--user`, `--username`, `--login`, or a `login` subcommand), for any tool | `docker login -u bot -p X`, `regcli --user bot -p X` | `RedactToolFlags` (`redactUserContextPassword`) |
+| `-p X` in a command that also names a user (`-u`, `-U`, `-l`, `--user`, `--username`, `--login`, or a `login` subcommand), for any tool. A value containing `:` is redacted too, except a port on `docker run` or `podman run` (including `container run`) | `docker login -u bot -p X`, `regcli --user bot -p deadbeef:22`, `ssh -l alice -p deadbeef:22` | `RedactToolFlags` (`redactUserContextPassword`) |
 
 A shell line continuation (`\` and a newline) between a flag, a header,
-or `bearer` and its value is skipped, as the shell deletes it.
+or `bearer` and its value is skipped, as the shell deletes it. A value
+whose quotes are themselves escaped (`echo "token: \"X\""`,
+`TOKEN=\"X\"`, `--password \"X\"`) is read as one value, quotes kept
+around `[REDACTED]`. The pair does not cross a newline.
 
 A credential name's value may start on the next line. If that line is
 a key, the more-indented lines are a nested mapping and are redacted
@@ -51,9 +55,15 @@ line. A key inside a shell command keeps the text after it. A
 commented-out key whose header comment is followed by content redacts
 the first content line and the lines indented deeper than it, since
 the original key's indentation is unknown. `-p X` is not redacted
-without a user in the command, so `mkdir -p`, `cp -p`, `ssh -p 22`, and
-`docker run -p 8080:80` keep their value, and a port mapping is never
-redacted. `password` matches only as a whole word: `--password-stdin`,
+without a user in the command, so `mkdir -p`, `cp -p`, `ssh -p 22`,
+`useradd -p HASH`, and `docker run -p 8080:80` keep their value. A
+value that contains `:` stays only for `docker run` and `podman run`,
+including `docker container run` and `podman container run`
+(`docker run -u 1000 -p 8080:80`). Any other command that names a user
+redacts `-p` even when the value contains `:`, so
+`ssh -l alice -p deadbeef:22` does not pass as a port, and
+`ssh -l alice -p 22` is redacted too. `password` matches only as a
+whole word: `--password-stdin`,
 `db_password`, and `password: x` are other classes. The word after
 `password` in free text (`echo password reset`) is redacted too: a
 hidden word costs less than a leaked password.

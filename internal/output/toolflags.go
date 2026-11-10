@@ -306,27 +306,85 @@ func redactToolFlagsInSegment(segment string) (string, []string) {
 		if flag.subcommand != "" && !wordAfter(words, offset, flag.subcommand) {
 			continue
 		}
-		suffix := flag.pattern.ReplaceAllStringFunc(segment[offset:], func(match string) string {
-			g := flag.pattern.FindStringSubmatch(match)
-			value := g[4]
-			if flag.envAssign {
-				redacted, secrets, ok := redactEnvAssignmentText(value)
+		quotes := indexEscapedQuotes(segment)
+		var next string
+		if len(quotes) == 0 {
+			suffix := flag.pattern.ReplaceAllStringFunc(segment[offset:], func(match string) string {
+				g := flag.pattern.FindStringSubmatch(match)
+				value := g[4]
+				if flag.envAssign {
+					redacted, secrets, ok := redactEnvAssignmentText(value)
+					if !ok {
+						return match
+					}
+					removed = append(removed, secrets...)
+					return g[1] + g[2] + g[3] + redacted
+				}
+				prefix, secret, ok := flag.secretPart(value)
 				if !ok {
 					return match
 				}
-				removed = append(removed, secrets...)
-				return g[1] + g[2] + g[3] + redacted
-			}
-			prefix, secret, ok := flag.secretPart(value)
-			if !ok {
-				return match
-			}
-			removed = append(removed, secret)
-			return g[1] + g[2] + g[3] + quoteLike(value, prefix+redactedMarker)
-		})
-		segment = segment[:offset] + suffix
+				removed = append(removed, secret)
+				return g[1] + g[2] + g[3] + quoteLike(value, prefix+redactedMarker)
+			})
+			next = segment[:offset] + suffix
+		} else {
+			next = redactToolFlagMatches(segment, offset, flag, quotes, &removed)
+		}
+		segment = next
 	}
 	return segment, removed
+}
+
+// redactToolFlagMatches is the tool-flag replacement for a segment that
+// contains a shell-escaped quote. The value regexp stops at the first
+// ", so a value of \"X\" is extended to the whole pair before the secret
+// test. A segment with no such quote keeps the regexp path.
+func redactToolFlagMatches(segment string, offset int, flag toolFlag, quotes escapedQuoteSpans, removed *[]string) string {
+	var b strings.Builder
+	b.WriteString(segment[:offset])
+	pos, written := offset, offset
+	for pos < len(segment) {
+		rel := flag.pattern.FindStringSubmatchIndex(segment[pos:])
+		if rel == nil {
+			break
+		}
+		m := rel
+		for i := range m {
+			if m[i] >= 0 {
+				m[i] += pos
+			}
+		}
+		valStart, valEnd := m[8], m[9]
+		if alt, ok := quotes.at(segment, valStart); ok && valStart+len(alt) > valEnd {
+			valEnd = valStart + len(alt)
+		}
+		value := segment[valStart:valEnd]
+		replacement := ""
+		redact := false
+		if flag.envAssign {
+			redacted, secrets, ok := redactEnvAssignmentText(value)
+			if ok {
+				*removed = append(*removed, secrets...)
+				replacement = redacted
+				redact = true
+			}
+		} else if prefix, secret, ok := flag.secretPart(value); ok {
+			*removed = append(*removed, secret)
+			replacement = quoteLike(value, prefix+redactedMarker)
+			redact = true
+		}
+		if !redact {
+			pos = m[1]
+			continue
+		}
+		b.WriteString(segment[written:valStart])
+		b.WriteString(replacement)
+		pos = valEnd
+		written = valEnd
+	}
+	b.WriteString(segment[written:])
+	return b.String()
 }
 
 // RedactToolArgv redacts tool-specific secret flags in an argv array
@@ -443,8 +501,11 @@ func redactEnvAssignmentText(text string) (redacted string, removed []string, ok
 }
 
 // quoteLike returns replacement wrapped in the same quotes as value, if
-// value is quoted.
+// value is quoted, including a shell-escaped \"...\" pair.
 func quoteLike(value, replacement string) string {
+	if _, ok := unescapeShellQuotes(value); ok {
+		return `\"` + replacement + `\"`
+	}
 	if len(value) >= 2 {
 		quote := value[0]
 		if (quote == '"' || quote == '\'') && value[len(value)-1] == quote {

@@ -21,10 +21,11 @@ shapes. Its key and fingerprint are built from the sanitized command,
 which before still held the secret, so the fingerprint depended on it
 (under `s1`, rotating it changed the fingerprint). It is now redacted
 before it is hashed, so under `s1` the fingerprint no longer depends on
-the secret. Every other fingerprint is unchanged: the 95 corpus
-directories scan to byte-identical JSONL. The sink itself never changes
-a fingerprint, since it is computed before the sink runs. As with the
-section below, this lands before the first release, so a baseline keyed
+the secret. Every other fingerprint is unchanged: the 81 corpus
+seeds (50 benign and 31 malicious) scan to byte-identical JSONL. The
+sink itself never changes a fingerprint, since it is computed before
+the sink runs. As with the section below, this lands before the first
+release, so a baseline keyed
 by a fingerprint of one of these entries is recorded once.
 
 ### Fingerprints of secret-bearing entries change
@@ -149,6 +150,19 @@ init writes reports those differences as further highs.
 
 ### Known gaps
 
+- `-p X` is redacted only when the same command also names a user
+  (`-u`, `-U`, `-l`, `--user`, `--username`, `--login`, or a `login`
+  subcommand). A `-p` with no user flag in the command, such as
+  `ssh -p 22` or `mkdir -p`, is left as written.
+- `useradd -p HASH` is the same gap: with no user flag, the password
+  hash after `-p` is not redacted. It is redacted when a user flag or
+  a `login` subcommand is also present (`useradd -u 1000 -p HASH bob`).
+- A commented-out credential key (`# token: # note`) treats the next
+  line as its value and replaces that line in the published evidence
+  with `[REDACTED]`. The finding is still reported; the line is only
+  missing from the evidence. A command whose network fetch sits on
+  that next line is still a TC-CFG-001 finding, and the evidence shows
+  `# token: [REDACTED]` instead of the fetch.
 - [TC-CFG-013](rules/TC-CFG-013.md), an AI coding-agent workflow
   triggered by an event a non-collaborator can produce (`issues`,
   `issue_comment`, `discussion`, `discussion_comment`, or
