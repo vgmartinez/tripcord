@@ -189,6 +189,12 @@ runs:
         TRIPCORD_BASE: ${{ inputs.base }}
         TRIPCORD_SARIF: ${{ steps.paths.outputs.sarif }}
         TRIPCORD_MARKDOWN: ${{ steps.paths.outputs.markdown }}
+        TRIPCORD_INPUT_BINARY: ${{ inputs.binary }}
+        TRIPCORD_INPUT_REF: ${{ inputs.ref }}
+        TRIPCORD_ACTION_REPOSITORY: ${{ github.action_repository }}
+        TRIPCORD_WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+        TRIPCORD_WORKFLOW_FILE_PATH: ${{ job.workflow_file_path }}
+        TRIPCORD_WORKFLOW_SHA: ${{ job.workflow_sha }}
       run: |
         set +e
         # Same order as check-path. The base is workflow-command data:
@@ -214,6 +220,22 @@ runs:
             fi
             args+=(--base "$TRIPCORD_BASE")
           fi
+        fi
+        # --executing-workflow names the reusable workflow this job runs
+        # (job.workflow_*, not github.workflow_*, which is the caller). It
+        # lets the scan accept a tripcord.yml pin equal to that workflow
+        # only when the base pins it too, so it is passed only when this
+        # action runs inside this repository's own tripcord-pr.yml (a
+        # fork's is not one the scanner accepts), and
+        # only to the tripcord built from this action's own source: a
+        # binary input or another ref may predate the flag. GHES has no
+        # job.workflow_*, so it gets no flag.
+        if [ -z "$TRIPCORD_INPUT_BINARY" ] && [ -z "$TRIPCORD_INPUT_REF" ] &&
+          [ -n "$TRIPCORD_WORKFLOW_SHA" ] &&
+          [ "$TRIPCORD_WORKFLOW_REPOSITORY" = "$TRIPCORD_ACTION_REPOSITORY" ] &&
+          [ "$TRIPCORD_WORKFLOW_REPOSITORY" = "vgmartinez/tripcord" ] &&
+          [ "$TRIPCORD_WORKFLOW_FILE_PATH" = ".github/workflows/tripcord-pr.yml" ]; then
+          args+=(--executing-workflow "${TRIPCORD_WORKFLOW_REPOSITORY}/${TRIPCORD_WORKFLOW_FILE_PATH}@${TRIPCORD_WORKFLOW_SHA}")
         fi
         "$TRIPCORD" scan "$TRIPCORD_PATH" --format gha "${args[@]}"
         status=$?
