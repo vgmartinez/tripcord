@@ -1210,7 +1210,7 @@ func redactFinding(finding model.Finding, redact Redactor) model.Finding {
 				Excerpt: redact(evidence.Excerpt),
 			}
 			if evidence.Config != nil {
-				out.Evidence[i].Config = &model.ConfigRef{ID: redact(evidence.Config.ID), Key: redact(evidence.Config.Key)}
+				out.Evidence[i].Config = &model.ConfigRef{ID: redact(evidence.Config.ID), Key: redactEvidenceKey(evidence.Config.Key, redact)}
 			}
 		}
 	}
