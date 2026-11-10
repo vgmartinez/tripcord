@@ -18,6 +18,19 @@ func LoadCore(env *Env) (*Pack, error) {
 	return LoadPack(corepack.FS, CoreSource, env)
 }
 
+// LoadCoreIndex loads the built-in pack's catalog without compiling CEL.
+// Policy locks and the custom-id check need each rule's id, pack,
+// severity, and harnesses. The hook does not evaluate core rules, so it
+// uses this instead of LoadCore. The returned rules have no compiled
+// expression and must not be evaluated.
+func LoadCoreIndex() (*Catalog, error) {
+	pack, err := loadPack(corepack.FS, CoreSource, nil, false)
+	if err != nil {
+		return nil, err
+	}
+	return NewCatalog(pack)
+}
+
 // CoreAdvisories returns the built-in pack's offline advisory list, the
 // one LoadCore attaches to its environment, without compiling a rule.
 // An environment that evaluates policy expressions without LoadCore

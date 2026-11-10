@@ -88,6 +88,38 @@ func TestCoreMatchesDisk(t *testing.T) {
 	}
 }
 
+func TestLoadCoreIndexMatchesCompiled(t *testing.T) {
+	env := testEnv(t)
+	core, err := LoadCore(env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	index, err := LoadCoreIndex()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(index.Rules()) != len(core.Rules) {
+		t.Fatalf("index has %d rules, compiled pack %d", len(index.Rules()), len(core.Rules))
+	}
+	for _, want := range core.Rules {
+		got, ok := index.Rule(want.ID)
+		if !ok {
+			t.Fatalf("index missing %s", want.ID)
+		}
+		if got.When != nil || len(got.SeverityWhen) != 0 {
+			t.Fatalf("%s index compiled an expression", want.ID)
+		}
+		if got.Pack != want.Pack || got.Severity != want.Severity || len(got.Harness) != len(want.Harness) {
+			t.Fatalf("%s index %+v compiled pack %s severity %s", want.ID, got.Pack, want.Pack, want.Severity)
+		}
+		for i := range want.Harness {
+			if got.Harness[i] != want.Harness[i] {
+				t.Fatalf("%s harness %v, compiled %v", want.ID, got.Harness, want.Harness)
+			}
+		}
+	}
+}
+
 func activeEntries(r *Registry) []RegistryEntry {
 	var out []RegistryEntry
 	for _, e := range r.Entries() {

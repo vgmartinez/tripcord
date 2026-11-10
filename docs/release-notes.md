@@ -2,6 +2,32 @@
 
 ## v0 (unreleased)
 
+### More secret shapes are redacted, in evidence keys too
+
+JSON and JSONL output carry the evidence key of a finding, which
+includes the full command of a hook or setup step, and some secrets
+stayed in it. These are now redacted in every format (text, JSON, JSONL,
+SARIF, Markdown, annotations): a YAML value that continues on later
+lines (a quoted value, a comment, then a more-indented line; a quoted
+scalar that closes on a later line; a commented-out key followed by its
+value), a netrc line (`machine h login u password X`, also in a
+copilot-setup-steps `run:` block), the word after `password`, and `-p X`
+in a command that names a user. The sink also decodes the key and
+redacts each string in it, instead of the JSON text, which hid the
+shapes behind `\n` and `\"`.
+
+Fingerprints change only for an entry whose command carried one of these
+shapes. Its key and fingerprint are built from the sanitized command,
+which before still held the secret, so the fingerprint depended on it
+(under `s1`, rotating it changed the fingerprint). It is now redacted
+before it is hashed, so under `s1` the fingerprint no longer depends on
+the secret. Every other fingerprint is unchanged: the 81 corpus
+seeds (50 benign and 31 malicious) scan to byte-identical JSONL. The
+sink itself never changes a fingerprint, since it is computed before
+the sink runs. As with the section below, this lands before the first
+release, so a baseline keyed
+by a fingerprint of one of these entries is recorded once.
+
 ### Fingerprints of secret-bearing entries change
 
 Findings on a configuration entry that lost a value to redaction (a
@@ -70,6 +96,58 @@ keyed `k1` discriminator developers get locally, rather than defaulting
 to `s1`. See
 [fingerprint.md](fingerprint.md#fingerprint-key).
 
+### Hook decisions use custom rules
+
+In v0, `tripcord hook` decides from the policy's `custom` rules on the
+hook surface. It does not run the core `TC-CFG-*` pack. With no custom
+rules, or with the event's harness left out of `harnesses`, the tool
+call is allowed. A custom rule can still call the same CEL detectors
+the pack uses (`shell.risks`, `shell.unpinned`, `hook.argv`,
+`mcp.packages`, and the rest). See [hook.md](hook.md).
+
+### Action refs before 7ffdcbe
+
+`7ffdcbea10174609eb58284c21bcb94aee4a2a82` is the first commit of this
+repository with no tracked symlinks. Its parent still has the 46
+fixture links. GitHub's action download fails on in-repo and dangling
+symlinks, so a `uses:` ref before `7ffdcbe` cannot be consumed as a
+remote composite action. Current `main` has no tracked symlinks.
+
+### Empty or missing `path`
+
+The composite action's `path` input defaults to `.`. Omitting it is
+that default, not a failure. Before the scan, the `check-path` step
+exits 1 when the value is an empty string, names a path that does not
+exist, names something that is not a directory, names an empty
+directory, or names a directory `ls` cannot read. That last case is
+reported as unreadable, not as empty. `tripcord scan` of a directory
+inside a Git repository scans that repository from its git root, so an
+empty subdirectory used
+to fall through and scan the whole repository. It now fails first. A
+non-empty subdirectory still scans the git root; scoping a scan to one
+package is an open product question
+([#59](https://github.com/vgmartinez/tripcord/issues/59)).
+
+### Reusable workflows and report-only
+
+CI runs the composite action as a remote step. The reusable workflows
+`tripcord-pr.yml` and `tripcord-pr-comment.yml` are covered by the
+contract test and actionlint, not by an end-to-end run. There is no
+report-only mode. `fail-on` accepts `low`, `medium`, `high`, and
+`critical`, and a non-zero scan or `pr-context` exit fails the job
+after publishing
+([#62](https://github.com/vgmartinez/tripcord/issues/62)).
+
+### Leftover embed
+
+When `bootstrap.sh` and `embed.json` are gone and a leftover piece
+that only `init --embed` writes is still what this build writes (the
+workflow, or a hook that runs `.tripcord/bootstrap.sh hook`), the scan
+reports two high [TC-CFG-016](rules/TC-CFG-016.md) findings: the
+missing manifest and the missing bootstrap. It does not also report
+every harness hook. A leftover guard hook that no longer matches what
+init writes reports those differences as further highs.
+
 ### TC-CFG-003 and a repository's own scripts
 
 `config.repo_script` quiets TC-CFG-003 when a repository MCP server is
@@ -111,6 +189,19 @@ the tree, and its bytes are not read.
 
 ### Known gaps
 
+- `-p X` is redacted only when the same command also names a user
+  (`-u`, `-U`, `-l`, `--user`, `--username`, `--login`, or a `login`
+  subcommand). A `-p` with no user flag in the command, such as
+  `ssh -p 22` or `mkdir -p`, is left as written.
+- `useradd -p HASH` is the same gap: with no user flag, the password
+  hash after `-p` is not redacted. It is redacted when a user flag or
+  a `login` subcommand is also present (`useradd -u 1000 -p HASH bob`).
+- A commented-out credential key (`# token: # note`) treats the next
+  line as its value and replaces that line in the published evidence
+  with `[REDACTED]`. The finding is still reported; the line is only
+  missing from the evidence. A command whose network fetch sits on
+  that next line is still a TC-CFG-001 finding, and the evidence shows
+  `# token: [REDACTED]` instead of the fetch.
 - [TC-CFG-013](rules/TC-CFG-013.md), an AI coding-agent workflow
   triggered by an event a non-collaborator can produce (`issues`,
   `issue_comment`, `discussion`, `discussion_comment`, or
@@ -121,3 +212,12 @@ the tree, and its bytes are not read.
   ([zizmor#1655](https://github.com/zizmorcore/zizmor/pull/1655),
   [#41](https://github.com/vgmartinez/tripcord/issues/41)). See
   [Known gaps](rules/README.md#known-gaps) in the rule index.
+- Report-only mode for the Action and the reusable workflows is not
+  implemented. Publishing SARIF or a pull-request comment without
+  failing on findings needs a product decision
+  ([#62](https://github.com/vgmartinez/tripcord/issues/62)). Exit 3,
+  exit 4, and an invalid `path` would still have to fail.
+- Scanning one subdirectory of a monorepo is not implemented. `tripcord
+  scan PATH` and the Action's `path` input resolve a path inside a Git
+  repository to that repository's root
+  ([#59](https://github.com/vgmartinez/tripcord/issues/59)).

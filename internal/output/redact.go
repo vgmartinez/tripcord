@@ -95,7 +95,10 @@ var urlUserinfoSlashPattern = regexp.MustCompile(`(://)([^/\s:@]*:([^\s@?#]*/[^\
 // followed it; a single-quoted string (shell single quotes do not
 // support backslash escapes, so no \-skipping is needed there); or an
 // unquoted run, which the two assignmentPattern variants below bound
-// differently.
+// differently. A value whose quotes are themselves escaped
+// (echo "token: \"X\"") does not start at a real quote; indexEscapedQuotes
+// reads that pair, because folding it into this regexp would rescan a
+// missed closer to the end of the line for every candidate.
 const quotedValue = `"(?:[^"\\\n]|\\.)*"|'[^'\n]*'`
 
 // lineContinuation is a shell backslash-newline. The shell deletes it,
@@ -460,6 +463,7 @@ func RedactSecretFlags(value string) (string, []string) {
 	var b strings.Builder
 	var spans literalSpans
 	spansFound := false
+	quotes := indexEscapedQuotes(value)
 	pos, written := 0, 0
 	for pos < len(value) {
 		dash := strings.IndexByte(value[pos:], '-')
@@ -493,10 +497,15 @@ func RedactSecretFlags(value string) (string, []string) {
 			spans, spansFound = findLiteralSpans(value), true
 		}
 		if (closeQuote == "" || closeQuote == openQuote) && !spans.contains(start) {
-			loc = valuePattern.FindStringIndex(value[sepEnd:])
-		}
-		if loc != nil {
-			body = value[sepEnd : sepEnd+loc[1]]
+			if alt, ok := quotes.at(value, sepEnd); ok {
+				body = alt
+				loc = []int{0, len(alt)}
+			} else {
+				loc = valuePattern.FindStringIndex(value[sepEnd:])
+				if loc != nil {
+					body = value[sepEnd : sepEnd+loc[1]]
+				}
+			}
 		}
 		pos = sepEnd
 		if loc == nil || placeholderSecret(body) {
@@ -520,8 +529,12 @@ func wordBoundaryBefore(value string, offset int) bool {
 	return offset == 0 || isCommandSpace(value[offset-1])
 }
 
-// unquote strips one layer of matching single or double quotes.
+// unquote strips one layer of matching single or double quotes, or one
+// shell-escaped \"...\" pair.
 func unquote(value string) string {
+	if inner, ok := unescapeShellQuotes(value); ok {
+		return inner
+	}
 	if len(value) >= 2 {
 		quote := value[0]
 		if (quote == '"' || quote == '\'') && value[len(value)-1] == quote {
@@ -529,6 +542,16 @@ func unquote(value string) string {
 		}
 	}
 	return value
+}
+
+// valueSecret is the secret text inside an assignment or flag value:
+// one \"...\" pair, or the same trimming of ordinary quotes the colon
+// and user-flag paths have always used.
+func valueSecret(body string) string {
+	if inner, ok := unescapeShellQuotes(body); ok {
+		return inner
+	}
+	return strings.Trim(body, `"'`)
 }
 
 // userFlagPattern matches curl's -u/--user/-user flag and its value,
@@ -548,6 +571,7 @@ var userFlagPattern = regexp.MustCompile(`(?i)^(` + UserFlagAlternation + `)(` +
 func RedactUserFlags(value string) (string, []string) {
 	var removed []string
 	var b strings.Builder
+	quotes := indexEscapedQuotes(value)
 	pos, written := 0, 0
 	for pos < len(value) {
 		dash := strings.IndexByte(value[pos:], '-')
@@ -566,6 +590,13 @@ func RedactUserFlags(value string) (string, []string) {
 		end := start + g[1]
 		pos = end
 		flag, separator, body := value[start+g[2]:start+g[3]], value[start+g[4]:start+g[5]], value[start+g[6]:end]
+		if separator != "" {
+			if alt, ok := quotes.at(value, start+g[6]); ok {
+				body = alt
+				end = start + g[6] + len(alt)
+				pos = end
+			}
+		}
 		if separator == "" {
 			switch strings.ToLower(flag) {
 			case "-u":
@@ -579,7 +610,7 @@ func RedactUserFlags(value string) (string, []string) {
 		if !LooksLikeUserPass(body) || placeholderSecret(body) {
 			continue
 		}
-		removed = append(removed, strings.Trim(body, `"'`))
+		removed = append(removed, valueSecret(body))
 		b.WriteString(value[written:start])
 		b.WriteString(flag + separator + quoteLike(body, redactedMarker))
 		written = end
@@ -672,6 +703,7 @@ func redactColonAssignments(value string, removed *[]string) string {
 	var b strings.Builder
 	var spans literalSpans
 	spansFound := false
+	quotes := indexEscapedQuotes(value)
 	imageRefs := findContainerImageSpans(value)
 	lines := newLineIndex(value)
 	commentGaps := newCommentGapIndex(value)
@@ -700,11 +732,16 @@ func redactColonAssignments(value string, removed *[]string) string {
 				blockStart, isBlock = nestedMappingStart(value, h)
 				bodyStart = blockStart
 			}
+			commentGap := false
 			if !isBlock {
 				blockStart, bodyStart, isBlock = commentGapStart(value, h, lines, commentGaps)
+				commentGap = isBlock
 			}
 			if isBlock {
 				bodyEnd := blockBodyEnd(value, bodyStart, lines.column(h.start))
+				if commentGap && inCommentLine(value, h.start) {
+					bodyEnd = commentHeadBodyEnd(value, bodyStart)
+				}
 				if bodyEnd > blockStart {
 					b.WriteString(value[pos:blockStart])
 					*removed = append(*removed, value[blockStart:bodyEnd])
@@ -727,16 +764,25 @@ func redactColonAssignments(value string, removed *[]string) string {
 		}
 		body := ""
 		if ok {
-			body = colonValue(value[h.valStart:], stop)
+			body = colonValue(value, h.valStart, stop, quotes)
+			if opensQuote(value, h.valStart) && keyStartsLine(value, h.start) {
+				body = multilineQuotedValue(value, h.valStart)
+			}
 		}
 		b.WriteString(value[pos:h.valStart])
 		pos = h.valStart
 		if !ok || placeholderSecret(body) {
 			continue
 		}
-		*removed = append(*removed, strings.Trim(body, `"'`))
+		*removed = append(*removed, valueSecret(body))
 		b.WriteString(quoteLike(body, redactedMarker))
 		pos += len(body)
+		if next, end, more := valueContinuation(value, h, pos, lines); more {
+			b.WriteString(value[pos:next])
+			*removed = append(*removed, value[next:end])
+			b.WriteString(redactedBlockScalarBody(value[next:end]))
+			pos = end
+		}
 	}
 	b.WriteString(value[pos:])
 	return b.String()
@@ -1007,7 +1053,7 @@ func commentGapStart(value string, h assignmentHead, lines *lineIndex, gaps *com
 	for first < len(value) && (value[first] == ' ' || value[first] == '\t') {
 		first++
 	}
-	if first == len(value) || first-bodyStart <= keyIndent {
+	if first == len(value) || first-bodyStart <= keyIndent && !inCommentLine(value, h.start) {
 		return 0, 0, false
 	}
 	return h.valStart, bodyStart, true
@@ -1074,10 +1120,14 @@ func (c *commentGapIndex) cache(start, end int) {
 	c.runs = append(c.runs, commentGapRun{start: start, end: end})
 }
 
-// colonValue returns the "key: value" value at the start of rest: a
-// quoted string, or the unquoted run up to a colonValueEnd or stop
-// byte, without trailing whitespace.
-func colonValue(rest, stop string) string {
+// colonValue returns the "key: value" value starting at valStart: a
+// shell-escaped \"...\" pair, a quoted string, or the unquoted run up
+// to a colonValueEnd or stop byte, without trailing whitespace.
+func colonValue(value string, valStart int, stop string, quotes escapedQuoteSpans) (body string) {
+	if body, ok := quotes.at(value, valStart); ok {
+		return body
+	}
+	rest := value[valStart:]
 	if loc := assignmentQuotedValue.FindStringIndex(rest); loc != nil {
 		return rest[:loc[1]]
 	}
@@ -1127,6 +1177,7 @@ func isAlnum(c byte) bool {
 // whitespace ("token = -x") is the next flag, not the value.
 func redactEqualsAssignments(value string, removed *[]string) string {
 	scan := newStemScanner(value)
+	quotes := indexEscapedQuotes(value)
 	var b strings.Builder
 	pos := 0
 	for {
@@ -1137,8 +1188,12 @@ func redactEqualsAssignments(value string, removed *[]string) string {
 		body := ""
 		ok := CredentialName(h.name)
 		if ok {
-			loc := assignmentEqualsValue.FindStringIndex(value[h.valStart:])
-			body = value[h.valStart : h.valStart+loc[1]]
+			if alt, quoted := quotes.at(value, h.valStart); quoted {
+				body = alt
+			} else {
+				loc := assignmentEqualsValue.FindStringIndex(value[h.valStart:])
+				body = value[h.valStart : h.valStart+loc[1]]
+			}
 			ok = !placeholderSecret(body) && (!strings.HasPrefix(body, "-") || !isCommandSpace(value[h.valStart-1]))
 		}
 		b.WriteString(value[pos:h.valStart])
@@ -1155,7 +1210,11 @@ func redactEqualsAssignments(value string, removed *[]string) string {
 }
 
 func placeholderSecret(value string) bool {
-	inner := strings.Trim(strings.TrimSpace(value), `"'`)
+	inner := strings.TrimSpace(value)
+	if unescaped, ok := unescapeShellQuotes(inner); ok {
+		inner = strings.TrimSpace(unescaped)
+	}
+	inner = strings.Trim(inner, `"'`)
 	if inner == "" || strings.HasPrefix(inner, "$") || strings.HasPrefix(inner, "<") || strings.HasPrefix(strings.ToLower(inner), "your-") {
 		return true
 	}
@@ -1196,7 +1255,7 @@ func redactFinding(finding model.Finding, redact Redactor) model.Finding {
 				Excerpt: redact(evidence.Excerpt),
 			}
 			if evidence.Config != nil {
-				out.Evidence[i].Config = &model.ConfigRef{ID: redact(evidence.Config.ID), Key: redact(evidence.Config.Key)}
+				out.Evidence[i].Config = &model.ConfigRef{ID: redact(evidence.Config.ID), Key: redactEvidenceKey(evidence.Config.Key, redact)}
 			}
 		}
 	}

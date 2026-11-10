@@ -16,9 +16,11 @@ var HookEvents = []string{hook.EventPreTool}
 const claudePreToolUse = "PreToolUse"
 
 // preToolUseInput is the Claude Code PreToolUse hook JSON. Fields rules
-// do not read (transcript_path, permission_mode, cwd) are ignored.
+// do not read (transcript_path, permission_mode) are ignored. cwd is the
+// directory a relative tool path is resolved against.
 type preToolUseInput struct {
 	SessionID     string         `json:"session_id"`
+	Cwd           string         `json:"cwd"`
 	HookEventName string         `json:"hook_event_name"`
 	ToolName      string         `json:"tool_name"`
 	ToolInput     map[string]any `json:"tool_input"`
@@ -45,6 +47,7 @@ func ParseHookInput(event string, data []byte, now time.Time) (model.Event, erro
 		SessionID: in.SessionID,
 		Tool:      in.ToolName,
 		Input:     in.ToolInput,
+		Dir:       in.Cwd,
 	}
 	return call.Event(data, now), nil
 }

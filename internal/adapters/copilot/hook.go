@@ -19,6 +19,7 @@ var HookEvents = []string{hook.EventPreTool}
 // against --event.
 type preToolUseInput struct {
 	SessionID string          `json:"sessionId"`
+	Cwd       string          `json:"cwd"`
 	ToolName  string          `json:"toolName"`
 	ToolArgs  json.RawMessage `json:"toolArgs"`
 }
@@ -45,6 +46,7 @@ func ParseHookInput(event string, data []byte, now time.Time) (model.Event, erro
 		SessionID: in.SessionID,
 		Tool:      in.ToolName,
 		Input:     args,
+		Dir:       in.Cwd,
 	}
 	return call.Event(data, now), nil
 }

@@ -29,6 +29,25 @@ custom:
     deny_if: 'event.command != "" && "pipe" in shell.risks(event.command)'
     message: piping a download into a shell is not allowed
   - id: ACME-002
+    deny_if: 'event.paths.exists(p, p.lowerAscii().endsWith("/.env"))'
+    message: reading .env is not allowed
+`
+
+// hookLockedEnforcePolicy is hookTestPolicy with the hook surface locked
+// to enforce. locked.mode locks the mode and the fail-on ceiling
+// (docs/policy.md). locked.rules forces the core catalog to compile,
+// which is the cold-start path a lock adds on top of the custom rules.
+const hookLockedEnforcePolicy = `version: 1
+mode: enforce
+fail-on: high
+locked:
+  mode: true
+  rules: [TC-CFG-001]
+custom:
+  - id: ACME-001
+    deny_if: 'event.command != "" && "pipe" in shell.risks(event.command)'
+    message: piping a download into a shell is not allowed
+  - id: ACME-002
     deny_if: 'event.paths.exists(p, p.endsWith("/.env"))'
     message: reading .env is not allowed
 `
@@ -95,6 +114,37 @@ func jsonString(s string) string {
 	return string(raw)
 }
 
+// TestHookEnvPathEvasions checks the documented .env rule against the
+// paths that a raw endsWith("/.env") comparison misses: a relative
+// name, a different case, and a trailing slash. A neighboring file is
+// still allowed.
+func TestHookEnvPathEvasions(t *testing.T) {
+	root := hookProject(t, hookTestPolicy)
+	for _, tc := range []struct {
+		name, path string
+		deny       bool
+	}{
+		{name: "relative", path: ".env", deny: true},
+		{name: "upper", path: ".ENV", deny: true},
+		{name: "trailing slash", path: "/abs/.env/", deny: true},
+		{name: "neighbor", path: ".env.bak", deny: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			raw := fmt.Sprintf(`{"hook_event_name":"PreToolUse","tool_name":"Read","cwd":%q,"tool_input":{"file_path":%q}}`, root, tc.path)
+			code, stdout, stderr := runHookCLI(t, strings.NewReader(raw), "--harness", "claude", "--event", hook.EventPreTool)
+			if tc.deny {
+				if code != int(exitcode.Block) || stderr != envReason+"\n" {
+					t.Fatalf("exit %d stdout %q stderr %q", code, stdout, stderr)
+				}
+				return
+			}
+			if code != int(exitcode.OK) || strings.Contains(stderr, "blocked") {
+				t.Fatalf("exit %d stdout %q stderr %q", code, stdout, stderr)
+			}
+		})
+	}
+}
+
 // TestHookContract runs each harness's recorded hook input through
 // `tripcord hook` and checks the decision in that harness's format.
 func TestHookContract(t *testing.T) {
@@ -122,6 +172,55 @@ func TestHookContract(t *testing.T) {
 			code, stdout, stderr := runHookCLI(t, bytes.NewReader(adapterFixture(t, tc.harness, tc.fixture)), "--harness", string(tc.harness), "--event", tc.event)
 			if code != int(tc.exit) || stdout != tc.stdout || stderr != tc.stderr {
 				t.Errorf("got exit %d stdout %q stderr %q\nwant exit %d stdout %q stderr %q", code, stdout, stderr, tc.exit, tc.stdout, tc.stderr)
+			}
+		})
+	}
+}
+
+// TestHookWhenAndDenyIf proves `tripcord hook` evaluates a custom
+// rule's when and deny_if. Both have to match for the call to be
+// denied. pre-tool-use-bash-allow.json is a Bash call whose command is
+// `go test ./...`, so when matches tool_call and deny_if matches the
+// command. pre-tool-use-bash-deny.json is a Bash call with a different
+// command and no path, so deny_if is false. pre-tool-use-read.json
+// reads a path ending in /.env, which deny_if would match, but its
+// kind is read, so when is false. A Read of README.md is also kind
+// read, and that path does not end in /.env, so when and deny_if are
+// both false and the call is allowed.
+func TestHookWhenAndDenyIf(t *testing.T) {
+	const policy = `version: 1
+mode: enforce
+custom:
+  - id: ACME-020
+    when: 'event.kind == "tool_call"'
+    deny_if: 'event.command == "go test ./..." || event.paths.exists(p, p.endsWith("/.env"))'
+    message: refused
+`
+	const reason = "tripcord blocked this tool call: ACME-020 (high): refused"
+	for _, tc := range []struct {
+		name, fixture, path string
+		deny                bool
+	}{
+		{name: "when and deny_if match", fixture: "pre-tool-use-bash-allow.json", deny: true},
+		{name: "deny_if does not match", fixture: "pre-tool-use-bash-deny.json", deny: false},
+		{name: "when does not match", fixture: "pre-tool-use-read.json", deny: false},
+		{name: "when and deny_if are both false", fixture: "pre-tool-use-read.json", path: "/home/dev/project/README.md", deny: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			hookProject(t, policy)
+			raw := adapterFixture(t, model.HarnessClaude, tc.fixture)
+			if tc.path != "" {
+				raw = bytes.ReplaceAll(raw, []byte(`"file_path": "/home/dev/project/.env"`), []byte(`"file_path": "`+tc.path+`"`))
+			}
+			code, stdout, stderr := runHookCLI(t, bytes.NewReader(raw), "--harness", "claude", "--event", hook.EventPreTool)
+			if tc.deny {
+				if code != int(exitcode.Block) || stdout != claudeDeny(reason) || stderr != reason+"\n" {
+					t.Errorf("got exit %d stdout %q stderr %q", code, stdout, stderr)
+				}
+				return
+			}
+			if code != int(exitcode.OK) || stdout != "{}\n" || stderr != "" {
+				t.Errorf("got exit %d stdout %q stderr %q", code, stdout, stderr)
 			}
 		})
 	}
@@ -553,37 +652,79 @@ func TestHookCustomRuleCoreIDRejected(t *testing.T) {
 
 // hookColdStartBudget is the spec's hook latency target: p95 of a whole
 // `tripcord hook` process, from exec to exit.
-const hookColdStartBudget = 25 * time.Millisecond
+// bootstrapOverheadBudget is how much slower `bash bootstrap.sh hook`
+// may be than that direct hook, measured in the same run with the same
+// policy and harness. bootstrapHookBudget is the end-to-end ceiling:
+// the hook budget plus that overhead.
+const (
+	hookColdStartBudget     = 25 * time.Millisecond
+	bootstrapOverheadBudget = 10 * time.Millisecond
+	bootstrapHookBudget     = hookColdStartBudget + bootstrapOverheadBudget
+)
+
+const hookColdStartRuns = 100
+
+type hookColdCase struct {
+	harness        model.Harness
+	event, fixture string
+	exit           int
+}
+
+func hookColdCases() []hookColdCase {
+	return []hookColdCase{
+		{model.HarnessClaude, hook.EventPreTool, "pre-tool-use-bash-deny.json", 2},
+		{model.HarnessCursor, hook.EventBeforeShell, "before-shell-execution-allow.json", 0},
+		{model.HarnessCopilot, hook.EventPreTool, "pre-tool-use-bash-deny.json", 2},
+	}
+}
+
+func buildTrimpathTripcord(t *testing.T, dest string) {
+	t.Helper()
+	build := exec.Command("go", "build", "-trimpath", "-o", dest, ".")
+	build.Dir = filepath.Join(adaptersDir, "..", "..", "cmd", "tripcord")
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("go build: %v\n%s", err, out)
+	}
+}
+
+// summarizeHookBudget logs p50, p95, and max. The first five samples are
+// warmup and are dropped. p95 over budget fails the test.
+func summarizeHookBudget(t *testing.T, label string, samples []time.Duration, budget time.Duration) {
+	t.Helper()
+	if len(samples) <= 5 {
+		t.Fatalf("%s: %d samples", label, len(samples))
+	}
+	samples = samples[5:]
+	slices.Sort(samples)
+	p50 := samples[len(samples)/2]
+	p95 := samples[int(math.Ceil(0.95*float64(len(samples))))-1]
+	max := samples[len(samples)-1]
+	t.Logf("%s: p50 %v, p95 %v, max %v over %d runs (budget p95 %v)", label, p50, p95, max, len(samples), budget)
+	if p95 > budget {
+		t.Errorf("%s: p95 %v is over the %v budget", label, p95, budget)
+	}
+}
+
+func skipHookBudget(t *testing.T) {
+	t.Helper()
+	if os.Getenv("TRIPCORD_PERF_BUDGET") == "" {
+		t.Skip("set TRIPCORD_PERF_BUDGET=1 to check the hook cold-start budget")
+	}
+}
 
 // TestHookColdStartBudget builds tripcord and runs it as each harness's
 // hook would, as a new process per event, on a policy with custom rules.
 // It runs only with TRIPCORD_PERF_BUDGET set (the CI perf job): a
 // timing check is too noisy for -race runs.
 func TestHookColdStartBudget(t *testing.T) {
-	if os.Getenv("TRIPCORD_PERF_BUDGET") == "" {
-		t.Skip("set TRIPCORD_PERF_BUDGET=1 to check the hook cold-start budget")
-	}
+	skipHookBudget(t)
 	bin := filepath.Join(t.TempDir(), "tripcord")
-	build := exec.Command("go", "build", "-trimpath", "-o", bin, ".")
-	build.Dir = filepath.Join(adaptersDir, "..", "..", "cmd", "tripcord")
-	if out, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("go build: %v\n%s", err, out)
-	}
+	buildTrimpathTripcord(t, bin)
 	root := hookProject(t, hookTestPolicy)
-	cases := []struct {
-		harness        model.Harness
-		event, fixture string
-		exit           int
-	}{
-		{model.HarnessClaude, hook.EventPreTool, "pre-tool-use-bash-deny.json", 2},
-		{model.HarnessCursor, hook.EventBeforeShell, "before-shell-execution-allow.json", 0},
-		{model.HarnessCopilot, hook.EventPreTool, "pre-tool-use-bash-deny.json", 2},
-	}
-	const runs = 100
-	for _, tc := range cases {
+	for _, tc := range hookColdCases() {
 		input := adapterFixture(t, tc.harness, tc.fixture)
-		samples := make([]time.Duration, 0, runs)
-		for range runs + 5 {
+		samples := make([]time.Duration, 0, hookColdStartRuns+5)
+		for range hookColdStartRuns + 5 {
 			cmd := exec.Command(bin, "hook", "--harness", string(tc.harness), "--event", tc.event, "--on-failure", "block")
 			cmd.Dir = root
 			cmd.Stdin = bytes.NewReader(input)
@@ -595,13 +736,33 @@ func TestHookColdStartBudget(t *testing.T) {
 			}
 			samples = append(samples, elapsed)
 		}
-		samples = samples[5:]
-		slices.Sort(samples)
-		p50 := samples[len(samples)/2]
-		p95 := samples[int(math.Ceil(0.95*float64(len(samples))))-1]
-		t.Logf("%s %s: p50 %v, p95 %v over %d runs (budget p95 %v)", tc.harness, tc.event, p50, p95, runs, hookColdStartBudget)
-		if p95 > hookColdStartBudget {
-			t.Errorf("%s %s: p95 %v is over the %v hook budget", tc.harness, tc.event, p95, hookColdStartBudget)
+		summarizeHookBudget(t, string(tc.harness)+" "+tc.event, samples, hookColdStartBudget)
+	}
+}
+
+// TestHookColdStartBudgetLocked is TestHookColdStartBudget on a policy
+// whose mode is locked to enforce and which locks a core rule, so the
+// hook compiles the core catalog. The p95 ceiling is still 25 ms.
+func TestHookColdStartBudgetLocked(t *testing.T) {
+	skipHookBudget(t)
+	bin := filepath.Join(t.TempDir(), "tripcord")
+	buildTrimpathTripcord(t, bin)
+	root := hookProject(t, hookLockedEnforcePolicy)
+	for _, tc := range hookColdCases() {
+		input := adapterFixture(t, tc.harness, tc.fixture)
+		samples := make([]time.Duration, 0, hookColdStartRuns+5)
+		for range hookColdStartRuns + 5 {
+			cmd := exec.Command(bin, "hook", "--harness", string(tc.harness), "--event", tc.event, "--on-failure", "block")
+			cmd.Dir = root
+			cmd.Stdin = bytes.NewReader(input)
+			start := time.Now()
+			err := cmd.Run()
+			elapsed := time.Since(start)
+			if code := cmd.ProcessState.ExitCode(); code != tc.exit {
+				t.Fatalf("locked %s %s: exit %d (%v), want %d", tc.harness, tc.fixture, code, err, tc.exit)
+			}
+			samples = append(samples, elapsed)
 		}
+		summarizeHookBudget(t, "locked "+string(tc.harness)+" "+tc.event, samples, hookColdStartBudget)
 	}
 }

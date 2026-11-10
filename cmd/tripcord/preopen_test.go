@@ -133,6 +133,9 @@ func TestPreopenRejectsUsage(t *testing.T) {
 		"option target": {"preopen", "--", "-uhelp"},
 		"since":         {"preopen", "--since", "HEAD~1", repo},
 		"user scope":    {"preopen", "--scope", "user", repo},
+		"all scope":     {"preopen", "--scope", "all", repo},
+		"staged":        {"preopen", "--staged", repo},
+		"staged url":    {"preopen", "--staged", "https://github.com/example/project.git"},
 		"secrets":       {"preopen", "--secrets", repo},
 	} {
 		var stdout, stderr bytes.Buffer
@@ -141,6 +144,20 @@ func TestPreopenRejectsUsage(t *testing.T) {
 		}
 		if !strings.HasPrefix(stderr.String(), "tripcord preopen: ") {
 			t.Errorf("%s: stderr = %q", name, stderr.String())
+		}
+		switch name {
+		case "since":
+			if !strings.Contains(stderr.String(), "--since") {
+				t.Errorf("%s: stderr = %q", name, stderr.String())
+			}
+		case "user scope", "all scope":
+			if !strings.Contains(stderr.String(), "--scope") {
+				t.Errorf("%s: stderr = %q", name, stderr.String())
+			}
+		case "staged", "staged url":
+			if !strings.Contains(stderr.String(), "--staged") || strings.Contains(stderr.String(), "must be relative") {
+				t.Errorf("%s: stderr = %q", name, stderr.String())
+			}
 		}
 	}
 	if _, err := os.Stat(sentinel); err == nil {

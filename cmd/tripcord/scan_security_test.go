@@ -310,14 +310,69 @@ func TestSinceMissingGit(t *testing.T) {
 	}
 }
 
+func TestScanFileOutsideGitDoesNotScanParent(t *testing.T) {
+	dir := outsideGit(t)
+	writeTestFile(t, dir, ".claude/settings.json", stagedBad)
+	writeTestFile(t, dir, "notes.txt", "notes\n")
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"scan", filepath.Join(dir, "notes.txt")}, &stdout, &stderr)
+	if code != int(exitcode.Config) || strings.Contains(stdout.String(), "TC-CFG-001") || !strings.Contains(stderr.String(), "file outside a Git repository") {
+		t.Fatalf("file: exit %d\nstdout %s\nstderr %s", code, stdout.String(), stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"scan", dir}, &stdout, &stderr)
+	if code != int(exitcode.Findings) || !strings.Contains(stdout.String(), "TC-CFG-001") {
+		t.Fatalf("directory: exit %d\nstdout %s\nstderr %s", code, stdout.String(), stderr.String())
+	}
+	repo := gitRepo(t)
+	writeTestFile(t, repo, ".claude/settings.json", stagedBad)
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"scan", filepath.Join(repo, "a.txt")}, &stdout, &stderr)
+	if code != int(exitcode.Findings) || !strings.Contains(stdout.String(), "TC-CFG-001") {
+		t.Fatalf("repo file: exit %d\nstdout %s\nstderr %s", code, stdout.String(), stderr.String())
+	}
+}
+
 func TestScanOutsideGit(t *testing.T) {
 	dir := outsideGit(t)
 	var stdout, stderr bytes.Buffer
 	if code := run([]string{"scan", dir}, &stdout, &stderr); code != int(exitcode.OK) {
 		t.Fatalf("exit code = %d, stderr = %q", code, stderr.String())
 	}
-	if code := run([]string{"scan", dir, "--since", "HEAD"}, &stdout, &stderr); code != int(exitcode.Config) {
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"scan", dir, "--since", "HEAD"}, &stdout, &stderr); code != int(exitcode.Config) || !strings.Contains(stderr.String(), "--since requires a Git repository") || strings.Contains(stderr.String(), "not a git repository") {
 		t.Fatalf("--since exit code = %d, stderr = %q", code, stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"scan", "--base", "HEAD", dir}, &stdout, &stderr); code != int(exitcode.Config) || !strings.Contains(stderr.String(), "--base requires a Git repository") {
+		t.Fatalf("--base exit code = %d, stderr = %q", code, stderr.String())
+	}
+}
+
+func TestScanSymlinkLoop(t *testing.T) {
+	dir := outsideGit(t)
+	self := filepath.Join(dir, "self")
+	if err := os.Symlink(self, self); err != nil {
+		t.Fatal(err)
+	}
+	a := filepath.Join(dir, "a")
+	b := filepath.Join(dir, "b")
+	if err := os.Symlink(b, a); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(a, b); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{self, a} {
+		var stdout, stderr bytes.Buffer
+		code := run([]string{"scan", path}, &stdout, &stderr)
+		if code != int(exitcode.Config) || !strings.Contains(stderr.String(), "symbolic link loop") {
+			t.Fatalf("%s: exit %d, stderr = %q", path, code, stderr.String())
+		}
 	}
 }
 
