@@ -148,6 +148,15 @@ missing manifest and the missing bootstrap. It does not also report
 every harness hook. A leftover guard hook that no longer matches what
 init writes reports those differences as further highs.
 
+### Repin before tagging
+
+`make release-gate` now fails when the generated workflow pin or a
+documented pin of the reusable workflows or the pre-commit hook does
+not contain the latest scanner change on main. A repin pull request is
+required before tagging. Tagging is Victor's. Pull request CI checks
+only that each pin is a full sha and an ancestor of the commit under
+test. See [Release gate](init.md#release-gate).
+
 ### Known gaps
 
 - `main` has no required status checks. A pull request can merge
@@ -165,6 +174,11 @@ init writes reports those differences as further highs.
   rewrite in place of the cached binary that keeps its inode and size
   and lands in the same ctime tick still matches the `verified`
   record, so `hook` runs it without re-hashing. This is a residual.
+- `init --embed` does not write cloud-agent setup files (Cursor
+  `environment.json`, Copilot `copilot-setup-steps.yml`, Devin
+  `blueprint.yaml`) unless `--cloud-setup` is set. That flag is a known
+  gap: `bootstrap.sh install` downloads nothing, and v0 has no download
+  channel. See [init](init.md).
 - `-p X` is redacted only when the same command also names a user
   (`-u`, `-U`, `-l`, `--user`, `--username`, `--login`, or a `login`
   subcommand). A `-p` with no user flag in the command, such as

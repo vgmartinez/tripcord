@@ -103,6 +103,298 @@ func TestPinsHaveEmbedCheck(t *testing.T) {
 	}
 }
 
+// pinCurrencyPaths are the files a documented pin falls behind by
+// missing. A pin is behind when it does not contain the latest commit
+// on origin/main (or main, when origin/main is absent) that changes any
+// of them. The set is the reusable workflows, the composite action, the
+// pre-commit hook manifest, and the scanner those pins ship: advisories,
+// the rule registry, top-level rule YAML, the rule and adapter sources,
+// and go.mod. It leaves out init's templates and the docs that quote the
+// pin, so a commit that only changes those does not make a pin that
+// already contains the scanner look stale.
+var pinCurrencyPaths = []string{
+	".github/workflows/tripcord-pr.yml",
+	".github/workflows/tripcord-pr-comment.yml",
+	".github/actions/tripcord",
+	".pre-commit-hooks.yaml",
+	"rules/ADVISORIES.json",
+	"rules/REGISTRY",
+	"rules/embed.go",
+	":(glob)rules/*.yaml",
+	":(glob)internal/rules/*.go",
+	":(glob)internal/rules/**/*.go",
+	":(glob)internal/adapters/*.go",
+	":(glob)internal/adapters/**/*.go",
+	"go.mod",
+}
+
+// reusableWorkflowPin matches a full-SHA pin of tripcord-pr.yml or
+// tripcord-pr-comment.yml. The composite action pin is a different
+// check: the workflow file at WorkflowPin still calls that action, and
+// this test does not require the action SHA itself to move.
+var reusableWorkflowPin = regexp.MustCompile(regexp.QuoteMeta(project.Repository) + `/\.github/workflows/tripcord-pr(?:-comment)?\.yml@([0-9a-f]{40})`)
+
+// documentedPreCommitRev matches a tripcord pre-commit repo line and the
+// full SHA on the next line. The hook builds that commit.
+var documentedPreCommitRev = regexp.MustCompile(`(?m)repo:[ \t]+https://github\.com/` + regexp.QuoteMeta(project.Repository) + `(?:\.git)?[ \t]*\r?\n[ \t]*rev:[ \t]+([0-9a-f]{40})`)
+
+// anyPreCommitRev matches a tripcord pre-commit repo line and whatever
+// follows rev: on the next line, so a branch, a tag, or a short sha is
+// collected and fails the full-sha check instead of being skipped.
+var anyPreCommitRev = regexp.MustCompile(`(?m)repo:[ \t]+https://github\.com/` + regexp.QuoteMeta(project.Repository) + `(?:\.git)?[ \t]*\r?\n[ \t]*rev:[ \t]+([^\s#]+)`)
+
+// TestPinsReachableFromHead is the per-pull-request pin check. It does
+// not read origin/main. Every pin of this repository's action or
+// reusable workflows in the generated workflow, README.md, and docs/,
+// and every pre-commit rev in README.md and docs/pre-commit.md, must be
+// a full 40-character lowercase sha (never a branch or a tag) and an
+// ancestor of the HEAD under test. A pin missing from the clone, or any
+// pin in a shallow clone, is fetched by that exact sha from origin; a
+// failed fetch fails the test. It never skips.
+func TestPinsReachableFromHead(t *testing.T) {
+	root := filepath.Join("..", "..")
+	pins := headPins(t, root)
+	if len(pins) == 0 {
+		t.Fatal("found no pins")
+	}
+	for _, p := range pins {
+		if !commitPinSHA(p.pin) {
+			t.Errorf("%s pins %q, want a 40-character lowercase sha, not a branch, tag, or short sha", p.where, p.pin)
+		}
+	}
+	if t.Failed() {
+		return
+	}
+	seen := map[string]bool{}
+	for _, p := range pins {
+		if seen[p.pin] {
+			continue
+		}
+		seen[p.pin] = true
+		if err := ensurePinCommit(root, p.pin); err != nil {
+			t.Errorf("%s pin %s: %v", p.where, p.pin, err)
+			continue
+		}
+		if err := gitRun(root, "merge-base", "--is-ancestor", p.pin, "HEAD"); err != nil {
+			t.Errorf("%s pin %s is not an ancestor of HEAD", p.where, p.pin)
+		}
+	}
+}
+
+// ensurePinCommit makes sha's commit and its history available in the
+// clone at root. A clone that already has the commit and is not shallow
+// needs nothing. Otherwise it fetches that exact sha from origin, with
+// --unshallow when the clone is shallow so ancestry can be computed.
+// Any failure is returned; the caller fails closed.
+func ensurePinCommit(root, sha string) error {
+	if _, err := exec.LookPath("git"); err != nil {
+		return errors.New("git is not installed")
+	}
+	shallow, err := gitOutput(root, "rev-parse", "--is-shallow-repository")
+	if err != nil {
+		return fmt.Errorf("not a git checkout: %v", err)
+	}
+	isShallow := strings.TrimSpace(shallow) == "true"
+	if !isShallow && gitRun(root, "cat-file", "-e", sha+"^{commit}") == nil {
+		return nil
+	}
+	args := []string{"fetch", "--no-tags", "--quiet"}
+	if isShallow {
+		args = append(args, "--unshallow")
+	}
+	args = append(args, "origin", sha)
+	if _, err := gitOutput(root, args...); err != nil {
+		return fmt.Errorf("fetching it from origin failed: %v", err)
+	}
+	if err := gitRun(root, "cat-file", "-e", sha+"^{commit}"); err != nil {
+		return fmt.Errorf("not in the clone after fetching it: %v", err)
+	}
+	return nil
+}
+
+func headPins(t *testing.T, root string) []repoPin {
+	t.Helper()
+	pins := []repoPin{{where: "embedded.WorkflowPin", pin: embedded.WorkflowPin}}
+	for where, text := range pinTexts(t, root) {
+		for _, m := range usesPin.FindAllStringSubmatch(text, -1) {
+			pins = append(pins, repoPin{where: where, pin: m[1]})
+		}
+		if where != "README.md" && where != "docs/pre-commit.md" {
+			continue
+		}
+		for _, m := range anyPreCommitRev.FindAllStringSubmatch(text, -1) {
+			pins = append(pins, repoPin{where: where, pin: m[1]})
+		}
+	}
+	return pins
+}
+
+// TestReleaseGatePinsContainLatestScannerChange runs only with
+// TRIPCORD_RELEASE_GATE=1 (make release-gate), before a tag. No
+// pull_request or push workflow sets that variable. It fails when the
+// generated workflow pin, a documented pin of the reusable workflows, or
+// a documented pre-commit rev does not contain the latest commit on
+// origin/main (or main) that changes pinCurrencyPaths. Every merge that
+// changes those paths makes it fail until a repin pull request lands.
+// main@6a12795 and the pre-commit rev main@c44853c fail it. A shallow or
+// non-git checkout fails it too.
+func TestReleaseGatePinsContainLatestScannerChange(t *testing.T) {
+	if os.Getenv("TRIPCORD_RELEASE_GATE") != "1" {
+		t.Log("release gate not requested; set TRIPCORD_RELEASE_GATE=1 to run it")
+		return
+	}
+	root := filepath.Join("..", "..")
+	setRunningInCI(t, true)
+	if !pinHistoryAvailable(t, root) {
+		return
+	}
+	ref := mainRef(t, root)
+	latest := currentPinCommit(t, root, ref)
+	for _, stale := range []string{
+		"6a1279565e9e41e9dec163e6bedf07f2647a2c67",
+		"c44853c105b84c1e2928aab1c75f2da31c29d13e",
+	} {
+		if err := gitRun(root, "merge-base", "--is-ancestor", latest, stale); err == nil {
+			t.Errorf("pinCurrencyPaths is too narrow: %s contains %s, so that old pin would not count as behind", stale, latest)
+		}
+	}
+	workflows, revs := currentPins(t, root)
+	if len(workflows) == 0 || len(revs) == 0 {
+		t.Fatalf("workflow pins = %v, pre-commit revs = %v", workflows, revs)
+	}
+	for _, p := range workflows {
+		if err := gitRun(root, "merge-base", "--is-ancestor", latest, p.pin); err != nil {
+			t.Errorf("release gate: %s workflow pin %s does not contain %s, the latest commit on %s that changes the scanner, the reusable workflows, the action, or the hook manifest; land a repin pull request before tagging", p.where, p.pin, latest, ref)
+		}
+	}
+	for _, p := range revs {
+		if err := gitRun(root, "merge-base", "--is-ancestor", latest, p.pin); err != nil {
+			t.Errorf("release gate: %s pre-commit rev %s does not contain %s, the latest commit on %s that changes the scanner, the reusable workflows, the action, or the hook manifest; land a repin pull request before tagging", p.where, p.pin, latest, ref)
+		}
+	}
+}
+
+// TestReleaseGateNotInPullRequestCI keeps the release gate off the
+// pull_request and push workflows: none may set TRIPCORD_RELEASE_GATE
+// or run make release-gate.
+func TestReleaseGateNotInPullRequestCI(t *testing.T) {
+	dir := filepath.Join("..", "..", ".github", "workflows")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		raw, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if s := string(raw); strings.Contains(s, "TRIPCORD_RELEASE_GATE") || strings.Contains(s, "release-gate") {
+			t.Errorf(".github/workflows/%s runs the release gate; it must only run before a tag", e.Name())
+		}
+	}
+}
+
+func currentPinCommit(t *testing.T, root, ref string) string {
+	t.Helper()
+	args := append([]string{"log", "-1", "--format=%H", ref, "--"}, pinCurrencyPaths...)
+	out, err := gitOutput(root, args...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	latest := strings.TrimSpace(out)
+	if !commitPinSHA(latest) {
+		t.Fatalf("latest commit for the pin pathspec = %q", latest)
+	}
+	return latest
+}
+
+func pinTexts(t *testing.T, root string) map[string]string {
+	t.Helper()
+	texts := map[string]string{"generated tripcord.yml": string(embedded.Workflow())}
+	var files []string
+	err := filepath.WalkDir(filepath.Join(root, "docs"), func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() && strings.EqualFold(filepath.Ext(path), ".md") {
+			files = append(files, path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	files = append(files, filepath.Join(root, "README.md"))
+	for _, path := range files {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		texts[filepath.ToSlash(rel)] = string(raw)
+	}
+	return texts
+}
+
+func currentPins(t *testing.T, root string) (workflows, revs []repoPin) {
+	t.Helper()
+	workflows = append(workflows, repoPin{where: "embedded.WorkflowPin", pin: embedded.WorkflowPin})
+	for where, text := range pinTexts(t, root) {
+		for _, m := range reusableWorkflowPin.FindAllStringSubmatch(text, -1) {
+			workflows = append(workflows, repoPin{where: where, pin: m[1]})
+		}
+		if where != "README.md" && where != "docs/pre-commit.md" {
+			continue
+		}
+		for _, m := range documentedPreCommitRev.FindAllStringSubmatch(text, -1) {
+			revs = append(revs, repoPin{where: where, pin: m[1]})
+		}
+	}
+	return workflows, revs
+}
+
+// TestEnsurePinCommitFetchesIntoShallowClone checks the fail-closed
+// fetch: a shallow clone gets the pinned commit and its history from
+// origin, and a clone whose origin cannot serve it fails.
+func TestEnsurePinCommitFetchesIntoShallowClone(t *testing.T) {
+	src := tempRepo(t)
+	first, err := gitOutput(src, "rev-parse", "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	first = strings.TrimSpace(first)
+	for i := range 2 {
+		if err := os.WriteFile(filepath.Join(src, "README"), []byte(strconv.Itoa(i)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		gitIn(t, src, "commit", "-qam", "next")
+	}
+	clone := t.TempDir()
+	gitIn(t, src, "clone", "-q", "--no-local", "--depth", "1", src, clone)
+	if gitRun(clone, "cat-file", "-e", first+"^{commit}") == nil {
+		t.Fatal("the shallow clone already has the first commit")
+	}
+	if err := ensurePinCommit(clone, first); err != nil {
+		t.Fatalf("ensurePinCommit: %v", err)
+	}
+	if err := gitRun(clone, "merge-base", "--is-ancestor", first, "HEAD"); err != nil {
+		t.Fatalf("after the fetch the first commit is not an ancestor of HEAD: %v", err)
+	}
+
+	broken := t.TempDir()
+	gitIn(t, src, "clone", "-q", "--no-local", "--depth", "1", src, broken)
+	gitIn(t, broken, "remote", "set-url", "origin", filepath.Join(t.TempDir(), "missing"))
+	if err := ensurePinCommit(broken, first); err == nil {
+		t.Fatal("ensurePinCommit succeeded with an origin that cannot serve the commit")
+	}
+	if err := ensurePinCommit(t.TempDir(), first); err == nil {
+		t.Fatal("ensurePinCommit succeeded outside a git checkout")
+	}
+}
+
 // TestUsesPinRejectsBranchAndTag checks that a docs or README ref of
 // @main, @v1, @v1.2.3, or @release fails the 40-character pin check,
 // and that a hexadecimal ref still has to be a full sha with a
@@ -177,6 +469,25 @@ func TestVetAndTestFetchesFullHistory(t *testing.T) {
 	}
 	if found != 1 {
 		t.Fatalf("jobs named %q: %d, want 1", "vet and test", found)
+	}
+}
+
+// TestPinHistoryProblemFailsWhenGitMissingInCI checks that a missing
+// git fails the history check when the process was started with CI or
+// GITHUB_ACTIONS set, and skips outside CI. PATH is emptied so
+// LookPath cannot find git. runningInCI is assigned directly because
+// TestMain has already overwritten the launch environment.
+func TestPinHistoryProblemFailsWhenGitMissingInCI(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	setRunningInCI(t, true)
+	reason, skip := pinHistoryProblem(t.TempDir())
+	if skip || reason != "git is not installed" {
+		t.Fatalf("missing git in CI: skip=%v reason=%q", skip, reason)
+	}
+	setRunningInCI(t, false)
+	reason, skip = pinHistoryProblem(t.TempDir())
+	if !skip || reason != "git is not installed" {
+		t.Fatalf("missing git outside CI: skip=%v reason=%q", skip, reason)
 	}
 }
 
@@ -355,9 +666,10 @@ func commitPinSHA(s string) bool {
 // pinHistoryAvailable reports whether this clone can prove a pin is on
 // main. Outside CI it skips when git, the checkout, or the recorded
 // minimum is missing. When the process was started with CI or
-// GITHUB_ACTIONS set, a shallow clone and a directory that is not a git
-// checkout fail, as does a non-shallow checkout that is missing the
-// minimum. That flag is runningInCI, not the environment TestMain sets.
+// GITHUB_ACTIONS set, a missing git, a shallow clone, and a directory
+// that is not a git checkout fail, as does a non-shallow checkout that
+// is missing the minimum. That flag is runningInCI, not the environment
+// TestMain sets.
 func pinHistoryAvailable(t *testing.T, root string) bool {
 	t.Helper()
 	reason, skip := pinHistoryProblem(root)
@@ -372,11 +684,11 @@ func pinHistoryAvailable(t *testing.T, root string) bool {
 
 // pinHistoryProblem reports why root cannot prove a pin is on main.
 // skip is true when the caller should skip rather than fail. Outside CI
-// a shallow clone and a non-git checkout skip. When the process was
-// started with CI or GITHUB_ACTIONS set, both are failures.
+// a missing git, a shallow clone, and a non-git checkout skip. When the
+// process was started with CI or GITHUB_ACTIONS set, all three fail.
 func pinHistoryProblem(root string) (reason string, skip bool) {
 	if _, err := exec.LookPath("git"); err != nil {
-		return "git is not installed", true
+		return ciFailOrSkip("git is not installed")
 	}
 	out, err := gitOutput(root, "rev-parse", "--is-inside-work-tree")
 	if err != nil || strings.TrimSpace(out) != "true" {

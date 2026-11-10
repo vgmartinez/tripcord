@@ -858,7 +858,7 @@ func TestRedactionCanaryCommands(t *testing.T) {
 				dir := embedRoot(t)
 				writeTestFile(t, dir, ".claude/settings.json", encode(indent(map[string]any{"env": map[string]string{"CANARY": c.text}})))
 				writeTestFile(t, dir, embedded.CursorEnvironmentPath, encode(indent(map[string]any{"start": c.text})))
-				args := []string{"--dry-run", dir}
+				args := []string{"--cloud-setup", "--dry-run", dir}
 				if enc != encodePlain {
 					args = append([]string{"--force"}, args...)
 				}

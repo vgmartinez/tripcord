@@ -21,6 +21,19 @@ func embed(t *testing.T, harnesses ...model.Harness) string {
 	return dir
 }
 
+func embedCloud(t *testing.T, harnesses ...model.Harness) string {
+	t.Helper()
+	dir := t.TempDir()
+	changes, err := Plan(dir, Options{Embed: true, CloudSetup: true, Harnesses: harnesses, Pin: testPin, Force: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Apply(dir, changes); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
 func embedInto(t *testing.T, dir string, pin Pin, harnesses ...model.Harness) {
 	t.Helper()
 	changes, err := Plan(dir, Options{Embed: true, Harnesses: harnesses, Pin: pin, Force: true})
@@ -298,8 +311,9 @@ func readFile(t *testing.T, dir, rel string) string {
 
 func TestCheckWorkflowAndSetupStep(t *testing.T) {
 	for name, tc := range map[string]struct {
-		edit func(t *testing.T, dir string)
-		want guardHit
+		cloud bool
+		edit  func(t *testing.T, dir string)
+		want  guardHit
 	}{
 		"workflow fail-on loosened": {
 			edit: func(t *testing.T, dir string) { replace(t, dir, WorkflowPath, "fail-on: high", "fail-on: critical") },
@@ -310,12 +324,14 @@ func TestCheckWorkflowAndSetupStep(t *testing.T) {
 			want: guardHit{model.SurfaceGeneric, WorkflowPath, subjectWorkflow, StateMissing},
 		},
 		"setup step continues on error": {
+			cloud: true,
 			edit: func(t *testing.T, dir string) {
 				replace(t, dir, CopilotSetupStepsPath, "        run: "+installCommand, "        continue-on-error: true\n        run: "+installCommand)
 			},
 			want: guardHit{model.HarnessCopilot, CopilotSetupStepsPath, subjectStep, StateChanged},
 		},
 		"setup step removed": {
+			cloud: true,
 			edit: func(t *testing.T, dir string) {
 				replace(t, dir, CopilotSetupStepsPath, "      - name: "+copilotStepName+"\n        run: "+installCommand+"\n", "")
 			},
@@ -324,6 +340,9 @@ func TestCheckWorkflowAndSetupStep(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			dir := embed(t)
+			if tc.cloud {
+				dir = embedCloud(t)
+			}
 			tc.edit(t, dir)
 			if got := check(t, dir); !slices.Equal(got, []guardHit{tc.want}) {
 				t.Fatalf("hits = %+v, want %+v", got, tc.want)
@@ -499,7 +518,7 @@ func TestHookEntryDigestsAreStable(t *testing.T) {
 			want[string(h)+" "+e.Event] = e.SHA256()
 		}
 	}
-	m := newManifest(testPin, Harnesses)
+	m := newManifest(testPin, Harnesses, true)
 	if len(m.Hooks) != len(want) {
 		t.Fatalf("manifest hooks = %d, want %d", len(m.Hooks), len(want))
 	}

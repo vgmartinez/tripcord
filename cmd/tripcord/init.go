@@ -18,13 +18,15 @@ import (
 	"github.com/vgmartinez/tripcord/internal/policy"
 )
 
-const initUsage = `tripcord init [PATH] [--embed] [--harness h,...] [--version V --sha256 os-arch=HEX ...] [--force] [--dry-run]
+const initUsage = `tripcord init [PATH] [--embed] [--cloud-setup] [--harness h,...] [--version V --sha256 os-arch=HEX ...] [--force] [--dry-run]
 
 Without --embed, writes .tripcord/policy.yaml only. With --embed, also
 writes .tripcord/bootstrap.sh, .tripcord/embed.json,
-.github/workflows/tripcord.yml, and the wiring of each harness. Existing
-files are merged, never replaced; a file that cannot be merged safely
-exits 3 and nothing is written. See docs/init.md.
+.github/workflows/tripcord.yml, and the wiring of each harness.
+--cloud-setup also writes cloud-agent setup files. That is a known gap:
+bootstrap.sh install downloads nothing, so those files do not install
+Tripcord. Existing files are merged, never replaced; a file that cannot
+be merged safely exits 3 and nothing is written. See docs/init.md.
 
 `
 
@@ -42,15 +44,16 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 		return int(code)
 	}
 	var (
-		embed, force, dryRun bool
-		harnesses, version   string
-		sums                 = sha256Flags{}
+		embed, cloudSetup, force, dryRun bool
+		harnesses, version               string
+		sums                             = sha256Flags{}
 	)
 	flags := flag.NewFlagSet("init", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	flags.BoolVar(&embed, "embed", false, "write the bootstrap script, PR workflow, and harness wiring")
+	flags.BoolVar(&cloudSetup, "cloud-setup", false, "known gap: also write cloud-agent setup files (Cursor environment.json, Copilot copilot-setup-steps.yml, Devin blueprint). bootstrap.sh install downloads nothing, so this does not install Tripcord")
 	flags.StringVar(&harnesses, "harness", "", "comma-separated harnesses to wire: "+strings.Join(harnessNames(), ", ")+" (default all)")
-	flags.StringVar(&version, "version", "", "Tripcord release bootstrap.sh installs (required with --embed)")
+	flags.StringVar(&version, "version", "", "Tripcord version bootstrap.sh runs from the cache; it does not download a release (required with --embed)")
 	flags.Var(sums, "sha256", "os-arch=HEX SHA-256 of that platform's tripcord binary; repeat per platform (required with --embed)")
 	flags.BoolVar(&force, "force", false, "rewrite files whose merge would reformat them or replace a conflicting value")
 	flags.BoolVar(&dryRun, "dry-run", false, "print a unified diff and write nothing")
@@ -71,10 +74,10 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 	if flags.NArg() > 1 {
 		return fail(exitcode.Config, errors.New("init accepts at most one PATH"))
 	}
-	if !embed && (harnesses != "" || version != "" || len(sums) > 0) {
-		return fail(exitcode.Config, errors.New("--harness, --version, and --sha256 require --embed"))
+	if !embed && (harnesses != "" || version != "" || len(sums) > 0 || cloudSetup) {
+		return fail(exitcode.Config, errors.New("--harness, --version, --sha256, and --cloud-setup require --embed"))
 	}
-	opts := embedded.Options{Embed: embed, Force: force, Pin: embedded.Pin{Version: version, SHA256: sums}}
+	opts := embedded.Options{Embed: embed, CloudSetup: cloudSetup, Force: force, Pin: embedded.Pin{Version: version, SHA256: sums}}
 	if harnesses != "" {
 		for _, raw := range strings.Split(harnesses, ",") {
 			opts.Harnesses = append(opts.Harnesses, model.Harness(strings.TrimSpace(raw)))

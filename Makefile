@@ -39,8 +39,9 @@ upstream-check:
 
 # release-gate fails while a feature a release depends on is missing.
 # It checks that this build has the `tripcord hook` the init --embed
-# wiring runs, and that both pinned actions have the base input and the
-# embed check. Both pass on this tree.
+# wiring runs, that both pinned actions have the base input and the
+# embed check, and that every documented pin contains the latest scanner
+# change on main. Run it before tagging; no CI workflow runs it.
 release-gate:
 	TRIPCORD_RELEASE_GATE=1 go test ./cmd/tripcord -run '^TestReleaseGate' -count=1 -v
 

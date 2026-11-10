@@ -145,12 +145,48 @@ func TestInitEmbedIdempotent(t *testing.T) {
 		}
 	}
 	want := []string{
-		embedded.AgentsPath, embedded.ClaudeSettingsPath, embedded.CursorEnvironmentPath, embedded.CursorHooksPath,
-		embedded.DevinBlueprintPath, embedded.CopilotHooksPath, embedded.CopilotSetupStepsPath, embedded.WorkflowPath,
+		embedded.AgentsPath, embedded.ClaudeSettingsPath, embedded.CursorHooksPath,
+		embedded.CopilotHooksPath, embedded.WorkflowPath,
 		embedded.BootstrapPath, embedded.ManifestPath, embedded.PolicyPath, embedded.GitattributesPath, embedded.GitignorePath,
 	}
 	if got := slices.Sorted(maps.Keys(first)); !slices.Equal(got, slices.Sorted(slices.Values(want))) {
 		t.Fatalf("files = %v", got)
+	}
+}
+
+func TestInitCloudSetupOptIn(t *testing.T) {
+	dir := embedRoot(t)
+	if code, _, stderr := runCLI(t, embedArgs("--cloud-setup", dir)...); code != 0 {
+		t.Fatalf("exit %d: %s", code, stderr)
+	}
+	files := snapshot(t, dir)
+	for _, path := range []string{embedded.CursorEnvironmentPath, embedded.CopilotSetupStepsPath, embedded.DevinBlueprintPath} {
+		if files[path] == "" {
+			t.Errorf("missing %s", path)
+		}
+	}
+	var m embedded.Manifest
+	mustJSON(t, files[embedded.ManifestPath], &m)
+	recorded := false
+	for _, f := range m.Files {
+		if f.Path == embedded.CopilotSetupStepsPath && f.Step != "" && len(f.SHA256) == 64 {
+			recorded = true
+		}
+	}
+	if !recorded {
+		t.Fatalf("manifest does not record the setup step: %+v", m.Files)
+	}
+
+	// A broken cloud file does not block init when the flag is off, and
+	// init leaves that file as it found it.
+	plain := embedRoot(t)
+	broken := "maintenance: [\n"
+	writeTestFile(t, plain, embedded.DevinBlueprintPath, broken)
+	if code, _, stderr := runCLI(t, embedArgs(plain)...); code != 0 {
+		t.Fatalf("default init: exit %d: %s", code, stderr)
+	}
+	if got := snapshot(t, plain)[embedded.DevinBlueprintPath]; got != broken {
+		t.Fatalf("default init rewrote the blueprint: %q", got)
 	}
 }
 
@@ -309,15 +345,25 @@ func TestInitMergesExistingFiles(t *testing.T) {
 	writeTestFile(t, dir, embedded.ClaudeSettingsPath, claude)
 	writeTestFile(t, dir, "scripts/lint.sh", "#!/bin/sh\nexit 0\n")
 	writeTestFile(t, dir, embedded.CursorHooksPath, "{\n\t\"version\": 1,\n\t\"hooks\": {\n\t\t\"stop\": [\n\t\t\t{\n\t\t\t\t\"command\": \"./scripts/lint.sh\"\n\t\t\t}\n\t\t]\n\t}\n}\n")
-	writeTestFile(t, dir, embedded.CursorEnvironmentPath, "{\n  \"snapshot\": \"snap-1\",\n  \"start\": \"make dev\"\n}\n")
+	envBefore := "{\n  \"snapshot\": \"snap-1\",\n  \"start\": \"make dev\"\n}\n"
+	blueprintBefore := "initialize: make deps\nmaintenance:\n  - make tidy\n"
+	stepsBefore := "name: Copilot Setup Steps\non: workflow_dispatch\njobs:\n  copilot-setup-steps:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1\n      - run: make deps\n"
+	writeTestFile(t, dir, embedded.CursorEnvironmentPath, envBefore)
 	writeTestFile(t, dir, embedded.AgentsPath, "# Agents\n\nRun `make test` before you push.\n")
-	writeTestFile(t, dir, embedded.DevinBlueprintPath, "initialize: make deps\nmaintenance:\n  - make tidy\n")
-	writeTestFile(t, dir, embedded.CopilotSetupStepsPath, "name: Copilot Setup Steps\non: workflow_dispatch\njobs:\n  copilot-setup-steps:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1\n      - run: make deps\n")
+	writeTestFile(t, dir, embedded.DevinBlueprintPath, blueprintBefore)
+	writeTestFile(t, dir, embedded.CopilotSetupStepsPath, stepsBefore)
 	writeTestFile(t, dir, embedded.PolicyPath, "version: 1\nmode: warn\n")
 	if code, _, stderr := runCLI(t, embedArgs(dir)...); code != 0 {
 		t.Fatalf("exit %d: %s", code, stderr)
 	}
 	files := snapshot(t, dir)
+	if files[embedded.CursorEnvironmentPath] != envBefore || files[embedded.DevinBlueprintPath] != blueprintBefore || files[embedded.CopilotSetupStepsPath] != stepsBefore {
+		t.Fatalf("default init edited cloud setup files")
+	}
+	if code, _, stderr := runCLI(t, embedArgs("--cloud-setup", dir)...); code != 0 {
+		t.Fatalf("--cloud-setup: exit %d: %s", code, stderr)
+	}
+	files = snapshot(t, dir)
 	if files[embedded.PolicyPath] != "version: 1\nmode: warn\n" {
 		t.Errorf("policy was rewritten: %q", files[embedded.PolicyPath])
 	}
@@ -350,7 +396,7 @@ func TestInitMergesExistingFiles(t *testing.T) {
 		t.Errorf("copilot-setup-steps = %q", steps)
 	}
 	before := snapshot(t, dir)
-	code, stdout, stderr := runCLI(t, embedArgs(dir)...)
+	code, stdout, stderr := runCLI(t, embedArgs("--cloud-setup", dir)...)
 	if code != 0 || strings.Contains(stdout, "updated") || strings.Contains(stdout, "created") {
 		t.Fatalf("second run: exit %d\n%s%s", code, stdout, stderr)
 	}
@@ -366,16 +412,19 @@ func TestInitMergesExistingFiles(t *testing.T) {
 }
 
 func TestInitUnmergeableFailsClosed(t *testing.T) {
-	for name, tc := range map[string]struct{ path, content string }{
-		"invalid JSON":        {embedded.ClaudeSettingsPath, "{\"hooks\": \n"},
-		"hooks not an object": {embedded.ClaudeSettingsPath, "{\n  \"hooks\": []\n}\n"},
-		"duplicate key":       {embedded.ClaudeSettingsPath, "{\n  \"hooks\": {},\n  \"hooks\": {}\n}\n"},
-		"cursor version 2":    {embedded.CursorHooksPath, "{\n  \"version\": 2,\n  \"hooks\": {}\n}\n"},
-		"invalid YAML":        {embedded.DevinBlueprintPath, "maintenance: [\n"},
-		"no setup job":        {embedded.CopilotSetupStepsPath, "name: x\non: workflow_dispatch\njobs: {}\n"},
-		"open AGENTS marker":  {embedded.AgentsPath, "# Agents\n<!-- tripcord:begin -->\n"},
-		"install not string":  {embedded.CursorEnvironmentPath, "{\n  \"install\": 1\n}\n"},
-		"jsonc comment":       {embedded.CursorHooksPath, "{\n  // mine\n  \"version\": 1,\n  \"hooks\": {}\n}\n"},
+	for name, tc := range map[string]struct {
+		path, content string
+		cloud         bool
+	}{
+		"invalid JSON":        {path: embedded.ClaudeSettingsPath, content: "{\"hooks\": \n"},
+		"hooks not an object": {path: embedded.ClaudeSettingsPath, content: "{\n  \"hooks\": []\n}\n"},
+		"duplicate key":       {path: embedded.ClaudeSettingsPath, content: "{\n  \"hooks\": {},\n  \"hooks\": {}\n}\n"},
+		"cursor version 2":    {path: embedded.CursorHooksPath, content: "{\n  \"version\": 2,\n  \"hooks\": {}\n}\n"},
+		"invalid YAML":        {path: embedded.DevinBlueprintPath, content: "maintenance: [\n", cloud: true},
+		"no setup job":        {path: embedded.CopilotSetupStepsPath, content: "name: x\non: workflow_dispatch\njobs: {}\n", cloud: true},
+		"open AGENTS marker":  {path: embedded.AgentsPath, content: "# Agents\n<!-- tripcord:begin -->\n"},
+		"install not string":  {path: embedded.CursorEnvironmentPath, content: "{\n  \"install\": 1\n}\n", cloud: true},
+		"jsonc comment":       {path: embedded.CursorHooksPath, content: "{\n  // mine\n  \"version\": 1,\n  \"hooks\": {}\n}\n"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			for _, force := range []bool{false, true} {
@@ -383,6 +432,9 @@ func TestInitUnmergeableFailsClosed(t *testing.T) {
 				writeTestFile(t, dir, tc.path, tc.content)
 				before := snapshot(t, dir)
 				args := embedArgs()
+				if tc.cloud {
+					args = append(args, "--cloud-setup")
+				}
 				if force {
 					args = append(args, "--force")
 				}
@@ -399,35 +451,42 @@ func TestInitUnmergeableFailsClosed(t *testing.T) {
 }
 
 func TestInitConflictsNeedForce(t *testing.T) {
-	for name, tc := range map[string]struct{ path, content, keep string }{
-		"reformat":           {embedded.ClaudeSettingsPath, "{\"model\": \"opus\"}\n", `"model": "opus"`},
-		"install set":        {embedded.CursorEnvironmentPath, "{\n  \"install\": \"npm ci\"\n}\n", "bash .tripcord/bootstrap.sh install && npm ci"},
-		"edited hook":        {embedded.CopilotHooksPath, "{\n  \"version\": 1,\n  \"hooks\": {\n    \"preToolUse\": [\n      {\n        \"type\": \"command\",\n        \"bash\": \"tripcord hook --harness copilot --event pre-tool || true\"\n      }\n    ]\n  }\n}\n", "--event pre-tool --on-failure block\""},
-		"disableAllHooks":    {embedded.ClaudeSettingsPath, "{\n  \"disableAllHooks\": true\n}\n", `"disableAllHooks": true`},
-		"own bootstrap":      {embedded.BootstrapPath, "#!/bin/sh\nexit 0\n", "TRIPCORD_VERSION='0.1.0'"},
-		"workflow differs":   {embedded.WorkflowPath, "name: mine\n", embedded.ReusableWorkflow},
-		"agents note edits":  {embedded.AgentsPath, "<!-- tripcord:begin -->\nold\n<!-- tripcord:end -->\nmine\n", "## Tripcord"},
-		"maintenance string": {embedded.DevinBlueprintPath, "maintenance: make tidy\n", "  - make tidy\n  - name: tripcord\n"},
+	for name, tc := range map[string]struct {
+		path, content, keep string
+		cloud               bool
+	}{
+		"reformat":           {path: embedded.ClaudeSettingsPath, content: "{\"model\": \"opus\"}\n", keep: `"model": "opus"`},
+		"install set":        {path: embedded.CursorEnvironmentPath, content: "{\n  \"install\": \"npm ci\"\n}\n", keep: "bash .tripcord/bootstrap.sh install && npm ci", cloud: true},
+		"edited hook":        {path: embedded.CopilotHooksPath, content: "{\n  \"version\": 1,\n  \"hooks\": {\n    \"preToolUse\": [\n      {\n        \"type\": \"command\",\n        \"bash\": \"tripcord hook --harness copilot --event pre-tool || true\"\n      }\n    ]\n  }\n}\n", keep: "--event pre-tool --on-failure block\""},
+		"disableAllHooks":    {path: embedded.ClaudeSettingsPath, content: "{\n  \"disableAllHooks\": true\n}\n", keep: `"disableAllHooks": true`},
+		"own bootstrap":      {path: embedded.BootstrapPath, content: "#!/bin/sh\nexit 0\n", keep: "TRIPCORD_VERSION='0.1.0'"},
+		"workflow differs":   {path: embedded.WorkflowPath, content: "name: mine\n", keep: embedded.ReusableWorkflow},
+		"agents note edits":  {path: embedded.AgentsPath, content: "<!-- tripcord:begin -->\nold\n<!-- tripcord:end -->\nmine\n", keep: "## Tripcord"},
+		"maintenance string": {path: embedded.DevinBlueprintPath, content: "maintenance: make tidy\n", keep: "  - make tidy\n  - name: tripcord\n", cloud: true},
 	} {
 		t.Run(name, func(t *testing.T) {
 			dir := embedRoot(t)
 			writeTestFile(t, dir, tc.path, tc.content)
 			before := snapshot(t, dir)
-			code, _, stderr := runCLI(t, embedArgs(dir)...)
+			args := embedArgs()
+			if tc.cloud {
+				args = append(args, "--cloud-setup")
+			}
+			code, _, stderr := runCLI(t, append(slices.Clone(args), dir)...)
 			if code != int(exitcode.Config) || !strings.Contains(stderr, "--force") {
 				t.Fatalf("exit %d, want 3 suggesting --force: %s", code, stderr)
 			}
 			if !maps.Equal(before, snapshot(t, dir)) {
 				t.Fatal("files changed without --force")
 			}
-			if code, _, stderr := runCLI(t, embedArgs("--force", dir)...); code != 0 {
+			if code, _, stderr := runCLI(t, append(slices.Clone(args), "--force", dir)...); code != 0 {
 				t.Fatalf("--force: exit %d: %s", code, stderr)
 			}
 			if got := snapshot(t, dir)[tc.path]; !strings.Contains(got, tc.keep) {
 				t.Fatalf("--force result lacks %q:\n%s", tc.keep, got)
 			}
 			forced := snapshot(t, dir)
-			if code, _, stderr := runCLI(t, embedArgs("--force", dir)...); code != 0 || !maps.Equal(forced, snapshot(t, dir)) {
+			if code, _, stderr := runCLI(t, append(slices.Clone(args), "--force", dir)...); code != 0 || !maps.Equal(forced, snapshot(t, dir)) {
 				t.Fatalf("second --force run changed files: exit %d: %s", code, stderr)
 			}
 		})
@@ -476,6 +535,13 @@ func TestInitDryRun(t *testing.T) {
 	code, stdout, stderr := runCLI(t, embedArgs("--dry-run", dir)...)
 	if code != 0 {
 		t.Fatalf("exit %d: %s", code, stderr)
+	}
+	if strings.Contains(stdout, "environment.json") {
+		t.Fatalf("default dry run mentions environment.json:\n%s", stdout)
+	}
+	code, stdout, stderr = runCLI(t, embedArgs("--cloud-setup", "--dry-run", dir)...)
+	if code != 0 {
+		t.Fatalf("--cloud-setup: exit %d: %s", code, stderr)
 	}
 	if files := snapshot(t, dir); len(files) != 1 {
 		t.Fatalf("dry run wrote %v", slices.Sorted(maps.Keys(files)))

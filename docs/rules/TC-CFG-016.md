@@ -86,7 +86,7 @@ The check covers:
 | Bootstrap | `.tripcord/bootstrap.sh` | What init renders for the version and checksums in `embed.json`, then the digest `embed.json` records |
 | Manifest | `.tripcord/embed.json` | It must parse, with a valid pin |
 | Workflow | `.github/workflows/tripcord.yml` | What init renders, then the recorded digest |
-| Copilot setup step | `.github/workflows/copilot-setup-steps.yml` | The `Tripcord bootstrap` step init writes, then the recorded digest (only when Copilot is wired) |
+| Copilot setup step | `.github/workflows/copilot-setup-steps.yml` | The `Tripcord bootstrap` step init writes, then the recorded digest (when the manifest records the step, or the file still contains it; `init --embed --cloud-setup`) |
 | Claude Code hooks | `.claude/settings.json` | `SessionStart`, `PreToolUse` |
 | Cursor hooks | `.cursor/hooks.json` | `sessionStart`, `preToolUse` |
 | GitHub Copilot hooks | `.github/hooks/tripcord.json` | `sessionStart`, `preToolUse` |
