@@ -319,6 +319,95 @@ func TestBenignIndexIsNotAFixture(t *testing.T) {
 	}
 }
 
+func TestAdvisoryCatalogSizeCap(t *testing.T) {
+	t.Parallel()
+	marker := []byte("\ntracking.evil.com\nAKIAIOSFODNN7EXAMPLE\nabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN\n")
+	overFixture := append(bytes.Repeat([]byte("a"), maxFileBytes+1), marker...)
+	if len(overFixture) <= maxFileBytes || len(overFixture) > maxAdvisoryBytes {
+		t.Fatalf("catalog sample is %d bytes", len(overFixture))
+	}
+	rules := filepath.Join(t.TempDir(), "rules")
+	writeFile(t, filepath.Join(rules, "ADVISORIES.json"), overFixture, 0o644)
+	writeFile(t, filepath.Join(rules, "ADVISORIES.json.bak"), bytes.Repeat([]byte("b"), maxFileBytes+1), 0o644)
+	writeFile(t, filepath.Join(rules, "x", "ADVISORIES.json"), bytes.Repeat([]byte("c"), maxFileBytes+1), 0o644)
+	got, err := Check(rules)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var catalogSize bool
+	catalogKinds := map[string]bool{}
+	sized := map[string]bool{}
+	for _, f := range got {
+		switch f.Path {
+		case "ADVISORIES.json":
+			if f.Kind == KindSize {
+				catalogSize = true
+			}
+			catalogKinds[f.Kind] = true
+		case "ADVISORIES.json.bak", "x/ADVISORIES.json":
+			if f.Kind == KindSize {
+				sized[f.Path] = true
+			} else {
+				t.Errorf("%s unexpected %s: %s", f.Path, f.Kind, f.Detail)
+			}
+		default:
+			t.Errorf("unexpected path %s %s", f.Path, f.Kind)
+		}
+	}
+	if catalogSize {
+		t.Fatalf("rules/ADVISORIES.json under %d bytes was a size finding: %#v", maxAdvisoryBytes, got)
+	}
+	for _, kind := range []string{KindHost, KindSecret, KindEntropy} {
+		if !catalogKinds[kind] {
+			t.Errorf("rules/ADVISORIES.json missing %s: %#v", kind, got)
+		}
+	}
+	if !sized["ADVISORIES.json.bak"] || !sized["x/ADVISORIES.json"] {
+		t.Fatalf("nearby copies were exempt: %#v", got)
+	}
+
+	other := filepath.Join(t.TempDir(), "pkg")
+	writeFile(t, filepath.Join(other, "ADVISORIES.json"), bytes.Repeat([]byte("d"), maxFileBytes+1), 0o644)
+	got, err = Check(other)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Path != "ADVISORIES.json" || got[0].Kind != KindSize {
+		t.Fatalf("same name outside rules: %#v", got)
+	}
+
+	hugeRoot := filepath.Join(t.TempDir(), "rules")
+	huge := append(bytes.Repeat([]byte("e"), maxAdvisoryBytes+1), marker...)
+	writeFile(t, filepath.Join(hugeRoot, "ADVISORIES.json"), huge, 0o644)
+	got, err = Check(hugeRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var hugeSize bool
+	hugeKinds := map[string]bool{}
+	for _, f := range got {
+		if f.Path != "ADVISORIES.json" {
+			t.Errorf("unexpected path %s", f.Path)
+			continue
+		}
+		hugeKinds[f.Kind] = true
+		if f.Kind == KindSize {
+			hugeSize = true
+			if f.Detail != fmt.Sprintf("%d bytes", len(huge)) {
+				t.Errorf("size detail %q", f.Detail)
+			}
+		}
+	}
+	if !hugeSize {
+		t.Fatalf("catalog over %d bytes was not a size finding: %#v", maxAdvisoryBytes, got)
+	}
+	for _, kind := range []string{KindHost, KindSecret, KindEntropy} {
+		if !hugeKinds[kind] {
+			t.Errorf("oversized catalog missing %s: %#v", kind, got)
+		}
+	}
+}
+
 func writeFile(t *testing.T, path string, data []byte, mode os.FileMode) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

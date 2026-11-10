@@ -37,6 +37,14 @@ const (
 // maxFileBytes is the largest fixture file that passes the size check.
 const maxFileBytes = 16 << 10
 
+// maxAdvisoryBytes is the size cap for ADVISORIES.json when the walk
+// root is named rules. The catalog grows with each advisory batch, so
+// the fixture cap is too small, and 256 KiB is still a cap. Only that
+// exact relative path is raised. A backup, a nested copy, and the same
+// name under any other root stay at maxFileBytes. The higher cap does
+// not skip host, secret, entropy, or any other check.
+const maxAdvisoryBytes = 256 << 10
+
 // maxScanBytes is the largest file whose content Check reads. A file
 // over maxFileBytes is still read up to here, so a size finding never
 // hides what the file holds.
@@ -129,7 +137,7 @@ func CheckRoots(roots ...Root) ([]Finding, error) {
 			// against repos.lock and THIRD_PARTY_NOTICES instead, and
 			// every other check still runs.
 			vend := vendored(abs, rel)
-			out = append(out, inspect(root, rel, info, p, content, index, !vend)...)
+			out = append(out, inspect(root, rel, info, p, content, index, !vend, fileSizeLimit(abs, rel))...)
 			if vend && info.Mode().IsRegular() {
 				out = append(out, vc.check(rel, p)...)
 			}
@@ -176,7 +184,23 @@ func corpusBenignIndex(rootAbs, rel string) bool {
 	}
 }
 
-func inspect(root, rel string, info fs.FileInfo, p string, content, index, hosts bool) []Finding {
+// advisoryCatalog is the rules pack catalog: the walk root's base name
+// is rules and the relative path is exactly ADVISORIES.json. No prefix
+// and no glob.
+func advisoryCatalog(rootAbs, rel string) bool {
+	return filepath.Base(rootAbs) == "rules" && rel == "ADVISORIES.json"
+}
+
+// fileSizeLimit is maxAdvisoryBytes for the rules catalog and
+// maxFileBytes for every other file.
+func fileSizeLimit(rootAbs, rel string) int64 {
+	if advisoryCatalog(rootAbs, rel) {
+		return maxAdvisoryBytes
+	}
+	return maxFileBytes
+}
+
+func inspect(root, rel string, info fs.FileInfo, p string, content, index, hosts bool, sizeLimit int64) []Finding {
 	mode := info.Mode()
 	if mode&os.ModeSymlink != 0 {
 		return []Finding{{Root: root, Path: rel, Kind: KindSymlink, Detail: "symlink"}}
@@ -194,7 +218,7 @@ func inspect(root, rel string, info fs.FileInfo, p string, content, index, hosts
 	if loadable(rel) {
 		out = append(out, Finding{Root: root, Path: rel, Kind: KindConfig, Detail: rel})
 	}
-	if info.Size() > maxFileBytes && !index {
+	if info.Size() > sizeLimit && !index {
 		out = append(out, Finding{Root: root, Path: rel, Kind: KindSize, Detail: fmt.Sprintf("%d bytes", info.Size())})
 	}
 	if info.Size() > maxScanBytes {
