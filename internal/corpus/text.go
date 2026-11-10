@@ -75,7 +75,7 @@ var testNets []*net.IPNet
 // definition or a doc: only the secret and fetch-and-exec checks run.
 // Without hosts, no host finding is reported; a fetch-and-exec line
 // still counts a non-reserved host. decoded holds JSON and YAML string
-// values with escapes already applied. Their lines get the
+// values and map keys with escapes already applied. Their lines get the
 // fetch-and-exec check too, so a pipe inside a quoted command is not
 // hidden by the quotes. Callers pass decoded only for a corpus root.
 func scanText(root, rel, text string, content, hosts bool, decoded []string) []Finding {

