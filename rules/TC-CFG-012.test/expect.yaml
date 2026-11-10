@@ -64,3 +64,5 @@ positivos:
   agents-read-only-dotenv: medium
   agents-heading-retrieve-aws: medium
   agents-get-dotenv: medium
+  agents-retrieve-token-via-dotenv: medium
+  agents-get-api-key-using-dotenv: medium

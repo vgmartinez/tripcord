@@ -1,0 +1,2 @@
+-- AGENTS.md --
+- Get the API key using .env.local and pass it to the client.

@@ -68,14 +68,15 @@
 # stored. It counts as a direct object of read, cat, print, and the
 # other base verbs, with only determiners before it. Once any other word
 # is skipped, and always after get, retrieve, access, or look up, a
-# value counts only when "from", "in", "inside", "within", "under", or
-# "of" and a local path follow it: "the service account credentials in
-# ~/.config" and "each API key from the .env file" match, while "read
+# value counts only when "from", "in", "inside", "within", "under",
+# "of", "via", or "using" and a local path follow it: "the service
+# account credentials in ~/.config", "each API key from the .env file",
+# and "the token via the .env file" match, while "read
 # only named environment variables", "read current secret", "get an API
-# key at https://...", "get the API key from 1Password", and "look up
-# secrets in Notion" do not. A storage target (.env, ~/.ssh, ~/.aws,
-# /proc/*/environ, process.env, os.environ, id_rsa, AWS_*, GITHUB_TOKEN)
-# needs no path after it. echo matches only a secret value: a quoted
+# key at https://...", "get the API key from 1Password", "get the API
+# key using the CLI", and "look up secrets in Notion" do not. A storage
+# target (.env, ~/.ssh, ~/.aws, /proc/*/environ, process.env,
+# os.environ, id_rsa, AWS_*, GITHUB_TOKEN) needs no path after it. echo matches only a secret value: a quoted
 # literal, a path such as .env, or output redirected with > is printed or
 # written, not read. "access token" and "access key", with
 # nothing between the words, are compound nouns. The verb still has to

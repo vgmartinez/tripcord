@@ -24,7 +24,7 @@ var (
 	// A secret value names what is read, not where it is stored. Outside a
 	// direct object of a read verb it needs a local path after it.
 	instructionSecretValue = regexp.MustCompile(`(?i)^(?:environment[ \t]+variables?|credentials|secrets?|api[_ ]?keys?|tokens?|passwords?|private[ \t]+key)$`)
-	instructionStoredPrep  = regexp.MustCompile(`(?i)^(?:from|in|inside|within|under|of)$`)
+	instructionStoredPrep  = regexp.MustCompile(`(?i)^(?:from|in|inside|within|under|of|via|using)$`)
 	instructionLocalPath   = regexp.MustCompile(`^(?:~/|\$\{?HOME\}?/|\.{1,2}/|/|\.[\p{L}\p{N}_]|[\p{L}\p{N}_.-]+/)`)
 	instructionRedirect    = regexp.MustCompile(`(?:^|[^-])>`)
 	// "access token" and "access key" are compound nouns, not the verb.

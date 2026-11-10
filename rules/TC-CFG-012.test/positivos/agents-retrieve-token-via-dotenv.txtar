@@ -1,0 +1,4 @@
+-- AGENTS.md --
+# Deploy
+
+Retrieve the token via the .env file before the deploy.

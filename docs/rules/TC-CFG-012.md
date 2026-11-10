@@ -74,13 +74,14 @@ is stored. It is a direct object of `read`, `cat`, `print`, and the
 other base verbs when only determiners come before it. Once any other
 word is skipped, and always after `get`, `retrieve`, `access`, or
 `look up`, a value counts only when `from`, `in`, `inside`, `within`,
-`under`, or `of` and a local path follow it. `Read the service account
-credentials in ~/.config` and `Look up each API key from the .env file`
-match. `Read only named environment variables`, `Read current secret`,
+`under`, `of`, `via`, or `using` and a local path follow it. `Read the
+service account credentials in ~/.config`, `Look up each API key from
+the .env file`, and `Retrieve the token via the .env file` match.
+`Read only named environment variables`, `Read current secret`,
 `Get an API key at https://...`, `Get the API key from 1Password`,
-`Get token from cookies`, and `Look up secrets in Notion` do not: they
-name no file the agent opens. A storage target (`.env`, `~/.ssh`,
-`~/.aws`, `/proc/*/environ`, `process.env`, `os.environ`, `id_rsa`,
+`Get the API key using the CLI`, `Get token from cookies`, and `Look up
+secrets in Notion` do not: they name no file the agent opens. A
+storage target (`.env`, `~/.ssh`, `~/.aws`, `/proc/*/environ`, `process.env`, `os.environ`, `id_rsa`,
 `AWS_*`, `GITHUB_TOKEN`) needs no path after it, so `Read only the .env
 file` and `## Retrieve ~/.aws/credentials` match. `echo` matches only a
 secret value: a quoted literal, a path such as `.env`, or output
