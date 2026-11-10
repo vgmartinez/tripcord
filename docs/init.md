@@ -275,7 +275,13 @@ CI runs shellcheck on it (`init --embed output lint` in
 ## Workflow
 
 `.github/workflows/tripcord.yml` runs on `pull_request` only, never
-`pull_request_target`, with a `paths` filter over agent configuration.
+`pull_request_target`, and it sets no `paths` filter. A filter limited
+to a fixed list of directories would skip nested configuration,
+`CLAUDE.local.md`, `.gemini`, `.agents`, `.devcontainer`, `.opencode`,
+`.windsurf`, `.cursorrules`, `.windsurfrules`, `.claude-plugin`, a
+nested `AGENTS.md`, `.gitattributes`, and any path a Claude plugin
+manifest names. Adapters match those case-insensitively. The workflow
+therefore runs on every pull request.
 Workflow permissions are `contents: read`; the job adds
 `pull-requests: read` and `security-events: write`. It calls this
 repository's `.github/workflows/tripcord-pr.yml` pinned by full commit

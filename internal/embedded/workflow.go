@@ -22,27 +22,27 @@ const checkoutPin = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #
 const ReusableWorkflow = project.Repository + "/.github/workflows/tripcord-pr.yml@" + WorkflowPin
 
 // Workflow returns .github/workflows/tripcord.yml.
+//
+// The workflow sets no paths filter. A filter built from the adapters'
+// directory globs would miss files the scan reads: nested copies of
+// those directories, CLAUDE.local.md, .cursorrules, .windsurfrules,
+// .gemini, .agents, .devcontainer, .opencode, .windsurf, .claude-plugin,
+// nested AGENTS.md, and .gitattributes. It would also miss a Claude
+// plugin whose manifest names an arbitrary path (claude.ManifestRefs):
+// that path is not a fixed glob. Adapters match case-insensitively and
+// GitHub's filter does not. A pull request the filter skipped would not
+// be scanned.
 func Workflow() []byte {
 	return []byte(`# Written by tripcord init --embed.
-# Scans pull requests that touch agent configuration. pull_request only:
-# never pull_request_target, so a fork's head never runs with write
-# access or secrets.
+# Scans every pull request. pull_request only: never
+# pull_request_target, so a fork's head never runs with write access
+# or secrets. There is no paths filter. Agent configuration is not a
+# fixed list of paths: adapters read nested files, plugin manifests
+# name arbitrary paths, and .gitattributes counts.
 name: tripcord
 
 on:
   pull_request:
-    paths:
-      - ".claude/**"
-      - ".cursor/**"
-      - ".codex/**"
-      - ".github/**"
-      - ".vscode/**"
-      - ".mcp.json"
-      - "AGENTS.md"
-      - "CLAUDE.md"
-      - "GEMINI.md"
-      - ".devin/**"
-      - ".tripcord/**"
 
 permissions:
   contents: read
