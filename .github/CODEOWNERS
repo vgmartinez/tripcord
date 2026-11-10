@@ -3,3 +3,8 @@
 # from the spec owner before that floor moves.
 /schemas/*.schema.json @vgmartinez
 /schemas/testdata/baseline/ @vgmartinez
+
+# registrycheck under internal/tools/ becomes the binary that judges
+# later pull requests once it is on the default branch. Require review
+# from the spec owner before that checker moves.
+/internal/tools/ @vgmartinez

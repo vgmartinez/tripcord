@@ -68,20 +68,36 @@ runs:
         TRIPCORD_PATH: ${{ inputs.path }}
       run: |
         set -euo pipefail
+        # The path is workflow-command data, not a property. Escape %
+        # first, then CR and LF, so a crafted path cannot start another
+        # command. : (%3A) and , (%2C) are escaped only in properties.
+        workflow_data() {
+          local data=$1
+          data=${data//'%'/'%25'}
+          data=${data//$'\r'/'%0D'}
+          data=${data//$'\n'/'%0A'}
+          printf '%s' "$data"
+        }
         if [ -z "$TRIPCORD_PATH" ]; then
           echo "::error::tripcord path is empty"
           exit 1
         fi
         if [ ! -e "$TRIPCORD_PATH" ]; then
-          echo "::error::tripcord path does not exist: $TRIPCORD_PATH"
+          echo "::error::tripcord path does not exist: $(workflow_data "$TRIPCORD_PATH")"
           exit 1
         fi
         if [ ! -d "$TRIPCORD_PATH" ]; then
-          echo "::error::tripcord path is not a directory: $TRIPCORD_PATH"
+          echo "::error::tripcord path is not a directory: $(workflow_data "$TRIPCORD_PATH")"
           exit 1
         fi
-        if [ -z "$(ls -A -- "$TRIPCORD_PATH")" ]; then
-          echo "::error::tripcord path is empty: $TRIPCORD_PATH"
+        # A failed listing is unreadable, not empty. set -e does not
+        # abort inside this if, so the status has to be checked itself.
+        if ! listing=$(ls -A -- "$TRIPCORD_PATH" 2>/dev/null); then
+          echo "::error::tripcord path is unreadable: $(workflow_data "$TRIPCORD_PATH")"
+          exit 1
+        fi
+        if [ -z "$listing" ]; then
+          echo "::error::tripcord path is empty: $(workflow_data "$TRIPCORD_PATH")"
           exit 1
         fi
     - id: paths
@@ -289,7 +305,52 @@ runs:
             const comments = await github.paginate(github.rest.issues.listComments, {
               owner, repo, issue_number: issueNumber, per_page: 100,
             });
-            const previous = comments.find(comment => comment.user.type === "Bot" && comment.body.startsWith(marker));
+            // GET /user accepts a user or PAT. An installation token, including
+            // the default GITHUB_TOKEN, is not in that list and returns 403.
+            // GraphQL viewer is the authenticated identity and accepts an
+            // installation token. If neither answers, skip: do not edit a
+            // comment and do not create one, and do not fail the job.
+            let actorLogin = "";
+            let actorID = null;
+            try {
+              const me = await github.rest.users.getAuthenticated();
+              const actor = me.data || {};
+              actorLogin = typeof actor.login === "string" ? actor.login : "";
+              actorID = actor.id;
+            } catch (error) {
+              const status = error.status || (error.response && error.response.status);
+              const message = String(error && error.message || "");
+              if (status !== 403 && !message.includes("Resource not accessible by integration")) {
+                throw error;
+              }
+              let viewer = null;
+              try {
+                const result = await github.graphql("query { viewer { login databaseId } }");
+                viewer = result && result.viewer;
+              } catch (graphqlError) {
+                core.warning(`Tripcord comment skipped: the token identity could not be read (${graphqlError.message}).`);
+                return;
+              }
+              if (viewer) {
+                actorLogin = typeof viewer.login === "string" ? viewer.login : "";
+                actorID = viewer.databaseId;
+              }
+            }
+            if ((actorLogin === "" || actorLogin == null) && actorID == null) {
+              core.warning("Tripcord comment skipped: the token identity could not be read.");
+              return;
+            }
+            const owns = comment => {
+              const user = comment.user;
+              if (!user || typeof comment.body !== "string" || !comment.body.startsWith(marker)) {
+                return false;
+              }
+              if (actorID != null && user.id != null) {
+                return user.id === actorID;
+              }
+              return actorLogin !== "" && user.login === actorLogin;
+            };
+            const previous = comments.find(owns);
             if (previous) {
               await github.rest.issues.updateComment({ owner, repo, comment_id: previous.id, body: report });
             } else {

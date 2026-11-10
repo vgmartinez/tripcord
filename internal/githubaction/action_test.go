@@ -2,6 +2,7 @@ package githubaction_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"os"
 	"os/exec"
@@ -258,6 +259,17 @@ func TestActionRejectsMissingOrEmptyPath(t *testing.T) {
 			t.Fatalf("empty directory = %d\n%s", code, out)
 		}
 	})
+	t.Run("unreadable directory", func(t *testing.T) {
+		dir := t.TempDir()
+		if err := os.Chmod(dir, 0); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+		code, out := run(t, dir)
+		if code == 0 || !strings.Contains(out, "path is unreadable") || strings.Contains(out, "path is empty") {
+			t.Fatalf("unreadable directory = %d\n%s", code, out)
+		}
+	})
 	t.Run("directory", func(t *testing.T) {
 		dir := t.TempDir()
 		if err := os.WriteFile(filepath.Join(dir, "README"), []byte("x\n"), 0o600); err != nil {
@@ -265,6 +277,19 @@ func TestActionRejectsMissingOrEmptyPath(t *testing.T) {
 		}
 		if code, out := run(t, dir); code != 0 {
 			t.Fatalf("non-empty directory = %d\n%s", code, out)
+		}
+	})
+	t.Run("workflow command data", func(t *testing.T) {
+		// Newline, %, ::, and comma. The path is command data, so % CR
+		// and LF are escaped. : and , stay, inside the one error line.
+		path := "a%b\n::error::injected,x\ry"
+		code, out := run(t, path)
+		want := "::error::tripcord path does not exist: a%25b%0A::error::injected,x%0Dy\n"
+		if code == 0 || out != want {
+			t.Fatalf("crafted path = %d\n%q\nwant %q", code, out, want)
+		}
+		if strings.Contains(out, "\n::") || strings.Contains(out, "\r") {
+			t.Fatalf("crafted path starts another workflow command: %q", out)
 		}
 	})
 }
@@ -658,4 +683,264 @@ func TestActionScanComparesWithPullRequestBase(t *testing.T) {
 			t.Fatalf("%s\n%s", exit, out)
 		}
 	})
+}
+
+// TestCommentUpsertUsesTokenIdentity runs the action's comment script.
+// A marked comment is updated only when its author is the authenticated
+// token: github-actions[bot], another app, or a user. Another bot is left
+// alone even when the login string matches.
+func TestCommentUpsertUsesTokenIdentity(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Fatal("node is not installed")
+	}
+	var script string
+	for _, step := range parseAction(t).Runs.Steps {
+		if strings.Contains(step.With["script"], "tripcord-report") {
+			script = step.With["script"]
+		}
+	}
+	if script == "" {
+		t.Fatal("action has no report comment script")
+	}
+	if strings.Contains(script, `comment.user.type === "Bot"`) {
+		t.Fatal("comment upsert still accepts any bot")
+	}
+	if !strings.Contains(script, "users.getAuthenticated") {
+		t.Fatal("comment upsert does not look up the token identity")
+	}
+
+	markdown := filepath.Join(t.TempDir(), "report.md")
+	if err := os.WriteFile(markdown, []byte("report body\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	const marker = "<!-- tripcord-report -->"
+	comment := func(id int, login string, userID int, kind string) map[string]any {
+		return map[string]any{
+			"id":   id,
+			"body": marker + "\nold",
+			"user": map[string]any{"login": login, "id": userID, "type": kind},
+		}
+	}
+	actions := comment(10, "github-actions[bot]", 41898282, "Bot")
+	dependabot := comment(11, "dependabot[bot]", 49699333, "Bot")
+	human := comment(12, "octocat", 1, "User")
+	spoofed := comment(13, "github-actions[bot]", 1, "Bot")
+	app := comment(14, "my-app[bot]", 99, "Bot")
+
+	run := func(t *testing.T, fixture map[string]any) []map[string]any {
+		t.Helper()
+		fixture["markdown"] = markdown
+		dir := t.TempDir()
+		scriptPath := filepath.Join(dir, "script.js")
+		fixturePath := filepath.Join(dir, "fixture.json")
+		if err := os.WriteFile(scriptPath, []byte(script), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		raw, err := json.Marshal(fixture)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(fixturePath, raw, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		harness := `
+const fs = require("fs");
+const script = fs.readFileSync(process.argv[1], "utf8");
+const fixture = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const calls = [];
+const core = { warning(message) { calls.push({ op: "warning", message }); } };
+const context = { payload: { pull_request: { number: 7 } }, repo: { owner: "acme", repo: "tools" } };
+function httpError(spec) {
+  const err = new Error(spec.message || "request failed");
+  if (spec.status) err.status = spec.status;
+  return err;
+}
+const github = {
+  paginate: async () => fixture.comments,
+  graphql: async () => {
+    calls.push({ op: "graphql" });
+    if (fixture.graphqlError) throw httpError(fixture.graphqlError);
+    return { viewer: fixture.viewer == null ? null : fixture.viewer };
+  },
+  rest: {
+    users: {
+      getAuthenticated: async () => {
+        calls.push({ op: "getUser" });
+        if (fixture.userError) throw httpError(fixture.userError);
+        return { data: fixture.me };
+      },
+    },
+    issues: {
+      updateComment: async (args) => { calls.push({ op: "update", id: args.comment_id }); },
+      createComment: async (args) => { calls.push({ op: "create", body: args.body }); },
+    },
+  },
+};
+process.env.TRIPCORD_MARKDOWN = fixture.markdown;
+process.env.TRIPCORD_HEAD_REPO = "";
+process.env.TRIPCORD_BASE_REPO = "";
+const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+new AsyncFunction("core", "context", "github", "process", script)(core, context, github, process)
+  .then(() => process.stdout.write(JSON.stringify(calls)))
+  .catch((err) => { console.error(err); process.exit(1); });
+`
+		cmd := exec.Command("node", "-e", harness, scriptPath, fixturePath)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("comment script: %v\n%s", err, out)
+		}
+		var calls []map[string]any
+		if err := json.Unmarshal(out, &calls); err != nil {
+			t.Fatalf("calls %s: %v", out, err)
+		}
+		return calls
+	}
+	ops := func(calls []map[string]any) []string {
+		t.Helper()
+		var got []string
+		for _, call := range calls {
+			switch call["op"] {
+			case "update":
+				got = append(got, "update:"+jsonNumber(t, call["id"]))
+			case "create":
+				body, _ := call["body"].(string)
+				if !strings.HasPrefix(body, marker+"\n") || !strings.Contains(body, "report body") {
+					t.Fatalf("create body = %q", body)
+				}
+				got = append(got, "create")
+			case "warning":
+				got = append(got, "warning")
+			case "getUser", "graphql":
+			default:
+				t.Fatalf("call = %#v", call)
+			}
+		}
+		return got
+	}
+	assertOps := func(t *testing.T, me map[string]any, comments []map[string]any, want ...string) {
+		t.Helper()
+		got := ops(run(t, map[string]any{"me": me, "comments": comments}))
+		if strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Fatalf("ops = %v, want %v", got, want)
+		}
+	}
+	saw := func(calls []map[string]any, op string) bool {
+		for _, call := range calls {
+			if call["op"] == op {
+				return true
+			}
+		}
+		return false
+	}
+
+	t.Run("github-actions bot", func(t *testing.T) {
+		assertOps(t,
+			map[string]any{"login": "github-actions[bot]", "id": 41898282, "type": "Bot"},
+			[]map[string]any{dependabot, human, spoofed, actions},
+			"update:10",
+		)
+	})
+	t.Run("authenticated app", func(t *testing.T) {
+		assertOps(t,
+			map[string]any{"login": "my-app[bot]", "id": 99, "type": "Bot"},
+			[]map[string]any{actions, app},
+			"update:14",
+		)
+	})
+	t.Run("authenticated user", func(t *testing.T) {
+		assertOps(t,
+			map[string]any{"login": "octocat", "id": 1, "type": "User"},
+			[]map[string]any{actions, human},
+			"update:12",
+		)
+	})
+	t.Run("someone else's comment is not edited", func(t *testing.T) {
+		assertOps(t,
+			map[string]any{"login": "github-actions[bot]", "id": 41898282, "type": "Bot"},
+			[]map[string]any{dependabot, human, spoofed},
+			"create",
+		)
+	})
+	t.Run("missing identity", func(t *testing.T) {
+		assertOps(t, map[string]any{}, []map[string]any{actions}, "warning")
+	})
+
+	forbidden := map[string]any{"status": 403, "message": "Resource not accessible by integration"}
+	t.Run("403 then graphql viewer", func(t *testing.T) {
+		calls := run(t, map[string]any{
+			"userError": forbidden,
+			"viewer":    map[string]any{"login": "github-actions[bot]", "databaseId": 41898282},
+			"comments":  []map[string]any{dependabot, human, spoofed, actions},
+		})
+		if !saw(calls, "getUser") || !saw(calls, "graphql") {
+			t.Fatalf("calls = %#v", calls)
+		}
+		if got := ops(calls); strings.Join(got, ",") != "update:10" {
+			t.Fatalf("ops = %v", got)
+		}
+	})
+	t.Run("403 then graphql viewer for another app", func(t *testing.T) {
+		calls := run(t, map[string]any{
+			"userError": forbidden,
+			"viewer":    map[string]any{"login": "my-app[bot]", "databaseId": 99},
+			"comments":  []map[string]any{actions, app},
+		})
+		if got := ops(calls); strings.Join(got, ",") != "update:14" {
+			t.Fatalf("ops = %v", got)
+		}
+	})
+	t.Run("403 message without status", func(t *testing.T) {
+		calls := run(t, map[string]any{
+			"userError": map[string]any{"message": "Resource not accessible by integration"},
+			"viewer":    map[string]any{"login": "github-actions[bot]", "databaseId": 41898282},
+			"comments":  []map[string]any{dependabot, actions},
+		})
+		if got := ops(calls); strings.Join(got, ",") != "update:10" {
+			t.Fatalf("ops = %v", got)
+		}
+	})
+	t.Run("403 then graphql failure", func(t *testing.T) {
+		calls := run(t, map[string]any{
+			"userError":    forbidden,
+			"graphqlError": map[string]any{"message": "Resource not accessible by integration"},
+			"comments":     []map[string]any{actions, dependabot, human},
+		})
+		if !saw(calls, "graphql") {
+			t.Fatalf("calls = %#v", calls)
+		}
+		if got := ops(calls); strings.Join(got, ",") != "warning" {
+			t.Fatalf("ops = %v", got)
+		}
+	})
+	t.Run("403 then empty viewer", func(t *testing.T) {
+		calls := run(t, map[string]any{
+			"userError": forbidden,
+			"comments":  []map[string]any{actions, dependabot},
+		})
+		if got := ops(calls); strings.Join(got, ",") != "warning" {
+			t.Fatalf("ops = %v", got)
+		}
+	})
+	t.Run("non-403 identity error does not fail the step", func(t *testing.T) {
+		calls := run(t, map[string]any{
+			"userError": map[string]any{"status": 401, "message": "Bad credentials"},
+			"viewer":    map[string]any{"login": "github-actions[bot]", "databaseId": 41898282},
+			"comments":  []map[string]any{actions},
+		})
+		if saw(calls, "graphql") {
+			t.Fatalf("graphql was called: %#v", calls)
+		}
+		if got := ops(calls); strings.Join(got, ",") != "warning" {
+			t.Fatalf("ops = %v", got)
+		}
+	})
+}
+
+func jsonNumber(t *testing.T, v any) string {
+	t.Helper()
+	raw, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(raw)
 }

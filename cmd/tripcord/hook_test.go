@@ -127,6 +127,48 @@ func TestHookContract(t *testing.T) {
 	}
 }
 
+// TestHookWhenAndDenyIf proves `tripcord hook` evaluates a custom
+// rule's when and deny_if. Both have to match for the call to be
+// denied. pre-tool-use-bash-allow.json is a Bash call whose command is
+// `go test ./...`, so when matches tool_call and deny_if matches the
+// command. pre-tool-use-bash-deny.json is a Bash call with a different
+// command and no path, so deny_if is false. pre-tool-use-read.json
+// reads a path ending in /.env, which deny_if would match, but its
+// kind is read, so when is false.
+func TestHookWhenAndDenyIf(t *testing.T) {
+	const policy = `version: 1
+mode: enforce
+custom:
+  - id: ACME-020
+    when: 'event.kind == "tool_call"'
+    deny_if: 'event.command == "go test ./..." || event.paths.exists(p, p.endsWith("/.env"))'
+    message: refused
+`
+	const reason = "tripcord blocked this tool call: ACME-020 (high): refused"
+	for _, tc := range []struct {
+		name, fixture string
+		deny          bool
+	}{
+		{name: "when and deny_if match", fixture: "pre-tool-use-bash-allow.json", deny: true},
+		{name: "deny_if does not match", fixture: "pre-tool-use-bash-deny.json", deny: false},
+		{name: "when does not match", fixture: "pre-tool-use-read.json", deny: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			hookProject(t, policy)
+			code, stdout, stderr := runHookCLI(t, bytes.NewReader(adapterFixture(t, model.HarnessClaude, tc.fixture)), "--harness", "claude", "--event", hook.EventPreTool)
+			if tc.deny {
+				if code != int(exitcode.Block) || stdout != claudeDeny(reason) || stderr != reason+"\n" {
+					t.Errorf("got exit %d stdout %q stderr %q", code, stdout, stderr)
+				}
+				return
+			}
+			if code != int(exitcode.OK) || stdout != "{}\n" || stderr != "" {
+				t.Errorf("got exit %d stdout %q stderr %q", code, stdout, stderr)
+			}
+		})
+	}
+}
+
 // The hook surface defaults to warn: without a policy mode, a deny_if
 // hit is shown and the call proceeds.
 func TestHookDefaultModeWarns(t *testing.T) {

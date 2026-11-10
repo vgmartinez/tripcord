@@ -1,7 +1,7 @@
 # Roadmap
 
 Nothing here is released. There is no tagged release yet; `main` is the
-pre-release v0 tree described in [Release notes](release-notes.md).
+v0 tree described in [Release notes](release-notes.md).
 
 ## In this tree
 
