@@ -525,8 +525,9 @@ func TestBootstrapRefusesCacheDirOfAnotherUser(t *testing.T) {
 		t.Fatal(err)
 	}
 	code, _, stderr := e.runSplit(t, "hook", "--harness", "claude", "--event", HookEvent)
-	if code != 2 || !strings.Contains(stderr, "unsafe cache directories:") || !strings.Contains(stderr, dir) || !strings.Contains(stderr, "cache directories must be owned by uid 0") || e.ran(t) != "" {
-		t.Fatalf("exit %d, stderr %q", code, stderr)
+	want := "tripcord bootstrap: unsafe cache directories: " + dir + "; cache directories must be owned by uid 0\n"
+	if code != 2 || stderr != want || e.ran(t) != "" {
+		t.Fatalf("exit %d, stderr %q, want exit 2 and %q", code, stderr, want)
 	}
 }
 
