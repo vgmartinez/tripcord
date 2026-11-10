@@ -247,11 +247,12 @@ func resolveExisting(dir string) string {
 }
 
 // loadHookPolicy loads the hook surface policy without compiling the
-// core pack, which would take most of the hook's latency budget. Merge
-// needs the pack's catalog only for rule locks and to reject a custom
-// rule that reuses a pack rule id; with any of those, or when the load
-// without it fails, the policy is loaded again with the catalog so the
-// result is the one scan gets.
+// core pack. Merge needs the pack's catalog only for rule locks and to
+// reject a custom rule that reuses a pack rule id. That catalog is the
+// index (id, severity, pack, harness), not the compiled expressions:
+// the hook evaluates custom rules only, and compiling the pack is most
+// of the latency budget. When the load without the index fails, it is
+// merged again with the index so the error is the one scan gets.
 // loadHookPolicy does not warn when the loaded policy's privacy.redact
 // is false (contrast runScan's warnRedactFalse): each `tripcord hook`
 // run is a fresh process deciding one tool call (see docs/hook.md), so
@@ -268,29 +269,45 @@ func loadHookPolicy(root string, limits rules.Limits) (*policy.Effective, error)
 		return nil, err
 	}
 	opts := policy.Options{RepoRoot: root, Surface: policy.SurfaceHook, Env: env}
-	eff, err := policy.Load(opts)
-	if err == nil {
-		needs, rerr := hookNeedsCatalog(eff)
-		if rerr != nil {
-			return nil, rerr
-		}
-		if !needs {
-			return eff, nil
-		}
-	}
-	env, catalog, err := loadRules(limits)
+	layers, err := policy.LoadLayers(opts)
 	if err != nil {
 		return nil, err
 	}
-	opts.Env, opts.Catalog = env, catalog
-	return policy.Load(opts)
+	needs, err := hookLayersNeedCatalog(layers)
+	if err != nil {
+		return nil, err
+	}
+	if !needs {
+		eff, merr := policy.Merge(env, nil, policy.SurfaceHook, layers)
+		if merr == nil {
+			return eff, nil
+		}
+	}
+	catalog, err := rules.LoadCoreIndex()
+	if err != nil {
+		return nil, err
+	}
+	return policy.Merge(env, catalog, policy.SurfaceHook, layers)
 }
 
-func hookNeedsCatalog(eff *policy.Effective) (bool, error) {
-	if len(eff.RuleLocks) > 0 || len(eff.ExemptionLocks) > 0 {
-		return true, nil
+// hookLayersNeedCatalog reports whether merge has to see the core
+// catalog: a rule or exception lock, or a custom id that is also a pack
+// rule id. A mode lock alone does not. The check looks at the parsed
+// layers so the expressions are compiled once.
+func hookLayersNeedCatalog(layers []policy.Layer) (bool, error) {
+	var custom []string
+	for _, layer := range layers {
+		if layer.File == nil {
+			continue
+		}
+		if lk := layer.File.Locked; lk != nil && (len(lk.Rules) > 0 || len(lk.Exceptions) > 0) {
+			return true, nil
+		}
+		for _, c := range layer.File.Custom {
+			custom = append(custom, c.ID)
+		}
 	}
-	if len(eff.Custom) == 0 {
+	if len(custom) == 0 {
 		return false, nil
 	}
 	raw, err := corepack.FS.ReadFile(rules.RegistryFile)
@@ -301,8 +318,8 @@ func hookNeedsCatalog(eff *policy.Effective) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	for _, c := range eff.Custom {
-		if _, ok := reg.Lookup(c.ID); ok {
+	for _, id := range custom {
+		if _, ok := reg.Lookup(id); ok {
 			return true, nil
 		}
 	}

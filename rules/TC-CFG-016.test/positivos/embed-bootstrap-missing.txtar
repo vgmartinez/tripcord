@@ -82,7 +82,7 @@ jobs:
   "files": [
     {
       "path": ".tripcord/bootstrap.sh",
-      "sha256": "971752bf3f8534917d90ea0142df0e5e0b28c06f0a95ef47665fbb662f62f7fb"
+      "sha256": "441bfce1ecfa6c29217b9af919d58fc2181716a8705959a95ed5a220efd8b544"
     },
     {
       "path": ".github/workflows/tripcord.yml",

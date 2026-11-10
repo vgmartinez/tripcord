@@ -153,9 +153,11 @@ milliseconds, inside the deadline. The cost limit fits one
 unit a byte); a rule that parses such a command twice exceeds it, and
 the run follows `--on-failure` too.
 
-The core rule pack is compiled only when the policy needs its catalog
-(a `locked` section, or a `custom` id that is also a core rule id, which
-is rejected as in `scan`). Without that, a cold start is a few
+The core rule pack's expressions are not compiled on this path. A
+`locked.rules` or `locked.exceptions` entry, or a `custom` id that is
+also a pack rule id (rejected as in `scan`), needs the pack's ids,
+severities, and harnesses. Those are read from the pack index. A mode
+lock alone does not. Without a lock, a cold start is a few
 milliseconds. The `e2e perf budget` CI job runs
 `TestHookColdStartBudget`, which fails if the p95 of a new `tripcord
 hook` process per event exceeds 25 ms.
@@ -174,6 +176,14 @@ hook` process per event exceeds 25 ms.
 The hooks `init --embed` writes run `bash .tripcord/bootstrap.sh hook
 --harness <h> --event pre-tool --on-failure block`, which runs this
 command from the verified binary, so a run that cannot decide denies
-the tool call. Without a verified binary in its cache, `bootstrap.sh`
-exits 2 with the reason, which blocks the call too. See
-[Init](init.md#bootstrap).
+the tool call. After `install` or `session-start` (or the first hook)
+has recorded the cached file's identity, later hooks compare that
+record with one `stat` and do not copy or hash the binary. If the file
+changed, is group- or world-writable, or the record is not a private
+regular file, `bootstrap.sh` exits 2 and runs nothing. With no record,
+`hook` verifies once, and a failed check exits 2 as well. Either
+reason blocks the call. See [Init](init.md#bootstrap).
+
+`scripts/hook-latency.sh` prints the p50, p95, and max of a locked
+`tripcord hook`, of `bootstrap.sh hook`, and of the difference between
+the two in the same run. It does not enforce a threshold.
