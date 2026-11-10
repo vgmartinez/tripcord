@@ -753,6 +753,8 @@ func parseCommandFlags(cmd flagCommand, args []string, stdout io.Writer) (scanOp
 	switch {
 	case cmd == preopenCommand && flags.NArg() != 1:
 		return opts, errors.New("preopen takes exactly one git URL or local path")
+	case cmd == preopenCommand && opts.staged:
+		return opts, errors.New("--staged is not available: preopen scans the fetched tree, not a Git index")
 	case opts.staged:
 		opts.path = "."
 		if flags.NArg() > 0 {

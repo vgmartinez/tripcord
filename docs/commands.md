@@ -86,7 +86,7 @@ exiting 3 or 4. See [hook](hook.md).
 ## `tripcord preopen`
 
 `tripcord preopen <git-url|path>` takes the `scan` flags except
-`--since`, and `--scope` must be `repo`. It ignores the fetched
+`--since` and `--staged`, and `--scope` must be `repo`. It ignores the fetched
 repository's own `.tripcord` policy. See [preopen](preopen.md).
 
 ## `tripcord pr-context`
