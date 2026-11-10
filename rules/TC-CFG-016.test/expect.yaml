@@ -35,5 +35,4 @@ positivos:
   embed-inflated-version-hook-loosened.json: high
   embed-pin-unknown.json: high
   embed-pin-malformed.json: high
-  embed-render-outdated.json: low
   embed-manifest-future-schema.json: low

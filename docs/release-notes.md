@@ -39,10 +39,16 @@ own templates ([design](design/tc-cfg-016-version-skew.md)):
   base already has.
 - A release `init` refuses a `--version` older than itself (exit 3).
 
-Embeds pinned to `6a12795` keep failing in CI until two repins land:
-the action pin in `tripcord-pr.yml`, then `WorkflowPin`, followed by
-`init --embed --force`. Until then `make release-gate` fails
-`TestVersionSkewCIScanner` with those six highs, so no release is
+Embeds pinned to `6a12795` or `277066a` keep failing in CI until two
+repins land: the action pin in `tripcord-pr.yml`, then `WorkflowPin`,
+followed by `init --embed --force`. Both pins run action `8b33b1b`.
+`KnownWorkflowPins` stays empty until that `WorkflowPin` repin, so a
+local or pre-commit scan reports such an embed's pin as `pin-unknown`,
+high, until the repin appends the pins it replaces. Until then
+`make release-gate` fails `TestVersionSkewCIScanner` with those six
+highs, plus a seventh for
+`copilot-setup-steps.yml`, which `init` now writes only with
+`--cloud-setup` and that action reports missing, so no release is
 tagged. Moving that test from the release gate into per-pull-request
 CI, passing, is the last step. Tracking issue: not opened yet; it will
 be linked here.

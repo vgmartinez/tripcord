@@ -30,10 +30,6 @@ func init() {
 			edit: edits(repinWorkflowTo(skewUnknownPin), rerecord)},
 		"embed-pin-malformed": {kind: "positivos", tracked: true, args: embedArgs("--harness", "claude"),
 			edit: edits(replaceInFile(embedded.WorkflowPath, "tripcord-pr.yml@"+embedded.WorkflowPin, "tripcord-pr.yml@main"), rerecord)},
-		// The SessionStart entry init wrote before CLAUDE_PROJECT_DIR got
-		// its :-. fallback (c8e5bdd), under the same WorkflowPin.
-		"embed-render-outdated": {kind: "positivos", tracked: true, args: embedArgs("--harness", "claude"),
-			edit: edits(replaceInFile(embedded.ClaudeSettingsPath, `${CLAUDE_PROJECT_DIR:-.}/.tripcord/bootstrap.sh\" session-start`, `${CLAUDE_PROJECT_DIR}/.tripcord/bootstrap.sh\" session-start`), rerecord)},
 		"embed-manifest-future-schema": {kind: "positivos", tracked: true, args: embedArgs("--harness", "claude"),
 			edit: replaceInFile(embedded.ManifestPath, `"tripcord.embed/v1"`, `"tripcord.embed/v2"`)},
 	} {

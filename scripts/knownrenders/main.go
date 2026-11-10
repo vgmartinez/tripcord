@@ -115,7 +115,12 @@ func observe(root, commit string) (embedded.RenderSet, error) {
 	if _, err := git(repo, "init", "-q"); err != nil {
 		return embedded.RenderSet{}, err
 	}
-	init := exec.Command(bin, "init", repo, "--embed", "--version", "0.1.0", "--sha256", "linux-x64="+strings.Repeat("0", 64))
+	args := []string{"init", repo, "--embed", "--version", "0.1.0", "--sha256", "linux-x64=" + strings.Repeat("0", 64)}
+	// Later inits write the Copilot setup step only with --cloud-setup.
+	if src, err := os.ReadFile(filepath.Join(src, "cmd", "tripcord", "init.go")); err == nil && bytes.Contains(src, []byte(`"cloud-setup"`)) {
+		args = append(args, "--cloud-setup")
+	}
+	init := exec.Command(bin, args...)
 	if err := runCmd(init); err != nil {
 		return embedded.RenderSet{}, err
 	}

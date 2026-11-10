@@ -59,8 +59,24 @@ passing, is the third change.
   `docs/commands.md`), and every configuration error exits 3, so a
   malformed value, and an older `init --version`, exit 3.
 - **`stale`** is no longer reported; its rule clause is replaced by
-  `outdated` (low). The forged-digest positive is now `changed` through
-  `B4` (or the writer witness), still high.
+  one low clause for `outdated` and `unverified`. The forged-digest
+  positive is now `changed` through `B4` (or the writer witness), still
+  high.
+- **Main repinned first.** While this change was in review, main moved
+  `WorkflowPin` from `6a12795` to `277066a` (still action `8b33b1b`) and
+  dropped the workflow's `paths` filter. `known_renders.json` therefore
+  holds only `277066a`. With `KnownWorkflowPins` empty (condition 4), no
+  pin and no render can be `outdated` today, so no rule fixture can
+  hold that state. `outdated` shares the `unverified` clause, which
+  `embed-manifest-future-schema` pins, and
+  `TestVersionSkewKnownPinIsOutdatedLow` checks it end to end. Until
+  the `WorkflowPin` repin appends `6a12795` and `277066a`, a trusted
+  scan reports embeds under either as `pin-unknown`, high. W2 still
+  applies only to a `paths` filter that is present. Since main stopped
+  writing `copilot-setup-steps.yml` without `--cloud-setup`, the
+  scanner at `8b33b1b` also reports it missing, so
+  `TestVersionSkewCIScanner` now fails with seven highs, not six.
+  Section 1 and later describe the tree at `1571edc`.
 - **Files.** `internal/embedded/pins.go` (pins, `WorkflowRef`, version
   order), `invariants.go`, `renders.go` and the generated
   `known_renders.json` (`go run ./scripts/knownrenders`), plus the
@@ -73,8 +89,7 @@ passing, is the third change.
 - **New positives** are config-item JSON fixtures, one per new
   `severity_when` clause, so `TestSeverityClausesAreCovered` pins each
   of them: `embed-inflated-version-hook-loosened`, `embed-pin-unknown`,
-  `embed-pin-malformed`, `embed-render-outdated` (low), and
-  `embed-manifest-future-schema` (low). A raw archive would carry
+  `embed-pin-malformed`, and `embed-manifest-future-schema` (low). A raw archive would carry
   `bootstrap.sh`, whose shebang needs an `allowlist.tsv` line, and that
   list only shrinks.
 - **CI context** is plain `scan` with `--executing-workflow` or

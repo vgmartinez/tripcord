@@ -477,7 +477,9 @@ builds the tripcord the generated `tripcord.yml` really runs in CI
 way the action does) and scans a fresh embed from this tree's `init`
 with `GITHUB_ACTIONS=true`. It fails on any high TC-CFG-016 finding.
 It fails on this tree: the action at `8b33b1b` predates this tree's
-templates and reports six highs. It passes once the action and then
+templates and reports seven highs (six surfaces "written by an older
+Tripcord", and the Copilot setup step `init` writes only with
+`--cloud-setup` as missing). It passes once the action and then
 `WorkflowPin` are repinned past the TC-CFG-016 version-skew fix
 ([release notes](release-notes.md)), so until then no release can be
 tagged.

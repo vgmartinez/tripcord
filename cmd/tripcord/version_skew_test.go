@@ -77,7 +77,7 @@ func newerEmbed(t *testing.T, dir string) {
 		replaceInFile(embedded.ClaudeSettingsPath, `session-start --harness claude"`, `session-start --harness claude", "timeout": 300`),
 		replaceInFile(embedded.CursorHooksPath, `"failClosed": true`, `"failClosed": true, "timeout": 30`),
 		replaceInFile(embedded.CopilotHooksPath, `"timeoutSec": 60`, `"timeoutSec": 90`),
-		replaceInFile(embedded.WorkflowPath, "      - \".tripcord/**\"\n", "      - \".tripcord/**\"\n      - \".agents/**\"\n"),
+		replaceInFile(embedded.WorkflowPath, "\non:\n", "\n# written by a later Tripcord\non:\n"),
 		repinWorkflowTo(skewUnknownPin),
 		rerecord,
 	)(t, dir)
@@ -87,7 +87,7 @@ func newerEmbed(t *testing.T, dir string) {
 // whose head only adds a README, the way a pull request sees it.
 func newerEmbedRepo(t *testing.T) string {
 	t.Helper()
-	repo := embeddedBase(t)
+	repo := embeddedBase(t, "--cloud-setup")
 	newerEmbed(t, repo)
 	commitAll(t, repo)
 	writeTestFile(t, repo, "README.md", "docs\n")
@@ -138,6 +138,22 @@ func TestVersionSkewTrustedDevScannerFlagsUnknownPin(t *testing.T) {
 	}
 }
 
+// TestVersionSkewKnownPinIsOutdatedLow: an embed under a pin
+// KnownWorkflowPins lists is outdated, low. No rule fixture can hold
+// that state while the list is empty, so this pins the clause.
+func TestVersionSkewKnownPinIsOutdatedLow(t *testing.T) {
+	saved := embedded.KnownWorkflowPins
+	embedded.KnownWorkflowPins = []string{skewUnknownPin}
+	t.Cleanup(func() { embedded.KnownWorkflowPins = saved })
+	repo := embeddedBase(t)
+	edits(repinWorkflowTo(skewUnknownPin), rerecord)(t, repo)
+	got := skewScan(t, repo)
+	want := skewFinding{embedded.WorkflowPath, "Tripcord guard was written by another Tripcord version", model.SeverityLow}
+	if len(got) != 1 || got[0] != want {
+		t.Fatalf("findings = %+v, want %+v", got, want)
+	}
+}
+
 func TestVersionSkewMutationsStayHigh(t *testing.T) {
 	inflate := func(t *testing.T, dir string) {
 		t.Helper()
@@ -163,7 +179,7 @@ func TestVersionSkewMutationsStayHigh(t *testing.T) {
 				version string
 				ci      bool
 			}{{"dev", true}, {"0.0.9", false}, {"0.0.9", true}} {
-				repo := embeddedBase(t)
+				repo := embeddedBase(t, "--cloud-setup")
 				newerEmbed(t, repo)
 				edit(t, repo)
 				withScannerVersion(t, scanner.version)

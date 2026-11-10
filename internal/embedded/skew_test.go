@@ -71,7 +71,7 @@ func TestInvariantsHoldForInit(t *testing.T) {
 
 func copilotStepYAML(t *testing.T) *yaml.Node {
 	t.Helper()
-	dir := embed(t, model.HarnessCopilot)
+	dir := embedCloud(t, model.HarnessCopilot)
 	steps, ok := setupSteps(file{raw: []byte(readFile(t, dir, CopilotSetupStepsPath))})
 	if !ok {
 		t.Fatal("setup steps do not parse")
@@ -141,13 +141,13 @@ func repinWorkflow(t *testing.T, dir, pin string) {
 // surface, records it, and pins an unknown tripcord-pr.yml.
 func newerEmbed(t *testing.T) string {
 	t.Helper()
-	dir := embed(t)
+	dir := embedCloud(t)
 	replace(t, dir, BootstrapPath, "set -eu\n", "set -eu\n# written by a later Tripcord\n")
 	replace(t, dir, ClaudeSettingsPath, `"onFailure": "block"`, `"onFailure": "block", "timeout": 30`)
 	replace(t, dir, ClaudeSettingsPath, `session-start --harness claude"`, `session-start --harness claude", "timeout": 300`)
 	replace(t, dir, CursorHooksPath, `"failClosed": true`, `"failClosed": true, "timeout": 30`)
 	replace(t, dir, CopilotHooksPath, `"timeoutSec": 60`, `"timeoutSec": 90`)
-	replace(t, dir, WorkflowPath, "      - \".tripcord/**\"\n", "      - \".tripcord/**\"\n      - \".agents/**\"\n")
+	replace(t, dir, WorkflowPath, "\non:\n", "\n# written by a later Tripcord\non:\n")
 	repinWorkflow(t, dir, unknownPin)
 	rerecord(t, dir)
 	return dir
@@ -248,7 +248,7 @@ func TestCheckNewerEmbedInvariants(t *testing.T) {
 			replace(t, dir, WorkflowPath, "  pull_request:\n", "  pull_request_target:\n")
 		}, "generic workflow"},
 		"W2 paths narrowed": {func(t *testing.T, dir string) {
-			replace(t, dir, WorkflowPath, "      - \".tripcord/**\"\n", "")
+			replace(t, dir, WorkflowPath, "  pull_request:\n", "  pull_request:\n    paths:\n      - \"src/**\"\n")
 		}, "generic workflow"},
 		"W5 binary input": {func(t *testing.T, dir string) {
 			replace(t, dir, WorkflowPath, "fail-on: high", "fail-on: high\n      binary: ./tripcord")

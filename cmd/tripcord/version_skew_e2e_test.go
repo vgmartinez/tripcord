@@ -25,8 +25,10 @@ import (
 // It runs only under the release gate (TRIPCORD_RELEASE_GATE=1, make
 // release-gate), and there it fails until the action repin and the
 // WorkflowPin repin land: today A predates this tree's templates, and
-// reports six highs (Claude SessionStart and PreToolUse, Cursor and
-// Copilot preToolUse, tripcord.yml, bootstrap.sh). That failure is the
+// reports seven highs: six "written by an older Tripcord" (Claude
+// SessionStart and PreToolUse, Cursor and Copilot preToolUse,
+// tripcord.yml, bootstrap.sh) and a missing copilot-setup-steps.yml,
+// which init writes only with --cloud-setup. That failure is the
 // point: no tag ships an embed its own CI flags. Moving this test from
 // the release gate into per-pull-request CI, passing, is the third PR of
 // the TC-CFG-016 version-skew rollout; its tracking issue is listed in
