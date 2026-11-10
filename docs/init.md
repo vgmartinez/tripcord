@@ -407,7 +407,7 @@ caught there as `repinned` or `changed`.
 
 ## Release gate
 
-Two tests run only with `TRIPCORD_RELEASE_GATE=1`:
+Three tests run only with `TRIPCORD_RELEASE_GATE=1`:
 
 ```sh
 make release-gate
@@ -429,11 +429,31 @@ action at `main@8b33b1b`, which has both. The generated workflow calls
 `tripcord-pr.yml` at `main@277066a`, and the file there pins the same
 action, so both paths pass. It reads the pinned commits with `git show`,
 so the clone must have them (`fetch-depth: 0`).
-Both pass on this tree.
 
-Without the variable both log that the gate was not requested and pass,
-so pull request CI stays green. There is no release workflow in this
-repository; run the target before tagging a release.
+`TestReleaseGatePinsContainLatestScannerChange`
+(`cmd/tripcord/pin_contract_test.go`) fails unless the generated
+workflow pin, every documented pin of the reusable workflows, and the
+documented pre-commit rev contain the latest commit on `origin/main`
+(or `main`) that changes the scanner: the reusable workflows, the
+composite action, `.pre-commit-hooks.yaml`, advisories, the rule
+registry, top-level rule YAML, the rule and adapter sources, or
+`go.mod`. Every merge that changes those paths makes it fail until a
+repin pull request lands, so a repin pull request is required before
+tagging. A shallow or non-git checkout fails it.
+
+All three pass on this tree. Without the variable they log that the
+gate was not requested and pass. No `pull_request` or `push` workflow
+runs the gate (`TestReleaseGateNotInPullRequestCI`). There is no
+release workflow in this repository: run the target before tagging.
+Tagging and releases are Victor's.
+
+The per-pull-request pin check is `TestPinsReachableFromHead`. It does
+not read `origin/main`. Each pin in the generated workflow,
+`README.md`, and `docs/` (including `docs/github-action.md` and the
+`docs/pre-commit.md` rev) must be a full 40-character sha and an
+ancestor of the `HEAD` under test. In a shallow clone, or when a pin is
+missing, it fetches that exact sha from `origin` and fails if the
+fetch fails. It never skips.
 `TestInitWiringInvokesTripcordHook` always runs and asserts the exact
 command each wiring file holds, `bash <project dir>/.tripcord/bootstrap.sh
 hook --harness <h> --event pre-tool --on-failure block`, and the

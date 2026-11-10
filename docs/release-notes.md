@@ -147,6 +147,15 @@ missing manifest and the missing bootstrap. It does not also report
 every harness hook. A leftover guard hook that no longer matches what
 init writes reports those differences as further highs.
 
+### Repin before tagging
+
+`make release-gate` now fails when the generated workflow pin or a
+documented pin of the reusable workflows or the pre-commit hook does
+not contain the latest scanner change on main. A repin pull request is
+required before tagging. Tagging is Victor's. Pull request CI checks
+only that each pin is a full sha and an ancestor of the commit under
+test. See [Release gate](init.md#release-gate).
+
 ### Known gaps
 
 - `init --embed` does not write cloud-agent setup files (Cursor
