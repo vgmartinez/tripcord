@@ -21,10 +21,14 @@
 // download from one checked against a file nobody committed.
 //
 // For a repository MCP server it sets RepoScript when the command is a
-// shell wrapper around files that stay inside the tree, or a dotenv
-// loader around a launcher (see shellcmd.RepoWrapper). A missing file
-// or a symlink that leaves the tree leaves RepoScript false, so
-// TC-CFG-003 still reports it.
+// shell wrapper around files that stay inside the tree, or a set -a
+// dotenv loader around a launcher (see shellcmd.RepoWrapper). A missing
+// script, or a symlink that leaves the tree, leaves RepoScript false.
+// A sourced .env, .env.local, or .env.claude under set -a may be
+// absent. One that is present, with or without set -a, stays quiet
+// only when it is a regular file of at most 64 KiB inside the tree
+// and every line is blank, a comment, or a strict KEY=VALUE. Any
+// other sourced path has to be in the tree, and its bytes are not read.
 package scriptcheck
 
 import (
@@ -182,8 +186,9 @@ func ItemReferencedPaths(item model.ConfigItem) []string {
 
 // repoScriptReady reports whether item is a repository MCP wrapper whose
 // referenced files all resolve inside root. A wrapper that names no
-// file (a dotenv loader around a launcher) is ready on the shape alone.
-// A path that cannot be cleaned stays a finding.
+// file (a launcher with only plain parameters) is ready on the shape
+// alone. A set -a dotenv may be absent; a present one has to be a
+// strict dotenv. A path that cannot be cleaned stays a finding.
 func repoScriptReady(root string, item model.ConfigItem) bool {
 	argv, ok := mcpArgv(item)
 	if !ok {
@@ -197,6 +202,12 @@ func repoScriptReady(root string, item model.ConfigItem) bool {
 		rel, ok := repoScriptRel(item.Path, f)
 		if !ok {
 			return false
+		}
+		if f.Dotenv {
+			if !dotenvAllows(root, rel, f.DotenvOptional) {
+				return false
+			}
+			continue
 		}
 		class, missing := lookupScript(root, rel)
 		if missing || class != "" {

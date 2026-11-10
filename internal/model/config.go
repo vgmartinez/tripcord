@@ -89,8 +89,12 @@ type ConfigItem struct {
 	// RepoScript is true when a repository MCP server is a shell wrapper
 	// whose programs resolve inside the scanned tree, or a `set -a`
 	// dotenv loader around a launcher (see scriptcheck). It is set after
-	// discovery, for rule evaluation only. A path that is missing or
-	// that resolves outside the repository leaves it false.
+	// discovery, for rule evaluation only. A script that is missing or
+	// that resolves outside the repository leaves it false. A sourced
+	// .env, .env.local, or .env.claude under set -a may be absent; a
+	// present one, including one sourced without set -a, leaves it false
+	// unless the file is a regular file of at most 64 KiB inside the tree
+	// whose every line is blank, a comment, or a strict KEY=VALUE.
 	RepoScript bool `json:"-"`
 	// Hidden is the invisible and direction-changing code points of an
 	// instruction or skill file (see internal/hiddenchar): where each run

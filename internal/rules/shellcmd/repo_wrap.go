@@ -10,21 +10,30 @@ import (
 // that holds the config file (a Claude plugin root). Otherwise the path
 // is relative to that directory for a nested config file, and to the
 // repository root for a config file at the root.
+//
+// Dotenv is one of .env, .env.local, or .env.claude. The caller keeps
+// the wrapper only when a file that is present is a strict dotenv
+// (see scriptcheck). DotenvOptional is set when `set -a` sourced it:
+// the file may be absent. Without that flag a missing dotenv is a
+// finding, which is `. ./.env && exec npx` with no committed .env.
 type RepoFile struct {
-	Path     string
-	Beside   bool
-	FromRoot bool
+	Path           string
+	Beside         bool
+	FromRoot       bool
+	Dotenv         bool
+	DotenvOptional bool
 }
 
 // RepoWrapper reports whether argv is a shell wrapper around the
 // repository's own files. ok is false for a pipe, a fetch, an inline
 // interpreter, a remote script, or a path that leaves the repository.
 // The files it returns have to exist in the scanned tree before the
-// wrapper is quiet, except a dotenv sourced by a `set -a` loader: that
-// file is usually gitignored, and the command it wraps is the same
-// launcher shell.mcp already accepts. A loader without `set -a` still
-// names the dotenv, so `. ./.env && exec npx` stays a finding when the
-// file is absent.
+// wrapper is quiet, except a dotenv sourced under `set -a`. That file
+// is marked Dotenv and DotenvOptional: absence is fine, and a file
+// that is present has to be a strict dotenv. The same content check
+// applies to `. ./.env && exec npx` when the file is in the tree; a
+// missing file there is still a finding. Only .env, .env.local, and
+// .env.claude are dotenvs.
 func RepoWrapper(argv []string) ([]RepoFile, bool) {
 	if len(argv) == 0 || argvHasOpaque(argv) {
 		return nil, false
@@ -236,7 +245,8 @@ func envLoader(payload string) ([]RepoFile, bool) {
 		return nil, false
 	}
 	for _, rel := range sources {
-		if sawSetA && dotenvBase(rel) {
+		if dotenvBase(rel) {
+			files = append(files, RepoFile{Path: rel, Dotenv: true, DotenvOptional: sawSetA})
 			continue
 		}
 		files = append(files, RepoFile{Path: rel})
@@ -451,22 +461,16 @@ func relInside(w string) (string, bool) {
 	return c, true
 }
 
+// dotenvBase is the closed list of dotenv names. Any other sourced
+// path is an ordinary file: it has to be in the tree, and its bytes
+// are not read.
 func dotenvBase(rel string) bool {
-	base := path.Base(rel)
-	if base == ".env" {
+	switch path.Base(rel) {
+	case ".env", ".env.local", ".env.claude":
 		return true
-	}
-	rest, ok := strings.CutPrefix(base, ".env.")
-	if !ok || rest == "" {
+	default:
 		return false
 	}
-	for i := 0; i < len(rest); i++ {
-		c := rest[i]
-		if c != '.' && c != '_' && c != '-' && !isDigit(c) && (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') {
-			return false
-		}
-	}
-	return true
 }
 
 // plainParams allows $NAME and ${NAME}. A command substitution, a
