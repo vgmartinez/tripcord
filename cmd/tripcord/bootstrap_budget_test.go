@@ -15,12 +15,12 @@ import (
 	"github.com/vgmartinez/tripcord/internal/model"
 )
 
-// TestBootstrapHookLatencyBudget times the installed hook path: bash
-// bootstrap.sh hook, with the pinned binary already in a local cache.
-// The measured command's PATH is download stubs plus /usr/bin and /bin,
-// and those stubs must not run. The policy is the locked enforce policy.
-// p95 is still the 25 ms hook budget. Issue #41 records about 70 ms for
-// the private copy and does not set a separate ceiling.
+// TestBootstrapHookLatencyBudget times bash bootstrap.sh hook against
+// the direct hook in the same run, with the same locked policy and
+// harness. The pinned binary is already in a local cache. The measured
+// command's PATH is download stubs plus /usr/bin and /bin, and those
+// stubs must not run. End-to-end p95 is 35 ms. The overhead, bootstrap
+// minus the direct sample beside it, has p95 of 10 ms.
 func TestBootstrapHookLatencyBudget(t *testing.T) {
 	skipHookBudget(t)
 	if _, err := exec.LookPath("bash"); err != nil {
@@ -61,40 +61,60 @@ func TestBootstrapHookLatencyBudget(t *testing.T) {
 	for _, tc := range hookColdCases() {
 		input := adapterFixture(t, tc.harness, tc.fixture)
 		wantOut, wantErr := hookColdOutput(t, tc)
-		samples := make([]time.Duration, 0, hookColdStartRuns+5)
-		for range hookColdStartRuns + 5 {
-			cmd := exec.Command("bash", scriptPath, "hook", "--harness", string(tc.harness), "--event", tc.event, "--on-failure", "block")
-			cmd.Dir = root
-			cmd.Env = []string{
-				"PATH=" + toolPath,
-				"HOME=" + home,
-				"XDG_CACHE_HOME=" + cache,
-				"TMPDIR=" + tmp,
-				"CLAUDE_PROJECT_DIR=" + root,
-				"CURSOR_PROJECT_DIR=" + root,
-				"CI=true",
-			}
-			cmd.Stdin = bytes.NewReader(input)
-			var stdout, stderr bytes.Buffer
-			cmd.Stdout = &stdout
-			cmd.Stderr = &stderr
-			start := time.Now()
-			err := cmd.Run()
-			elapsed := time.Since(start)
-			if cmd.ProcessState == nil {
-				t.Fatal(err)
-			}
-			if code := cmd.ProcessState.ExitCode(); code != tc.exit || stdout.String() != wantOut || stderr.String() != wantErr {
-				t.Fatalf("bootstrap %s %s: exit %d (%v) stdout %q stderr %q", tc.harness, tc.fixture, code, err, stdout.String(), stderr.String())
-			}
-			samples = append(samples, elapsed)
+		env := []string{
+			"PATH=" + toolPath,
+			"HOME=" + home,
+			"XDG_CACHE_HOME=" + cache,
+			"TMPDIR=" + tmp,
+			"CLAUDE_PROJECT_DIR=" + root,
+			"CURSOR_PROJECT_DIR=" + root,
+			"CI=true",
 		}
-		summarizeHookBudget(t, "bootstrap locked "+string(tc.harness)+" "+tc.event, samples, true)
+		direct := make([]time.Duration, 0, hookColdStartRuns+5)
+		bootstrap := make([]time.Duration, 0, hookColdStartRuns+5)
+		for range hookColdStartRuns + 5 {
+			elapsed, code, stdout, stderr, err := timeHook(t, env, root, bytes.NewReader(input), cached, "hook", "--harness", string(tc.harness), "--event", tc.event, "--on-failure", "block")
+			if code != tc.exit || stdout != wantOut || stderr != wantErr {
+				t.Fatalf("direct %s %s: exit %d (%v) stdout %q stderr %q", tc.harness, tc.fixture, code, err, stdout, stderr)
+			}
+			direct = append(direct, elapsed)
+			elapsed, code, stdout, stderr, err = timeHook(t, env, root, bytes.NewReader(input), "bash", scriptPath, "hook", "--harness", string(tc.harness), "--event", tc.event, "--on-failure", "block")
+			if code != tc.exit || stdout != wantOut || stderr != wantErr {
+				t.Fatalf("bootstrap %s %s: exit %d (%v) stdout %q stderr %q", tc.harness, tc.fixture, code, err, stdout, stderr)
+			}
+			bootstrap = append(bootstrap, elapsed)
+		}
+		overhead := make([]time.Duration, len(bootstrap))
+		for i := range bootstrap {
+			overhead[i] = bootstrap[i] - direct[i]
+		}
+		label := string(tc.harness) + " " + tc.event
+		summarizeHookBudget(t, "direct locked "+label, direct, hookColdStartBudget)
+		summarizeHookBudget(t, "bootstrap locked "+label, bootstrap, bootstrapHookBudget)
+		summarizeHookBudget(t, "bootstrap overhead "+label, overhead, bootstrapOverheadBudget)
 	}
 	if got, err := os.ReadFile(fetched); err == nil {
 		t.Fatalf("bootstrap.sh ran %q", got)
 	}
 	t.Logf("bootstrap.sh hook cached binary %d bytes", len(raw))
+}
+
+func timeHook(t *testing.T, env []string, dir string, stdin *bytes.Reader, argv ...string) (time.Duration, int, string, string, error) {
+	t.Helper()
+	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd.Dir = dir
+	cmd.Env = env
+	cmd.Stdin = stdin
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	start := time.Now()
+	err := cmd.Run()
+	elapsed := time.Since(start)
+	if cmd.ProcessState == nil {
+		t.Fatal(err)
+	}
+	return elapsed, cmd.ProcessState.ExitCode(), stdout.String(), stderr.String(), err
 }
 
 func hookColdOutput(t *testing.T, tc hookColdCase) (string, string) {

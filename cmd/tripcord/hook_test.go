@@ -571,9 +571,16 @@ func TestHookCustomRuleCoreIDRejected(t *testing.T) {
 }
 
 // hookColdStartBudget is the spec's hook latency target: p95 of a whole
-// `tripcord hook` process, from exec to exit. The same ceiling applies
-// when the harness runs that command through bootstrap.sh.
-const hookColdStartBudget = 25 * time.Millisecond
+// `tripcord hook` process, from exec to exit.
+// bootstrapOverheadBudget is how much slower `bash bootstrap.sh hook`
+// may be than that direct hook, measured in the same run with the same
+// policy and harness. bootstrapHookBudget is the end-to-end ceiling:
+// the hook budget plus that overhead.
+const (
+	hookColdStartBudget     = 25 * time.Millisecond
+	bootstrapOverheadBudget = 10 * time.Millisecond
+	bootstrapHookBudget     = hookColdStartBudget + bootstrapOverheadBudget
+)
 
 const hookColdStartRuns = 100
 
@@ -601,10 +608,8 @@ func buildTrimpathTripcord(t *testing.T, dest string) {
 }
 
 // summarizeHookBudget logs p50, p95, and max. The first five samples are
-// warmup and are dropped. Over budget is a test failure. allowReportOnly
-// lets TRIPCORD_PERF_BUDGET_REPORT_ONLY log the miss without failing, which
-// CI sets for the locked and bootstrap gates until that hot path is faster.
-func summarizeHookBudget(t *testing.T, label string, samples []time.Duration, allowReportOnly bool) {
+// warmup and are dropped. p95 over budget fails the test.
+func summarizeHookBudget(t *testing.T, label string, samples []time.Duration, budget time.Duration) {
 	t.Helper()
 	if len(samples) <= 5 {
 		t.Fatalf("%s: %d samples", label, len(samples))
@@ -613,16 +618,11 @@ func summarizeHookBudget(t *testing.T, label string, samples []time.Duration, al
 	slices.Sort(samples)
 	p50 := samples[len(samples)/2]
 	p95 := samples[int(math.Ceil(0.95*float64(len(samples))))-1]
-	t.Logf("%s: p50 %v, p95 %v, max %v over %d runs (budget p95 %v)", label, p50, p95, samples[len(samples)-1], len(samples), hookColdStartBudget)
-	if p95 <= hookColdStartBudget {
-		return
+	max := samples[len(samples)-1]
+	t.Logf("%s: p50 %v, p95 %v, max %v over %d runs (budget p95 %v)", label, p50, p95, max, len(samples), budget)
+	if p95 > budget {
+		t.Errorf("%s: p95 %v is over the %v budget", label, p95, budget)
 	}
-	msg := fmt.Sprintf("%s: p95 %v is over the %v hook budget", label, p95, hookColdStartBudget)
-	if allowReportOnly && os.Getenv("TRIPCORD_PERF_BUDGET_REPORT_ONLY") != "" {
-		t.Log("NOT ENFORCED: " + msg)
-		return
-	}
-	t.Error(msg)
 }
 
 func skipHookBudget(t *testing.T) {
@@ -656,7 +656,7 @@ func TestHookColdStartBudget(t *testing.T) {
 			}
 			samples = append(samples, elapsed)
 		}
-		summarizeHookBudget(t, string(tc.harness)+" "+tc.event, samples, false)
+		summarizeHookBudget(t, string(tc.harness)+" "+tc.event, samples, hookColdStartBudget)
 	}
 }
 
@@ -683,6 +683,6 @@ func TestHookColdStartBudgetLocked(t *testing.T) {
 			}
 			samples = append(samples, elapsed)
 		}
-		summarizeHookBudget(t, "locked "+string(tc.harness)+" "+tc.event, samples, true)
+		summarizeHookBudget(t, "locked "+string(tc.harness)+" "+tc.event, samples, hookColdStartBudget)
 	}
 }
