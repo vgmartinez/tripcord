@@ -46,7 +46,10 @@
 #   unverified  (low) it matches embed.json and keeps every invariant,
 #               but this scanner cannot tell who wrote it: a newer
 #               Tripcord, an embed.json schema it does not know, or a
-#               pin a CI scan cannot check.
+#               pin a CI scan cannot check. The first introduction (the
+#               base has no tripcord.yml, and the pin equals
+#               --executing-workflow) is that last case: self-attested,
+#               low, unless the workflow breaks an invariant.
 #   pin-unknown tripcord.yml pins a tripcord-pr.yml commit that is not
 #               WorkflowPin or a KnownWorkflowPins entry, in a local or
 #               pre-commit scan. A release scanner reads it as

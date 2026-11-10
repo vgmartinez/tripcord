@@ -30,9 +30,10 @@ const (
 	InvariantOnFailure     = "H5" // the guard passes --on-failure block
 	InvariantTrigger       = "W1" // pull_request, never pull_request_target or workflow_run
 	InvariantPaths         = "W2" // the paths filter keeps the embed's own paths
-	InvariantReusableJob   = "W3" // one job calls tripcord-pr.yml, with no if
+	InvariantReusableJob   = "W3" // exactly one job: the reusable call, no steps, if, or secrets
 	InvariantFailOn        = "W4" // fail-on low, medium, or high
-	InvariantInputs        = "W5" // no binary, ref, or path other than .
+	InvariantInputs        = "W5" // with holds only fail-on
+	InvariantPermissions   = "W6" // workflow and job permissions are the generated set
 	InvariantSetupStep     = "S1" // the setup step runs install, unconditionally
 	InvariantWriterWitness = "witness"
 )
@@ -41,7 +42,7 @@ const (
 var Invariants = []string{
 	InvariantShebang, InvariantVersion, InvariantSums, InvariantChecksumGate,
 	InvariantGuardEntry, InvariantClaudeBlock, InvariantCursorClosed, InvariantCopilotShape, InvariantOnFailure,
-	InvariantTrigger, InvariantPaths, InvariantReusableJob, InvariantFailOn, InvariantInputs,
+	InvariantTrigger, InvariantPaths, InvariantReusableJob, InvariantFailOn, InvariantInputs, InvariantPermissions,
 	InvariantSetupStep,
 }
 
@@ -197,17 +198,75 @@ var embedTriggerPaths = []string{".tripcord/**", ".claude/**", ".cursor/**", ".g
 // workflowFailOn are the fail-on values that fail a high finding.
 var workflowFailOn = []string{"low", "medium", "high"}
 
+// workflowPermissions is the workflow-level set init writes.
+var workflowPermissions = map[string]string{"contents": "read"}
+
+// jobPermissions is the job-level set init writes. The called workflow
+// runs as this job, so a broader grant here is the token the job gets.
+var jobPermissions = map[string]string{
+	"contents":        "read",
+	"pull-requests":   "read",
+	"security-events": "write",
+}
+
+// workflowJobKeys are the only keys the generated job has.
+var workflowJobKeys = map[string]bool{"permissions": true, "uses": true, "with": true}
+
+// workflowTopKeys are the only keys the generated workflow has.
+var workflowTopKeys = map[string]bool{"name": true, "on": true, "permissions": true, "jobs": true}
+
+// perm is a permissions value. scalar is set for `write-all` and any
+// other non-mapping, which is never the generated shape.
+type perm struct {
+	present bool
+	scalar  string
+	pairs   map[string]string
+}
+
+func (p perm) matches(want map[string]string) bool {
+	return p.present && p.scalar == "" && maps.Equal(p.pairs, want)
+}
+
+func readPerm(n *yaml.Node) perm {
+	if n == nil {
+		return perm{}
+	}
+	if n.Kind == yaml.ScalarNode {
+		return perm{present: true, scalar: n.Value}
+	}
+	if n.Kind != yaml.MappingNode {
+		return perm{present: true, scalar: "invalid"}
+	}
+	p := perm{present: true, pairs: map[string]string{}}
+	for i := 0; i+1 < len(n.Content); i += 2 {
+		v := n.Content[i+1]
+		if v.Kind != yaml.ScalarNode {
+			return perm{present: true, scalar: "invalid"}
+		}
+		p.pairs[n.Content[i].Value] = v.Value
+	}
+	return p
+}
+
 // workflowJob is one job of a parsed tripcord.yml.
 type workflowJob struct {
-	uses  string
-	hasIf bool
-	with  map[string]string
+	uses       string
+	hasIf      bool
+	hasSteps   bool
+	hasSecrets bool
+	unknownKey bool
+	with       map[string]string
+	perms      perm
 }
 
 // parsedWorkflow is a tripcord.yml read as YAML.
 type parsedWorkflow struct {
-	on   *yaml.Node
-	jobs []workflowJob
+	on         *yaml.Node
+	perms      perm
+	secrets    bool
+	unknownKey bool
+	badJob     bool
+	jobs       []workflowJob
 }
 
 func parseWorkflow(raw []byte) (parsedWorkflow, bool) {
@@ -216,7 +275,12 @@ func parseWorkflow(raw []byte) (parsedWorkflow, bool) {
 		return parsedWorkflow{}, false
 	}
 	top := doc.Content[0]
-	wf := parsedWorkflow{on: mapValue(top, "on")}
+	wf := parsedWorkflow{on: mapValue(top, "on"), perms: readPerm(mapValue(top, "permissions")), secrets: mapValue(top, "secrets") != nil}
+	for i := 0; i+1 < len(top.Content); i += 2 {
+		if !workflowTopKeys[top.Content[i].Value] {
+			wf.unknownKey = true
+		}
+	}
 	jobs := mapValue(top, "jobs")
 	if jobs == nil || jobs.Kind != yaml.MappingNode {
 		return wf, true
@@ -224,15 +288,31 @@ func parseWorkflow(raw []byte) (parsedWorkflow, bool) {
 	for i := 0; i+1 < len(jobs.Content); i += 2 {
 		job := jobs.Content[i+1]
 		if job.Kind != yaml.MappingNode {
+			wf.badJob = true
 			continue
 		}
-		j := workflowJob{with: map[string]string{}, hasIf: mapValue(job, "if") != nil}
+		j := workflowJob{
+			with:       map[string]string{},
+			hasIf:      mapValue(job, "if") != nil,
+			hasSteps:   mapValue(job, "steps") != nil,
+			hasSecrets: mapValue(job, "secrets") != nil,
+			perms:      readPerm(mapValue(job, "permissions")),
+		}
+		for k := 0; k+1 < len(job.Content); k += 2 {
+			if !workflowJobKeys[job.Content[k].Value] {
+				j.unknownKey = true
+			}
+		}
 		if u := mapValue(job, "uses"); u != nil && u.Kind == yaml.ScalarNode {
 			j.uses = u.Value
 		}
 		if w := mapValue(job, "with"); w != nil && w.Kind == yaml.MappingNode {
 			for k := 0; k+1 < len(w.Content); k += 2 {
-				j.with[w.Content[k].Value] = w.Content[k+1].Value
+				if w.Content[k+1].Kind == yaml.ScalarNode {
+					j.with[w.Content[k].Value] = w.Content[k+1].Value
+				} else {
+					j.unknownKey = true
+				}
 			}
 		}
 		wf.jobs = append(wf.jobs, j)
@@ -240,33 +320,58 @@ func parseWorkflow(raw []byte) (parsedWorkflow, bool) {
 	return wf, true
 }
 
-// reusableJobs are the jobs that call a tripcord-pr.yml.
-func (wf parsedWorkflow) reusableJobs() []workflowJob {
-	var out []workflowJob
-	for _, j := range wf.jobs {
-		if strings.Contains(j.uses, ReusableWorkflowPath+"@") || strings.Contains(j.uses, "tripcord-pr.yml") {
-			out = append(out, j)
-		}
+// emptyEvent reports whether a trigger value carries no filter. init
+// writes `pull_request:` with nothing under it.
+func emptyEvent(n *yaml.Node) bool {
+	if n == nil || n.Kind == 0 || n.Tag == "!!null" {
+		return true
 	}
-	return out
+	if n.Kind == yaml.ScalarNode && (n.Value == "" || n.Value == "null" || n.Value == "~") {
+		return true
+	}
+	return n.Kind == yaml.MappingNode && len(n.Content) == 0
 }
 
 // workflowInvariant is the first invariant tripcord.yml breaks, or "".
-// The pin itself is judged by checker.workflowPin.
+// The pin itself is judged by checker.workflowPin. The shape is what
+// init emits: one reusable job, the generated permissions, pull_request
+// with no filter, no secrets, and with holding only fail-on.
 func workflowInvariant(raw []byte) string {
 	wf, ok := parseWorkflow(raw)
 	if !ok {
 		return InvariantTrigger
 	}
-	on := wf.on
-	if on == nil || on.Kind != yaml.MappingNode || mapValue(on, "pull_request_target") != nil || mapValue(on, "workflow_run") != nil {
+	if id := triggerInvariant(wf.on); id != "" {
+		return id
+	}
+	if wf.secrets || wf.unknownKey || wf.badJob || len(wf.jobs) != 1 {
+		return InvariantReusableJob
+	}
+	job := wf.jobs[0]
+	if job.hasIf || job.hasSteps || job.hasSecrets || job.unknownKey || !strings.HasPrefix(job.uses, project.Repository+"/"+ReusableWorkflowPath+"@") {
+		return InvariantReusableJob
+	}
+	if !slices.Contains(workflowFailOn, job.with["fail-on"]) {
+		return InvariantFailOn
+	}
+	if len(job.with) != 1 {
+		return InvariantInputs
+	}
+	if !wf.perms.matches(workflowPermissions) || !job.perms.matches(jobPermissions) {
+		return InvariantPermissions
+	}
+	return ""
+}
+
+// triggerInvariant is W1 or W2 for on. The generated workflow is
+// `pull_request` with no filter. A paths filter that drops one of the
+// embed's own paths is W2; any other departure from that shape is W1.
+func triggerInvariant(on *yaml.Node) string {
+	if on == nil || on.Kind != yaml.MappingNode || len(on.Content) != 2 || on.Content[0].Value != "pull_request" {
 		return InvariantTrigger
 	}
-	pr := mapValue(on, "pull_request")
-	if pr == nil {
-		return InvariantTrigger
-	}
-	if pr.Kind == yaml.MappingNode {
+	pr := on.Content[1]
+	if pr != nil && pr.Kind == yaml.MappingNode {
 		if paths := mapValue(pr, "paths"); paths != nil {
 			var have []string
 			for _, p := range paths.Content {
@@ -282,21 +387,8 @@ func workflowInvariant(raw []byte) string {
 			return InvariantPaths
 		}
 	}
-	jobs := wf.reusableJobs()
-	if len(jobs) != 1 || jobs[0].hasIf || !strings.HasPrefix(jobs[0].uses, project.Repository+"/"+ReusableWorkflowPath+"@") {
-		return InvariantReusableJob
-	}
-	if !slices.Contains(workflowFailOn, jobs[0].with["fail-on"]) {
-		return InvariantFailOn
-	}
-	if _, ok := jobs[0].with["binary"]; ok {
-		return InvariantInputs
-	}
-	if _, ok := jobs[0].with["ref"]; ok {
-		return InvariantInputs
-	}
-	if p, ok := jobs[0].with["path"]; ok && p != "." {
-		return InvariantInputs
+	if !emptyEvent(pr) {
+		return InvariantTrigger
 	}
 	return ""
 }

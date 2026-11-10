@@ -68,9 +68,26 @@ func ParseWorkflowRef(s string) (*WorkflowRef, error) {
 	return &WorkflowRef{Repository: repo, Path: ReusableWorkflowPath, SHA: sha}, nil
 }
 
-// ReleaseVersion is v without a leading "v" when it is a release
-// version such as 0.1.0, and "" for any other build (dev, a commit).
+// releaseVersionPattern is a strict X.Y.Z release. A prerelease and a
+// git describe version such as 0.1.0-12-gdeadbeef are not releases:
+// they do not get the newer-embed exception.
+var releaseVersionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
+
+// ReleaseVersion is v without a leading "v" when it is a strict X.Y.Z
+// release, and "" for any other build (dev, a prerelease, a commit,
+// 0.1.0-12-gdeadbeef).
 func ReleaseVersion(v string) string {
+	v = strings.TrimPrefix(v, "v")
+	if !releaseVersionPattern.MatchString(v) {
+		return ""
+	}
+	return v
+}
+
+// PinVersion is v without a leading "v" when bootstrap.sh would accept
+// it as --version, including a prerelease. It is not a release; see
+// ReleaseVersion.
+func PinVersion(v string) string {
 	v = strings.TrimPrefix(v, "v")
 	if !versionPattern.MatchString(v) {
 		return ""

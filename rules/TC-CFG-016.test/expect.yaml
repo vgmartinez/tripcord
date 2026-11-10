@@ -36,3 +36,7 @@ positivos:
   embed-pin-unknown.json: high
   embed-pin-malformed.json: high
   embed-manifest-future-schema.json: low
+  embed-unknown-pin-extra-job.json: high
+  embed-unknown-pin-permissions.json: high
+  embed-unknown-pin-secrets-inherit.json: high
+  embed-unknown-pin-pull-request-target.json: high

@@ -149,8 +149,11 @@ type CheckOptions struct {
 	Context ScanContext
 	// Executing is the reusable workflow a CI scan runs inside
 	// (--executing-workflow). It accepts a tripcord.yml pin equal to its
-	// SHA only when the base pins the same commit; it never accepts a
-	// pin change, and never upgrades or suppresses anything else.
+	// SHA only when the base pins the same commit. On the first
+	// introduction, when the base has no pin, that same equality is
+	// self-attested: the new file names the workflow that is scanning
+	// it, so the pin stays unverified, low. It never accepts a pin
+	// change, and it never upgrades or suppresses an invariant failure.
 	Executing *WorkflowRef
 	// ScannerVersion is this scanner's version (main.version). Only a
 	// release version (ReleaseVersion) lets a trusted scan read an
@@ -728,6 +731,12 @@ func (c *checker) workflowPin() {
 			continue
 		case slices.Contains(KnownWorkflowPins, pin):
 			report(StateOutdated, map[string]string{"pin": pin})
+			return
+		case c.opts.Context == ContextCI && c.base != nil && len(basePins) == 0 && c.opts.Executing != nil && c.opts.Executing.SHA == pin:
+			// First introduction. The pull request adds tripcord.yml, and
+			// that file names the workflow this scan is running, so the
+			// pin attests only to itself. The file's invariants still apply.
+			report(StateUnverified, map[string]string{"pin": pin, "reason": "first-introduction"})
 			return
 		case c.opts.Context == ContextCI:
 			if c.opts.Executing != nil && c.opts.Executing.SHA == pin && slices.Contains(basePins, uses) {

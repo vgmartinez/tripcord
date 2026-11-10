@@ -1,0 +1,30 @@
+[
+  {
+    "harness": "generic",
+    "scope": "repo",
+    "path": ".github/workflows/tripcord.yml",
+    "sha256": "b82a2e33cdd35527dc775468eaeaa1379a57f20aabcdddb55dfe1da7b6071fb3",
+    "kind": "permissions",
+    "payload": {
+      "invariant": "W6",
+      "key": "[\"tripcordGuard\",\"workflow\"]",
+      "setting": "tripcordGuard",
+      "state": "changed",
+      "subject": "workflow"
+    }
+  },
+  {
+    "harness": "generic",
+    "scope": "repo",
+    "path": ".github/workflows/tripcord.yml",
+    "sha256": "b82a2e33cdd35527dc775468eaeaa1379a57f20aabcdddb55dfe1da7b6071fb3",
+    "kind": "permissions",
+    "payload": {
+      "key": "[\"tripcordGuard\",\"workflow-pin\"]",
+      "pin": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "setting": "tripcordGuard",
+      "state": "pin-unknown",
+      "subject": "workflow-pin"
+    }
+  }
+]

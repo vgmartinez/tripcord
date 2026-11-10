@@ -243,7 +243,7 @@ func buildVersion() string { return version }
 // that is not a release version (Plan reports that), passes.
 func pinNotOlder(pin string) error {
 	self := embedded.ReleaseVersion(buildVersion())
-	want := embedded.ReleaseVersion(pin)
+	want := embedded.PinVersion(pin)
 	if self == "" || want == "" || embedded.CompareVersions(want, self) >= 0 {
 		return nil
 	}

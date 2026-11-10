@@ -116,9 +116,11 @@ and fails on a checksum mismatch; the pre-tool hook runs `bootstrap.sh
 hook ... --on-failure block`, with matcher `*` and `onFailure: block`
 (Claude Code), `failClosed: true` (Cursor), or `type: command`, `cwd:
 .`, and `timeoutSec` 60 or more (Copilot); `tripcord.yml` runs on
-`pull_request` only, keeps the embed's paths, calls `tripcord-pr.yml`
-from exactly one job with no `if`, sets `fail-on` to `low`, `medium`,
-or `high`, and sets no `binary`, `ref`, or other `path`; the Copilot
+`pull_request` only, with no filter; calls `tripcord-pr.yml` from
+exactly one job, with no steps, `if`, `secrets`, or other key;
+permissions are `contents: read` on the workflow and `contents: read`,
+`pull-requests: read`, and `security-events: write` on the job; `with`
+holds only `fail-on` (`low`, `medium`, or `high`); the Copilot
 setup step runs `bash .tripcord/bootstrap.sh install` unconditionally;
 `.gitattributes` keeps `text eol=lf`. Raising `embed.json`'s `version`
 buys nothing here: the invariants hold in any scan.
@@ -133,7 +135,14 @@ its recorded digest: then it is `unverified`. A CI scan (`scan
 it; `--executing-workflow` accepts a pin equal to the running workflow
 only when the base revision pins the same commit. With a base, any
 change to the pin is `repinned`, high, even to the workflow that is
-running.
+running. When the base has no `tripcord.yml` at all, there is no pin
+to compare: a pin equal to `--executing-workflow` is the embed's first
+introduction, self-attested, and stays `unverified`, low. It does not
+bless the file. An extra job, a broader permission
+(`contents: write`, `id-token: write`, or `permissions: write-all`),
+`secrets: inherit`, or `pull_request_target` breaks an invariant and
+is `changed`, high, in that scan and in a trusted scan by an older
+release.
 
 Because `bootstrap.sh` is compared with the script re-rendered from
 the recorded pin, an edit to it is reported whether or not the
