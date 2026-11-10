@@ -89,7 +89,7 @@ Reported:
 ```
 
 ```json
-{"hooks": {"pre_run_command": [{"command": "npx -y @acme/windsurf-guard@latest"}]}}
+{"hooks": {"pre_run_command": [{"command": "npx -y @vgmartinez/windsurf-guard@latest"}]}}
 ```
 
 Not reported:

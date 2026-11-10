@@ -375,7 +375,7 @@ const (
 
 // ParseExtends classifies an extends entry. Entries starting with ./,
 // ../, or / are paths; anything else must be a pack reference such as
-// acme/org-policy@2026.11.
+// vgmartinez/org-policy@2026.11.
 func ParseExtends(s string) (ExtendsKind, rules.PackRef, error) {
 	if strings.HasPrefix(s, "./") || strings.HasPrefix(s, "../") || strings.HasPrefix(s, "/") {
 		return ExtendsPath, rules.PackRef{}, nil

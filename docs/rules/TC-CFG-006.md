@@ -28,7 +28,7 @@ is given: `bash x.sh`, `python x.py`, `node x.js`, `deno run x.ts`,
 | A hook `url` (HTTP hook) or program at a non-loopback URL, or a UNC share | high |
 | Under the home directory: `~`, `$HOME`, `%USERPROFILE%`, `$env:APPDATA`, `XDG_*_HOME`, `/home/<user>`, `/Users/<user>`, `/root`, `C:\Users\<user>` | high |
 | A temporary directory: `/tmp`, `/var/tmp`, `/dev/shm`, `/private/tmp`, `/var/folders`, `$TMPDIR`, `%TEMP%`, `$RUNNER_TEMP`, `C:\Windows\Temp` | high |
-| Any other absolute path, such as `/opt/acme/hooks/check.sh` or `D:\tools\x.ps1` | medium |
+| Any other absolute path, such as `/opt/vgmartinez/hooks/check.sh` or `D:\tools\x.ps1` | medium |
 | Above the project directory: `../x.sh`, `$CLAUDE_PROJECT_DIR/../x.sh` | medium |
 | A project script the hook runs that is not in the scanned tree | medium, titled "Referenced script missing from repo" |
 
@@ -67,7 +67,7 @@ taken to be an installed binary, such as `/usr/local/bin/tripcord` or
 `/opt/homebrew/bin/prettier`, and is not reported. A script there (by
 extension: `.sh`, `.py`, `.js`, `.mjs`, `.cjs`, `.ts`, `.rb`, `.pl`,
 `.php`, `.lua`, `.ps1`, `.cmd`, `.bat`, ...) is reported as medium, for
-example `/opt/acme/hooks/check.sh`.
+example `/opt/vgmartinez/hooks/check.sh`.
 
 **Programs on `PATH`.** A bare name (`npx`, `jq`, `tripcord`) is a
 `PATH` lookup and has no location.

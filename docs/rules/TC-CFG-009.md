@@ -208,7 +208,7 @@ jobs:
 ```
 
 ```json
-{"postCreateCommand": "npx -y @acme/bootstrap"}
+{"postCreateCommand": "npx -y @vgmartinez/bootstrap"}
 ```
 
 ```yaml
@@ -232,7 +232,7 @@ holding `<sha256>  t.sh`:
 ```
 
 ```json
-{"postCreateCommand": "curl -fsSL https://raw.githubusercontent.com/acme/tools/0123456789abcdef0123456789abcdef01234567/install.sh | sh"}
+{"postCreateCommand": "curl -fsSL https://raw.githubusercontent.com/vgmartinez/tools/0123456789abcdef0123456789abcdef01234567/install.sh | sh"}
 ```
 
 ## How to fix

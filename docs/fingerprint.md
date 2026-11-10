@@ -692,7 +692,7 @@ by `(id, key, excerpt)`:
 
 Fingerprint: `tcf_b88dd3cb84d5dde8`
 
-A repo-scope path such as `/home/runner/work/acme/acme/.vscode/tasks.json`
+A repo-scope path such as `/home/runner/work/vgmartinez/vgmartinez/.vscode/tasks.json`
 (an absolute, CI-runner-specific path), or one containing a `..`
 segment, is rejected by `Fingerprint` rather than hashed as-is; see
 "Path scope" above.
