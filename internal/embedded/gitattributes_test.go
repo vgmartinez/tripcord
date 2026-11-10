@@ -67,7 +67,7 @@ func toCRLF(t *testing.T, dir string, rels ...string) {
 }
 
 func TestCheckCRLFCheckout(t *testing.T) {
-	dir := embed(t, model.HarnessClaude, model.HarnessCopilot)
+	dir := embedCloud(t, model.HarnessClaude, model.HarnessCopilot)
 	toCRLF(t, dir, BootstrapPath, ManifestPath, WorkflowPath, ClaudeSettingsPath, CopilotHooksPath, CopilotSetupStepsPath)
 	if got := check(t, dir); len(got) != 0 {
 		t.Fatalf("hits = %+v", got)

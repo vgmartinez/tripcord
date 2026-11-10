@@ -141,8 +141,9 @@ func agentsNote() string {
 
 This repository embeds Tripcord (` + "`.tripcord/`" + `). Agents without
 repository hooks, such as Codex and Jules, should have their environment
-setup script run ` + "`" + installCommand + "`" + `. It installs the pinned
-Tripcord release, verifies its checksum, and runs ` + "`tripcord scan --config`" + `.
+setup script run ` + "`" + installCommand + "`" + `. That command does not
+download Tripcord. It checks the pinned build already in the cache and
+runs ` + "`tripcord scan --config`" + `. Fill the cache before setup.
 Do not remove or edit the Tripcord hooks in ` + "`.claude/settings.json`" + `,
 ` + "`.cursor/hooks.json`" + `, or ` + "`.github/hooks/tripcord.json`" + `.
 Pull requests are scanned again in CI.

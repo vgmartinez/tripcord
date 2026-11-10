@@ -342,7 +342,7 @@ func Check(root string, opts CheckOptions) ([]model.ConfigItem, error) {
 				c.hookHarness(h)
 			}
 		}
-		if slices.Contains(wired, model.HarnessCopilot) && c.head.manifestOK && c.selected(model.HarnessCopilot) {
+		if c.wantsSetupStep(wired) {
 			c.setupStep()
 		}
 	}
@@ -669,6 +669,23 @@ func entryState(e HookEntry, hooks map[string]any, recorded string) string {
 
 func hookDigest(event string, n *node) string {
 	return digest(append([]byte(event+"\x00"), n.canonical()...))
+}
+
+// wantsSetupStep reports the Copilot setup step only when it is part of
+// the guard. Default init does not write that file, so a repository
+// that never opted in is not reported for a step it was never given. A
+// step the head or base manifest records, or a step still present in
+// the file, stays checked.
+func (c *checker) wantsSetupStep(wired []model.Harness) bool {
+	if !slices.Contains(wired, model.HarnessCopilot) || !c.selected(model.HarnessCopilot) {
+		return false
+	}
+	return manifestRecordsStep(c.head) || manifestRecordsStep(c.base) ||
+		c.head.hasTripcordStep() || (c.base != nil && c.base.hasTripcordStep())
+}
+
+func manifestRecordsStep(t *revision) bool {
+	return t != nil && t.manifestOK && t.manifest.recordedFile(CopilotSetupStepsPath, copilotStepName) != ""
 }
 
 // setupStep checks the step init adds to copilot-setup-steps.yml.

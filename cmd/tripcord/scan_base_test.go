@@ -107,7 +107,8 @@ func TestScanSinceReportsRemovedEmbed(t *testing.T) {
 	repo := embeddedBase(t)
 	removeEmbedGuard(t, repo)
 	for _, p := range []string{embedded.WorkflowPath, embedded.CopilotSetupStepsPath} {
-		if err := os.Remove(filepath.Join(repo, filepath.FromSlash(p))); err != nil {
+		err := os.Remove(filepath.Join(repo, filepath.FromSlash(p)))
+		if err != nil && !os.IsNotExist(err) {
 			t.Fatal(err)
 		}
 	}
