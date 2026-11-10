@@ -472,6 +472,25 @@ func TestVetAndTestFetchesFullHistory(t *testing.T) {
 	}
 }
 
+// TestPinHistoryProblemFailsWhenGitMissingInCI checks that a missing
+// git fails the history check when the process was started with CI or
+// GITHUB_ACTIONS set, and skips outside CI. PATH is emptied so
+// LookPath cannot find git. runningInCI is assigned directly because
+// TestMain has already overwritten the launch environment.
+func TestPinHistoryProblemFailsWhenGitMissingInCI(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	setRunningInCI(t, true)
+	reason, skip := pinHistoryProblem(t.TempDir())
+	if skip || reason != "git is not installed" {
+		t.Fatalf("missing git in CI: skip=%v reason=%q", skip, reason)
+	}
+	setRunningInCI(t, false)
+	reason, skip = pinHistoryProblem(t.TempDir())
+	if !skip || reason != "git is not installed" {
+		t.Fatalf("missing git outside CI: skip=%v reason=%q", skip, reason)
+	}
+}
+
 // TestPinHistoryFailsShallowAndNonGitInCI checks that a shallow clone
 // and a directory that is not a git checkout fail the git half of
 // TestPinsHaveEmbedCheck when the process started in CI, and skip
@@ -647,9 +666,10 @@ func commitPinSHA(s string) bool {
 // pinHistoryAvailable reports whether this clone can prove a pin is on
 // main. Outside CI it skips when git, the checkout, or the recorded
 // minimum is missing. When the process was started with CI or
-// GITHUB_ACTIONS set, a shallow clone and a directory that is not a git
-// checkout fail, as does a non-shallow checkout that is missing the
-// minimum. That flag is runningInCI, not the environment TestMain sets.
+// GITHUB_ACTIONS set, a missing git, a shallow clone, and a directory
+// that is not a git checkout fail, as does a non-shallow checkout that
+// is missing the minimum. That flag is runningInCI, not the environment
+// TestMain sets.
 func pinHistoryAvailable(t *testing.T, root string) bool {
 	t.Helper()
 	reason, skip := pinHistoryProblem(root)
@@ -664,11 +684,11 @@ func pinHistoryAvailable(t *testing.T, root string) bool {
 
 // pinHistoryProblem reports why root cannot prove a pin is on main.
 // skip is true when the caller should skip rather than fail. Outside CI
-// a shallow clone and a non-git checkout skip. When the process was
-// started with CI or GITHUB_ACTIONS set, both are failures.
+// a missing git, a shallow clone, and a non-git checkout skip. When the
+// process was started with CI or GITHUB_ACTIONS set, all three fail.
 func pinHistoryProblem(root string) (reason string, skip bool) {
 	if _, err := exec.LookPath("git"); err != nil {
-		return "git is not installed", true
+		return ciFailOrSkip("git is not installed")
 	}
 	out, err := gitOutput(root, "rev-parse", "--is-inside-work-tree")
 	if err != nil || strings.TrimSpace(out) != "true" {
