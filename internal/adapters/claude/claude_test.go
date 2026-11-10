@@ -1200,6 +1200,38 @@ func TestFrontmatterRealShapes(t *testing.T) {
 		}
 	})
 
+	t.Run("quoted security keys fail closed", func(t *testing.T) {
+		t.Parallel()
+		for _, key := range []string{
+			`"hooks"`, `'hooks'`,
+			`"mcpServers"`, `'mcpServers'`,
+			`"mcp-servers"`, `'mcp-servers'`,
+		} {
+			t.Run(key, func(t *testing.T) {
+				t.Parallel()
+				_, changed, _, abort := rewriteLooseScalar(key + ": [")
+				if !abort || changed {
+					t.Fatalf("abort=%v changed=%v, want abort and no rewrite", abort, changed)
+				}
+				root := t.TempDir()
+				body := "---\ndescription: hello: world\n" + key + ": [\n---\nbody\n"
+				writeFile(t, filepath.Join(root, ".claude", "agents", "a.md"), body)
+				got := discover(t, New(Options{}), root)
+				if !containsDiag(got, "invalid frontmatter") {
+					t.Fatalf("diagnostics = %q, want invalid frontmatter", got.Diagnostics)
+				}
+				if cmds := hookCommands(got.Items); len(cmds) != 0 {
+					t.Fatalf("hooks = %q, want none", cmds)
+				}
+				for _, item := range got.Items {
+					if item.Kind == model.ConfigKindHook || item.Kind == model.ConfigKindMCPServer {
+						t.Fatalf("kind %s extracted from %s", item.Kind, key)
+					}
+				}
+			})
+		}
+	})
+
 	t.Run("unparseable hooks fail closed", func(t *testing.T) {
 		t.Parallel()
 		root := t.TempDir()

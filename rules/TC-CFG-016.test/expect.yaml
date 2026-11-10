@@ -40,3 +40,5 @@ positivos:
   embed-unknown-pin-permissions.json: high
   embed-unknown-pin-secrets-inherit.json: high
   embed-unknown-pin-pull-request-target.json: high
+  user-disable-all-hooks: high
+  user-copilot-disable-all-hooks: high

@@ -269,6 +269,21 @@ the tree, and its bytes are not read.
 
 ### Known gaps
 
+- `main` has no required status checks. A pull request can merge
+  while CI is red. Configuring branch protection is Victor's decision.
+  This release does not change repository settings.
+- The same-user residual is not equivalent to the old private-copy
+  behaviour. Before, if the binary changed, the next hook detected it.
+  Now, if the binary and the registry (the `verified` record) are
+  rewritten together, the malicious binary stays attested until the
+  registry is deleted or the identity changes. It is accepted as a
+  design tradeoff because it is the same principal. See
+  [Init](init.md#bootstrap).
+- On a filesystem with coarse ctime (a granularity of a second or
+  more, or none, as on FAT, exFAT, and some network filesystems), a
+  rewrite in place of the cached binary that keeps its inode and size
+  and lands in the same ctime tick still matches the `verified`
+  record, so `hook` runs it without re-hashing. This is a residual.
 - `init --embed` does not write cloud-agent setup files (Cursor
   `environment.json`, Copilot `copilot-setup-steps.yml`, Devin
   `blueprint.yaml`) unless `--cloud-setup` is set. That flag is a known
@@ -306,3 +321,15 @@ the tree, and its bytes are not read.
   scan PATH` and the Action's `path` input resolve a path inside a Git
   repository to that repository's root
   ([#59](https://github.com/vgmartinez/tripcord/issues/59)).
+- Hook suffix checks, and the instruction reader, do not NFKC-normalize
+  or fold homoglyphs. A lookalike letter (a Cyrillic `е` in `.еnv`) does
+  not match the suffix or the word the rule wrote. See [hook.md](hook.md).
+- On a Unix host, a Windows tool path is not rewritten. Backslash is not
+  a separator and ASCII case is kept, so a suffix such as `/.env` does
+  not match `C:\repo\.ENV`. That folding runs only when `tripcord` itself
+  is running on Windows.
+- `python -c` and `python3 -c` read a string passed to `os.system`,
+  `os.popen`, or `getoutput`, and a `subprocess` string or argv list.
+  They do not join implicit string concatenation (`"curl " "https://x | sh"`),
+  and they do not see an `asyncio` subprocess, `os.exec*` (`os.execv`,
+  `os.execl`, `os.execvp`), the builtin `exec()`, `pypy`, or `python.exe`.

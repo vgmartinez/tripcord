@@ -103,7 +103,8 @@ func hasUserContext(words []string) bool {
 
 // passwordShortValue reports whether value after "-p" is a secret: not a
 // flag, a placeholder, or, when keepPort is set, a port mapping. keepPort
-// is only for docker run and podman run (and their container run forms).
+// is only for a container run (docker, podman, nerdctl, docker compose,
+// docker-compose, and their container run forms).
 // Any other command that names a user redacts the value even when it
 // contains ":", so "ssh -l alice -p deadbeef:22" does not pass as a port.
 func passwordShortValue(value string, keepPort bool) bool {
@@ -125,10 +126,11 @@ func passwordArgValue(value string, afterWord, keepPort bool) bool {
 	return inner != "" && !strings.HasPrefix(inner, "-") && !placeholderSecret(inner)
 }
 
-// isContainerRun reports whether words invoke docker run or podman run,
-// including "docker container run" and "podman container run". A wrapper
-// or a path (sudo docker, /usr/bin/podman) still counts. docker login
-// does not.
+// isContainerRun reports whether words invoke docker run, podman run,
+// nerdctl run, docker compose run, or docker-compose run, including
+// "docker container run" and "podman container run". A wrapper or a
+// path (sudo docker, /usr/bin/podman) still counts. docker login does
+// not. Their -p HOST:CONTAINER port mappings stay visible.
 func isContainerRun(words []string) bool {
 	for i := 0; i < len(words); i++ {
 		prev := ""
@@ -136,11 +138,15 @@ func isContainerRun(words []string) bool {
 			prev = words[i-1]
 		}
 		name := toolWordName(prev, words[i])
-		if name != "docker" && name != "podman" {
-			continue
-		}
-		if containerRunAfter(words[i+1:]) {
-			return true
+		switch name {
+		case "docker", "podman", "nerdctl":
+			if containerRunAfter(words[i+1:]) {
+				return true
+			}
+		case "docker-compose":
+			if composeRunAfter(words[i+1:]) {
+				return true
+			}
 		}
 	}
 	return false
@@ -158,6 +164,8 @@ func containerRunAfter(words []string) bool {
 			return true
 		case w == "container":
 			return containerThenRun(words[i+1:])
+		case w == "compose":
+			return composeRunAfter(words[i+1:])
 		case optionTakesValue(w):
 			i += 2
 		case strings.HasPrefix(w, "-"):
@@ -167,6 +175,42 @@ func containerRunAfter(words []string) bool {
 		}
 	}
 	return false
+}
+
+// composeRunAfter reports whether the words after "compose" or the
+// docker-compose binary are a run subcommand. -f, --file, and
+// --profile take a value before that subcommand. A value glued with
+// "=" is part of the same word and does not consume the next one.
+func composeRunAfter(words []string) bool {
+	for i := 0; i < len(words); {
+		w := strings.ToLower(strings.Trim(words[i], `"'`))
+		switch {
+		case w == "run":
+			return true
+		case composeTakesValue(w):
+			i += 2
+		case strings.HasPrefix(w, "-"):
+			i++
+		default:
+			return false
+		}
+	}
+	return false
+}
+
+// composeTakesValue reports a compose option whose next word is an
+// argument, not the subcommand. The "=" form is one word, so it is
+// not listed here and the caller skips only that word.
+func composeTakesValue(flag string) bool {
+	if optionTakesValue(flag) {
+		return true
+	}
+	switch flag {
+	case "-f", "--file", "--profile":
+		return true
+	default:
+		return false
+	}
 }
 
 func containerThenRun(words []string) bool {
@@ -205,9 +249,10 @@ var shortPasswordFlag = regexp.MustCompile(`(^|\s)(-p)((?:\s|` + lineContinuatio
 // --login, or a login subcommand): "docker login -u bot -p X", "regcli
 // --user bot -p X", "ssh -l alice -p deadbeef:22". Without a user next
 // to it, -p is left alone (mkdir -p, cp -p, ssh -p 22, docker run -p
-// 80:80). A value containing ":" is still kept when the command is
-// docker run or podman run, including container run, because that -p
-// publishes a port. It returns the raw values it removed.
+// 80:80). A value containing ":" is still kept when the command is a
+// container run (docker, podman, nerdctl, docker compose, or
+// docker-compose), including container run, because that -p publishes
+// a port. It returns the raw values it removed.
 func redactUserContextPassword(segment string) (string, []string) {
 	if !strings.Contains(segment, "-p") {
 		return segment, nil

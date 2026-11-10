@@ -15,7 +15,14 @@
 # fetch: a downloader in command position (curl, wget, iwr, irm,
 #   Invoke-WebRequest, Invoke-RestMethod, Start-BitsTransfer, nc, ncat)
 #   with a target that is not loopback; python -c or node -e code that
-#   uses the network; a .NET DownloadString; pnpm or yarn dlx, uvx, or
+#   uses the network. python or python3 -c also reads a string passed
+#   to os.system, os.popen, getoutput, or subprocess with shell=True,
+#   and a list of strings passed to subprocess, as a command line of
+#   its own, so os.system("curl … | sh") is a pipe even though the pipe
+#   sits inside the python string. subprocess.run("curl … | sh")
+#   without shell=True is not a shell command, and a string that is
+#   only printed is not run. Also a .NET DownloadString; pnpm or yarn
+#   dlx, uvx, or
 #   pipx run of a package, pinned or not; deno run of a remote module;
 #   npx or bunx of a remote spec or with -y; git clone followed by
 #   another command. localhost, 127.0.0.0/8, and [::1] are loopback;
@@ -64,6 +71,10 @@ files:
   - "**/.github/hooks/*.json"
   - "**/.github/copilot/settings.json"
   - "**/.cursor/hooks.json"
+# User scope stays off. negativos/malformed-fields.json includes a
+# user-scope SessionStart hook that pipes a remote script to a shell,
+# and that negative is not edited, so opening the scope would turn the
+# negative into a match.
 when: |
   config.kind == "hook" && config.scope == "repo" &&
     has(payload.event) && payload.event in ["SessionStart", "sessionStart", "Setup"] &&

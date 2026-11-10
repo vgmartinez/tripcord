@@ -35,6 +35,9 @@ severity_when:
         payload.value.allow.exists(e, type(e) == string && e.matches(r'''(?i)^\s*(read|edit|write|webfetch)(\(\s*(/*\*+|~/\*+|domain:\*)\s*\))?\s*$'''))
 harness: [claude]
 files: ["**/.claude/settings.json"]
+# User scope stays off. negativos/malformed-and-out-of-scope.json
+# includes ~/.claude/settings.json allowing Bash(*), and that negative
+# is not edited.
 when: |
   config.kind == "permissions" && config.scope == "repo" &&
     has(payload.setting) && payload.setting == "permissions"

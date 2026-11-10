@@ -35,10 +35,18 @@ var (
 	instructionObject         = regexp.MustCompile(`(?i)^[ \t]*(?:(?:--?[a-z][a-z0-9-]*(?:[= ][^ \t]*)?[ \t]+))*?(?:https?://[^ \t]+[ \t]+)?(?:(?:the|all|your|my|our|this|these|any|every|each|its|their|those)[ \t]+)*(?:(?:contents?|values?)[ \t]+of[ \t]+)?(?:\$env:)?(?:[` + "`" + `'"@][ \t]*)?`)
 	instructionModifier       = regexp.MustCompile(`(?i)^[ \t]*(?:-[a-z]|(?:sections?|polic(?:y|ies)|flows?|counts?|offsets?|usage|budgets?|docs?|documentation|readme|tables?|runbooks?|design|handling|management|templates?|reset|fields?|requirements?|pages?|code|rotation|formats?|limits?|rules?|guides?|examples?|scopes?|refresh|expiry|expiration|validation|forms?)\b)`)
 	instructionClauseEnd      = regexp.MustCompile(`[;]|(?:\.(?:[ \t]|$))`)
-	// Header and user-flag values are ordinary auth, not a secret read.
-	// Plain http(s) URLs are ignored too, except a URL that embeds $( or
-	// a backtick: stripping that URL would hide $(cat .env) inside it.
-	instructionCurlNoise = regexp.MustCompile(`(?i)(?:(?:^|[ \t])(?:-H|--header|-u|--user|--oauth2-bearer)(?:=|[ \t]+)(?:"[^"]*"|'[^']*'|[^ \t]+))|\bhttps?://(?:(?:[^ \t$` + "`" + `]|\$[^(\t ])*\$?)(?:[ \t]|$)`)
+	// A period ends a prose sentence. A curl span keeps ';' and the shell
+	// operators, which separate commands rather than sentences.
+	instructionProseEnd = regexp.MustCompile(`\.(?:[ \t]|$)`)
+	// Plain http(s) URLs are ignored, except a URL that embeds $( or a
+	// backtick: stripping that URL would hide $(cat .env) inside it.
+	// Header and user flags are stripped by stripCurlFlags, which also
+	// takes a glued quote, an equals form, and an unquoted header whose
+	// value continues past the first word (Authorization: Bearer $TOKEN).
+	instructionURLNoise = regexp.MustCompile(`(?i)\bhttps?://(?:(?:[^ \t$` + "`" + `]|\$[^(\t ])*\$?)(?:[ \t]|$)`)
+	// "come from" / "comes from" names where a credential originates.
+	// It is not an instruction to source a file.
+	instructionComesFrom = regexp.MustCompile(`(?i)(?:^|[ \t])(?:come|comes)[ \t]+from\b`)
 	instructionURL       = regexp.MustCompile(`(?i)\bhttps?://`)
 	instructionNamedSink = regexp.MustCompile(`(?i)\b(?:webhooks?|gist|pastebin|slack|discord)\b`)
 	instructionDataSink  = regexp.MustCompile(`(?i)\b(?:curl|wget)\b[^\r\n]*(?:\B-(?:d|F)\b|--data(?:-[a-z]+)?(?:=|[ \t])|--form(?:=|[ \t])|(?:-X|--request)[ \t=]*POST\b)`)
@@ -70,10 +78,14 @@ func instructionMatchLine(content string) int {
 					}
 					return line + 1
 				}
-				clause := instructionClause(rest[read[1]:])
-				if (verb == "curl" || verb == "wget") && instructionSecret.MatchString(instructionCurlNoise.ReplaceAllString(clause, " ")) {
-					return line + 1
+				if verb == "curl" || verb == "wget" {
+					// instructionCurlSpan keeps the commands after &&, ||,
+					// |, and ;. instructionClause would drop them at ';'.
+					if instructionSecret.MatchString(stripInstructionCurlNoise(instructionCurlSpan(rest[read[1]:]))) {
+						return line + 1
+					}
 				}
+				clause := instructionClause(rest[read[1]:])
 				if verb == "echo" {
 					if instructionEchoSecret(clause) {
 						return line + 1
@@ -215,6 +227,12 @@ func instructionGapTarget(text string, skipped int, widened, strict bool) bool {
 		return false
 	}
 	if h.at {
+		// "Source credentials for the run come from the connection"
+		// names an origin. A direct-object secret value with no local
+		// path in that tail is not a request to read a file.
+		if h.value && instructionComesFrom.MatchString(h.tail) && !instructionHasLocalPath(h.tail) {
+			return false
+		}
 		return !h.value || (!widened && !strict) || instructionStored(h.tail)
 	}
 	if skipped >= instructionWordGap {
@@ -253,8 +271,179 @@ func firstInstructionWord(text string) (string, string) {
 	return text[:i], text[i:]
 }
 
+// curlNoiseFlags are the Authorization and user flags the rule ignores.
+// Longer flags come first so --header is not read as -H.
+var curlNoiseFlags = []string{"--oauth2-bearer", "--header", "--user", "-H", "-u"}
+
+// stripInstructionCurlNoise drops auth-header and user-flag values, then
+// plain http(s) URLs. A URL that embeds $( or a backtick is kept.
+func stripInstructionCurlNoise(clause string) string {
+	return instructionURLNoise.ReplaceAllString(stripCurlFlags(clause), " ")
+}
+
+func stripCurlFlags(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); {
+		flag, ok := curlFlagAt(s, i)
+		if !ok {
+			b.WriteByte(s[i])
+			i++
+			continue
+		}
+		b.WriteByte(' ')
+		i = consumeCurlValue(s, i+len(flag), flag)
+	}
+	return b.String()
+}
+
+func curlFlagAt(s string, i int) (string, bool) {
+	if i > 0 && s[i-1] != ' ' && s[i-1] != '\t' {
+		return "", false
+	}
+	for _, flag := range curlNoiseFlags {
+		if len(s) < i+len(flag) || !strings.EqualFold(s[i:i+len(flag)], flag) {
+			continue
+		}
+		end := i + len(flag)
+		if end == len(s) {
+			return flag, true
+		}
+		switch s[end] {
+		case ' ', '\t', '=', '"', '\'':
+			return flag, true
+		}
+	}
+	return "", false
+}
+
+// consumeCurlValue reads the value of a curl auth flag. A quoted value is
+// one string. An unquoted header that contains ":" continues through the
+// following words, so "Authorization: Bearer $TOKEN" is one value. The
+// walk stops at the next flag, at an http(s) URL (which the URL pass
+// still has to see), and at a shell operator or a command substitution
+// that follows the value, so the next command stays in the clause.
+func consumeCurlValue(s string, i int, flag string) int {
+	for i < len(s) && (s[i] == ' ' || s[i] == '\t') {
+		i++
+	}
+	if i < len(s) && s[i] == '=' {
+		i++
+		for i < len(s) && (s[i] == ' ' || s[i] == '\t') {
+			i++
+		}
+	}
+	if i >= len(s) {
+		return i
+	}
+	if s[i] == '"' || s[i] == '\'' {
+		q := s[i]
+		i++
+		for i < len(s) && s[i] != q {
+			i++
+		}
+		if i < len(s) {
+			i++
+		}
+		return i
+	}
+	start := i
+	for i < len(s) && s[i] != ' ' && s[i] != '\t' {
+		i++
+	}
+	if headerFlag(flag) && strings.Contains(s[start:i], ":") {
+		return consumeHeaderTail(s, i)
+	}
+	return i
+}
+
+func consumeHeaderTail(s string, i int) int {
+	for {
+		j := i
+		for j < len(s) && (s[j] == ' ' || s[j] == '\t') {
+			j++
+		}
+		if j >= len(s) {
+			return j
+		}
+		if s[j] == '-' || curlURLToken(s[j:]) {
+			return i
+		}
+		for k := j; k < len(s) && s[k] != ' ' && s[k] != '\t'; k++ {
+			if !headerStop(s, k) {
+				continue
+			}
+			if k == j {
+				return i
+			}
+			return k
+		}
+		i = j
+		for i < len(s) && s[i] != ' ' && s[i] != '\t' {
+			i++
+		}
+	}
+}
+
+// headerStop reports a shell control operator or a following command
+// substitution at k. '&' covers a background command and '&&'. '|'
+// covers '|', '||', and '|&'. '$(' , a backtick, and '<(' end the value
+// only when they start a substitution, so '$TOKEN' stays inside it.
+// '.' ends a clause only when a space or the end of the string follows
+// it, so '.env' is not a stop.
+func headerStop(s string, k int) bool {
+	switch s[k] {
+	case '&', '|', ';', '\n', '`':
+		return true
+	case '$', '<':
+		return k+1 < len(s) && s[k+1] == '('
+	case '.':
+		return k+1 == len(s) || s[k+1] == ' ' || s[k+1] == '\t' || s[k+1] == '\n'
+	default:
+		return false
+	}
+}
+
+func curlURLToken(s string) bool {
+	return strings.HasPrefix(strings.ToLower(s), "http://") || strings.HasPrefix(strings.ToLower(s), "https://")
+}
+
+func headerFlag(flag string) bool {
+	return strings.EqualFold(flag, "-H") || strings.EqualFold(flag, "--header")
+}
+
+// instructionHasLocalPath reports a storage path anywhere in tail, so an
+// origin sentence that also names .env or ~/.aws stays a read.
+func instructionHasLocalPath(tail string) bool {
+	rest := tail
+	for {
+		word, next := firstInstructionWord(rest)
+		if word == "" {
+			return false
+		}
+		// Trim quotes, opening parentheses and brackets, and trailing
+		// punctuation. strings.Trim would also drop the leading dot,
+		// and .env would no longer match.
+		word = strings.TrimLeft(word, "`'\"([{")
+		word = strings.TrimRight(word, "`'\".,);]}")
+		if instructionLocalPath.MatchString(word) {
+			return true
+		}
+		rest = next
+	}
+}
+
 func instructionClause(text string) string {
 	if end := instructionClauseEnd.FindStringIndex(text); end != nil {
+		return text[:end[0]]
+	}
+	return text
+}
+
+// instructionCurlSpan is the curl or wget command plus the commands a
+// shell separator attaches to it. A prose period still ends it.
+func instructionCurlSpan(text string) string {
+	if end := instructionProseEnd.FindStringIndex(text); end != nil {
 		return text[:end[0]]
 	}
 	return text

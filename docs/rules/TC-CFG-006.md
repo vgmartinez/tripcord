@@ -111,6 +111,10 @@ Not reported at all: `.claude/settings.local.json` and
   so an untracked or gitignored script counts as present. Reading the
   git index is a follow-up.
 - What the target script does. Only the hook entry is read.
+- User-scope hooks. `negativos/malformed-fields.json` includes
+  `~/.cursor/hooks.json` running `~/.cursor/hooks/stop.sh`, and that
+  negative stays as it is, so the rule still requires repository scope.
+  A home path on that item would match if the scope gate were opened.
 
 ## Examples
 

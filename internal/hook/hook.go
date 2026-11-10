@@ -119,10 +119,12 @@ type Call struct {
 	// Paths, including Cursor beforeReadFile's file_path, are cleaned
 	// and made absolute against Dir before the policy runs.
 	Paths []string
-	// Dir is the directory a relative tool path is resolved against:
-	// the hook JSON's cwd, or a project root when the harness sends
-	// one and no cwd. Empty uses the process working directory, and
-	// only when a path is relative.
+	// Dir is the directory a relative tool path is resolved against.
+	// Claude Code and Copilot set the hook JSON cwd; an empty value
+	// uses the process working directory (Getwd), not the project
+	// directory. Cursor sets cwd, or workspace_roots[0] when cwd is
+	// empty, and Getwd when both are empty. Only a relative path uses
+	// Dir. The cleaned path does not follow symlinks.
 	Dir  string
 	Kind model.EventKind
 }
@@ -181,9 +183,11 @@ func (c Call) Event(raw []byte, now time.Time) model.Event {
 
 // normalizeToolPaths cleans each path and makes a relative path
 // absolute against dir (the process working directory when dir is
-// empty). The result uses forward slashes. On Windows, ASCII letters
-// are lowercased, because the filesystem does not distinguish them;
-// other platforms keep case. Duplicate paths are dropped.
+// empty). The result uses forward slashes. It does not follow
+// symlinks, so a suffix check sees the path the harness sent. On
+// Windows, ASCII letters are lowercased, because the filesystem does
+// not distinguish them; other platforms keep case, including a Windows
+// path seen on a Unix host. Duplicate paths are dropped.
 func normalizeToolPaths(paths []string, dir string, windows bool) []string {
 	if len(paths) == 0 {
 		return nil

@@ -63,6 +63,9 @@ severity_when:
     when: config.missing_scripts > 0
 harness: [claude, codex, copilot, cursor, gemini, windsurf, generic]
 files: ["**"]
+# User scope stays off. negativos/malformed-fields.json includes a
+# user Cursor hook that runs ~/.cursor/hooks/stop.sh, and that
+# negative is not edited. A home path on that item would match.
 when: |
   config.kind == "hook" && config.scope == "repo" &&
     !config.path.matches(r'''(^|/)settings\.local\.json$''')

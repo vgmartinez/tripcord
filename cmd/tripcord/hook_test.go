@@ -193,7 +193,7 @@ mode: enforce
 custom:
   - id: ACME-020
     when: 'event.kind == "tool_call"'
-    deny_if: 'event.command == "go test ./..." || event.paths.exists(p, p.endsWith("/.env"))'
+    deny_if: 'event.command == "go test ./..." || event.paths.exists(p, p.lowerAscii().endsWith("/.env"))'
     message: refused
 `
 	const reason = "tripcord blocked this tool call: ACME-020 (high): refused"

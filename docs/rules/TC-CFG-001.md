@@ -22,7 +22,14 @@ per-platform fields), and `exec` or `command` with `args`, is read by
 - fetch: a downloader in command position (`curl`, `wget`, `iwr`,
   `irm`, `Invoke-WebRequest`, `Invoke-RestMethod`, `Start-BitsTransfer`,
   `nc`, `ncat`) with a non-loopback target; `python -c` or `node -e`
-  code that uses the network; a .NET `DownloadString`; `pnpm dlx`,
+  code that uses the network. `python` or `python3 -c` also reads a
+  string passed to `os.system`, `os.popen`, `getoutput`, or
+  `subprocess` with `shell=True`, and a list of strings passed to
+  `subprocess`, as a command line of its own, so
+  `os.system("curl … | sh")` is a pipe even though the pipe sits inside
+  the Python string. `subprocess.run("curl … | sh")` without
+  `shell=True` is not a shell command, and a string that is only
+  printed is not run. Also a .NET `DownloadString`; `pnpm dlx`,
   `yarn dlx`, `uvx`, `pipx run`; a remote `deno run` module; `npx` or
   `bunx` of a remote spec or with `-y`; `git clone` followed by another
   command.
@@ -47,6 +54,10 @@ Not reported:
 - Local output into Invoke-Expression (`oh-my-posh init pwsh | iex`).
 - `npx tsc` and other bare names, read as a devDependency binary.
 - `settings.local.json`, which is personal.
+- User-scope files. `negativos/malformed-fields.json` includes a
+  user-scope SessionStart hook that pipes a remote script to a shell,
+  and that negative stays as it is, so the rule still requires
+  repository scope.
 
 ## Limits
 

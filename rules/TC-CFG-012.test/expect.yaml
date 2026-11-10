@@ -66,3 +66,16 @@ positivos:
   agents-get-dotenv: medium
   agents-retrieve-token-via-dotenv: medium
   agents-get-api-key-using-dotenv: medium
+  agents-curl-header-and-source-dotenv: medium
+  agents-curl-header-or-cat-dotenv: medium
+  agents-curl-header-pipe-source-dotenv: medium
+  agents-credentials-come-from-dotenv: medium
+  agents-credentials-come-from-dotenv-prod: medium
+  agents-curl-header-amp-source-dotenv: medium
+  agents-curl-header-amp-glued-dotenv: medium
+  agents-curl-header-amp-tab-dotenv: medium
+  agents-curl-header-command-subst-dotenv: medium
+  agents-curl-header-backtick-dotenv: medium
+  agents-credentials-come-from-paren-dotenv: medium
+  agents-credentials-come-from-quoted-paren-dotenv: medium
+  agents-credentials-come-from-bracket-dotenv: medium

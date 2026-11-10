@@ -84,8 +84,19 @@
 # secret appears anywhere later in the same clause, so a flag value
 # such as "-d @.env" still counts. Authorization and user flags
 # (-H/--header, -u/--user, --oauth2-bearer) and plain http(s) URLs are
-# ignored. A URL containing $( or a backtick is kept, so $(cat .env)
-# inside it still counts. Documentation modifiers after the
+# ignored, including a flag glued to a quoted value
+# (-H"X-Api-Token: $TOKEN"), an equals form
+# (--header=Authorization: Bearer $TOKEN), and an unquoted header
+# whose value continues past the colon
+# (-H Authorization: Bearer $TOKEN). The whole header value is
+# ignored, so a $(...) that sits inside the header rather than the
+# URL stays quiet. A URL containing $( or a backtick is kept, so
+# $(cat .env) inside it still counts. A secret value that is the
+# direct object, and whose tail says "come from" or "comes from"
+# without naming a local path, is an origin ("Source credentials for
+# the bteq run come from the connection"), not a request to source a
+# file. "Source the credentials from .env" and "Source
+# `.env.production`" still count. Documentation modifiers after the
 # target, singular or plural (for example "token budgets", "API key
 # policies", or "credentials section"), do not count.
 #

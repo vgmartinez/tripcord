@@ -159,33 +159,55 @@ jobs:
           go-version-file: go.mod
           cache: false
 
+      # A missing TRIPCORD_PERF_BUDGET, or a -run that matches nothing,
+      # makes go test exit 0. The step still fails unless the named test
+      # printed a PASS line.
       - name: Claude hook-heavy settings budget
         env:
           TRIPCORD_PERF_BUDGET: "1"
-        run: go test ./internal/adapters/claude -run '^TestDiscoverHookHeavyBudget$' -count 1 -v
+        run: |
+          set -o pipefail
+          out="${RUNNER_TEMP}/perf-claude.out"
+          go test ./internal/adapters/claude -run '^TestDiscoverHookHeavyBudget$' -count 1 -v | tee "$out"
+          grep -q -- '--- PASS: TestDiscoverHookHeavyBudget ' "$out"
 
       - name: Staged index bulk budget
         env:
           TRIPCORD_PERF_BUDGET: "1"
-        run: go test ./cmd/tripcord -run '^TestStagedBulkBlobsPerfBudget$' -count 1 -v
+        run: |
+          set -o pipefail
+          out="${RUNNER_TEMP}/perf-staged.out"
+          go test ./cmd/tripcord -run '^TestStagedBulkBlobsPerfBudget$' -count 1 -v | tee "$out"
+          grep -q -- '--- PASS: TestStagedBulkBlobsPerfBudget ' "$out"
 
       - name: Hook cold-start budget
         env:
           TRIPCORD_PERF_BUDGET: "1"
-        run: go test ./cmd/tripcord -run '^TestHookColdStartBudget$' -count 1 -v
+        run: |
+          set -o pipefail
+          out="${RUNNER_TEMP}/perf-hook.out"
+          go test ./cmd/tripcord -run '^TestHookColdStartBudget$' -count 1 -v | tee "$out"
+          grep -q -- '--- PASS: TestHookColdStartBudget ' "$out"
 
       # Locked direct hook is p95 25 ms. bash bootstrap.sh hook is
       # p95 35 ms end to end, and its overhead over the direct hook in
-      # the same run is p95 10 ms. A miss fails this step.
+      # the same run is p95 10 ms. A miss fails this step. So does a
+      # run in which either test was skipped or did not match -run.
       - name: Locked hook cold start, direct and bootstrap.sh
         env:
           TRIPCORD_PERF_BUDGET: "1"
-        run: go test ./cmd/tripcord -run '^(TestHookColdStartBudgetLocked|TestBootstrapHookLatencyBudget)$' -count 1 -v
+        run: |
+          set -o pipefail
+          out="${RUNNER_TEMP}/perf-bootstrap.out"
+          go test ./cmd/tripcord -run '^(TestHookColdStartBudgetLocked|TestBootstrapHookLatencyBudget)$' -count 1 -v | tee "$out"
+          grep -q -- '--- PASS: TestHookColdStartBudgetLocked ' "$out"
+          grep -q -- '--- PASS: TestBootstrapHookLatencyBudget ' "$out"
 
   # Cache and key ownership checks that only root can set up, by handing
-  # a directory to another uid. sudo -E keeps HOME and the Go module
-  # cache. secure_path still replaces PATH, so env restores the
-  # setup-go bin directory before go runs.
+  # a directory to another uid. sudo -E is ignored on ubuntu-26.04, so
+  # it does not keep the caller's environment. go is found through
+  # env PATH=..., which puts the setup-go bin directory back after
+  # secure_path. -v prints TestBootstrapRefusesCacheDirOfAnotherUser.
   root:
     name: tests as root
     runs-on: ubuntu-latest
@@ -205,7 +227,7 @@ jobs:
           cache: false
 
       - name: Ownership tests
-        run: sudo -E env "PATH=$PATH" go test ./internal/embedded ./internal/policy ./internal/fpkey -count=1
+        run: sudo -E env "PATH=$PATH" go test ./internal/embedded ./internal/policy ./internal/fpkey -count=1 -v
 
   precommit:
     name: pre-commit hook

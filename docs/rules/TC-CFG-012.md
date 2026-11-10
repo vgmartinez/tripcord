@@ -92,8 +92,26 @@ has to be on that same line. `curl` and `wget` also match
 when a secret appears anywhere later in the same clause, so a flag
 value such as `-d @.env` still counts. Authorization and user flags
 (`-H`, `--header`, `-u`, `--user`, `--oauth2-bearer`) and plain
-http(s) URLs are ignored. A URL that contains `$(` or a backtick is
-kept, so `$(cat .env)` inside it still counts. A target followed by a
+http(s) URLs are ignored. That includes a flag glued to a quoted
+value (`-H"X-Api-Token: $TOKEN"`), an equals form
+(`--header=Authorization: Bearer $TOKEN`), and an unquoted header
+whose value continues past the colon
+(`-H Authorization: Bearer $TOKEN`). The unquoted value stops at a
+shell operator (`&`, `&&`, `|`, `||`, `|&`, `;`, or a newline) and at
+a `$(`, backtick, or `<(` that follows the value, with or without
+spaces, so `curl -H Authorization: Bearer $TOKEN & source .env` and
+`curl -H Authorization: Bearer $TOKEN $(cat .env)` still count. A
+`$(...)` that sits inside the header value, rather than after it,
+stays quiet. A URL that contains `$(` or a backtick is
+kept, so `$(cat .env)` inside it still counts. A secret value that is
+the direct object, and whose tail says `come from` or `comes from`
+without naming a local path, is an origin (`Source credentials for the
+bteq run come from the connection`), not a request to source a file.
+`Source the credentials from .env`, `Source credentials come from .env`,
+`Source credentials come from .env.production`,
+`Source credentials come from (.env)`, and
+`Source .env.production` still count. A leading dot is part of the
+path. An opening parenthesis, square bracket, or brace is not. A target followed by a
 documentation modifier, singular or plural—such as `credentials
 section`, `token budgets`, `API key policies`, or `secrets
 template`—is quiet.
@@ -111,7 +129,8 @@ evidence use sanitized payloads, and no instruction body is exposed.
 
 Not reported:
 
-- A curl/wget auth header or user flag (`curl -H "Authorization: Bearer $GITHUB_TOKEN"`, `curl -u user:password`).
+- A curl/wget auth header or user flag (`curl -H "Authorization: Bearer $GITHUB_TOKEN"`, `curl -H Authorization: Bearer $TOKEN`, `curl -H"X-Api-Token: $TOKEN"`, `curl --header=Authorization: Bearer $TOKEN`, `curl -u user:password`).
+- An origin sentence whose secret is not read from a local path (`Source credentials for the bteq run come from the configured source_connection`).
 - A negated read (`Do not read .env`, `Never print secrets`).
 - `.env.example`, `.env.sample`, `.env.template`, and `.envrc`.
 - `/proc/self/status`, `/proc/self/environment`, a `../` detour such as

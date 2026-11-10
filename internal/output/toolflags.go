@@ -396,7 +396,72 @@ func redactToolFlagMatches(segment string, offset int, flag toolFlag, quotes esc
 func RedactToolArgv(argv []string) ([]string, []string) {
 	argv, removed := redactArgvPasswordWords(argv)
 	out, toolRemoved := redactToolArgvFlags(argv)
-	return out, append(removed, toolRemoved...)
+	out, genericRemoved := redactArgvGenericSecrets(out)
+	return out, append(append(removed, toolRemoved...), genericRemoved...)
+}
+
+// genericSecretFlagElem matches an argv element that is only a generic
+// secret flag, such as --password or "--token", with no value attached.
+var genericSecretFlagElemPattern = regexp.MustCompile(`(?i)^(["']?)(?:` + SecretFlagAlternation() + `)(["']?)$`)
+
+// redactArgvGenericSecrets applies the command-string rules that do not
+// depend on a known tool: --password VALUE, --password=VALUE, and a
+// credential colon assignment (token: value, or token: in one element
+// and the value in the next). A tool the flag table does not know still
+// leaks those. Known-tool flags run first, so a value they already
+// redacted is left as the placeholder.
+func redactArgvGenericSecrets(argv []string) ([]string, []string) {
+	out := append([]string(nil), argv...)
+	var removed []string
+	for i := 0; i < len(out); i++ {
+		if i+1 < len(out) && genericSecretFlagElem(out[i]) && argvSecretValue(out[i+1]) {
+			removed = append(removed, unquote(out[i+1]))
+			out[i+1] = quoteLike(out[i+1], redactedMarker)
+			i++
+			continue
+		}
+		if i+1 < len(out) && colonKeyElem(out[i]) && argvSecretValue(out[i+1]) {
+			removed = append(removed, unquote(out[i+1]))
+			out[i+1] = quoteLike(out[i+1], redactedMarker)
+			i++
+			continue
+		}
+		next, secrets := redactElemGeneric(out[i])
+		if next != out[i] {
+			out[i] = next
+			removed = append(removed, secrets...)
+		}
+	}
+	return out, removed
+}
+
+func genericSecretFlagElem(elem string) bool {
+	return genericSecretFlagElemPattern.MatchString(elem)
+}
+
+// colonKeyElem reports whether elem is only a credential name and a
+// colon, so the value is the next argv element ("token:" "x").
+func colonKeyElem(elem string) bool {
+	e := strings.Trim(elem, `"'`)
+	if !strings.HasSuffix(e, ":") {
+		return false
+	}
+	name := strings.TrimSpace(strings.TrimSuffix(e, ":"))
+	if name == "" || strings.ContainsAny(name, " \t") {
+		return false
+	}
+	return CredentialName(name)
+}
+
+func argvSecretValue(value string) bool {
+	inner := unquote(value)
+	return inner != "" && !strings.HasPrefix(inner, "-") && !placeholderSecret(value)
+}
+
+func redactElemGeneric(elem string) (string, []string) {
+	elem, flags := RedactSecretFlags(elem)
+	elem, assign := RedactAssignments(elem)
+	return elem, append(flags, assign...)
 }
 
 func redactToolArgvFlags(argv []string) ([]string, []string) {
@@ -501,10 +566,11 @@ func redactEnvAssignmentText(text string) (redacted string, removed []string, ok
 }
 
 // quoteLike returns replacement wrapped in the same quotes as value, if
-// value is quoted, including a shell-escaped \"...\" pair.
+// value is quoted, including a shell-escaped \"...\" pair and a longer
+// odd run such as \\\"...\\\".
 func quoteLike(value, replacement string) string {
-	if _, ok := unescapeShellQuotes(value); ok {
-		return `\"` + replacement + `\"`
+	if lead, trail, ok := escapedQuoteBounds(value); ok {
+		return strings.Repeat(`\`, lead) + `"` + replacement + strings.Repeat(`\`, trail) + `"`
 	}
 	if len(value) >= 2 {
 		quote := value[0]

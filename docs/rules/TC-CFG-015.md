@@ -4,7 +4,7 @@
 | --- | --- |
 | Severity | high |
 | Harnesses | Claude Code |
-| Files | `.claude/settings.json` (any depth, repository scope) |
+| Files | `.claude/settings.json` (any depth, repository or user scope) |
 | Rule | [`rules/TC-CFG-015.yaml`](../../rules/TC-CFG-015.yaml) |
 
 ## What it detects
@@ -28,7 +28,7 @@ steer a `WebFetch` call to an attacker-controlled Hugging Face
 repository path such as `/resolve/main/config.json`; Hugging Face
 counts that server-side as a download, so the repository owner can
 read back data the agent encoded into the path or query string. The
-rule flags a repository committing that same shape itself: a
+rule flags a repository or user settings file committing that same shape: a
 `WebFetch(domain:...)` or sandbox network allow entry naming one of a short list of hosts
 with that write-then-observe design.
 
@@ -81,6 +81,10 @@ Not reported:
 - Only `permissions.allow` entries of the exact `WebFetch(domain:...)`
   shape and `sandbox.network.allowedDomains` are read; a wrapper script that
   fetches another host through `Bash` is not analyzed by this rule.
+- A raw user-scope fixture is not in the pack. The host list is real
+  names, and a new fixture file would be a new corpus-lint host finding.
+  `TestCFG015UserScope` covers `~/.claude/settings.json` allowing
+  `WebFetch(domain:huggingface.co)`.
 
 ## Examples
 

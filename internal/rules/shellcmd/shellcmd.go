@@ -422,6 +422,8 @@ func (s *scanner) command(words []string, depth int, followed bool) {
 		s.line(strings.Join(args, " "), depth+1, false)
 	case name == "iex" || name == "invoke-expression":
 		s.line(strings.Join(args, " "), depth+1, true)
+	case isPython(name):
+		s.python(args, depth)
 	default:
 		if fetches(name, args, followed) {
 			s.fetch = true
@@ -844,11 +846,29 @@ func fetches(name string, args []string, followed bool) bool {
 		code, ok := nodeCode(args)
 		return ok && codeFetches(code, "fetch", "http")
 	}
-	if isPython(name) {
-		code, ok := pythonCode(args)
-		return ok && codeFetches(code, "urllib", "requests", "http.client")
-	}
 	return false
+}
+
+// python reads a python -c payload. Inline code that calls urllib,
+// requests, or http.client is a fetch, as before. A string passed to
+// os.system, os.popen, or another shell runner, and an argv list passed
+// to subprocess, is a command line of its own.
+func (s *scanner) python(args []string, depth int) {
+	code, ok := pythonCode(args)
+	if !ok {
+		return
+	}
+	if codeFetches(code, "urllib", "requests", "http.client") {
+		s.fetch = true
+		s.unpinned = true
+	}
+	lines, argvs := pythonShellPayloads(code)
+	for _, line := range lines {
+		s.line(line, depth+1, false)
+	}
+	for _, argv := range argvs {
+		s.command(argv, depth+1, false)
+	}
 }
 
 // Target classes, in increasing precedence.

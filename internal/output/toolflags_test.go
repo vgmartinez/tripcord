@@ -259,3 +259,26 @@ func TestDefaultRedactorFollowUpGaps(t *testing.T) {
 		t.Errorf("DefaultRedactor ate the next flag: %q", got)
 	}
 }
+
+// Generic --password, --password=VALUE, and colon assignments apply to
+// an argv even when the tool is not in the known-tool table.
+func TestRedactToolArgvGenericSecrets(t *testing.T) {
+	t.Parallel()
+	const secret = "ARGVGENERIC"
+	cases := []struct {
+		argv, want, removed []string
+	}{
+		{[]string{"custom-tool", "--password", secret}, []string{"custom-tool", "--password", "[REDACTED]"}, []string{secret}},
+		{[]string{"custom-tool", "--password=" + secret}, []string{"custom-tool", "--password=[REDACTED]"}, []string{secret}},
+		{[]string{"custom-tool", "token: " + secret}, []string{"custom-tool", "token: [REDACTED]"}, []string{secret}},
+		{[]string{"custom-tool", "token:", secret}, []string{"custom-tool", "token:", "[REDACTED]"}, []string{secret}},
+		{[]string{"custom-tool", "--password", "--verbose"}, []string{"custom-tool", "--password", "--verbose"}, nil},
+		{[]string{"custom-tool", "--password", "$PW"}, []string{"custom-tool", "--password", "$PW"}, nil},
+	}
+	for _, tc := range cases {
+		got, removed := RedactToolArgv(tc.argv)
+		if !slices.Equal(got, tc.want) || !slices.Equal(removed, tc.removed) {
+			t.Errorf("RedactToolArgv(%q) = %q, %q; want %q, %q", tc.argv, got, removed, tc.want, tc.removed)
+		}
+	}
+}

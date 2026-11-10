@@ -36,7 +36,7 @@ severity: high
 harness: [claude]
 files: ["**/.claude/settings.json"]
 when: |
-  config.kind == "permissions" && config.scope == "repo" && has(payload.setting) &&
+  config.kind == "permissions" && config.scope in ["repo", "user"] && has(payload.setting) &&
     has(payload.value) && type(payload.value) == map && (
       (payload.setting == "permissions" &&
         has(payload.value.allow) && type(payload.value.allow) == list &&

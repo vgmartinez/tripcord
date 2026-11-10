@@ -58,8 +58,9 @@ func splitFrontmatter(raw []byte) (front []byte, found bool, err error) {
 //
 // A document whose only problem is a plain scalar YAML rejects (a
 // description containing ": ", or an argument hint written `[a] [b]`)
-// is read again with those scalars quoted. hooks and mcpServers are not
-// rewritten: a value for either that is not valid YAML still fails closed,
+// is read again with those scalars quoted. hooks and mcpServers, including
+// a quoted key ("hooks", 'mcpServers', "mcp-servers"), are not rewritten:
+// a value for one of them that is not valid YAML still fails closed,
 // because that is the configuration a harness would execute.
 func decodeYAML(raw []byte) (any, []string, error) {
 	value, warnings, err := decodeYAMLDocument(raw)
@@ -172,10 +173,24 @@ func yamlSyntaxError(err error) bool {
 // securityFrontmatterKeys are the frontmatter fields a harness executes.
 // A value for one of them that is not valid YAML is not quoted into a
 // string: that would hide a hook or MCP server the strict parse refused.
+// The lookup uses yamlMappingKey, so "hooks", 'hooks', and the same
+// quoted forms of mcpServers and mcp-servers abort too.
 var securityFrontmatterKeys = map[string]bool{
 	"hooks":       true,
 	"mcpServers":  true,
 	"mcp-servers": true,
+}
+
+// yamlMappingKey strips one pair of matching YAML quotes from a mapping
+// key. "hooks" and 'hooks' are then the same key as hooks.
+func yamlMappingKey(key string) string {
+	if len(key) >= 2 {
+		q := key[0]
+		if (q == '"' || q == '\'') && key[len(key)-1] == q {
+			return key[1 : len(key)-1]
+		}
+	}
+	return key
 }
 
 // repairFrontmatterScalars quotes plain scalar values that are not valid
@@ -247,7 +262,7 @@ func rewriteLooseScalar(line string) (next string, changed bool, block int, abor
 	if yamlLineOK(line) {
 		return line, false, block, false
 	}
-	if securityFrontmatterKeys[key] {
+	if securityFrontmatterKeys[yamlMappingKey(key)] {
 		return line, false, block, true
 	}
 	if trim == "" {
