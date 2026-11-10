@@ -291,6 +291,14 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 		}
 		return code
 	}
+	if !repoRoot(root) {
+		switch {
+		case opts.since != "":
+			return target.configError(stderr, errors.New("--since requires a Git repository"))
+		case opts.base != "":
+			return target.configError(stderr, errors.New("--base requires a Git repository"))
+		}
+	}
 	target.root, target.policyRoot = root, root
 	target.gitRoot = root
 	return scanTree(context.Background(), target, opts, stdout, stderr)
@@ -865,6 +873,9 @@ func scanRoot(scanPath string) (string, error) {
 		var pathErr *fs.PathError
 		if errors.As(err, &pathErr) {
 			err = pathErr.Err
+		}
+		if errors.Is(err, syscall.ELOOP) {
+			return "", fmt.Errorf("scan path %q: symbolic link loop", output.Message(foldHome(scanPath)))
 		}
 		return "", fmt.Errorf("scan path %q: %w", output.Message(foldHome(scanPath)), err)
 	}

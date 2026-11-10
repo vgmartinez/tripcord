@@ -6,8 +6,9 @@ hooks, or contacts a network service. `PATH` defaults to the current directory.
 A directory that is not a Git repository can still be scanned. A file
 outside a Git repository is an error; pass the directory that holds it.
 A file inside a repository scans that repository from its git root.
-`--since` is the only mode that requires Git. To scan a repository before
-cloning it yourself, use [`tripcord preopen`](preopen.md).
+`--since` and `--base` require a Git repository, and a scan path that is
+a symbolic-link loop is an error. To scan a repository before cloning it
+yourself, use [`tripcord preopen`](preopen.md).
 
 `--staged` reads the Git index into a private temporary tree and uses the
 staged version of each file, except when `PRE_COMMIT_FROM_REF` and
