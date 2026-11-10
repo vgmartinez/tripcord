@@ -57,9 +57,18 @@
 # program stays matched. A $ in program position is not expanded, so
 # ${X:-rm} stays matched. cd, pushd, env -C, sudo -D, sudo --chdir,
 # and any --cwd or --chdir wrapper stay matched. The one cd that is
-# followed is repo=$(git rev-parse --show-toplevel) || exit 1; cd
-# "$repo" || exit 1; exec bun run <file>, because that directory is
-# the repository root. The only dotenv
+# followed is a repository-root cd, and only when all of these hold.
+# The git command is exactly V=$(git rev-parse --show-toplevel) or
+# cd "$(git rev-parse --show-toplevel)": no other git arguments, no
+# git -C, --git-dir, or --work-tree, and no environment prefix
+# (GIT_DIR, GIT_WORK_TREE, any GIT_*, or any other VAR=) on that line
+# or exported earlier in the command. The cd uses that same variable,
+# double-quoted, and the variable is not reassigned between the
+# assignment and the cd. Between that cd and the exec there is no
+# other cd, pushd, -C, --chdir, or --cwd. The script is still
+# relative, inside the tree, has no .., and is not a symlink that
+# leaves the tree. || exit 1 after the assignment or the cd is that
+# same form. Any other variant leaves repo_script false. The only dotenv
 # names are .env, .env.local, and .env.claude. Under set -a one of
 # those does not have to be in the tree. When it is, and when the same
 # file is sourced without set -a, every line has to be blank, a

@@ -18,6 +18,9 @@ func TestRepoWrapper(t *testing.T) {
 		{[]string{"bash", "-lc", `exec "$(git rev-parse --show-toplevel)/scripts/x.sh"`}, []RepoFile{{Path: "scripts/x.sh", FromRoot: true}}},
 		{[]string{"bash", "-c", `exec "$(git rev-parse --show-toplevel)/scripts/browser-mcp.sh"`}, []RepoFile{{Path: "scripts/browser-mcp.sh", FromRoot: true}}},
 		{[]string{"sh", "-c", `repo=$(git rev-parse --show-toplevel) || exit 1; cd "$repo" || exit 1; exec bun run .claude/mcp/stella-docs.ts`}, []RepoFile{{Path: ".claude/mcp/stella-docs.ts", FromRoot: true}}},
+		{[]string{"sh", "-c", `top=$(git rev-parse --show-toplevel); cd "$top"; exec bun run scripts/good.ts`}, []RepoFile{{Path: "scripts/good.ts", FromRoot: true}}},
+		{[]string{"sh", "-c", `cd "$(git rev-parse --show-toplevel)"; exec bun run scripts/good.ts`}, []RepoFile{{Path: "scripts/good.ts", FromRoot: true}}},
+		{[]string{"sh", "-c", `cd "$(git rev-parse --show-toplevel)" || exit 1; exec bun run scripts/good.ts`}, []RepoFile{{Path: "scripts/good.ts", FromRoot: true}}},
 		{[]string{"sh", "-lc", `. ./.env && exec npx -y pkg-mcp`}, []RepoFile{{Path: ".env", Dotenv: true}}},
 		{[]string{"bash", "-c", `set -a && source .env && npx -y pkg`}, []RepoFile{{Path: ".env", Dotenv: true, DotenvOptional: true}}},
 		{[]string{"/bin/bash", "-c", `set -a && source .env.claude && set +a && npx -y @modelcontextprotocol/server-postgres "${COW_DB_URL}"`}, []RepoFile{{Path: ".env.claude", Dotenv: true, DotenvOptional: true}}},
@@ -83,6 +86,17 @@ func TestRepoWrapper(t *testing.T) {
 		{"bash", "-c", `env -C /tmp bash scripts/run.sh`},
 		{"bash", "-c", `sudo --chdir /tmp bash scripts/run.sh`},
 		{"bash", "-c", `sudo -D /tmp bash scripts/run.sh`},
+		{"sh", "-c", `repo=$(git -C x rev-parse --show-toplevel) || exit 1; cd "$repo" || exit 1; exec bun run scripts/good.ts`},
+		{"sh", "-c", `repo=$(GIT_WORK_TREE=/tmp git rev-parse --show-toplevel) || exit 1; cd "$repo" || exit 1; exec bun run scripts/good.ts`},
+		{"sh", "-c", `repo=$(git rev-parse --show-toplevel) || exit 1; cd "$repo/.." || exit 1; exec bun run scripts/good.ts`},
+		{"sh", "-c", `repo=$(git rev-parse --show-toplevel) || exit 1; cd "$other" || exit 1; exec bun run scripts/good.ts`},
+		{"sh", "-c", `repo=$(git rev-parse --show-toplevel); repo=/tmp; cd "$repo"; exec bun run scripts/good.ts`},
+		{"sh", "-c", `repo=$(git rev-parse --show-toplevel); cd "$repo"; cd sub; exec bun run scripts/good.ts`},
+		{"sh", "-c", `export GIT_DIR=/tmp; repo=$(git rev-parse --show-toplevel); cd "$repo"; exec bun run scripts/good.ts`},
+		{"sh", "-c", `FOO=1; repo=$(git rev-parse --show-toplevel); cd "$repo"; exec bun run scripts/good.ts`},
+		{"sh", "-c", `repo=$(git rev-parse --show-toplevel); cd $repo; exec bun run scripts/good.ts`},
+		{"sh", "-c", `repo=$(git rev-parse --show-toplevel); cd "$repo"; exec bun --cwd sub run scripts/good.ts`},
+		{"sh", "-c", `cd $(git rev-parse --show-toplevel); exec bun run scripts/good.ts`},
 	}
 	for _, argv := range no {
 		if files, good := RepoWrapper(argv); good {

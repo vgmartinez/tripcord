@@ -84,10 +84,20 @@ list (`rm`, `notes-mcp`, `evil-mcp "$TOKEN"`), a `$` in program
 position (`${X:-rm}`, which is not rewritten to its default), the
 same loader written with newlines, `cd` or `pushd` before a relative
 script, and `env -C`, `sudo -D`, `sudo --chdir`, or any `--cwd` or
-`--chdir` wrapper. The one `cd` that is followed is
-`repo=$(git rev-parse --show-toplevel) || exit 1; cd "$repo" || exit 1; exec bun run <file>`,
-because that directory is the repository root and the path is resolved
-from that root.
+`--chdir` wrapper. The one `cd` that is followed is a repository-root
+`cd`, and only when all of these hold: the git command is exactly
+`V=$(git rev-parse --show-toplevel)` or
+`cd "$(git rev-parse --show-toplevel)"`, with no other git arguments,
+no `git -C`, `--git-dir`, or `--work-tree`, and no environment prefix
+(`GIT_DIR`, `GIT_WORK_TREE`, any `GIT_*`, or any other `VAR=`) on that
+line or exported earlier in the command; the `cd` uses that same
+variable, double-quoted, and the variable is not reassigned between
+the assignment and the `cd`; between that `cd` and the exec there is
+no other `cd`, `pushd`, `-C`, `--chdir`, or `--cwd`; and the script is
+still relative, inside the tree, has no `..`, and is not a symlink
+that leaves the tree. `|| exit 1` after the assignment or the `cd` is
+that same form. Any other variant stays a finding. The path is
+resolved from the repository root.
 
 The only dotenv names are `.env`, `.env.local`, and `.env.claude`.
 Under `set -a` one of those may be absent. When the file is in the

@@ -54,7 +54,20 @@ Not reported:
   `powershell -File ./scripts/start.ps1`, or a short loader whose last
   command is one known launcher (`set -a && source .env && npx -y pkg`).
   The signal checks the script's location. A script inside the tree is
-  not inspected for content. The launchers that may name no file are
+  not inspected for content. The one `cd` that is followed is a
+  repository-root `cd`, and only when all of these hold: the git
+  command is exactly `V=$(git rev-parse --show-toplevel)` or
+  `cd "$(git rev-parse --show-toplevel)"`, with no other git
+  arguments, no `git -C`, `--git-dir`, or `--work-tree`, and no
+  environment prefix (`GIT_DIR`, `GIT_WORK_TREE`, any `GIT_*`, or any
+  other `VAR=`) on that line or exported earlier in the command; the
+  `cd` uses that same variable, double-quoted, and the variable is
+  not reassigned between the assignment and the `cd`; between that
+  `cd` and the exec there is no other `cd`, `pushd`, `-C`,
+  `--chdir`, or `--cwd`; and the script is still relative, inside the
+  tree, has no `..`, and is not a symlink that leaves the tree.
+  `|| exit 1` after the assignment or the `cd` is that same form.
+  Any other variant stays matched. The launchers that may name no file are
   `npx`, `bunx`, `uvx`, `uv`, `pipx`, `pnpm dlx`, `yarn dlx`,
   `npm exec`, `npm dlx`, and `bun x`.
   The only dotenv names are `.env`, `.env.local`, and `.env.claude`.
@@ -90,10 +103,21 @@ Not reported:
   `--cwd` or `--chdir` wrapper stay matched. A relative script after
   `cd` is not resolved against the directory the shell enters, so a
   decoy script at the repository root does not hide `bash run.sh` or
-  `./run.sh`. The one `cd`
-  that is followed is `repo=$(git rev-parse --show-toplevel) || exit 1;
-  cd "$repo" || exit 1; exec bun run <file>`: that directory is the
-  repository root, and the path is resolved from that root.
+  `./run.sh`. The one `cd` that is followed is a repository-root
+  `cd`, and only when all of these hold: the git command is exactly
+  `V=$(git rev-parse --show-toplevel)` or
+  `cd "$(git rev-parse --show-toplevel)"`, with no other git
+  arguments, no `git -C`, `--git-dir`, or `--work-tree`, and no
+  environment prefix (`GIT_DIR`, `GIT_WORK_TREE`, any `GIT_*`, or any
+  other `VAR=`) on that line or exported earlier in the command; the
+  `cd` uses that same variable, double-quoted, and the variable is
+  not reassigned between the assignment and the `cd`; between that
+  `cd` and the exec there is no other `cd`, `pushd`, `-C`,
+  `--chdir`, or `--cwd`; and the script is still relative, inside the
+  tree, has no `..`, and is not a symlink that leaves the tree.
+  `|| exit 1` after the assignment or the `cd` is that same form.
+  Any other variant stays matched. The path is resolved from the
+  repository root.
 - A `$` in program position is not expanded. `${X:-rm}` stays matched.
   `rm`, `notes-mcp`, and `evil-mcp "$TOKEN"` stay matched, including
   when the loader is separated by newlines.

@@ -130,41 +130,197 @@ func gitExec(payload string) ([]RepoFile, bool) {
 	return []RepoFile{{Path: rel, FromRoot: true}}, true
 }
 
-// gitAssignChain is the committed-script form
+// gitAssignChain is the one cd that is followed: a repository-root cd
+// and then exec bun run of a relative file. It is quiet only when
+// every one of these holds.
 //
-//	repo=$(git rev-parse --show-toplevel) || exit 1; cd "$repo" || exit 1; exec bun run <file>
-//
-// The same line with any other substitution, or any extra command, is
-// not this form. <file> is returned so a missing file stays a finding.
+// The git command is exactly V=$(git rev-parse --show-toplevel) or
+// cd "$(git rev-parse --show-toplevel)". No other git arguments, no
+// git -C, --git-dir, or --work-tree, and no environment prefix
+// (GIT_DIR, GIT_WORK_TREE, any GIT_*, or any other VAR=) on that line
+// or in an earlier command. The cd uses that same variable,
+// double-quoted, and the variable is not reassigned after the
+// assignment. Between that cd and the exec there is no other cd,
+// pushd, -C, --chdir, or --cwd. || exit 1 after the assignment or the
+// cd is the same form. Any other variant is not.
 func gitAssignChain(payload string) ([]RepoFile, bool) {
 	toks, subs := lex(payload, false)
 	if len(subs) != 1 || !gitTop(subs[0]) {
 		return nil, false
 	}
 	cmds := split(toks)
-	if len(cmds) != 5 {
-		return nil, false
-	}
-	seps := []string{"||", ";", "||", ";", ""}
-	for i, c := range cmds {
-		if c.pipeIn || c.depth != 0 || c.sep != seps[i] {
+	for _, c := range cmds {
+		if c.pipeIn || c.depth != 0 {
 			return nil, false
 		}
 	}
-	if len(cmds[0].words) != 1 || cmds[0].words[0] != "repo="+subst {
+	gitAt := -1
+	name := ""
+	for i, c := range cmds {
+		if !cmdHasSubst(c) {
+			continue
+		}
+		if gitAt >= 0 {
+			return nil, false
+		}
+		gitAt = i
+		switch {
+		case len(c.words) == 1:
+			n, ok := assignVar(c.words[0])
+			if !ok {
+				return nil, false
+			}
+			name = n
+		case len(c.words) == 2 && c.words[0] == "cd" && c.words[1] == subst:
+			if !strings.Contains(payload, `cd "$(git rev-parse --show-toplevel)"`) {
+				return nil, false
+			}
+		default:
+			return nil, false
+		}
+	}
+	if gitAt < 0 || envBefore(cmds[:gitAt]) {
 		return nil, false
 	}
-	if !exitOne(cmds[1].words) || !exitOne(cmds[3].words) {
+	cdAt := gitAt
+	if name != "" {
+		next, ok := skipExit(cmds, gitAt)
+		if !ok || next >= len(cmds) || !quotedVarCD(payload, cmds[next], name) {
+			return nil, false
+		}
+		cdAt = next
+	}
+	execAt, ok := skipExit(cmds, cdAt)
+	if !ok || execAt != len(cmds)-1 || cmds[execAt].sep != "" {
 		return nil, false
 	}
-	if len(cmds[2].words) != 2 || cmds[2].words[0] != "cd" || (cmds[2].words[1] != "$repo" && cmds[2].words[1] != "${repo}") {
-		return nil, false
+	if name != "" {
+		for _, c := range cmds[gitAt+1:] {
+			if assignsName(c, name) {
+				return nil, false
+			}
+		}
 	}
-	w, ok := repoUnwrap(cmds[4].words)
-	if !ok {
+	for _, c := range cmds[cdAt+1:] {
+		if dirShift(c.words) {
+			return nil, false
+		}
+	}
+	w, ok := repoUnwrap(cmds[execAt].words)
+	if !ok || dirShift(w) {
 		return nil, false
 	}
 	return bunRun(w)
+}
+
+func cmdHasSubst(c command) bool {
+	for _, w := range c.words {
+		if strings.Contains(w, subst) {
+			return true
+		}
+	}
+	return false
+}
+
+func assignVar(word string) (string, bool) {
+	name, ok := strings.CutSuffix(word, "="+subst)
+	if !ok || !shellIdent(name) {
+		return "", false
+	}
+	return name, true
+}
+
+func shellIdent(name string) bool {
+	if name == "" {
+		return false
+	}
+	for i := 0; i < len(name); i++ {
+		c := name[i]
+		switch {
+		case c == '_' || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'):
+		case i > 0 && c >= '0' && c <= '9':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func quotedVarCD(payload string, c command, name string) bool {
+	if len(c.words) != 2 || c.words[0] != "cd" {
+		return false
+	}
+	switch c.words[1] {
+	case "$" + name:
+		return strings.Contains(payload, `cd "$`+name+`"`)
+	case "${" + name + "}":
+		return strings.Contains(payload, `cd "${`+name+`}"`)
+	default:
+		return false
+	}
+}
+
+func assignsName(c command, name string) bool {
+	prefix := name + "="
+	for _, w := range c.words {
+		if isAssignment(w) && strings.HasPrefix(w, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// envBefore reports an export or assignment before the git command.
+// The V= substitution itself is not in this prefix.
+func envBefore(cmds []command) bool {
+	for _, c := range cmds {
+		if len(c.words) > 0 && (c.words[0] == "export" || progName(c.words[0]) == "env") {
+			return true
+		}
+		for _, w := range c.words {
+			if isAssignment(w) || strings.HasPrefix(w, "GIT_") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// skipExit moves past an optional "|| exit 1" onto the next command.
+func skipExit(cmds []command, i int) (int, bool) {
+	if i < 0 || i >= len(cmds) {
+		return 0, false
+	}
+	sep := cmds[i].sep
+	i++
+	if sep == "||" {
+		if i >= len(cmds) || !exitOne(cmds[i].words) {
+			return 0, false
+		}
+		sep = cmds[i].sep
+		i++
+	}
+	if sep != ";" && sep != "" {
+		return 0, false
+	}
+	return i, true
+}
+
+// dirShift reports a directory change after the repository-root cd.
+func dirShift(words []string) bool {
+	for _, w := range words {
+		if progName(w) == "cd" || progName(w) == "pushd" {
+			return true
+		}
+		switch w {
+		case "-C", "--chdir", "--cwd":
+			return true
+		}
+		if strings.HasPrefix(w, "--chdir=") || strings.HasPrefix(w, "--cwd=") {
+			return true
+		}
+	}
+	return false
 }
 
 func bunRun(w []string) ([]RepoFile, bool) {
@@ -544,6 +700,9 @@ func interpreter(name string) bool {
 }
 
 func gitTop(sub string) bool {
+	if strings.ContainsAny(sub, "=\n;&|<>`$") || strings.Contains(sub, "--git-dir") || strings.Contains(sub, "--work-tree") {
+		return false
+	}
 	f := strings.Fields(sub)
 	return len(f) == 3 && f[0] == "git" && f[1] == "rev-parse" && f[2] == "--show-toplevel"
 }
