@@ -676,11 +676,15 @@ jobs:
     name: rule id registry
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read # checkout the head tree and the base commit
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # The base commit has to be in this clone. registrycheck is
+          # built from that commit, not from this checkout.
           fetch-depth: 0
 
       - name: Setup Go
@@ -689,11 +693,20 @@ jobs:
           go-version-file: go.mod
           cache: false
 
+      # The checker binary is built from the base commit, in its own
+      # worktree, and that binary judges the head tree. This checkout's
+      # copy of internal/tools/registrycheck is not compiled.
+      # pull_request uses the pull request base SHA. A push to main uses
+      # the previous tip (the parent of the pushed range), so the commits
+      # just pushed do not supply the checker. A push with no previous
+      # commit (an all-zeros before) uses the merge-base of the default
+      # branch, the same commit the registry comparison uses. That is the
+      # only tree that exists, so the pushed commit itself is the checker
+      # only in that case. A pull request whose base is the checked-out
+      # head fails instead of building that head.
       # The base must be readable: a missing base fails instead of
-      # comparing with an empty registry. A push with no previous commit
-      # (an all-zeros before) compares with the merge-base of the
-      # default branch. A base that predates rules/REGISTRY compares with
-      # an empty registry.
+      # comparing with an empty registry. A base that predates
+      # rules/REGISTRY compares with an empty registry.
       - name: Registry is append-only
         env:
           EVENT_NAME: ${{ github.event_name }}
@@ -727,10 +740,27 @@ jobs:
               exit 1
               ;;
           esac
+          if [[ ! "$base" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "::error::base commit ${base} is not a full SHA"
+            exit 1
+          fi
           if ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
             echo "::error::base commit ${base} is not readable; cannot check the registry"
             exit 1
           fi
+          headsha=$(git rev-parse HEAD)
+          if [ "$base" = "$headsha" ]; then
+            if [ "$EVENT_NAME" = "pull_request" ]; then
+              echo "::error::registrycheck base SHA is the checked-out head; refusing to build the checker from it"
+              exit 1
+            fi
+            echo "No parent commit; the pushed commit is the only tree, so registrycheck is built from it."
+          fi
+          src="${RUNNER_TEMP}/registrycheck-base"
+          rm -rf "$src"
+          git worktree prune
+          git worktree add --detach "$src" "$base"
+          go build -C "$src" -o "${RUNNER_TEMP}/registrycheck" ./internal/tools/registrycheck
           old="$RUNNER_TEMP/REGISTRY.base"
           : > "$old"
           if git cat-file -e "${base}:rules/REGISTRY" 2>/dev/null; then
@@ -738,7 +768,7 @@ jobs:
           else
             echo "Base ${base} has no rules/REGISTRY; comparing with an empty registry."
           fi
-          go run ./internal/tools/registrycheck "$old" rules/REGISTRY
+          "${RUNNER_TEMP}/registrycheck" "$old" rules/REGISTRY
 
   zizmor:
     name: zizmor
