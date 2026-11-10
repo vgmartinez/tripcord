@@ -47,6 +47,14 @@ Not reported:
 - A shell wrapper around one simple launch:
   `cmd /c npx -y pkg`, `bash -lc 'uvx pkg'`,
   `sh -c 'cd sdk && exec tool mcp'`.
+- A repository server whose command is a shell wrapper around a file
+  that resolves inside the scanned tree (`config.repo_script`):
+  `bash scripts/run.sh`, `bash ${CLAUDE_PLUGIN_ROOT}/scripts/launch`,
+  `bash -c 'exec "$(git rev-parse --show-toplevel)/scripts/x.sh"'`,
+  `powershell -File ./scripts/start.ps1`, or a short loader whose last
+  command is one launcher (`set -a && source .env && npx -y pkg`,
+  including a dotenv that is not committed). A plain `$NAME` or
+  `${NAME}` in a launcher argument is still that wrapper.
 
 ## Limits
 
@@ -66,9 +74,12 @@ Not reported:
   `shell.risks` treats as downloaders) is not simple. The shell stays
   matched. A `|` inside ordinary POSIX quotes is not itself a pipe
   (`echo 'a|b'`).
-- `bash script.sh` is not rewritten. The rule does not look at the
-  filesystem, so it cannot tell a committed script from any other path.
-- PowerShell is not unwrapped. `-Command` and `-File` stay matched.
+- `bash script.sh` stays matched when that script is missing from the
+  scanned tree, leaves it through `..` or an absolute path, or is a
+  symlink that resolves outside it. The same is true of a fetched
+  script and of `powershell -Command` or `-EncodedCommand`.
+  `powershell -File` of a script that resolves inside the tree does
+  not match.
 
 ## Examples
 

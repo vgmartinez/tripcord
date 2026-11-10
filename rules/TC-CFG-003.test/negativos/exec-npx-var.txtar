@@ -1,0 +1,9 @@
+-- .cursor/mcp.json --
+{
+  "mcpServers": {
+    "helper": {
+      "command": "sh",
+      "args": ["-lc", "exec npx -y dbhub --dsn \"postgresql://$POSTGRES_USER:$POSTGRES_PASSWORD@localhost/$POSTGRES_DB\""]
+    }
+  }
+}

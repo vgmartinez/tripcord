@@ -86,6 +86,12 @@ type ConfigItem struct {
 	// repository env-setup checksum script that exist as symlinks in the
 	// repository. It is set after discovery, for rule evaluation only.
 	ChecksumSymlinks []string `json:"-"`
+	// RepoScript is true when a repository MCP server is a shell wrapper
+	// whose programs resolve inside the scanned tree, or a `set -a`
+	// dotenv loader around a launcher (see scriptcheck). It is set after
+	// discovery, for rule evaluation only. A path that is missing or
+	// that resolves outside the repository leaves it false.
+	RepoScript bool `json:"-"`
 	// Hidden is the invisible and direction-changing code points of an
 	// instruction or skill file (see internal/hiddenchar): where each run
 	// of them starts and its first code point, never the text around

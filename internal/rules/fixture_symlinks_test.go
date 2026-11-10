@@ -22,6 +22,7 @@ type fixtureSymlink struct {
 }
 
 var fixtureSymlinks = []fixtureSymlink{
+	{"TC-CFG-003.test/positivos/bash-script-symlink-outside", "scripts/run.sh", "/etc/passwd"},
 	{"TC-CFG-006.test/negativos/claude-symlink-inside", "scripts/x.sh", "real.sh"},
 	{"TC-CFG-009.test/negativos/devin-assignment-dot-path-keeps-checksum", "sub/t.sh.sha256", "inside-link-target"},
 	{"TC-CFG-009.test/negativos/devin-cp-dot-keeps-checksum", "sub/t.sh.sha256", "inside-link-target"},
