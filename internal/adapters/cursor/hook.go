@@ -29,6 +29,8 @@ type hookInput struct {
 	ConversationID string         `json:"conversation_id"`
 	HookEventName  string         `json:"hook_event_name"`
 	CursorVersion  string         `json:"cursor_version"`
+	Cwd            string         `json:"cwd"`
+	WorkspaceRoots []string       `json:"workspace_roots"`
 	ToolName       string         `json:"tool_name"`
 	ToolInput      map[string]any `json:"tool_input"`
 	Command        *string        `json:"command"`
@@ -48,11 +50,16 @@ func ParseHookInput(event string, data []byte, now time.Time) (model.Event, erro
 	if in.HookEventName != name {
 		return model.Event{}, hook.Inputf("cursor: hook_event_name is not %s", name)
 	}
+	dir := in.Cwd
+	if dir == "" && len(in.WorkspaceRoots) > 0 {
+		dir = in.WorkspaceRoots[0]
+	}
 	call := hook.Call{
 		Harness:   model.HarnessCursor,
 		Origin:    "hook:" + name,
 		SessionID: in.ConversationID,
 		Version:   in.CursorVersion,
+		Dir:       dir,
 	}
 	switch event {
 	case hook.EventPreTool:

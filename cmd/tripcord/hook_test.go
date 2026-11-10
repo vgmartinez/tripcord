@@ -29,7 +29,7 @@ custom:
     deny_if: 'event.command != "" && "pipe" in shell.risks(event.command)'
     message: piping a download into a shell is not allowed
   - id: ACME-002
-    deny_if: 'event.paths.exists(p, p.endsWith("/.env"))'
+    deny_if: 'event.paths.exists(p, p.lowerAscii().endsWith("/.env"))'
     message: reading .env is not allowed
 `
 
@@ -93,6 +93,37 @@ func cursorDeny(reason string) string {
 func jsonString(s string) string {
 	raw, _ := json.Marshal(s)
 	return string(raw)
+}
+
+// TestHookEnvPathEvasions checks the documented .env rule against the
+// paths that a raw endsWith("/.env") comparison misses: a relative
+// name, a different case, and a trailing slash. A neighboring file is
+// still allowed.
+func TestHookEnvPathEvasions(t *testing.T) {
+	root := hookProject(t, hookTestPolicy)
+	for _, tc := range []struct {
+		name, path string
+		deny       bool
+	}{
+		{name: "relative", path: ".env", deny: true},
+		{name: "upper", path: ".ENV", deny: true},
+		{name: "trailing slash", path: "/abs/.env/", deny: true},
+		{name: "neighbor", path: ".env.bak", deny: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			raw := fmt.Sprintf(`{"hook_event_name":"PreToolUse","tool_name":"Read","cwd":%q,"tool_input":{"file_path":%q}}`, root, tc.path)
+			code, stdout, stderr := runHookCLI(t, strings.NewReader(raw), "--harness", "claude", "--event", hook.EventPreTool)
+			if tc.deny {
+				if code != int(exitcode.Block) || stderr != envReason+"\n" {
+					t.Fatalf("exit %d stdout %q stderr %q", code, stdout, stderr)
+				}
+				return
+			}
+			if code != int(exitcode.OK) || strings.Contains(stderr, "blocked") {
+				t.Fatalf("exit %d stdout %q stderr %q", code, stdout, stderr)
+			}
+		})
+	}
 }
 
 // TestHookContract runs each harness's recorded hook input through
