@@ -19,6 +19,16 @@
 // It also reads, for each repository env-setup entry, the committed sums
 // files its sha256sum -c checks name, so TC-CFG-009 can tell a checked
 // download from one checked against a file nobody committed.
+//
+// For a repository MCP server it sets RepoScript when the command is a
+// shell wrapper around files that stay inside the tree, or a set -a
+// dotenv loader around a launcher (see shellcmd.RepoWrapper). A missing
+// script, or a symlink that leaves the tree, leaves RepoScript false.
+// A sourced .env, .env.local, or .env.claude under set -a may be
+// absent. One that is present, with or without set -a, stays quiet
+// only when it is a regular file of at most 64 KiB inside the tree
+// and every line is blank, a comment, or a strict KEY=VALUE. Any
+// other sourced path has to be in the tree, and its bytes are not read.
 package scriptcheck
 
 import (
@@ -28,6 +38,7 @@ import (
 	"path"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/vgmartinez/tripcord/internal/model"
@@ -53,6 +64,10 @@ func Annotate(root string, items []model.ConfigItem) error {
 	}
 	for i := range items {
 		item := &items[i]
+		item.RepoScript = false
+		if item.Kind == model.ConfigKindMCPServer && item.Scope == model.ScopeRepo {
+			item.RepoScript = repoScriptReady(resolvedRoot, *item)
+		}
 		if item.Kind != model.ConfigKindHook || item.Scope != model.ScopeRepo {
 			continue
 		}
@@ -163,7 +178,183 @@ func ItemReferencedPaths(item model.ConfigItem) []string {
 			add(name)
 		}
 	}
+	for _, rel := range repoScriptPaths(item) {
+		add(rel)
+	}
 	return out
+}
+
+// repoScriptReady reports whether item is a repository MCP wrapper whose
+// referenced files all resolve inside root. A wrapper that names no
+// file (a launcher with only plain parameters) is ready on the shape
+// alone. A set -a dotenv may be absent; a present one has to be a
+// strict dotenv. A path that cannot be cleaned stays a finding.
+func repoScriptReady(root string, item model.ConfigItem) bool {
+	argv, ok := mcpArgv(item)
+	if !ok {
+		return false
+	}
+	files, good := shellcmd.RepoWrapper(argv)
+	if !good {
+		return false
+	}
+	for _, f := range files {
+		rel, ok := repoScriptRel(item.Path, f)
+		if !ok {
+			return false
+		}
+		if f.Dotenv {
+			if !dotenvAllows(root, rel, f.DotenvOptional) {
+				return false
+			}
+			continue
+		}
+		class, missing := lookupScript(root, rel)
+		if missing || class != "" {
+			return false
+		}
+	}
+	return true
+}
+
+// repoScriptPaths returns the repository-relative files a repository
+// MCP wrapper names, including ones the tree does not contain.
+func repoScriptPaths(item model.ConfigItem) []string {
+	if item.Kind != model.ConfigKindMCPServer || item.Scope != model.ScopeRepo {
+		return nil
+	}
+	argv, ok := mcpArgv(item)
+	if !ok {
+		return nil
+	}
+	files, good := shellcmd.RepoWrapper(argv)
+	if !good {
+		return nil
+	}
+	var out []string
+	for _, f := range files {
+		rel, ok := repoScriptRel(item.Path, f)
+		if !ok {
+			continue
+		}
+		out = append(out, rel)
+	}
+	return out
+}
+
+// repoScriptRel joins f onto the directory the wrapper runs it from.
+func repoScriptRel(itemPath string, f shellcmd.RepoFile) (string, bool) {
+	var rel string
+	switch {
+	case f.FromRoot:
+		rel = f.Path
+	case f.Beside:
+		rel = path.Join(path.Dir(itemPath), f.Path)
+	default:
+		rel = path.Join(scriptBase(itemPath), f.Path)
+	}
+	return cleanRepoRelative(rel)
+}
+
+// scriptBase is the directory a nested config's relative script is
+// resolved from. A config at the repository root, or one level inside
+// a harness directory, uses the repository root.
+func scriptBase(itemPath string) string {
+	dir := path.Dir(itemPath)
+	switch dir {
+	case ".", ".claude", ".cursor", ".github", ".windsurf", ".devin", ".codex", ".gemini", ".agents", ".vscode":
+		return ""
+	default:
+		return dir
+	}
+}
+
+// mcpArgv is the command TC-CFG-003 reads: command plus args, or
+// OpenCode's command array. A non-stdio server and an unreadable arg
+// are not a wrapper.
+func mcpArgv(item model.ConfigItem) ([]string, bool) {
+	payload := decode(item)
+	if payload == nil {
+		return nil, false
+	}
+	if t, ok := payload["type"].(string); ok && t != "" && t != "stdio" && t != "local" {
+		return nil, false
+	}
+	switch cmd := payload["command"].(type) {
+	case string:
+		args, ok := mcpArgs(payload["args"])
+		if !ok {
+			return nil, false
+		}
+		return append([]string{cmd}, args...), true
+	case []any:
+		if item.Harness != model.HarnessOpenCode {
+			return nil, false
+		}
+		out := make([]string, 0, len(cmd))
+		for _, a := range cmd {
+			s, ok := a.(string)
+			if !ok {
+				return nil, false
+			}
+			out = append(out, s)
+		}
+		return out, len(out) > 0
+	default:
+		return nil, false
+	}
+}
+
+// mcpArgs reads an MCP args list. A missing list is empty. A value the
+// rule cannot read is not ok, so the wrapper stays a finding.
+func mcpArgs(v any) ([]string, bool) {
+	if v == nil {
+		return nil, true
+	}
+	list, ok := v.([]any)
+	if !ok {
+		return nil, false
+	}
+	out := make([]string, 0, len(list))
+	for _, a := range list {
+		s, ok := mcpArg(a)
+		if !ok {
+			return nil, false
+		}
+		out = append(out, s)
+	}
+	return out, true
+}
+
+func mcpArg(v any) (string, bool) {
+	switch a := v.(type) {
+	case string:
+		return a, true
+	case bool:
+		if a {
+			return "true", true
+		}
+		return "false", true
+	case float64:
+		if a == float64(int64(a)) {
+			return strconv.FormatInt(int64(a), 10), true
+		}
+		return strconv.FormatFloat(a, 'f', -1, 64), true
+	case json.Number:
+		return a.String(), true
+	case []any:
+		parts := make([]string, 0, len(a))
+		for _, el := range a {
+			s, ok := mcpArg(el)
+			if !ok {
+				return "", false
+			}
+			parts = append(parts, s)
+		}
+		return strings.Join(parts, ","), true
+	default:
+		return "", false
+	}
 }
 
 // cleanRepoRelative cleans a referenced path the way ReferencedPaths and

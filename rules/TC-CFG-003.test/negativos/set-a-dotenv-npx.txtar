@@ -1,0 +1,9 @@
+-- .mcp.json --
+{
+  "mcpServers": {
+    "helper": {
+      "command": "bash",
+      "args": ["-c", "set -a && source .env && set +a && npx -y pkg-mcp"]
+    }
+  }
+}

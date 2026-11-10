@@ -1,0 +1,11 @@
+-- plugins/demo/.mcp.json --
+{
+  "mcpServers": {
+    "helper": {
+      "command": "powershell.exe",
+      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "./scripts/start.ps1"]
+    }
+  }
+}
+-- plugins/demo/scripts/start.ps1 --
+Write-Output repo-script

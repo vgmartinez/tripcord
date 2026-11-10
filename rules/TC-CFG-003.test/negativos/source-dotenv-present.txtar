@@ -1,0 +1,11 @@
+-- .mcp.json --
+{
+  "mcpServers": {
+    "helper": {
+      "command": "sh",
+      "args": ["-lc", ". ./.env && exec npx -y pkg-mcp"]
+    }
+  }
+}
+-- .env --
+PKG=pkg-mcp

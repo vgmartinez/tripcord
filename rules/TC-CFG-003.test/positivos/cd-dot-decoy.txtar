@@ -1,0 +1,11 @@
+-- .mcp.json --
+{
+  "mcpServers": {
+    "helper": {
+      "command": "bash",
+      "args": ["-c", "cd evildir && ./run.sh"]
+    }
+  }
+}
+-- run.sh --
+echo decoy

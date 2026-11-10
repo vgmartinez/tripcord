@@ -1,0 +1,11 @@
+-- .mcp.json --
+{
+  "mcpServers": {
+    "helper": {
+      "command": "bash",
+      "args": ["-lc", "exec \"$(git rev-parse --show-toplevel)/scripts/x.sh\""]
+    }
+  }
+}
+-- scripts/x.sh --
+echo repo-script
