@@ -321,8 +321,8 @@ func curlFlagAt(s string, i int) (string, bool) {
 // one string. An unquoted header that contains ":" continues through the
 // following words, so "Authorization: Bearer $TOKEN" is one value. The
 // walk stops at the next flag, at an http(s) URL (which the URL pass
-// still has to see), and at &&, ||, |, ;, or the end of a clause, so
-// the next command stays in the clause.
+// still has to see), and at a shell operator or a command substitution
+// that follows the value, so the next command stays in the clause.
 func consumeCurlValue(s string, i int, flag string) int {
 	for i < len(s) && (s[i] == ' ' || s[i] == '\t') {
 		i++
@@ -385,17 +385,20 @@ func consumeHeaderTail(s string, i int) int {
 	}
 }
 
-// headerStop reports a shell separator or a prose period at k. '.' ends
-// a clause only when a space or the end of the string follows it, so
-// '.env' is not a stop.
+// headerStop reports a shell control operator or a following command
+// substitution at k. '&' covers a background command and '&&'. '|'
+// covers '|', '||', and '|&'. '$(' , a backtick, and '<(' end the value
+// only when they start a substitution, so '$TOKEN' stays inside it.
+// '.' ends a clause only when a space or the end of the string follows
+// it, so '.env' is not a stop.
 func headerStop(s string, k int) bool {
 	switch s[k] {
-	case '&':
-		return k+1 < len(s) && s[k+1] == '&'
-	case '|', ';':
+	case '&', '|', ';', '\n', '`':
 		return true
+	case '$', '<':
+		return k+1 < len(s) && s[k+1] == '('
 	case '.':
-		return k+1 == len(s) || s[k+1] == ' ' || s[k+1] == '\t'
+		return k+1 == len(s) || s[k+1] == ' ' || s[k+1] == '\t' || s[k+1] == '\n'
 	default:
 		return false
 	}
@@ -418,10 +421,11 @@ func instructionHasLocalPath(tail string) bool {
 		if word == "" {
 			return false
 		}
-		// Trim quotes and trailing punctuation only. strings.Trim would
-		// also drop the leading dot, and .env would no longer match.
-		word = strings.TrimLeft(word, "`'\"")
-		word = strings.TrimRight(word, "`'\".,);")
+		// Trim quotes, opening parentheses and brackets, and trailing
+		// punctuation. strings.Trim would also drop the leading dot,
+		// and .env would no longer match.
+		word = strings.TrimLeft(word, "`'\"([{")
+		word = strings.TrimRight(word, "`'\".,);]}")
 		if instructionLocalPath.MatchString(word) {
 			return true
 		}

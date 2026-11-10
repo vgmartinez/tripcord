@@ -2,6 +2,7 @@ package rules
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/vgmartinez/tripcord/internal/model"
@@ -190,6 +191,14 @@ func TestInstructionMatchLine(t *testing.T) {
 		"curl header then pipe source":  {`curl -H Authorization: Bearer $TOKEN | source .env`, 1},
 		"curl header then semicolon":    {`curl -H Authorization: Bearer $TOKEN; source .env`, 1},
 		"quoted header then and source": {`curl -H "Authorization: Bearer $TOKEN" && source .env`, 1},
+		"curl header then background":   {`curl -H Authorization: Bearer $TOKEN & source .env`, 1},
+		"curl header background glued":  {`curl -H Authorization: Bearer $TOKEN&source .env`, 1},
+		"curl header background tabs":   {"curl -H Authorization: Bearer $TOKEN\t&\tsource\t.env", 1},
+		"curl header then subst":        {`curl -H Authorization: Bearer $TOKEN $(cat .env)`, 1},
+		"curl header then backtick":     {"curl -H Authorization: Bearer $TOKEN `cat .env`", 1},
+		"credentials come from paren":   {"Source credentials come from (.env)", 1},
+		"credentials come from quoted":  {`Source credentials come from "(.env)"`, 1},
+		"credentials come from bracket": {"Source credentials come from [.env]", 1},
 		"source creds origin":           {"- Source credentials for the `bteq` run come from the configured `source_connection` (Teradata).", 0},
 		"source dotenv prod":            {"Source `.env.production` before running the app locally.", 1},
 		"source creds from dotenv":      {"Source the credentials from .env", 1},
@@ -203,6 +212,55 @@ func TestInstructionMatchLine(t *testing.T) {
 				t.Fatalf("instructionMatchLine(%q) = %d, want %d", test.content, got, test.want)
 			}
 		})
+	}
+}
+
+// TestUnquotedHeaderTailStopsAtShellOperators checks that an unquoted
+// header value ends at every shell operator and at a command
+// substitution after the value. Each stop is tried with a space, with
+// no space, and with a tab. A newline is one of the operators, so that
+// row matches on the following line.
+func TestUnquotedHeaderTailStopsAtShellOperators(t *testing.T) {
+	stops := []struct {
+		name string
+		op   string
+		rest string
+	}{
+		{"amp", "&", "source .env"},
+		{"and", "&&", "source .env"},
+		{"pipe", "|", "source .env"},
+		{"or", "||", "source .env"},
+		{"pipeamp", "|&", "source .env"},
+		{"semi", ";", "source .env"},
+		{"newline", "\n", "source .env"},
+		{"subst", "$(", "cat .env)"},
+		{"backtick", "`", "cat .env`"},
+		{"proc", "<(", "cat .env)"},
+	}
+	gaps := []struct {
+		name string
+		gap  string
+	}{
+		{"spaces", " "},
+		{"nospace", ""},
+		{"tabs", "\t"},
+	}
+	for _, stop := range stops {
+		for _, gap := range gaps {
+			content := "curl -H Authorization: Bearer $TOKEN" + gap.gap + stop.op + gap.gap + stop.rest
+			t.Run(stop.name+"/"+gap.name, func(t *testing.T) {
+				want := 1
+				if strings.Contains(content, "\n") {
+					want = 2
+				}
+				if got := instructionMatchLine(content); got != want {
+					t.Fatalf("instructionMatchLine(%q) = %d, want %d", content, got, want)
+				}
+				if got := stripInstructionCurlNoise(content); !strings.Contains(got, ".env") {
+					t.Fatalf("stripInstructionCurlNoise(%q) = %q, want .env kept", content, got)
+				}
+			})
+		}
 	}
 }
 
