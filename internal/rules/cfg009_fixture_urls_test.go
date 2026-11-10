@@ -7,6 +7,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -78,14 +79,73 @@ func cfg009URLProblem(s string) string {
 	}
 }
 
+// cfg009MaxUnescape is how many percent-encoding layers the guard peels
+// after the one url.Parse already decoded. A path still encoded past that
+// fails closed.
+const cfg009MaxUnescape = 4
+
 // cfg009OwnerProblem checks the owner segment, at index i of the slash-split
-// path, as written and after dot segments resolve.
+// path, as written and after dot segments resolve, at every percent-decoding
+// layer. %252e%252e is ".." once a server decodes it twice, and path.Clean
+// only resolves it after the guard decodes it.
 func cfg009OwnerProblem(p string, i int) string {
-	for _, form := range []string{p, path.Clean(p)} {
-		parts := strings.Split(form, "/")
-		if len(parts) <= i || parts[i] != cfg009FixtureOwner {
-			return "path " + form + " is not under " + cfg009FixtureOwner
+	layers, why := cfg009Unescaped(p)
+	if why != "" {
+		return why
+	}
+	for _, layer := range layers {
+		for _, form := range []string{layer, path.Clean(layer)} {
+			parts := strings.Split(form, "/")
+			if len(parts) <= i || parts[i] != cfg009FixtureOwner {
+				return "path " + form + " is not under " + cfg009FixtureOwner
+			}
 		}
 	}
 	return ""
+}
+
+// cfg009Unescaped returns p and each further percent-decoded layer of it,
+// until decoding no longer changes the path.
+func cfg009Unescaped(p string) ([]string, string) {
+	layers := []string{p}
+	for range cfg009MaxUnescape {
+		next, err := url.PathUnescape(p)
+		if err != nil {
+			return nil, "path " + p + " has a bad percent escape"
+		}
+		if next == p {
+			return layers, ""
+		}
+		layers = append(layers, next)
+		p = next
+	}
+	if next, err := url.PathUnescape(p); err != nil || next != p {
+		return nil, "path " + p + " is still percent-encoded after " + strconv.Itoa(cfg009MaxUnescape) + " decodes"
+	}
+	return layers, ""
+}
+
+func TestCFG009URLProblemDecodesBeforeClean(t *testing.T) {
+	const raw = "https://raw.githubusercontent.com/vgmartinez/tools/abababababababababababababababababababab/"
+	const jsd = "https://cdn.jsdelivr.net/gh/vgmartinez/tools@abababababababababababababababababababab/"
+	cases := map[string]bool{
+		raw + "main/i.sh": false,
+		raw + "%2e%2e/%2e%2e/%2e%2e/other/repo/main/i.sh":                         true,
+		raw + "%252e%252e/%252e%252e/%252e%252e/other/repo/main/i.sh":             true,
+		raw + "%252E%252E/%252e%252E/%252E%252e/other/repo/main/i.sh":             true,
+		raw + ".%252e/.%252E/%252e./other/repo/main/i.sh":                         true,
+		raw + "%25252e%25252e/%25252e%25252e/%25252e%25252e/other/repo/main/i.sh": true,
+		raw + "%252e%252e%252f%252e%252e%252f%252e%252e%252fother/repo/main/i.sh": true,
+		raw + "%2525252525252e%2525252525252e/main/i.sh":                          true,
+		raw + "%25zz/main/i.sh":                                   true,
+		raw + "%252e%252e/main/i.sh":                              false,
+		jsd + "%252e%252e/%252e%252e/%252e%252e/other/tools/i.sh": true,
+		jsd + "%252e%252e/i.sh":                                   false,
+		"https://github.com/vgmartinez/tools/raw/%252e%252e/%252e%252e/%252e%252e/x/y": true,
+	}
+	for u, bad := range cases {
+		if got := cfg009URLProblem(u); (got != "") != bad {
+			t.Errorf("cfg009URLProblem(%s) = %q, want problem %v", u, got, bad)
+		}
+	}
 }
