@@ -103,6 +103,136 @@ func TestPinsHaveEmbedCheck(t *testing.T) {
 	}
 }
 
+// pinCurrencyPaths are the files a documented pin falls behind by
+// missing. A pin is behind when it does not contain the latest commit
+// on origin/main (or main, when origin/main is absent) that changes any
+// of them. The set is the reusable workflows, the composite action, the
+// pre-commit hook manifest, and the scanner those pins ship: advisories,
+// the rule registry, top-level rule YAML, the rule and adapter sources,
+// and go.mod. It leaves out init's templates and the docs that quote the
+// pin, so a commit that only changes those does not make a pin that
+// already contains the scanner look stale.
+var pinCurrencyPaths = []string{
+	".github/workflows/tripcord-pr.yml",
+	".github/workflows/tripcord-pr-comment.yml",
+	".github/actions/tripcord",
+	".pre-commit-hooks.yaml",
+	"rules/ADVISORIES.json",
+	"rules/REGISTRY",
+	"rules/embed.go",
+	":(glob)rules/*.yaml",
+	":(glob)internal/rules/*.go",
+	":(glob)internal/rules/**/*.go",
+	":(glob)internal/adapters/*.go",
+	":(glob)internal/adapters/**/*.go",
+	"go.mod",
+}
+
+// reusableWorkflowPin matches a full-SHA pin of tripcord-pr.yml or
+// tripcord-pr-comment.yml. The composite action pin is a different
+// check: the workflow file at WorkflowPin still calls that action, and
+// this test does not require the action SHA itself to move.
+var reusableWorkflowPin = regexp.MustCompile(regexp.QuoteMeta(project.Repository) + `/\.github/workflows/tripcord-pr(?:-comment)?\.yml@([0-9a-f]{40})`)
+
+// documentedPreCommitRev matches a tripcord pre-commit repo line and the
+// full SHA on the next line. The hook builds that commit.
+var documentedPreCommitRev = regexp.MustCompile(`(?m)repo:[ \t]+https://github\.com/` + regexp.QuoteMeta(project.Repository) + `(?:\.git)?[ \t]*\r?\n[ \t]*rev:[ \t]+([0-9a-f]{40})`)
+
+// TestPinsAreCurrent fails when the generated workflow pin, a documented
+// pin of the reusable workflows, or a documented pre-commit rev does not
+// contain the latest commit on main that changes pinCurrencyPaths.
+// main@6a12795 and the pre-commit rev main@c44853c fail that check: both
+// are older than the latest change to the rule sources. Outside CI a
+// shallow or non-git checkout skips, the same way TestPinsHaveEmbedCheck
+// does. In CI that checkout fails.
+func TestPinsAreCurrent(t *testing.T) {
+	root := filepath.Join("..", "..")
+	if !pinHistoryAvailable(t, root) {
+		return
+	}
+	ref := mainRef(t, root)
+	latest := currentPinCommit(t, root, ref)
+	for _, stale := range []string{
+		"6a1279565e9e41e9dec163e6bedf07f2647a2c67",
+		"c44853c105b84c1e2928aab1c75f2da31c29d13e",
+	} {
+		if err := gitRun(root, "merge-base", "--is-ancestor", latest, stale); err == nil {
+			t.Errorf("pinCurrencyPaths is too narrow: %s contains %s, so that old pin would not count as behind", stale, latest)
+		}
+	}
+	workflows, revs := currentPins(t, root)
+	if len(workflows) == 0 || len(revs) == 0 {
+		t.Fatalf("workflow pins = %v, pre-commit revs = %v", workflows, revs)
+	}
+	for _, p := range workflows {
+		if err := gitRun(root, "merge-base", "--is-ancestor", latest, p.pin); err != nil {
+			t.Errorf("%s workflow pin %s does not contain %s, the latest commit on %s that changes the scanner, the reusable workflows, the action, or the hook manifest", p.where, p.pin, latest, ref)
+		}
+	}
+	for _, p := range revs {
+		if err := gitRun(root, "merge-base", "--is-ancestor", latest, p.pin); err != nil {
+			t.Errorf("%s pre-commit rev %s does not contain %s, the latest commit on %s that changes the scanner, the reusable workflows, the action, or the hook manifest", p.where, p.pin, latest, ref)
+		}
+	}
+}
+
+func currentPinCommit(t *testing.T, root, ref string) string {
+	t.Helper()
+	args := append([]string{"log", "-1", "--format=%H", ref, "--"}, pinCurrencyPaths...)
+	out, err := gitOutput(root, args...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	latest := strings.TrimSpace(out)
+	if !commitPinSHA(latest) {
+		t.Fatalf("latest commit for the pin pathspec = %q", latest)
+	}
+	return latest
+}
+
+func currentPins(t *testing.T, root string) (workflows, revs []repoPin) {
+	t.Helper()
+	workflows = append(workflows, repoPin{where: "embedded.WorkflowPin", pin: embedded.WorkflowPin})
+	texts := map[string]string{"generated tripcord.yml": string(embedded.Workflow())}
+	var files []string
+	err := filepath.WalkDir(filepath.Join(root, "docs"), func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() && strings.EqualFold(filepath.Ext(path), ".md") {
+			files = append(files, path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	files = append(files, filepath.Join(root, "README.md"))
+	for _, path := range files {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		texts[filepath.ToSlash(rel)] = string(raw)
+	}
+	for where, text := range texts {
+		for _, m := range reusableWorkflowPin.FindAllStringSubmatch(text, -1) {
+			workflows = append(workflows, repoPin{where: where, pin: m[1]})
+		}
+		if where != "README.md" && where != "docs/pre-commit.md" {
+			continue
+		}
+		for _, m := range documentedPreCommitRev.FindAllStringSubmatch(text, -1) {
+			revs = append(revs, repoPin{where: where, pin: m[1]})
+		}
+	}
+	return workflows, revs
+}
+
 // TestUsesPinRejectsBranchAndTag checks that a docs or README ref of
 // @main, @v1, @v1.2.3, or @release fails the 40-character pin check,
 // and that a hexadecimal ref still has to be a full sha with a

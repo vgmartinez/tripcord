@@ -29,7 +29,7 @@ policy at the Git root and would block every tool call without one.
 > the bootstrap cache itself ([Bootstrap](#bootstrap)).
 >
 > The generated `.github/workflows/tripcord.yml` pins the reusable
-> workflow at `main@6a12795`. `tripcord-pr.yml` at that commit pins the
+> workflow at `main@c244a77`. `tripcord-pr.yml` at that commit pins the
 > composite action at `main@8b33b1b`, which has the `base` input and
 > the embed check, so the generated workflow compares a pull request
 > with its base. This repository's own workflows pin that same action.
@@ -426,7 +426,7 @@ composite action: the reusable workflow commit the generated
 the action at each pin has the `base` input and builds a Tripcord with
 the embed check (`internal/embedded`). This tree's workflows pin the
 action at `main@8b33b1b`, which has both. The generated workflow calls
-`tripcord-pr.yml` at `main@6a12795`, and the file there pins the same
+`tripcord-pr.yml` at `main@c244a77`, and the file there pins the same
 action, so both paths pass. It reads the pinned commits with `git show`,
 so the clone must have them (`fetch-depth: 0`).
 Both pass on this tree.
