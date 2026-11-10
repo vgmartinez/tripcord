@@ -259,6 +259,17 @@ func TestActionRejectsMissingOrEmptyPath(t *testing.T) {
 			t.Fatalf("empty directory = %d\n%s", code, out)
 		}
 	})
+	t.Run("unreadable directory", func(t *testing.T) {
+		dir := t.TempDir()
+		if err := os.Chmod(dir, 0); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+		code, out := run(t, dir)
+		if code == 0 || !strings.Contains(out, "path is unreadable") || strings.Contains(out, "path is empty") {
+			t.Fatalf("unreadable directory = %d\n%s", code, out)
+		}
+	})
 	t.Run("directory", func(t *testing.T) {
 		dir := t.TempDir()
 		if err := os.WriteFile(filepath.Join(dir, "README"), []byte("x\n"), 0o600); err != nil {

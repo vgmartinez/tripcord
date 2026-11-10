@@ -19,7 +19,8 @@ scans that whole repository from its git root; it does not narrow
 discovery to the directory. Monorepo scoping is tracked in
 [#59](https://github.com/vgmartinez/tripcord/issues/59). The action
 fails before the scan when `path` is empty, does not exist, is not a
-directory, or is an empty directory.
+directory, is an empty directory, or cannot be listed. An unreadable
+directory is reported as unreadable, not as empty.
 
 An empty `fail-on` leaves the threshold to the CLI and the repository
 policy. The action passes `--fail-on` only when the caller sets the

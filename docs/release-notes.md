@@ -92,9 +92,11 @@ remote composite action. Current `main` has no tracked symlinks.
 The composite action's `path` input defaults to `.`. Omitting it is
 that default, not a failure. Before the scan, the `check-path` step
 exits 1 when the value is an empty string, names a path that does not
-exist, names something that is not a directory, or names an empty
-directory. `tripcord scan` of a directory inside a Git repository
-scans that repository from its git root, so an empty subdirectory used
+exist, names something that is not a directory, names an empty
+directory, or names a directory `ls` cannot read. That last case is
+reported as unreadable, not as empty. `tripcord scan` of a directory
+inside a Git repository scans that repository from its git root, so an
+empty subdirectory used
 to fall through and scan the whole repository. It now fails first. A
 non-empty subdirectory still scans the git root; scoping a scan to one
 package is an open product question

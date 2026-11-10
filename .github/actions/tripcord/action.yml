@@ -90,7 +90,13 @@ runs:
           echo "::error::tripcord path is not a directory: $(workflow_data "$TRIPCORD_PATH")"
           exit 1
         fi
-        if [ -z "$(ls -A -- "$TRIPCORD_PATH")" ]; then
+        # A failed listing is unreadable, not empty. set -e does not
+        # abort inside this if, so the status has to be checked itself.
+        if ! listing=$(ls -A -- "$TRIPCORD_PATH" 2>/dev/null); then
+          echo "::error::tripcord path is unreadable: $(workflow_data "$TRIPCORD_PATH")"
+          exit 1
+        fi
+        if [ -z "$listing" ]; then
           echo "::error::tripcord path is empty: $(workflow_data "$TRIPCORD_PATH")"
           exit 1
         fi
