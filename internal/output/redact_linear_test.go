@@ -30,6 +30,8 @@ func TestRedactionScalesLinearly(t *testing.T) {
 		"tool flag":          "sshpass -p $X ",
 		"yaml continuation":  "token: \"a\" # c\n  b\n",
 		"unterminated quote": "token: \"a\n",
+		"password word":      "password x ",
+		"user context flag":  "-u a -p x ",
 		"commented key run":  "# token: # c\n  x\n",
 	}
 	for name, unit := range units {
