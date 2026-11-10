@@ -69,3 +69,16 @@ for example) so CI fingerprints secret-bearing entries with the same
 keyed `k1` discriminator developers get locally, rather than defaulting
 to `s1`. See
 [fingerprint.md](fingerprint.md#fingerprint-key).
+
+### Known gaps
+
+- [TC-CFG-013](rules/TC-CFG-013.md), an AI coding-agent workflow
+  triggered by an event a non-collaborator can produce (`issues`,
+  `issue_comment`, `discussion`, `discussion_comment`, or
+  `pull_request_target`), is documentation-only in v0. Tripcord has no
+  detection for it: there is no `rules/TC-CFG-013.yaml`. Coverage is
+  meant to come from zizmor's `agentic-actions` audit once it is
+  released
+  ([zizmor#1655](https://github.com/zizmorcore/zizmor/pull/1655),
+  [#41](https://github.com/vgmartinez/tripcord/issues/41)). See
+  [Known gaps](rules/README.md#known-gaps) in the rule index.
