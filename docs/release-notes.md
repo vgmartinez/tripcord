@@ -150,6 +150,9 @@ init writes reports those differences as further highs.
 
 ### Known gaps
 
+- `main` has no required status checks. A pull request can merge
+  while CI is red. Configuring branch protection is Victor's decision.
+  This release does not change repository settings.
 - The same-user residual is not equivalent to the old private-copy
   behaviour. Before, if the binary changed, the next hook detected it.
   Now, if the binary and the registry (the `verified` record) are
