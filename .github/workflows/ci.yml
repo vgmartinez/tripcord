@@ -27,6 +27,11 @@ jobs:
           # .pre-commit-hooks.yaml. TestPinsHaveEmbedCheck reads the
           # pinned commits on main. A depth-1 checkout is shallow, and
           # in CI that test fails instead of skipping.
+          # TestPinsReachableFromHead needs each pin and its history to
+          # prove it is an ancestor of HEAD. With full history it needs
+          # no network; otherwise it fetches the pin from origin, which
+          # needs no credentials on this public repository, and fails
+          # if that fetch fails.
           # TestVetAndTestFetchesFullHistory keeps this at 0.
           fetch-depth: 0
 

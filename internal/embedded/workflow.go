@@ -10,10 +10,12 @@ import (
 // (internal/embedded and rules/TC-CFG-016.yaml), and whose
 // tripcord-pr.yml pins the composite action at a commit that has the
 // base input and that check. TestPinsHaveEmbedCheck checks the sha.
-// TestPinsAreCurrent fails when this pin does not contain the latest
-// commit on main that changes the scanner, the reusable workflows, the
-// action, or the hook manifest. TestReleaseGatePinnedActionHasEmbedCheck
-// follows the action pin inside the pinned workflow file.
+// TestPinsReachableFromHead requires it to be an ancestor of HEAD. The
+// release gate (TestReleaseGatePinsContainLatestScannerChange) fails
+// when it does not contain the latest commit on main that changes the
+// scanner, the reusable workflows, the action, or the hook manifest.
+// TestReleaseGatePinnedActionHasEmbedCheck follows the action pin inside
+// the pinned workflow file.
 const WorkflowPin = "277066a292b8717d4d91393a10d00c5dd2d51cdb"
 
 // checkoutPin is actions/checkout v7.0.1, the version this repository's
