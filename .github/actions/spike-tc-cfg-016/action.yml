@@ -1,0 +1,20 @@
+name: spike-tc-cfg-016 composite
+description: Throwaway TC-CFG-016 version-skew spike. Echoes workflow identity as seen from a composite action. Never merge.
+runs:
+  using: composite
+  steps:
+    - name: Echo identity inside the composite action
+      shell: bash
+      env:
+        SPIKE_JOB: ${{ toJSON(job) }}
+        SPIKE_ACTION_REF: ${{ github.action_ref }}
+        SPIKE_ACTION_REPOSITORY: ${{ github.action_repository }}
+      run: |
+        set -euo pipefail
+        echo "--- composite: job context ---"
+        printf '%s\n' "$SPIKE_JOB" | jq -S '{workflow_ref, workflow_sha, workflow_repository, workflow_file_path}'
+        echo "--- composite: github.action_* ---"
+        printf 'github.action_ref=%s\n' "$SPIKE_ACTION_REF"
+        printf 'github.action_repository=%s\n' "$SPIKE_ACTION_REPOSITORY"
+        printf 'env GITHUB_WORKFLOW_SHA=%s\n' "${GITHUB_WORKFLOW_SHA:-}"
+        printf 'env GITHUB_WORKFLOW_REF=%s\n' "${GITHUB_WORKFLOW_REF:-}"
