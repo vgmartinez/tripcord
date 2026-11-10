@@ -700,11 +700,16 @@ func redactColonAssignments(value string, removed *[]string) string {
 				blockStart, isBlock = nestedMappingStart(value, h)
 				bodyStart = blockStart
 			}
+			commentGap := false
 			if !isBlock {
 				blockStart, bodyStart, isBlock = commentGapStart(value, h, lines, commentGaps)
+				commentGap = isBlock
 			}
 			if isBlock {
 				bodyEnd := blockBodyEnd(value, bodyStart, lines.column(h.start))
+				if commentGap && inCommentLine(value, h.start) {
+					bodyEnd = commentHeadBodyEnd(value, bodyStart)
+				}
 				if bodyEnd > blockStart {
 					b.WriteString(value[pos:blockStart])
 					*removed = append(*removed, value[blockStart:bodyEnd])
@@ -728,6 +733,9 @@ func redactColonAssignments(value string, removed *[]string) string {
 		body := ""
 		if ok {
 			body = colonValue(value[h.valStart:], stop)
+			if opensQuote(value, h.valStart) && keyStartsLine(value, h.start) {
+				body = multilineQuotedValue(value, h.valStart)
+			}
 		}
 		b.WriteString(value[pos:h.valStart])
 		pos = h.valStart
@@ -737,6 +745,12 @@ func redactColonAssignments(value string, removed *[]string) string {
 		*removed = append(*removed, strings.Trim(body, `"'`))
 		b.WriteString(quoteLike(body, redactedMarker))
 		pos += len(body)
+		if next, end, more := valueContinuation(value, h, pos, lines); more {
+			b.WriteString(value[pos:next])
+			*removed = append(*removed, value[next:end])
+			b.WriteString(redactedBlockScalarBody(value[next:end]))
+			pos = end
+		}
 	}
 	b.WriteString(value[pos:])
 	return b.String()
@@ -1007,7 +1021,7 @@ func commentGapStart(value string, h assignmentHead, lines *lineIndex, gaps *com
 	for first < len(value) && (value[first] == ' ' || value[first] == '\t') {
 		first++
 	}
-	if first == len(value) || first-bodyStart <= keyIndent {
+	if first == len(value) || first-bodyStart <= keyIndent && !inCommentLine(value, h.start) {
 		return 0, 0, false
 	}
 	return h.valStart, bodyStart, true
@@ -1196,7 +1210,7 @@ func redactFinding(finding model.Finding, redact Redactor) model.Finding {
 				Excerpt: redact(evidence.Excerpt),
 			}
 			if evidence.Config != nil {
-				out.Evidence[i].Config = &model.ConfigRef{ID: redact(evidence.Config.ID), Key: redact(evidence.Config.Key)}
+				out.Evidence[i].Config = &model.ConfigRef{ID: redact(evidence.Config.ID), Key: redactEvidenceKey(evidence.Config.Key, redact)}
 			}
 		}
 	}

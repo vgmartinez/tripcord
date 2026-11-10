@@ -26,7 +26,7 @@ The identity tables are **unverified** ([#34](https://github.com/vgmartinez/trip
 `internal/prcontext/identities.go`, and each list carries:
 
 ```
-// TODO(#34): Verify the unverified agent identity tables (botLogins, trailerEmails, branchPrefixes) and replace 0 with the tracking issue.
+// TODO(#34): Verify the unverified agent identity tables (botLogins, trailerEmails, branchPrefixes).
 ```
 
 A value that only resembles an entry does not match. `claude-bot` is not

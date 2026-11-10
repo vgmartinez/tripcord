@@ -1,4 +1,4 @@
-# Development tasks for the pre-release tree.
+# Development tasks for this tree.
 # `build` is CGO_ENABLED=0. `test` uses the race detector, which needs cgo.
 
 BINARY := bin/tripcord
