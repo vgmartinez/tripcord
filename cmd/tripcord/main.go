@@ -711,7 +711,7 @@ func parseCommandFlags(cmd flagCommand, args []string, stdout io.Writer) (scanOp
 	flags.BoolVar(&opts.all, "all", false, "(v1) not available")
 	flags.StringVar(&opts.harnesses, "harness", "", "comma-separated harnesses; default autodetect")
 	flags.StringVar(&opts.scope, "scope", "repo", "repo, user, managed, or all")
-	flags.StringVar(&opts.format, "format", "text", "text, json, sarif, md, or gha")
+	flags.StringVar(&opts.format, "format", "text", "text, json, jsonl, sarif, md, or gha")
 	flags.StringVar(&opts.output, "output", "-", "output path or - for stdout")
 	flags.StringVar(&opts.since, "since", "", "files changed between the ref and HEAD; requires git")
 	flags.StringVar(&opts.base, "base", "", "base revision of a change: also report a Tripcord embed the change removes or weakens (TC-CFG-016); requires git. --since implies it")
