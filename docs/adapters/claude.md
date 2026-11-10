@@ -210,6 +210,11 @@ would let one hide the other.
 
 Frontmatter must open and close with exact `---` lines. A byte-order mark and
 CRLF line endings are normalized first; a missing closing line is an error.
+A plain scalar that YAML rejects on its own, such as a description containing
+`: ` or an argument hint written `[a] [b]`, is kept as one string and the
+rest of the document is parsed strictly. `hooks` and `mcpServers` are not
+rewritten that way: a value for either that is not valid YAML still makes
+the scan incomplete.
 
 ## Limits
 

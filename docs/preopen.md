@@ -68,8 +68,9 @@ directories, or more than 1 GiB of content is refused.
 ## Flags, policy, and exit codes
 
 `preopen` takes the [scan flags](scan.md#flags) and produces the same output
-formats. `--since` is refused, because only the latest commit is fetched, and
-`--scope` must be `repo`, because only the fetched repository is scanned.
+formats. `--since` and `--staged` are refused, because only the latest commit
+is fetched and the scan reads that tree, not a Git index. `--scope` must be
+`repo`, because only the fetched repository is scanned.
 
 The repository's own `.tripcord/policy.yaml` and `.tripcord/policy.local.yaml`
 are not read: a repository under review cannot grant itself exceptions or

@@ -22,7 +22,7 @@ type agentID struct {
 // this table. Review bots such as gemini-code-assist[bot] are not
 // listed: they comment on pull requests but do not author the changes.
 //
-// TODO(#34): Verify the unverified agent identity tables (botLogins, trailerEmails, branchPrefixes) and replace 0 with the tracking issue.
+// TODO(#34): Verify the unverified agent identity tables (botLogins, trailerEmails, branchPrefixes).
 var botLogins = []agentID{
 	{match: "copilot-swe-agent[bot]", agent: "copilot"},
 	{match: "copilot[bot]", agent: "copilot"},
@@ -40,7 +40,7 @@ var botLogins = []agentID{
 // of the address. Codex CLI has no address here. Codex is recognized
 // only as chatgpt-codex-connector[bot] and the codex/ branch prefix.
 //
-// TODO(#34): Verify the unverified agent identity tables (botLogins, trailerEmails, branchPrefixes) and replace 0 with the tracking issue.
+// TODO(#34): Verify the unverified agent identity tables (botLogins, trailerEmails, branchPrefixes).
 var trailerEmails = []agentID{
 	{match: "noreply@anthropic.com", agent: "claude"},
 	{match: "cursoragent@cursor.com", agent: "cursor"},
@@ -54,7 +54,7 @@ var trailerEmails = []agentID{
 // claude/. A name that merely contains the word, such as
 // feature/claude-fix or notclaude/foo, does not match.
 //
-// TODO(#34): Verify the unverified agent identity tables (botLogins, trailerEmails, branchPrefixes) and replace 0 with the tracking issue.
+// TODO(#34): Verify the unverified agent identity tables (botLogins, trailerEmails, branchPrefixes).
 var branchPrefixes = []agentID{
 	{match: "claude/", agent: "claude"},
 	{match: "cursor/", agent: "cursor"},

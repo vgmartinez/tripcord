@@ -276,8 +276,8 @@ func shellSeparators(command string) [][]int {
 // --from, bash -c, a subshell), its own flags, or "sudo -u root". It
 // returns the redacted text and the raw values it removed.
 func RedactToolFlags(command string) (string, []string) {
+	command, removed := redactPasswordWords(command)
 	var b strings.Builder
-	var removed []string
 	start := 0
 	locs := append(shellSeparators(command), []int{len(command), len(command)})
 	for _, loc := range locs {
@@ -292,12 +292,12 @@ func RedactToolFlags(command string) (string, []string) {
 }
 
 func redactToolFlagsInSegment(segment string) (string, []string) {
+	segment, removed := redactUserContextPassword(segment)
 	words := splitWords(segment)
 	activations := toolActivations(words)
 	if len(activations) == 0 {
-		return segment, nil
+		return segment, removed
 	}
-	var removed []string
 	for _, flag := range toolSecretFlags {
 		offset, ok := activations[flag.tool]
 		if !ok {
@@ -336,6 +336,12 @@ func redactToolFlagsInSegment(segment string) (string, []string) {
 // "npx vercel") activates that tool's flags for elements from that point
 // on. It returns the redacted argv and the raw values it removed.
 func RedactToolArgv(argv []string) ([]string, []string) {
+	argv, removed := redactArgvPasswordWords(argv)
+	out, toolRemoved := redactToolArgvFlags(argv)
+	return out, append(removed, toolRemoved...)
+}
+
+func redactToolArgvFlags(argv []string) ([]string, []string) {
 	out := append([]string(nil), argv...)
 	type elemWord struct {
 		elem int
