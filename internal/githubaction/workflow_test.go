@@ -17,9 +17,9 @@ import (
 
 // runningInCI is the CI environment of the process that started the
 // test binary. It is read at init, before a test can change CI, so the
-// pre-commit rev check follows TestPinsHaveEmbedCheck: a shallow or
-// non-git checkout fails when the process was started in CI and skips
-// otherwise.
+// pre-commit rev check follows TestPinsHaveEmbedCheck: a missing git, a
+// shallow clone, and a non-git checkout fail when the process was
+// started in CI and skip otherwise.
 var runningInCI = ciRequiresPinnedObject(os.Getenv)
 
 const (
@@ -571,9 +571,9 @@ func TestPreCommitRevRejectsBranchAndTag(t *testing.T) {
 // preCommitHistoryAvailable reports whether this clone can prove a rev
 // is on main. Outside CI it skips when git, the checkout, or main is
 // missing, or when the clone is shallow. When the process was started
-// with CI or GITHUB_ACTIONS set, a shallow clone and a directory that
-// is not a git checkout fail. runningInCI records that environment at
-// init.
+// with CI or GITHUB_ACTIONS set, a missing git, a shallow clone, and a
+// directory that is not a git checkout fail. runningInCI records that
+// environment at init.
 func preCommitHistoryAvailable(t *testing.T, root string) bool {
 	t.Helper()
 	reason, skip := preCommitHistoryProblem(root)
@@ -586,9 +586,14 @@ func preCommitHistoryAvailable(t *testing.T, root string) bool {
 	return true
 }
 
+// preCommitHistoryProblem reports why root cannot prove a rev is on
+// main. skip is true when the caller should skip rather than fail.
+// Outside CI a missing git, a shallow clone, and a non-git checkout
+// skip. When the process was started with CI or GITHUB_ACTIONS set,
+// all three fail, through preCommitFailOrSkip.
 func preCommitHistoryProblem(root string) (reason string, skip bool) {
 	if _, err := exec.LookPath("git"); err != nil {
-		return "git is not installed", true
+		return preCommitFailOrSkip("git is not installed")
 	}
 	out, err := gitText(root, "rev-parse", "--is-inside-work-tree")
 	if err != nil || strings.TrimSpace(out) != "true" {
@@ -630,6 +635,25 @@ func preCommitMainRefOf(root string) string {
 		}
 	}
 	return ""
+}
+
+// TestPreCommitHistoryProblemFailsWhenGitMissingInCI checks that a
+// missing git fails the history check when the process was started with
+// CI or GITHUB_ACTIONS set, and skips outside CI. PATH is emptied so
+// LookPath cannot find git. runningInCI is assigned directly because
+// the launch environment was already captured.
+func TestPreCommitHistoryProblemFailsWhenGitMissingInCI(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	setPreCommitRunningInCI(t, true)
+	reason, skip := preCommitHistoryProblem(t.TempDir())
+	if skip || reason != "git is not installed" {
+		t.Fatalf("missing git in CI: skip=%v reason=%q", skip, reason)
+	}
+	setPreCommitRunningInCI(t, false)
+	reason, skip = preCommitHistoryProblem(t.TempDir())
+	if !skip || reason != "git is not installed" {
+		t.Fatalf("missing git outside CI: skip=%v reason=%q", skip, reason)
+	}
 }
 
 // TestPreCommitHistoryFailsShallowAndNonGitInCI checks that a shallow
