@@ -309,6 +309,10 @@ func TestActionRejectsMissingOrEmptyPath(t *testing.T) {
 		}
 	})
 	t.Run("unreadable directory", func(t *testing.T) {
+		// Root can read a mode-000 directory, so the check would not fail.
+		if runningAsRoot() {
+			t.Skip("euid is 0")
+		}
 		dir := t.TempDir()
 		if err := os.Chmod(dir, 0); err != nil {
 			t.Fatal(err)
