@@ -8,3 +8,10 @@
 # later pull requests once it is on the default branch. Require review
 # from the spec owner before that checker moves.
 /internal/tools/ @vgmartinez
+
+# A pull request can edit the workflow and turn the rule-registry job
+# into a no-op. Require review from the spec owner before that happens.
+/.github/workflows/ @vgmartinez
+
+# This file names the owners above. Require review before it changes.
+/.github/CODEOWNERS @vgmartinez
