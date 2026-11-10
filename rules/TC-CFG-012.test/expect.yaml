@@ -55,3 +55,12 @@ positivos:
   skill-read-dotenv: medium
   windsurf-os-environ: medium
   windsurf-rules-read-dotenv: medium
+  agents-look-up-dotenv: medium
+  agents-read-service-account: medium
+  agents-retrieve-database-credentials: medium
+  agents-echo-api-key: medium
+  agents-access-ssh: medium
+  agents-verb-gap-six: medium
+  agents-read-only-dotenv: medium
+  agents-heading-retrieve-aws: medium
+  agents-get-dotenv: medium

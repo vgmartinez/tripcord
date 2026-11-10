@@ -1,0 +1,9 @@
+-- .mcp.json --
+{
+  "mcpServers": {
+    "opencode": {
+      "command": "npx",
+      "args": ["-y", "opencode-ai@1.0.137"]
+    }
+  }
+}

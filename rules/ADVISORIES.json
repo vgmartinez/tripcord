@@ -316,6 +316,36 @@
       ],
       "added": "tripcord/core@2026.11",
       "reviewed": "2026-11-05"
+    },
+    {
+      "id": "TCA-2026-0016",
+      "aliases": ["CVE-2026-119025", "GHSA-q978-78c7-phqw"],
+      "summary": "open from 7.2.0 before 11.0.0 passes URLs into PowerShell -EncodedCommand without escaping on Windows/WSL, so crafted URLs, including an OAuth authorization_endpoint from a remote MCP server as described for Inspector, can execute PowerShell subexpressions",
+      "severity": "high",
+      "affected": [
+        {
+          "ecosystem": "npm",
+          "name": "open",
+          "ranges": [{"introduced": "7.2.0", "fixed": "11.0.0"}]
+        },
+        {
+          "ecosystem": "npm",
+          "name": "@modelcontextprotocol/inspector",
+          "ranges": [{"introduced": "2.0.0", "fixed": "2.12.0"}]
+        },
+        {
+          "ecosystem": "npm",
+          "name": "opencode-ai",
+          "ranges": [{"introduced": "1.0.137", "fixed": "1.18.33"}]
+        }
+      ],
+      "refs": [
+        "https://osv.dev/vulnerability/CVE-2026-119025",
+        "https://nvd.nist.gov/vuln/detail/CVE-2026-119025",
+        "https://github.com/modelcontextprotocol/inspector/security/advisories/GHSA-q978-78c7-phqw"
+      ],
+      "added": "tripcord/core@2026.11",
+      "reviewed": "2026-11-06"
     }
   ]
 }

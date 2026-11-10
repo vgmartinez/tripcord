@@ -30,7 +30,8 @@
 # not a role, and a role label without the comment is not stripped.
 # The read verbs are read, cat, cp, copy, open,
 # load, source, printenv, print, dump, collect, extract, show, curl,
-# wget, type, and Get-Content. printenv matches on its own unless a
+# wget, type, Get-Content, access, echo, get, retrieve, and the phrasal
+# verb "look up". printenv matches on its own unless a
 # documentation modifier follows, and it remains a target after another
 # read verb. The targets are .env (also .env.local,
 # .env.development, .env.production, .env.prod, and .env.dev),
@@ -47,10 +48,38 @@
 # /proc/self/status, /proc/self/environment, /proc/self/../self/environ,
 # and /proc/self/environ.example are not. .env.example, .env.sample,
 # .env.template, and .envrc do not count.
-# Between the verb and target, only curl/wget flags, one URL, one or
-# more determiners (the/all/your/any/every/each/its/their/those and the
-# rest), "contents/values of", and one quote, backtick, @, or
-# PowerShell $env: prefix are allowed. curl and wget also match when a
+# Between the verb and target, curl/wget flags, one URL, one or more
+# determiners (the/all/your/any/every/each/its/their/those, a, an, and
+# the rest), "contents/values of", and one quote, backtick, @, or
+# PowerShell $env: prefix are allowed and do not by themselves open a
+# new phrase. Up to 6 further words may sit in that same noun phrase.
+# Every skipped token counts toward the 6, including a determiner. The
+# walk stops at a negation or a new clause (not, never, if, when, and,
+# before, and the rest), at a copula, auxiliary, or clause connective
+# (is, won't, can, despite, because, and the rest), at a documentation word, and at a
+# token that is not a plain word, a determiner, or a preposition.
+# Hyphenated tokens are not plain words, so ".env.example",
+# "docs/security.md", and "whitespace-delimited" are not skipped. A preposition after a content
+# word also stops, so "read config via process.env" stays quiet. A
+# secret followed by a documentation modifier still does not count, and
+# the walk does not continue past that modifier.
+# A secret value (credentials, secret, API key, token, password, private
+# key, environment variables) names what is read, not where it is
+# stored. It counts as a direct object of read, cat, print, and the
+# other base verbs, with only determiners before it. Once any other word
+# is skipped, and always after get, retrieve, access, or look up, a
+# value counts only when "from", "in", "inside", "within", "under", or
+# "of" and a local path follow it: "the service account credentials in
+# ~/.config" and "each API key from the .env file" match, while "read
+# only named environment variables", "read current secret", "get an API
+# key at https://...", "get the API key from 1Password", and "look up
+# secrets in Notion" do not. A storage target (.env, ~/.ssh, ~/.aws,
+# /proc/*/environ, process.env, os.environ, id_rsa, AWS_*, GITHUB_TOKEN)
+# needs no path after it. echo matches only a secret value: a quoted
+# literal, a path such as .env, or output redirected with > is printed or
+# written, not read. "access token" and "access key", with
+# nothing between the words, are compound nouns. The verb still has to
+# start the line, and the target has to be on that same line. curl and wget also match when a
 # secret appears anywhere later in the same clause, so a flag value
 # such as "-d @.env" still counts. Authorization and user flags
 # (-H/--header, -u/--user, --oauth2-bearer) and plain http(s) URLs are

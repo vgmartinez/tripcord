@@ -1,0 +1,2 @@
+-- AGENTS.md --
+Read the first whitespace-delimited token of the argument as COMMAND, and treat the rest as arguments.

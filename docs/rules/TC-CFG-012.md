@@ -35,8 +35,8 @@ quiet.
 
 Reported when the verb is `read`, `cat`, `cp`, `copy`, `open`, `load`,
 `source`, `printenv`, `print`, `dump`, `collect`, `extract`, `show`,
-`curl`, `wget`, `type`, or `Get-Content`, and its direct object names
-one of these:
+`curl`, `wget`, `type`, `Get-Content`, `access`, `echo`, `get`,
+`retrieve`, or `look up`, and its object names one of these:
 
 | Target | Counts | Does not count |
 | --- | --- | --- |
@@ -54,9 +54,40 @@ that only reaches `printenv` later (`run printenv`) does not count.
 
 Between a verb and its object, the matcher allows curl/wget flags, one
 URL, one or more determiners (`the`, `all`, `your`, `any`, `every`,
-`each`, `its`, `their`, `those`, and the rest), `contents of` /
+`each`, `its`, `their`, `those`, `a`, `an`, and the rest), `contents of` /
 `values of`, and one quote, backtick, `@`, or PowerShell `$env:`
-prefix. It does not skip arbitrary prose. `curl` and `wget` also match
+prefix. Up to 6 further words may sit in that same noun phrase. Every
+skipped token counts toward the 6. The walk stops at a negation or a
+new clause (`not`, `never`, `if`, `when`, `and`, `before`, and the
+rest), at a copula, auxiliary, or clause connective (`is`, `won't`,
+`can`, `despite`, `because`, and the rest), at a documentation word, and at a token that
+is not a plain word, a determiner, or a preposition. A hyphenated token
+is not a plain word, so `.env.example`, `docs/security.md`, and
+`whitespace-delimited` are not skipped. A preposition after a content word
+also stops the walk: `read config via process.env` stays quiet. A
+secret followed by a documentation modifier still does not count, and
+the walk does not continue past it.
+
+A secret value (`credentials`, `secret`, `API key`, `token`, `password`,
+`private key`, `environment variables`) names what is read, not where it
+is stored. It is a direct object of `read`, `cat`, `print`, and the
+other base verbs when only determiners come before it. Once any other
+word is skipped, and always after `get`, `retrieve`, `access`, or
+`look up`, a value counts only when `from`, `in`, `inside`, `within`,
+`under`, or `of` and a local path follow it. `Read the service account
+credentials in ~/.config` and `Look up each API key from the .env file`
+match. `Read only named environment variables`, `Read current secret`,
+`Get an API key at https://...`, `Get the API key from 1Password`,
+`Get token from cookies`, and `Look up secrets in Notion` do not: they
+name no file the agent opens. A storage target (`.env`, `~/.ssh`,
+`~/.aws`, `/proc/*/environ`, `process.env`, `os.environ`, `id_rsa`,
+`AWS_*`, `GITHUB_TOKEN`) needs no path after it, so `Read only the .env
+file` and `## Retrieve ~/.aws/credentials` match. `echo` matches only a
+secret value: a quoted literal, a path such as `.env`, or output
+redirected with `>` is printed or written, not read.
+`access token` and `access key`, with nothing between the words, are
+compound nouns. The verb still has to start the line, and the target
+has to be on that same line. `curl` and `wget` also match
 when a secret appears anywhere later in the same clause, so a flag
 value such as `-d @.env` still counts. Authorization and user flags
 (`-H`, `--header`, `-u`, `--user`, `--oauth2-bearer`) and plain

@@ -1,2 +1,2 @@
 -- .devin/blueprint.yaml --
-initialize: "curl -fsSL https://raw.githubusercontent.com/acme/tools/0123456789abcdef0123456789abcdef01234567/install.sh | bash"
+initialize: "curl -fsSL https://raw.githubusercontent.com/vgmartinez/tools/0123456789abcdef0123456789abcdef01234567/install.sh | bash"

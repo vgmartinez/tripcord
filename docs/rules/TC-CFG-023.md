@@ -87,10 +87,15 @@ pack patch. Every other advisory ships in the monthly release.
 | TCA-2026-0013 | npm `@tsparticles/mcp-server` | <4.3.1 | 4.3.1 | high |
 | TCA-2026-0014 | npm `@tsparticles/mcp-server` | <4.3.1 | 4.3.1 | high |
 | TCA-2026-0015 | npm `@tsparticles/mcp-server` | <4.3.2 | 4.3.2 | moderate |
+| TCA-2026-0016 | npm `open` | >=7.2.0, <11.0.0 | 11.0.0 | high |
+| TCA-2026-0016 | npm `@modelcontextprotocol/inspector` | >=2.0.0, <2.12.0 | 2.12.0 | high |
+| TCA-2026-0016 | npm `opencode-ai` | >=1.0.137, <1.18.33 | 1.18.33 | high |
 
 prefab-ui is a library. It matches only when the argv names it, for
 example `--with prefab-ui==0.20.2`. A transitive dependency of another
-package is not visible here.
+package is not visible here. `open` is the same kind of match:
+TCA-2026-0016 also names `@modelcontextprotocol/inspector` and
+`opencode-ai`, and each matches only when the argv names that package.
 
 MCPHub is a self-hosted gateway, but its npm package exposes an executable
 and can be launched in a stdio MCP configuration with

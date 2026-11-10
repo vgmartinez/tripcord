@@ -1,0 +1,9 @@
+-- .mcp.json --
+{
+  "mcpServers": {
+    "inspector": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/inspector@1.9.9"]
+    }
+  }
+}

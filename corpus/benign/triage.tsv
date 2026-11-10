@@ -8,6 +8,7 @@
 # verdict: TP, FP, or accepted-risk.
 # reason: why that verdict was chosen. 16 to 200 bytes of printable ASCII, with no URL, host, IP address, or high-entropy token.
 # date: YYYY-MM-DD.
+tcf_dd5a901e13692072	TC-CFG-012	Asymmetric-al/core	accepted-risk	Troubleshooting step loads the root dotenv local file into the shell; the rule correctly flags reading a secrets file.	2026-11-06
 tcf_04a558f5a27f8d95	TC-CFG-004	Gerstep/cybos	TP	The shared allow list contains Bash, which pre-approves every shell command.	2026-11-05
 tcf_1630b6e93bff8d62	TC-CFG-005	Hacksore/cursed-repo	TP	Shared Codex config sets approval_policy to never, so commands run with no prompt.	2026-11-04
 tcf_44bef0cb8306b3dc	TC-CFG-009	HaxeFoundation/hashlink	accepted-risk	Copilot setup downloads a version-tagged SDL3 release tarball and builds and installs it with no checksum.	2026-11-05

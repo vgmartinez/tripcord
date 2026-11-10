@@ -167,8 +167,8 @@ func TestCommittedLists(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(triage) != 100 {
-		t.Fatalf("triage.tsv has %d rows, want 100", len(triage))
+	if len(triage) != 101 {
+		t.Fatalf("triage.tsv has %d rows, want 101", len(triage))
 	}
 	regRaw, err := os.ReadFile(filepath.Join(root, "rules", "REGISTRY"))
 	if err != nil {

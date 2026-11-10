@@ -391,20 +391,7 @@ func TestActionlintJobIsChecksumPinned(t *testing.T) {
 	if scalar(mapping(t, checkout["with"])["persist-credentials"]) != "false" {
 		t.Fatal("actionlint checkout persists credentials")
 	}
-	run := scalar(mapping(t, steps[1])["run"])
-	for _, want := range []string{
-		"https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz",
-		"8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8",
-		"sha256sum -c -",
-		"actionlint",
-	} {
-		if !strings.Contains(run, want) {
-			t.Errorf("actionlint step missing %s", want)
-		}
-	}
-	if strings.Contains(run, "${{") {
-		t.Fatal("actionlint step interpolates an expression into run")
-	}
+	checkActionlintDownload(t, scalar(mapping(t, steps[1])["run"]))
 }
 
 func TestPreCommitHookContract(t *testing.T) {

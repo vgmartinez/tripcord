@@ -1,0 +1,3 @@
+-- AGENTS.md --
+- Read only named environment variables (`BENCHLING_TENANT_URL`, `BENCHLING_API_KEY`, etc.)
+- Read only named database secrets such as `GEOPANDAS_POSTGIS_PASSWORD`; use a

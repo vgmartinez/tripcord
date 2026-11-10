@@ -6,8 +6,7 @@
 # line must cite the v1 item that owns it.
 # Rule changes for these go in their own pull requests.
 # case	rule	reason
-novee-sandbox/agents-proc-environ	TC-CFG-012	the path is on its own line, and printing on the previous line is not a read verb; closed by the bounded verb-target PR (#43 item 138)
-novee-sandbox/claude-md-printenv	TC-CFG-012	the line starts with a "When ..." clause and the verb is run, which is not a read verb; closed by the bounded verb-target PR (#43 item 138)
-novee-sandbox/webfetch-allowed-exfil	TC-CFG-012	"look up" is not a read verb and "API key from the .env" puts words between verb and target
+novee-sandbox/agents-proc-environ	TC-CFG-012	the path is on the next line and the previous line ends in printing, which is not a read verb; the match stays on one line and requires the read verb at its start
+novee-sandbox/claude-md-printenv	TC-CFG-012	the line starts with a When clause and the verb is run, which is not a read verb; a bounded gap still requires the read verb at the start of the line
 arxiv-2602.06547/html-comment-directive~homoglyph	TC-CFG-012	a Cyrillic e in .env is neither a target nor hidden, so nothing reports the file (v1, #43 item 136)
 novee-sandbox/agents-dotenv-exfil~homoglyph	TC-CFG-012	a Cyrillic e in .env is neither a target nor hidden, so nothing reports the file (v1, #43 item 136)

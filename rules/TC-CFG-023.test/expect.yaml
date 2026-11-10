@@ -40,3 +40,6 @@ positivos:
   claude-npx-dbhub-vulnerable: high
   claude-npx-tsparticles-vulnerable: high
   claude-npx-tsparticles-4.3.1: high
+  claude-npx-open-introduced: high
+  claude-npx-inspector-vulnerable: high
+  claude-npx-opencode-ai-vulnerable: high
