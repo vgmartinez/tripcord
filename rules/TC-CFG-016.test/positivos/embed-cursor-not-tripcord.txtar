@@ -26,10 +26,6 @@
     ]
   }
 }
--- .cursor/environment.json --
-{
-  "install": "bash .tripcord/bootstrap.sh install"
-}
 -- .cursor/hooks.json --
 {
   "version": 1,
@@ -47,11 +43,6 @@
     ]
   }
 }
--- .devin/blueprint.yaml --
-# Written by tripcord init --embed.
-maintenance:
-  - name: tripcord
-    run: bash .tripcord/bootstrap.sh install
 -- .gitattributes --
 # Tripcord embed: bash needs LF, and tripcord scan hashes these files.
 /.tripcord/bootstrap.sh text eol=lf
@@ -80,61 +71,17 @@ maintenance:
     ]
   }
 }
--- .github/workflows/copilot-setup-steps.yml --
-# Written by tripcord init --embed.
-name: Copilot Setup Steps
-
-on:
-  workflow_dispatch:
-  push:
-    paths:
-      - .github/workflows/copilot-setup-steps.yml
-  pull_request:
-    paths:
-      - .github/workflows/copilot-setup-steps.yml
-
-permissions:
-  contents: read
-
-concurrency:
-  group: copilot-setup-steps-${{ github.ref }}
-  cancel-in-progress: true
-
-jobs:
-  copilot-setup-steps:
-    name: Copilot setup steps
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read # checkout the repository
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Tripcord bootstrap
-        run: bash .tripcord/bootstrap.sh install
 -- .github/workflows/tripcord.yml --
 # Written by tripcord init --embed.
-# Scans pull requests that touch agent configuration. pull_request only:
-# never pull_request_target, so a fork's head never runs with write
-# access or secrets.
+# Scans every pull request. pull_request only: never
+# pull_request_target, so a fork's head never runs with write access
+# or secrets. There is no paths filter. Agent configuration is not a
+# fixed list of paths: adapters read nested files, plugin manifests
+# name arbitrary paths, and .gitattributes counts.
 name: tripcord
 
 on:
   pull_request:
-    paths:
-      - ".claude/**"
-      - ".cursor/**"
-      - ".codex/**"
-      - ".github/**"
-      - ".vscode/**"
-      - ".mcp.json"
-      - "AGENTS.md"
-      - "CLAUDE.md"
-      - "GEMINI.md"
-      - ".devin/**"
-      - ".tripcord/**"
 
 permissions:
   contents: read
@@ -145,8 +92,8 @@ jobs:
       contents: read # checkout the repository being scanned
       pull-requests: read # tripcord-pr.yml reads pull request reviews
       security-events: write # upload the SARIF report
-    # Reusable workflow pinned by full commit SHA (main@6a12795).
-    uses: vgmartinez/tripcord/.github/workflows/tripcord-pr.yml@6a1279565e9e41e9dec163e6bedf07f2647a2c67 # main@6a12795 # zizmor: ignore[ref-version-mismatch]
+    # Reusable workflow pinned by full commit SHA (main@277066a).
+    uses: vgmartinez/tripcord/.github/workflows/tripcord-pr.yml@277066a292b8717d4d91393a10d00c5dd2d51cdb # main@277066a # zizmor: ignore[ref-version-mismatch]
     with:
       fail-on: high
 -- .gitignore --
@@ -492,12 +439,7 @@ run_bin "$copy" scan --config "$repo_root" >&2
     },
     {
       "path": ".github/workflows/tripcord.yml",
-      "sha256": "6f6dac49ffd49928526fef319d7464d20c43b33d0fcaa02d3c9f03a5dfec869b"
-    },
-    {
-      "path": ".github/workflows/copilot-setup-steps.yml",
-      "step": "Tripcord bootstrap",
-      "sha256": "591047426ca45077ff170cb8c7b8bb8d7b5d722679189ce064ba23236df25a73"
+      "sha256": "cce8b822e27d8ba57bb54aa6beb5210bfbfdf854dd7fbac37f97c691edfc41c1"
     }
   ],
   "hooks": [
@@ -550,8 +492,9 @@ fail-on: high
 
 This repository embeds Tripcord (`.tripcord/`). Agents without
 repository hooks, such as Codex and Jules, should have their environment
-setup script run `bash .tripcord/bootstrap.sh install`. It installs the pinned
-Tripcord release, verifies its checksum, and runs `tripcord scan --config`.
+setup script run `bash .tripcord/bootstrap.sh install`. That command does not
+download Tripcord. It checks the pinned build already in the cache and
+runs `tripcord scan --config`. Fill the cache before setup.
 Do not remove or edit the Tripcord hooks in `.claude/settings.json`,
 `.cursor/hooks.json`, or `.github/hooks/tripcord.json`.
 Pull requests are scanned again in CI.

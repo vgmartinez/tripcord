@@ -110,6 +110,16 @@ func removeFile(rel string) func(*testing.T, string) {
 	}
 }
 
+func removeIfExists(rel string) func(*testing.T, string) {
+	return func(t *testing.T, dir string) {
+		t.Helper()
+		err := os.Remove(filepath.Join(dir, filepath.FromSlash(rel)))
+		if err != nil && !os.IsNotExist(err) {
+			t.Fatal(err)
+		}
+	}
+}
+
 // crlf converts rel to CRLF line endings, the way a Windows checkout
 // with core.autocrlf writes it.
 func crlf(rel string) func(*testing.T, string) {
@@ -199,11 +209,11 @@ var cfg016Fixtures = map[string]cfg016Fixture{
 	"embed-manifest-unreadable":     {kind: "positivos", args: embedArgs("--harness", "claude,cursor,copilot"), edit: writeFile(embedded.ManifestPath, "{\n")},
 	"embed-workflow-changed": {kind: "positivos", args: embedArgs("--harness", "claude"),
 		edit: replaceInFile(embedded.WorkflowPath, "fail-on: high", "fail-on: critical")},
-	"embed-copilot-step-changed": {kind: "positivos", args: embedArgs("--harness", "copilot"),
+	"embed-copilot-step-changed": {kind: "positivos", args: embedArgs("--cloud-setup", "--harness", "copilot"),
 		edit: replaceInFile(embedded.CopilotSetupStepsPath, "run: bash .tripcord/bootstrap.sh install", "run: bash .tripcord/bootstrap.sh install || true")},
 	"base-guard-removed": {kind: "positivos", args: embedArgs(), edit: removeGuard, againstBase: true},
 	"base-embed-removed": {kind: "positivos", args: embedArgs(), againstBase: true,
-		edit: edits(removeGuard, removeFile(embedded.WorkflowPath), removeFile(embedded.CopilotSetupStepsPath))},
+		edit: edits(removeGuard, removeFile(embedded.WorkflowPath), removeIfExists(embedded.CopilotSetupStepsPath))},
 	"base-harness-dropped": {kind: "positivos", args: embedArgs(), againstBase: true,
 		edit: replaceInFile(embedded.ManifestPath, "\"cursor\",\n", "")},
 	"base-repinned": {kind: "positivos", args: embedArgs(), againstBase: true,

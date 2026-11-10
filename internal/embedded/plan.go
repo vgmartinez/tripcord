@@ -20,11 +20,17 @@ type Options struct {
 	// Harnesses limits the wiring to these harnesses. Empty is every
 	// harness in Harnesses.
 	Harnesses []model.Harness
-	// Pin is the release bootstrap.sh installs. Required with Embed.
+	// Pin is the version bootstrap.sh runs from the cache. Required with
+	// Embed. bootstrap.sh does not download that version.
 	Pin Pin
 	// Force rewrites a file whose merge would reformat it or replace a
 	// conflicting value. It never overrides a file that cannot be parsed.
 	Force bool
+	// CloudSetup writes the cloud-agent install wiring: Cursor's
+	// environment.json install command, the Copilot setup step, and the
+	// Devin blueprint entry. Off by default. Known gap: bootstrap.sh
+	// install downloads nothing, so this wiring does not install Tripcord.
+	CloudSetup bool
 }
 
 // Change is one file init would write. Old is nil when the file does
@@ -150,7 +156,7 @@ func embedSteps(opts Options, harnesses []model.Harness) []step {
 			return ownFile(old, exists, Bootstrap(opts.Pin), force, "--force re-pins it to this --version and --sha256")
 		}},
 		{path: ManifestPath, mode: 0o644, merge: func(old []byte, exists bool) ([]byte, error) {
-			return mergeManifest(old, exists, opts.Pin, harnesses, force)
+			return mergeManifest(old, exists, opts.Pin, harnesses, force, opts.CloudSetup)
 		}},
 		{path: WorkflowPath, mode: 0o644, merge: func(old []byte, exists bool) ([]byte, error) {
 			return ownFile(old, exists, Workflow(), force, "--force replaces it")
@@ -168,27 +174,29 @@ func embedSteps(opts Options, harnesses []model.Harness) []step {
 				return mergeHooks(old, exists, HookEntries(h), hookFile{disableKey: "disableAllHooks"}, force)
 			}})
 		case model.HarnessCursor:
-			steps = append(steps,
-				step{path: CursorHooksPath, mode: 0o644, merge: func(old []byte, exists bool) ([]byte, error) {
-					return mergeHooks(old, exists, HookEntries(h), hookFile{version: true}, force)
-				}},
-				step{path: CursorEnvironmentPath, mode: 0o644, merge: func(old []byte, exists bool) ([]byte, error) {
-					return mergeCursorEnvironment(old, exists, force)
-				}},
-			)
-		case model.HarnessCopilot:
-			steps = append(steps,
-				step{path: CopilotHooksPath, mode: 0o644, merge: func(old []byte, exists bool) ([]byte, error) {
-					return mergeHooks(old, exists, HookEntries(h), hookFile{version: true, disableKey: "disableAllHooks"}, force)
-				}},
-				step{path: CopilotSetupStepsPath, mode: 0o644, merge: func(old []byte, exists bool) ([]byte, error) {
-					return mergeSetupSteps(old, exists, force)
-				}},
-			)
-		case model.HarnessDevin:
-			steps = append(steps, step{path: DevinBlueprintPath, mode: 0o644, merge: func(old []byte, exists bool) ([]byte, error) {
-				return mergeBlueprint(old, exists, force)
+			steps = append(steps, step{path: CursorHooksPath, mode: 0o644, merge: func(old []byte, exists bool) ([]byte, error) {
+				return mergeHooks(old, exists, HookEntries(h), hookFile{version: true}, force)
 			}})
+			if opts.CloudSetup {
+				steps = append(steps, step{path: CursorEnvironmentPath, mode: 0o644, merge: func(old []byte, exists bool) ([]byte, error) {
+					return mergeCursorEnvironment(old, exists, force)
+				}})
+			}
+		case model.HarnessCopilot:
+			steps = append(steps, step{path: CopilotHooksPath, mode: 0o644, merge: func(old []byte, exists bool) ([]byte, error) {
+				return mergeHooks(old, exists, HookEntries(h), hookFile{version: true, disableKey: "disableAllHooks"}, force)
+			}})
+			if opts.CloudSetup {
+				steps = append(steps, step{path: CopilotSetupStepsPath, mode: 0o644, merge: func(old []byte, exists bool) ([]byte, error) {
+					return mergeSetupSteps(old, exists, force)
+				}})
+			}
+		case model.HarnessDevin:
+			if opts.CloudSetup {
+				steps = append(steps, step{path: DevinBlueprintPath, mode: 0o644, merge: func(old []byte, exists bool) ([]byte, error) {
+					return mergeBlueprint(old, exists, force)
+				}})
+			}
 		case model.HarnessCodex:
 			steps = append(steps, step{path: AgentsPath, mode: 0o644, merge: func(old []byte, exists bool) ([]byte, error) {
 				return mergeAgents(old, exists, force)
@@ -202,7 +210,7 @@ func embedSteps(opts Options, harnesses []model.Harness) []step {
 
 // mergeManifest records the union of the harnesses already wired and
 // the ones this run wires.
-func mergeManifest(old []byte, exists bool, pin Pin, harnesses []model.Harness, force bool) ([]byte, error) {
+func mergeManifest(old []byte, exists bool, pin Pin, harnesses []model.Harness, force, cloudSetup bool) ([]byte, error) {
 	all := slices.Clone(harnesses)
 	if exists {
 		var m Manifest
@@ -217,7 +225,10 @@ func mergeManifest(old []byte, exists bool, pin Pin, harnesses []model.Harness, 
 			}
 		}
 	}
-	return newManifest(pin, all).node().encode("  "), nil
+	// Record the setup step only for a copilot harness this run wires.
+	// A harness kept from an older manifest is not given a digest for a
+	// file this run did not write.
+	return newManifest(pin, all, cloudSetup && slices.Contains(harnesses, model.HarnessCopilot)).node().encode("  "), nil
 }
 
 // Apply writes every change that is not already in place. It returns

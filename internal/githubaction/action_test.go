@@ -654,7 +654,8 @@ func TestActionScanComparesWithPullRequestBase(t *testing.T) {
 	git("commit", "-qm", "embed tripcord")
 	base := git("rev-parse", "HEAD")
 	for _, p := range []string{".tripcord/bootstrap.sh", ".tripcord/embed.json", ".github/hooks/tripcord.json", ".github/workflows/tripcord.yml", ".github/workflows/copilot-setup-steps.yml"} {
-		if err := os.Remove(filepath.Join(repo, p)); err != nil {
+		err := os.Remove(filepath.Join(repo, p))
+		if err != nil && !os.IsNotExist(err) {
 			t.Fatal(err)
 		}
 	}

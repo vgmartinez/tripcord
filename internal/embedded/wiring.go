@@ -228,7 +228,7 @@ type ManifestHook struct {
 // Pin is the release the manifest records.
 func (m Manifest) Pin() Pin { return Pin{Version: m.Version, SHA256: m.SHA256} }
 
-func newManifest(pin Pin, harnesses []model.Harness) Manifest {
+func newManifest(pin Pin, harnesses []model.Harness, cloudSetup bool) Manifest {
 	m := Manifest{
 		Schema:    ManifestSchema,
 		Version:   pin.Version,
@@ -245,7 +245,9 @@ func newManifest(pin Pin, harnesses []model.Harness) Manifest {
 			continue
 		}
 		m.Harnesses = append(m.Harnesses, string(h))
-		if h == model.HarnessCopilot {
+		// The setup step is part of the guard only when --cloud-setup
+		// wrote it. Default init does not record a file it does not write.
+		if cloudSetup && h == model.HarnessCopilot {
 			m.Files = append(m.Files, ManifestFile{Path: CopilotSetupStepsPath, Step: copilotStepName, SHA256: copilotStep().digest()})
 		}
 		for _, e := range HookEntries(h) {

@@ -1,7 +1,7 @@
 # `tripcord init`
 
 ```text
-tripcord init [PATH] [--embed] [--harness h,...] [--version V --sha256 os-arch=HEX ...] [--force] [--dry-run]
+tripcord init [PATH] [--embed] [--cloud-setup] [--harness h,...] [--version V --sha256 os-arch=HEX ...] [--force] [--dry-run]
 ```
 
 `init` writes Tripcord's files into the repository at `PATH` (default:
@@ -29,7 +29,7 @@ policy at the Git root and would block every tool call without one.
 > the bootstrap cache itself ([Bootstrap](#bootstrap)).
 >
 > The generated `.github/workflows/tripcord.yml` pins the reusable
-> workflow at `main@6a12795`. `tripcord-pr.yml` at that commit pins the
+> workflow at `main@277066a`. `tripcord-pr.yml` at that commit pins the
 > composite action at `main@8b33b1b`, which has the `base` input and
 > the embed check, so the generated workflow compares a pull request
 > with its base. This repository's own workflows pin that same action.
@@ -48,8 +48,8 @@ mode: enforce
 fail-on: high
 ```
 
-An existing policy file is kept as it is. `--harness`, `--version`, and
-`--sha256` without `--embed` exit 3.
+An existing policy file is kept as it is. `--harness`, `--version`,
+`--sha256`, and `--cloud-setup` without `--embed` exit 3.
 
 ## With `--embed`
 
@@ -66,7 +66,7 @@ Files written for every selection:
 | --- | --- |
 | `.tripcord/policy.yaml` | Policy, as without `--embed`. |
 | `.tripcord/bootstrap.sh` | Pinned installer (mode `0755`). See "Bootstrap". |
-| `.tripcord/embed.json` | Manifest: the pinned version and checksums, the harnesses selected at init time, the SHA-256 of `bootstrap.sh`, `tripcord.yml`, and the generated `copilot-setup-steps.yml` step, and the SHA-256 of every hook entry init wrote. |
+| `.tripcord/embed.json` | Manifest: the pinned version and checksums, the harnesses selected at init time, the SHA-256 of `bootstrap.sh` and `tripcord.yml`, the SHA-256 of every hook entry init wrote, and, only with `--cloud-setup`, the SHA-256 of the generated `copilot-setup-steps.yml` step. |
 | `.github/workflows/tripcord.yml` | Pull request scan. See "Workflow". |
 | `.gitattributes` | `text eol=lf` for `bootstrap.sh`, `embed.json`, `tripcord.yml`, and `.github/hooks/tripcord.json`, under a `# Tripcord embed` comment. Lines already there are kept; missing ones are appended, in the file's own line ending. |
 | `.gitignore` | `/.tripcord/policy.local.yaml`, appended if not already there, in the file's own line ending. `policy.local.yaml` is a per-checkout layer (see [policy.md](policy.md)); this keeps a fresh checkout from tracking one by accident. |
@@ -85,10 +85,21 @@ empty means all five.
 | `--harness` | Files |
 | --- | --- |
 | `claude` | `.claude/settings.json`: `hooks.SessionStart` runs `bash "${CLAUDE_PROJECT_DIR:-.}/.tripcord/bootstrap.sh" session-start --harness claude`; `hooks.PreToolUse` runs `bash "${CLAUDE_PROJECT_DIR:-.}/.tripcord/bootstrap.sh" hook --harness claude --event pre-tool --on-failure block` with `onFailure: block`. |
-| `cursor` | `.cursor/hooks.json`: `sessionStart` runs `bash "${CURSOR_PROJECT_DIR}/.tripcord/bootstrap.sh" session-start --harness cursor`; `preToolUse` runs `bash "${CURSOR_PROJECT_DIR}/.tripcord/bootstrap.sh" hook --harness cursor --event pre-tool --on-failure block` with `failClosed: true`. `.cursor/environment.json`: `install` runs `bash .tripcord/bootstrap.sh install`. |
-| `copilot` | `.github/hooks/tripcord.json`: `sessionStart` runs `bash .tripcord/bootstrap.sh session-start --harness copilot` (`timeoutSec: 300`); `preToolUse` runs `bash .tripcord/bootstrap.sh hook --harness copilot --event pre-tool --on-failure block` (`timeoutSec: 60`). Both set `cwd: "."`. `.github/workflows/copilot-setup-steps.yml`: a `Tripcord bootstrap` step. |
+| `cursor` | `.cursor/hooks.json`: `sessionStart` runs `bash "${CURSOR_PROJECT_DIR}/.tripcord/bootstrap.sh" session-start --harness cursor`; `preToolUse` runs `bash "${CURSOR_PROJECT_DIR}/.tripcord/bootstrap.sh" hook --harness cursor --event pre-tool --on-failure block` with `failClosed: true`. |
+| `copilot` | `.github/hooks/tripcord.json`: `sessionStart` runs `bash .tripcord/bootstrap.sh session-start --harness copilot` (`timeoutSec: 300`); `preToolUse` runs `bash .tripcord/bootstrap.sh hook --harness copilot --event pre-tool --on-failure block` (`timeoutSec: 60`). Both set `cwd: "."`. |
+| `devin` | Recorded in the manifest. No file, unless `--cloud-setup` is set. |
+| `codex` | `AGENTS.md`: a note between `<!-- tripcord:begin -->` and `<!-- tripcord:end -->` asking the environment setup script to run the bootstrap. That command does not download Tripcord. This covers Codex and Jules, which have no repository hooks. |
+
+`--cloud-setup` is off by default. It is a known gap: `bootstrap.sh
+install` downloads nothing, and v0 has no download channel, so the
+files below do not install Tripcord. They only run the cached build.
+Fill the cache first (see "Bootstrap"). With the flag, init also writes:
+
+| `--harness` | File |
+| --- | --- |
+| `cursor` | `.cursor/environment.json`: `install` runs `bash .tripcord/bootstrap.sh install`. |
+| `copilot` | `.github/workflows/copilot-setup-steps.yml`: a `Tripcord bootstrap` step. The manifest records that step's digest. |
 | `devin` | `.devin/blueprint.yaml`: a `maintenance` entry named `tripcord`. |
-| `codex` | `AGENTS.md`: a note between `<!-- tripcord:begin -->` and `<!-- tripcord:end -->` asking the environment setup script to run the bootstrap. This covers Codex and Jules, which have no repository hooks. |
 
 No hook runs a `tripcord` found on `PATH`. Every hook runs the
 repository's own `bootstrap.sh` by path, and the bootstrap runs the
@@ -125,13 +136,16 @@ harnesses' wiring; the manifest keeps the union.
 
 init never replaces a file it did not write.
 
-- JSON files (`settings.json`, `hooks.json`, `environment.json`,
+- JSON files (`settings.json`, `hooks.json`,
   `.github/hooks/tripcord.json`): existing keys keep their order and the
   file keeps its indentation. New keys are appended. A Tripcord entry
   is added to an event's array only if an identical entry is not
   already there.
-- YAML files (`copilot-setup-steps.yml`, `blueprint.yaml`): the step or
-  maintenance entry is appended.
+- With `--cloud-setup`, the same JSON merge applies to
+  `environment.json`, and YAML files (`copilot-setup-steps.yml`,
+  `blueprint.yaml`) gain the step or maintenance entry. Without the
+  flag, init does not read or rewrite those files, so a broken one does
+  not fail the run.
 - `AGENTS.md`: the note is appended after the existing text.
 - Files only Tripcord writes (`bootstrap.sh`, `tripcord.yml`,
   `embed.json`) must already match what init would write.
@@ -149,19 +163,22 @@ writes nothing. Two kinds:
     differs from init's (it is replaced);
   - `disableAllHooks: true` in a hook file (it is left in place, and
     TC-CFG-016 reports it);
-  - a different `install` in `.cursor/environment.json` (it becomes
+  - with `--cloud-setup`, a different `install` in
+    `.cursor/environment.json` (it becomes
     `bash .tripcord/bootstrap.sh install && <existing>`);
-  - a different tripcord step in `copilot-setup-steps.yml`, or a setup
-    workflow without a checkout step;
-  - a scalar `maintenance` in `blueprint.yaml` (it becomes a list);
+  - with `--cloud-setup`, a different tripcord step in
+    `copilot-setup-steps.yml`, or a setup workflow without a checkout
+    step;
+  - with `--cloud-setup`, a scalar `maintenance` in `blueprint.yaml`
+    (it becomes a list);
   - a Tripcord-owned file, or the `AGENTS.md` note, with other content
     (it is rewritten).
 - **Unmergeable**, which `--force` does not override: a file that does
   not parse (including JSON with comments in `.cursor/hooks.json`), a
   duplicate JSON key, a hook file `version` other than 1, `hooks` that
-  is not an object, an event that is not an array, a setup workflow
-  without `jobs.copilot-setup-steps.steps`, or an `AGENTS.md` begin
-  marker with no end marker.
+  is not an object, an event that is not an array, a `--cloud-setup`
+  setup workflow without `jobs.copilot-setup-steps.steps`, or an
+  `AGENTS.md` begin marker with no end marker.
 
 ## Safety
 
@@ -285,13 +302,20 @@ CI runs shellcheck on it (`init --embed output lint` in
 ## Workflow
 
 `.github/workflows/tripcord.yml` runs on `pull_request` only, never
-`pull_request_target`, with a `paths` filter over agent configuration.
+`pull_request_target`, and it sets no `paths` filter. A filter limited
+to a fixed list of directories would skip nested configuration,
+`CLAUDE.local.md`, `.gemini`, `.agents`, `.devcontainer`, `.opencode`,
+`.windsurf`, `.cursorrules`, `.windsurfrules`, `.claude-plugin`, a
+nested `AGENTS.md`, `.gitattributes`, and any path a Claude plugin
+manifest names. Adapters match those case-insensitively. The workflow
+therefore runs on every pull request.
 Workflow permissions are `contents: read`; the job adds
 `pull-requests: read` and `security-events: write`. It calls this
 repository's `.github/workflows/tripcord-pr.yml` pinned by full commit
 SHA, with the short SHA in a trailing comment. CI runs actionlint and
-zizmor on it and on the generated `copilot-setup-steps.yml`, which also
-has to pass zizmor's `pedantic` persona.
+zizmor on the generated workflow. `copilot-setup-steps.yml` is
+generated only with `--cloud-setup`, and CI lints that file the same
+way, including zizmor's `pedantic` persona.
 
 The workflow only protects the branch if a failing run blocks the
 merge. Make its job a required status check in the protected branch's
@@ -303,7 +327,8 @@ reports TC-CFG-016 and can still be merged.
 
 Each hook entry init writes is identified by the SHA-256 of its event
 name and the entry's canonical JSON (sorted keys, no whitespace). The
-Copilot setup step is identified the same way. `bootstrap.sh` and
+Copilot setup step, when `--cloud-setup` wrote it, is identified the
+same way. `bootstrap.sh` and
 `tripcord.yml` are identified by the SHA-256 of their bytes. The
 manifest records all of those digests. A fresh embed scans with no
 findings.
@@ -325,7 +350,7 @@ the manifest, not only with the recorded digests, so editing the
 script and the manifest's digest together still reports.
 [TC-CFG-016](rules/TC-CFG-016.md) reports, high:
 
-- **missing**: a file, hook, or setup step is not there;
+- **missing**: a file, hook, or recorded setup step is not there;
 - **changed**: it differs from what init writes for the recorded pin
   and from the recorded digest;
 - **stale**: it matches the recorded digest but not what this build
@@ -392,7 +417,7 @@ caught there as `repinned` or `changed`.
 
 ## Release gate
 
-Two tests run only with `TRIPCORD_RELEASE_GATE=1`:
+Three tests run only with `TRIPCORD_RELEASE_GATE=1`:
 
 ```sh
 make release-gate
@@ -411,14 +436,34 @@ composite action: the reusable workflow commit the generated
 the action at each pin has the `base` input and builds a Tripcord with
 the embed check (`internal/embedded`). This tree's workflows pin the
 action at `main@8b33b1b`, which has both. The generated workflow calls
-`tripcord-pr.yml` at `main@6a12795`, and the file there pins the same
+`tripcord-pr.yml` at `main@277066a`, and the file there pins the same
 action, so both paths pass. It reads the pinned commits with `git show`,
 so the clone must have them (`fetch-depth: 0`).
-Both pass on this tree.
 
-Without the variable both log that the gate was not requested and pass,
-so pull request CI stays green. There is no release workflow in this
-repository; run the target before tagging a release.
+`TestReleaseGatePinsContainLatestScannerChange`
+(`cmd/tripcord/pin_contract_test.go`) fails unless the generated
+workflow pin, every documented pin of the reusable workflows, and the
+documented pre-commit rev contain the latest commit on `origin/main`
+(or `main`) that changes the scanner: the reusable workflows, the
+composite action, `.pre-commit-hooks.yaml`, advisories, the rule
+registry, top-level rule YAML, the rule and adapter sources, or
+`go.mod`. Every merge that changes those paths makes it fail until a
+repin pull request lands, so a repin pull request is required before
+tagging. A shallow or non-git checkout fails it.
+
+All three pass on this tree. Without the variable they log that the
+gate was not requested and pass. No `pull_request` or `push` workflow
+runs the gate (`TestReleaseGateNotInPullRequestCI`). There is no
+release workflow in this repository: run the target before tagging.
+Tagging and releases are Victor's.
+
+The per-pull-request pin check is `TestPinsReachableFromHead`. It does
+not read `origin/main`. Each pin in the generated workflow,
+`README.md`, and `docs/` (including `docs/github-action.md` and the
+`docs/pre-commit.md` rev) must be a full 40-character sha and an
+ancestor of the `HEAD` under test. In a shallow clone, or when a pin is
+missing, it fetches that exact sha from `origin` and fails if the
+fetch fails. It never skips.
 `TestInitWiringInvokesTripcordHook` always runs and asserts the exact
 command each wiring file holds, `bash <project dir>/.tripcord/bootstrap.sh
 hook --harness <h> --event pre-tool --on-failure block`, and the
