@@ -9,7 +9,7 @@ import (
 func TestSeedList(t *testing.T) {
 	t.Parallel()
 	db := loadSeed(t)
-	if db.Count() != 16 || db.LatestReview() != "2026-11-06" {
+	if db.Count() != 17 || db.LatestReview() != "2026-11-10" {
 		t.Fatalf("count %d reviewed %s", db.Count(), db.LatestReview())
 	}
 	hits, err := db.Match([]PackageRef{{
@@ -246,6 +246,35 @@ func TestOpenEncodedCommandBounds(t *testing.T) {
 		if err != nil || len(hits) != 0 {
 			t.Fatalf("unpinned %s hits = %+v %v", tc.name, hits, err)
 		}
+	}
+}
+
+func TestFastAgentBounds(t *testing.T) {
+	t.Parallel()
+	db := loadSeed(t)
+	// 0.7.20 is the release the advisory reproduced against. 0.7.21 is the
+	// fix (ba99f89) and 0.7.22 is a later release.
+	for _, version := range []string{"0.0.7", "0.6.26", "0.7.20"} {
+		hits, err := db.Match([]PackageRef{{
+			Ecosystem: EcoPyPI, Name: "fast-agent-mcp", Kind: KindExact, Version: version,
+		}})
+		if err != nil || len(hits) != 1 || hits[0].ID != "TCA-2026-0017" || hits[0].Severity != "moderate" {
+			t.Fatalf("%s hits = %+v %v", version, hits, err)
+		}
+	}
+	for _, version := range []string{"0.7.21", "0.7.22", "0.10.53"} {
+		hits, err := db.Match([]PackageRef{{
+			Ecosystem: EcoPyPI, Name: "fast-agent-mcp", Kind: KindExact, Version: version,
+		}})
+		if err != nil || len(hits) != 0 {
+			t.Fatalf("%s hits = %+v %v", version, hits, err)
+		}
+	}
+	hits, err := db.Match([]PackageRef{{
+		Ecosystem: EcoPyPI, Name: "fast-agent-mcp", Kind: KindUnpinned,
+	}})
+	if err != nil || len(hits) != 0 {
+		t.Fatalf("unpinned hits = %+v %v", hits, err)
 	}
 }
 

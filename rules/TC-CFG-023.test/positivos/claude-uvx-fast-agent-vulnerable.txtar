@@ -1,0 +1,9 @@
+-- .mcp.json --
+{
+  "mcpServers": {
+    "fast-agent": {
+      "command": "uvx",
+      "args": ["fast-agent-mcp==0.7.20", "serve", "--transport", "stdio"]
+    }
+  }
+}

@@ -43,3 +43,5 @@ positivos:
   claude-npx-open-introduced: high
   claude-npx-inspector-vulnerable: high
   claude-npx-opencode-ai-vulnerable: high
+  claude-uvx-fast-agent-vulnerable: high
+  claude-uvx-fast-agent-from: high

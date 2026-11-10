@@ -90,6 +90,7 @@ pack patch. Every other advisory ships in the monthly release.
 | TCA-2026-0016 | npm `open` | >=7.2.0, <11.0.0 | 11.0.0 | high |
 | TCA-2026-0016 | npm `@modelcontextprotocol/inspector` | >=2.0.0, <2.12.0 | 2.12.0 | high |
 | TCA-2026-0016 | npm `opencode-ai` | >=1.0.137, <1.18.33 | 1.18.33 | high |
+| TCA-2026-0017 | pypi `fast-agent-mcp` | <0.7.21 | 0.7.21 | moderate, reported high |
 
 prefab-ui is a library. It matches only when the argv names it, for
 example `--with prefab-ui==0.20.2`. A transitive dependency of another
@@ -120,6 +121,9 @@ No Docker advisory is seeded. Image parsing is covered by unit tests.
   is withdrawn or gains a fixed version.
 - prefab-ui is reported even when the vulnerable feature is not enabled.
   The pinned version is the affected one.
+- fast-agent-mcp is reported for `serve --transport stdio` too. The
+  unauthenticated listener is the HTTP default, but the pinned version is
+  the affected one.
 - A server marked disabled is still reported. Turning it back on is a
   one-line edit. TC-CFG-003 uses the same policy.
 
