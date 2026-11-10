@@ -267,6 +267,19 @@ func TestActionRejectsMissingOrEmptyPath(t *testing.T) {
 			t.Fatalf("non-empty directory = %d\n%s", code, out)
 		}
 	})
+	t.Run("workflow command data", func(t *testing.T) {
+		// Newline, %, ::, and comma. The path is command data, so % CR
+		// and LF are escaped. : and , stay, inside the one error line.
+		path := "a%b\n::error::injected,x\ry"
+		code, out := run(t, path)
+		want := "::error::tripcord path does not exist: a%25b%0A::error::injected,x%0Dy\n"
+		if code == 0 || out != want {
+			t.Fatalf("crafted path = %d\n%q\nwant %q", code, out, want)
+		}
+		if strings.Contains(out, "\n::") || strings.Contains(out, "\r") {
+			t.Fatalf("crafted path starts another workflow command: %q", out)
+		}
+	})
 }
 
 func TestCICallerFixtureIsTCFG001(t *testing.T) {

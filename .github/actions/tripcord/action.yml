@@ -68,20 +68,30 @@ runs:
         TRIPCORD_PATH: ${{ inputs.path }}
       run: |
         set -euo pipefail
+        # The path is workflow-command data, not a property. Escape %
+        # first, then CR and LF, so a crafted path cannot start another
+        # command. : (%3A) and , (%2C) are escaped only in properties.
+        workflow_data() {
+          local data=$1
+          data=${data//'%'/'%25'}
+          data=${data//$'\r'/'%0D'}
+          data=${data//$'\n'/'%0A'}
+          printf '%s' "$data"
+        }
         if [ -z "$TRIPCORD_PATH" ]; then
           echo "::error::tripcord path is empty"
           exit 1
         fi
         if [ ! -e "$TRIPCORD_PATH" ]; then
-          echo "::error::tripcord path does not exist: $TRIPCORD_PATH"
+          echo "::error::tripcord path does not exist: $(workflow_data "$TRIPCORD_PATH")"
           exit 1
         fi
         if [ ! -d "$TRIPCORD_PATH" ]; then
-          echo "::error::tripcord path is not a directory: $TRIPCORD_PATH"
+          echo "::error::tripcord path is not a directory: $(workflow_data "$TRIPCORD_PATH")"
           exit 1
         fi
         if [ -z "$(ls -A -- "$TRIPCORD_PATH")" ]; then
-          echo "::error::tripcord path is empty: $TRIPCORD_PATH"
+          echo "::error::tripcord path is empty: $(workflow_data "$TRIPCORD_PATH")"
           exit 1
         fi
     - id: paths
