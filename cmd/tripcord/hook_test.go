@@ -165,7 +165,9 @@ func TestHookContract(t *testing.T) {
 // command. pre-tool-use-bash-deny.json is a Bash call with a different
 // command and no path, so deny_if is false. pre-tool-use-read.json
 // reads a path ending in /.env, which deny_if would match, but its
-// kind is read, so when is false.
+// kind is read, so when is false. A Read of README.md is also kind
+// read, and that path does not end in /.env, so when and deny_if are
+// both false and the call is allowed.
 func TestHookWhenAndDenyIf(t *testing.T) {
 	const policy = `version: 1
 mode: enforce
@@ -177,16 +179,21 @@ custom:
 `
 	const reason = "tripcord blocked this tool call: ACME-020 (high): refused"
 	for _, tc := range []struct {
-		name, fixture string
-		deny          bool
+		name, fixture, path string
+		deny                bool
 	}{
 		{name: "when and deny_if match", fixture: "pre-tool-use-bash-allow.json", deny: true},
 		{name: "deny_if does not match", fixture: "pre-tool-use-bash-deny.json", deny: false},
 		{name: "when does not match", fixture: "pre-tool-use-read.json", deny: false},
+		{name: "when and deny_if are both false", fixture: "pre-tool-use-read.json", path: "/home/dev/project/README.md", deny: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			hookProject(t, policy)
-			code, stdout, stderr := runHookCLI(t, bytes.NewReader(adapterFixture(t, model.HarnessClaude, tc.fixture)), "--harness", "claude", "--event", hook.EventPreTool)
+			raw := adapterFixture(t, model.HarnessClaude, tc.fixture)
+			if tc.path != "" {
+				raw = bytes.ReplaceAll(raw, []byte(`"file_path": "/home/dev/project/.env"`), []byte(`"file_path": "`+tc.path+`"`))
+			}
+			code, stdout, stderr := runHookCLI(t, bytes.NewReader(raw), "--harness", "claude", "--event", hook.EventPreTool)
 			if tc.deny {
 				if code != int(exitcode.Block) || stdout != claudeDeny(reason) || stderr != reason+"\n" {
 					t.Errorf("got exit %d stdout %q stderr %q", code, stdout, stderr)
