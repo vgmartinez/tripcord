@@ -2,11 +2,13 @@ package rules
 
 import (
 	"errors"
+	"io/fs"
 	"strings"
 	"testing"
 	"testing/fstest"
 
 	"github.com/vgmartinez/tripcord/internal/exitcode"
+	corepack "github.com/vgmartinez/tripcord/rules"
 )
 
 const fixturePackDir = "testdata/packs/fixture"
@@ -116,6 +118,41 @@ func TestLoadCoreIndexMatchesCompiled(t *testing.T) {
 			if got.Harness[i] != want.Harness[i] {
 				t.Fatalf("%s harness %v, compiled %v", want.ID, got.Harness, want.Harness)
 			}
+		}
+	}
+}
+
+// TestLoadCoreIndexExpressionsCompile compiles, here and not in the
+// hook, every when and severity_when expression of the rules
+// LoadCoreIndex returns. The index skips CEL, so a broken expression
+// would otherwise reach the hook as a valid lock target.
+func TestLoadCoreIndexExpressionsCompile(t *testing.T) {
+	env := testEnv(t)
+	index, err := LoadCoreIndex()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(index.Rules()) == 0 {
+		t.Fatal("index has no rules")
+	}
+	for _, r := range index.Rules() {
+		if r.When != nil || len(r.SeverityWhen) != 0 {
+			t.Fatalf("%s: LoadCoreIndex compiled an expression", r.ID)
+		}
+		raw, err := fs.ReadFile(corepack.FS, r.ID+".yaml")
+		if err != nil {
+			t.Fatal(err)
+		}
+		spec, err := ParseSpec(raw)
+		if err != nil {
+			t.Fatalf("%s: %v", r.ID, err)
+		}
+		compiled, err := Compile(spec, r.Pack, env)
+		if err != nil {
+			t.Fatalf("%s: CEL does not compile: %v", r.ID, err)
+		}
+		if compiled.When == nil || len(compiled.SeverityWhen) != len(spec.SeverityWhen) {
+			t.Fatalf("%s: compiled when %v, severity_when %d of %d", r.ID, compiled.When != nil, len(compiled.SeverityWhen), len(spec.SeverityWhen))
 		}
 	}
 }

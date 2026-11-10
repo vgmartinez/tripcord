@@ -530,7 +530,7 @@ func TestBootstrapRefusesCacheDirOfAnotherUser(t *testing.T) {
 		t.Fatal(err)
 	}
 	code, _, stderr := e.runSplit(t, "hook", "--harness", "claude", "--event", HookEvent)
-	if code != 2 || !strings.Contains(stderr, "is owned by another user") || e.ran(t) != "" {
+	if code != 2 || !strings.Contains(stderr, "must be owned by uid") || e.ran(t) != "" {
 		t.Fatalf("exit %d, stderr %q", code, stderr)
 	}
 }
