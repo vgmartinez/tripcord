@@ -683,6 +683,13 @@ func TestActionScanComparesWithPullRequestBase(t *testing.T) {
 			t.Fatalf("%s\n%s", exit, out)
 		}
 	})
+	t.Run("base workflow command data", func(t *testing.T) {
+		_, out := run(t, "abc%def\n::error::injected\r")
+		want := "::error::tripcord base commit abc%25def%0A::error::injected%0D is not in the checkout"
+		if !strings.Contains(out, want) || strings.Contains(out, "\n::error::injected") || strings.Contains(out, "\r") {
+			t.Fatalf("crafted base = %q\nwant %q", out, want)
+		}
+	})
 }
 
 // TestCommentUpsertUsesTokenIdentity runs the action's comment script.

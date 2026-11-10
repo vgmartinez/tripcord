@@ -185,6 +185,16 @@ runs:
         TRIPCORD_MARKDOWN: ${{ steps.paths.outputs.markdown }}
       run: |
         set +e
+        # Same order as check-path. The base is workflow-command data:
+        # escape % first, then CR, then LF, so a crafted base cannot
+        # start another command.
+        workflow_data() {
+          local data=$1
+          data=${data//'%'/'%25'}
+          data=${data//$'\r'/'%0D'}
+          data=${data//$'\n'/'%0A'}
+          printf '%s' "$data"
+        }
         args=()
         if [ -n "$TRIPCORD_FAIL_ON" ]; then
           args+=(--fail-on "$TRIPCORD_FAIL_ON")
@@ -194,7 +204,7 @@ runs:
             echo "::notice::tripcord path is not a Git repository; scanning without --base"
           else
             if ! git -C "$TRIPCORD_PATH" cat-file -e "${TRIPCORD_BASE}^{commit}" 2>/dev/null; then
-              echo "::error::tripcord base commit ${TRIPCORD_BASE} is not in the checkout; check out with fetch-depth: 0, or set base to an empty string"
+              echo "::error::tripcord base commit $(workflow_data "$TRIPCORD_BASE") is not in the checkout; check out with fetch-depth: 0, or set base to an empty string"
             fi
             args+=(--base "$TRIPCORD_BASE")
           fi
