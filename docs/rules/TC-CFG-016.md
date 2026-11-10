@@ -94,20 +94,52 @@ The check covers:
 
 Hooks are checked for each hook-capable harness the manifest records
 as selected at init time; with no manifest, or one that cannot be
-read, all three. Each item is reported, high, at its file, with a
-title and fix for its state:
+read, all three. Each item is reported at its file, with a title and
+fix for its state:
 
-| State | Title | Meaning |
-| --- | --- | --- |
-| missing | Tripcord embed is missing part of its guard | The file, hook, or step is not there. |
-| changed | Tripcord guard was edited | It differs from what init writes for the recorded pin and from the recorded digest, or `.tripcord` or `bootstrap.sh` is a symlink. |
-| stale | Tripcord guard was written by an older Tripcord | It matches the digest `embed.json` records, but not what this build writes. Rerun `tripcord init --embed --force` with the same pins. |
-| unreadable | Tripcord guard file cannot be read | The file cannot be read or parsed, or is a symlink out of the repository. |
+| State | Severity | Title | Meaning |
+| --- | --- | --- | --- |
+| missing | high | Tripcord embed is missing part of its guard | The file, hook, or step is not there. An event the manifest does not record, other than the pre-tool guard, is `unverified` instead: a newer Tripcord may have dropped it. |
+| changed | high | Tripcord guard was edited | It differs from what init writes for the recorded pin and from the recorded digest, or `.tripcord` or `bootstrap.sh` is a symlink. Also when it matches the recorded digest but breaks an invariant (below), or is a render this scanner never compiled although `tripcord.yml` pins a writer it knows (the writer witness). |
+| outdated | low | Tripcord guard was written by an older Tripcord | It matches the recorded digest and is what an earlier init under a known pin wrote, or `tripcord.yml` pins an earlier `WorkflowPin`. Rerun `tripcord init --embed --force` with the same pins. |
+| unverified | low | Tripcord could not verify this part of the guard | It matches the recorded digest and keeps every invariant, but this scanner cannot tell who wrote it: a newer Tripcord, an `embed.json` schema newer than `tripcord.embed/v1`, or a pin a CI scan cannot check. Scan locally with the latest Tripcord. |
+| pin-unknown | high | Tripcord workflow pins an unknown commit | `tripcord.yml` pins a `tripcord-pr.yml` commit that is neither `WorkflowPin` nor a `KnownWorkflowPins` entry, in a local or pre-commit scan. |
+| pin-malformed | high | Tripcord workflow pin is not a commit SHA | A job of `tripcord.yml` does not call `vgmartinez/tripcord/.github/workflows/tripcord-pr.yml` at a full 40-character commit SHA. |
+| unreadable | high | Tripcord guard file cannot be read | The file cannot be read or parsed, or is a symlink out of the repository. |
+
+A scanner older than the init that wrote an embed sees renders it has
+never compiled. Those are `unverified`, not `changed`, as long as they
+match `embed.json` and keep the invariants every Tripcord version
+keeps (`internal/embedded/invariants.go`): `bootstrap.sh` starts with
+`set -eu`, pins exactly the version and checksums `embed.json` records,
+and fails on a checksum mismatch; the pre-tool hook runs `bootstrap.sh
+hook ... --on-failure block`, with matcher `*` and `onFailure: block`
+(Claude Code), `failClosed: true` (Cursor), or `type: command`, `cwd:
+.`, and `timeoutSec` 60 or more (Copilot); `tripcord.yml` runs on
+`pull_request` only, keeps the embed's paths, calls `tripcord-pr.yml`
+from exactly one job with no `if`, sets `fail-on` to `low`, `medium`,
+or `high`, and sets no `binary`, `ref`, or other `path`; the Copilot
+setup step runs `bash .tripcord/bootstrap.sh install` unconditionally;
+`.gitattributes` keeps `text eol=lf`. Raising `embed.json`'s `version`
+buys nothing here: the invariants hold in any scan.
+
+The workflow pin decides the rest. A local or pre-commit scan reports
+an unknown pin `pin-unknown`, high, unless this scanner is a release,
+`embed.json`'s version is a later release, and `tripcord.yml` matches
+its recorded digest: then it is `unverified`. A CI scan (`scan
+--executing-workflow`, or `GITHUB_ACTIONS=true`) reports it
+`unverified`, because under `pull_request` the pull request's own
+`tripcord.yml` picks the workflow that scans it, so CI cannot vouch for
+it; `--executing-workflow` accepts a pin equal to the running workflow
+only when the base revision pins the same commit. With a base, any
+change to the pin is `repinned`, high, even to the workflow that is
+running.
 
 Because `bootstrap.sh` is compared with the script re-rendered from
 the recorded pin, an edit to it is reported whether or not the
-manifest's digest was edited to match: `changed` when it was not,
-`stale` when it was. Tamper cases covered by tests include replacing
+manifest's digest was edited to match: `changed` either way, through
+the invariants or the writer witness when the digest was edited.
+Tamper cases covered by tests include replacing
 the checksum comparison with `false`, the scan with `exit 0`, the whole
 script with `curl | sh`, adding a package download, moving the cache,
 swapping a checksum, and swapping the version.
@@ -262,7 +294,7 @@ would otherwise run. To pause a single hook, remove that hook's own
 entry, or use the harness's managed-hooks allow list, instead of a
 blanket switch.
 
-For a missing, edited, or stale Tripcord guard, run `tripcord init
+For a missing, edited, or outdated Tripcord guard, run `tripcord init
 --embed --force` with the version and checksums recorded in
 `.tripcord/embed.json` to restore it. If a harness is no longer used,
 remove it from `.tripcord/embed.json`'s `harnesses` in a reviewed

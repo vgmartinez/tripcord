@@ -60,6 +60,12 @@ and `linux-x64`. A missing version, a missing checksum, a malformed
 value, or an unknown platform exits 3 and writes nothing. There are no
 placeholder values.
 
+A release build of `init` refuses a `--version` older than itself
+(exit 3, nothing written): that release's `bootstrap.sh` runs its own
+`scan --config`, which would then be an older TC-CFG-016 judging this
+newer embed. Run the older release's `init` to pin it. A development
+build (`dev`) does not check.
+
 Files written for every selection:
 
 | File | Content |
@@ -323,16 +329,22 @@ through one. `bootstrap.sh` and `tripcord.yml` are compared with
 what init renders again from the version and checksums recorded in
 the manifest, not only with the recorded digests, so editing the
 script and the manifest's digest together still reports.
-[TC-CFG-016](rules/TC-CFG-016.md) reports, high:
+[TC-CFG-016](rules/TC-CFG-016.md) reports:
 
-- **missing**: a file, hook, or setup step is not there;
-- **changed**: it differs from what init writes for the recorded pin
-  and from the recorded digest;
-- **stale**: it matches the recorded digest but not what this build
-  writes, because an older Tripcord wrote it (rerun `tripcord init
-  --embed --force` with the same pins), or because its digest in
-  `embed.json` was edited to match;
-- **unreadable**: a file cannot be read or parsed.
+- **missing** (high): a file, hook, or setup step is not there;
+- **changed** (high): it differs from what init writes for the
+  recorded pin and from the recorded digest, or it matches the digest
+  but breaks an invariant every Tripcord version keeps, or a pin this
+  scanner knows never wrote it;
+- **outdated** (low): an earlier Tripcord under a known pin wrote it
+  (rerun `tripcord init --embed --force` with the same pins);
+- **unverified** (low): it matches the digest and keeps every
+  invariant, but this scanner cannot tell who wrote it, most likely a
+  newer Tripcord;
+- **pin-unknown** and **pin-malformed** (high): `tripcord.yml` pins a
+  `tripcord-pr.yml` commit this scanner does not know, or no full
+  commit SHA at all;
+- **unreadable** (high): a file cannot be read or parsed.
 
 `bootstrap.sh`, `tripcord.yml`, and the Copilot hook file are hashed
 with CRLF normalized to LF, but only when every line in the checked-out
@@ -392,7 +404,7 @@ caught there as `repinned` or `changed`.
 
 ## Release gate
 
-Two tests run only with `TRIPCORD_RELEASE_GATE=1`:
+Four tests run only with `TRIPCORD_RELEASE_GATE=1`:
 
 ```sh
 make release-gate
@@ -416,7 +428,26 @@ action, so both paths pass. It reads the pinned commits with `git show`,
 so the clone must have them (`fetch-depth: 0`).
 Both pass on this tree.
 
-Without the variable both log that the gate was not requested and pass,
+`TestReleaseGateKnownWorkflowPins`
+(`cmd/tripcord/release_gate_pins_test.go`) checks every
+`KnownWorkflowPins` entry and `WorkflowPin`: each is on main, descends
+from the embed check, and pins, through its `tripcord-pr.yml`, an action
+with the embed check and the `base` input; the list is in history
+order, holds neither excluded pin (`8b33b1b`, `6e1d5db`), and only
+extends main's.
+
+`TestVersionSkewCIScanner` (`cmd/tripcord/version_skew_e2e_test.go`)
+builds the tripcord the generated `tripcord.yml` really runs in CI
+(`tripcord-pr.yml@WorkflowPin`, then its action, built from source the
+way the action does) and scans a fresh embed from this tree's `init`
+with `GITHUB_ACTIONS=true`. It fails on any high TC-CFG-016 finding.
+It fails on this tree: the action at `8b33b1b` predates this tree's
+templates and reports six highs. It passes once the action and then
+`WorkflowPin` are repinned past the TC-CFG-016 version-skew fix
+([release notes](release-notes.md)), so until then no release can be
+tagged.
+
+Without the variable each logs that the gate was not requested and passes,
 so pull request CI stays green. There is no release workflow in this
 repository; run the target before tagging a release.
 `TestInitWiringInvokesTripcordHook` always runs and asserts the exact
@@ -431,7 +462,7 @@ the cache by its SHA-256: verified, tampered, and missing.
 | Code | Meaning |
 | --- | --- |
 | 0 | Files written, unchanged, or a dry run. |
-| 3 | Invalid flags, a missing or malformed pin, a `PATH` that is not a repository root (with `--embed`, not a Git repository), a symlink or non-regular target, or a file that cannot be merged. Nothing was written. |
+| 3 | Invalid flags, a missing or malformed pin, a `--version` older than a release build of `init`, a `PATH` that is not a repository root (with `--embed`, not a Git repository), a symlink or non-regular target, or a file that cannot be merged. Nothing was written. |
 | 4 | Internal error, including a failure while writing. |
 
 `init` does not create the fingerprint key; `tripcord scan` still

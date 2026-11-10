@@ -2,6 +2,61 @@
 
 ## v0 (unreleased)
 
+### TC-CFG-016 version skew: an older scanner no longer fails a newer embed
+
+The scanner CI runs is the one `tripcord-pr.yml@WorkflowPin` pins,
+built from that commit's source, so it can be older than the `init`
+that wrote the embed. It reported six highs ("written by an older
+Tripcord") on a fresh embed. TC-CFG-016 now holds an embed it did not
+write to invariants every Tripcord version keeps, instead of to its
+own templates ([design](design/tc-cfg-016-version-skew.md)):
+
+- A render that matches `embed.json` and keeps every invariant, but
+  that this scanner never compiled, is `unverified`, low, not high. A
+  render an earlier `init` under a known pin wrote is `outdated`, low.
+- A loosened guard is still high in any scan, however high
+  `embed.json`'s `version` is: `onFailure: continue`, a narrowed
+  matcher, `failClosed: false`, a disabled checksum gate, `fail-on:
+  critical`, `install || true`, `-text`, a removed guard, or anything
+  removed relative to the base.
+- A render this scanner never compiled, under a pin it knows, is
+  `changed`, high (the writer witness).
+  `TestTemplateChangeNeedsRepin` keeps that sound on every pull
+  request: a template change needs a new `WorkflowPin`.
+- The `tripcord.yml` pin is checked on its own. A pin that is not
+  `tripcord-pr.yml` at a full SHA is `pin-malformed`, high. An unknown
+  pin is `pin-unknown`, high, in a local or pre-commit scan, unless the
+  scanner is a release older than `embed.json`'s version and
+  `tripcord.yml` matches its digest; in CI it is `unverified`, low. A
+  pin change relative to the base is `repinned`, high, always.
+- `KnownWorkflowPins` (`internal/embedded/pins.go`) starts empty and
+  only grows. Each repin appends the pin it replaces, guarded by the
+  release gate. `8b33b1b` and `6e1d5db` are never in it.
+- `scan --executing-workflow` names the reusable workflow a CI scan
+  runs inside, and the composite action passes it. Under
+  `pull_request` the pull request's own `tripcord.yml` picks that
+  workflow, so it attests only to itself: it accepts only a pin the
+  base already has.
+- A release `init` refuses a `--version` older than itself (exit 3).
+
+Embeds pinned to `6a12795` keep failing in CI until two repins land:
+the action pin in `tripcord-pr.yml`, then `WorkflowPin`, followed by
+`init --embed --force`. Until then `make release-gate` fails
+`TestVersionSkewCIScanner` with those six highs, so no release is
+tagged. Moving that test from the release gate into per-pull-request
+CI, passing, is the last step. Tracking issue: not opened yet; it will
+be linked here.
+
+Known gap, not addressed in v0: CI still builds the scanner from the
+pinned action's source, so any template change ships an embed that the
+previously pinned scanner can only report as `unverified`. Two future
+options remain open:
+
+- `tripcord-pr.yml` checks out and builds `ref: ${{ job.workflow_sha }}`.
+- CI runs the published release the embed pins, verified by digest.
+
+Distribution is not decided here.
+
 ### More secret shapes are redacted, in evidence keys too
 
 JSON and JSONL output carry the evidence key of a finding, which

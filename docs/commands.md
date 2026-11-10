@@ -51,6 +51,7 @@ It does not execute repository content. The full reference, including
 | `--output path\|-` | Write to a new private (`0600`) local file, or `-` for stdout (default). A symlink is rejected. The destination is replaced only after the result is complete. |
 | `--since git-ref` | Repository files that differ between the ref and `HEAD`. The ref must not start with `-`. Untracked files and uncommitted edits are not included. Requires Git. Implies `--base` with the same ref. |
 | `--base git-ref` | Also compare a Tripcord embed with the ref's and report one the change removes, re-pins, or drops a harness from (TC-CFG-016). Requires Git. Must equal `--since` when both are given; not allowed with `--staged`. |
+| `--executing-workflow owner/repo/path@sha` | CI only: the reusable workflow the scan runs inside (`job.workflow_*`), which the composite action passes. TC-CFG-016 accepts a `tripcord.yml` pin equal to it only when `--base` pins the same commit. Only `vgmartinez/tripcord/.github/workflows/tripcord-pr.yml` at a full SHA is valid; anything else exits 3. Not allowed with `--staged`. See [scan](scan.md). |
 | `--staged` | Scan the staged Git index; paths given after it are unioned with the staged change set. |
 | `--fail-on low\|medium\|high\|critical` | Inclusive threshold for this invocation. A locked policy ceiling can be tightened and cannot be loosened. |
 | `--policy path` | Repository policy file. The path must exist. The default `.tripcord/policy.yaml` is optional. |
