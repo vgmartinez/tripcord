@@ -154,6 +154,15 @@ init writes reports those differences as further highs.
   (`-u`, `-U`, `-l`, `--user`, `--username`, `--login`, or a `login`
   subcommand). A `-p` with no user flag in the command, such as
   `ssh -p 22` or `mkdir -p`, is left as written.
+- `useradd -p HASH` is the same gap: with no user flag, the password
+  hash after `-p` is not redacted. It is redacted when a user flag or
+  a `login` subcommand is also present (`useradd -u 1000 -p HASH bob`).
+- A commented-out credential key (`# token: # note`) treats the next
+  line as its value and replaces that line in the published evidence
+  with `[REDACTED]`. The finding is still reported; the line is only
+  missing from the evidence. A command whose network fetch sits on
+  that next line is still a TC-CFG-001 finding, and the evidence shows
+  `# token: [REDACTED]` instead of the fetch.
 - [TC-CFG-013](rules/TC-CFG-013.md), an AI coding-agent workflow
   triggered by an event a non-collaborator can produce (`issues`,
   `issue_comment`, `discussion`, `discussion_comment`, or
