@@ -390,7 +390,7 @@ jobs:
           {
             "hooks": {
               "PostToolUse": [
-                {"matcher": "Write", "hooks": [{"type": "command", "command": "${HOME}/.acme/hooks/post-write.sh"}]}
+                {"matcher": "Write", "hooks": [{"type": "command", "command": "${HOME}/.vgmartinez/hooks/post-write.sh"}]}
               ]
             }
           }

@@ -109,7 +109,7 @@ func TestInstructionPath(t *testing.T) {
 		".devin/blueprint.yml", ".devin/hooks.json",
 		"docs/SKILL.md", "skills/SKILL.md", "skills/review/SKILL.md",
 		".claude/skills/SKILL.md", ".claude/skills/review/skill.md.txt",
-		"tools/acme/skills/review/SKILL.md", "not.claude/skills/review/SKILL.md",
+		"tools/vgmartinez/skills/review/SKILL.md", "not.claude/skills/review/SKILL.md",
 	}
 	for _, rel := range yes {
 		if !InstructionPath(rel) {

@@ -53,7 +53,7 @@ func TestNormalizeScopedPathRejects(t *testing.T) {
 	}{
 		{"empty path", ScopeRepo, "", errPathEmpty},
 		{"whitespace only path", ScopeRepo, "   ", errPathEmpty},
-		{"repo unix absolute", ScopeRepo, "/home/runner/work/acme/acme/x", errPathNotRelative},
+		{"repo unix absolute", ScopeRepo, "/home/runner/work/vgmartinez/vgmartinez/x", errPathNotRelative},
 		{"repo windows drive backslash", ScopeRepo, `C:\Users\runner\x`, errPathNotRelative},
 		{"repo windows drive forward slash", ScopeRepo, "C:/Users/runner/x", errPathNotRelative},
 		{"repo windows drive lowercase", ScopeRepo, "c:/users/runner/x", errPathNotRelative},

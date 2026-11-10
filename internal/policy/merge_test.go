@@ -107,7 +107,7 @@ func TestDefaults(t *testing.T) {
 
 func TestPrecedenceAndProvenance(t *testing.T) {
 	e := mustMerge(t, catalog,
-		"mode: warn\nharnesses: [claude]\nrules:\n  include: [\"TC-*\"]\n  severity_overrides: {TC-CFG-011: high, TC-CFG-004: low}\npack: [tripcord/core@2026.11, acme/extra@2026.10]\n",
+		"mode: warn\nharnesses: [claude]\nrules:\n  include: [\"TC-*\"]\n  severity_overrides: {TC-CFG-011: high, TC-CFG-004: low}\npack: [tripcord/core@2026.11, vgmartinez/extra@2026.10]\n",
 		"mode: enforce\nrules:\n  severity_overrides: {TC-CFG-011: critical}\npack: tripcord/core@2026.12\nsecrets: {rulesets: [gitleaks-default]}\n",
 		"mode: audit\nharnesses: [claude, cursor]\nprivacy: {redact: false}\n",
 	)
@@ -126,7 +126,7 @@ func TestPrecedenceAndProvenance(t *testing.T) {
 	if e.Severity("TC-SEC-018", model.SeverityCritical) != model.SeverityCritical {
 		t.Fatal("base severity lost")
 	}
-	if len(e.Packs) != 2 || e.Packs[0].String() != "tripcord/core@2026.12" || e.Provenance["pack.tripcord/core"].Layer != LayerRepo || e.Provenance["pack.acme/extra"].Layer != LayerOrg {
+	if len(e.Packs) != 2 || e.Packs[0].String() != "tripcord/core@2026.12" || e.Provenance["pack.tripcord/core"].Layer != LayerRepo || e.Provenance["pack.vgmartinez/extra"].Layer != LayerOrg {
 		t.Fatalf("packs %v", e.Packs)
 	}
 	if e.Redact || e.Provenance["privacy.redact"].Layer != LayerLocal || e.Provenance["rules.include"].Layer != LayerOrg {

@@ -501,8 +501,8 @@ func TestFingerprintRejectsBadPaths(t *testing.T) {
 		path  string
 		want  error
 	}{
-		{"repo scope, unix absolute", ScopeRepo, "/home/runner/work/acme/acme/.vscode/tasks.json", errPathNotRelative},
-		{"default scope, unix absolute", "", "/home/runner/work/acme/acme/.vscode/tasks.json", errPathNotRelative},
+		{"repo scope, unix absolute", ScopeRepo, "/home/runner/work/vgmartinez/vgmartinez/.vscode/tasks.json", errPathNotRelative},
+		{"default scope, unix absolute", "", "/home/runner/work/vgmartinez/vgmartinez/.vscode/tasks.json", errPathNotRelative},
 		{"repo scope, windows drive", ScopeRepo, `C:\Users\runner\acme\.vscode\tasks.json`, errPathNotRelative},
 		{"repo scope, home-relative", ScopeRepo, "~/.claude/settings.json", errPathNotRelative},
 		{"repo scope, dotdot segment", ScopeRepo, "../etc/passwd", errPathDotDot},

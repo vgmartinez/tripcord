@@ -70,7 +70,7 @@ func TestParseSpecSampleElidedHash(t *testing.T) {
 }
 
 func TestParsePackAndExtends(t *testing.T) {
-	doc := "version: 1\npack: tripcord/core@2026.11\nextends: [../org/policy.yaml, acme/org-policy@2026.11]\n"
+	doc := "version: 1\npack: tripcord/core@2026.11\nextends: [../org/policy.yaml, vgmartinez/org-policy@2026.11]\n"
 	f, err := Parse([]byte(doc))
 	if err != nil {
 		t.Fatal(err)
@@ -78,7 +78,7 @@ func TestParsePackAndExtends(t *testing.T) {
 	if len(f.Pack) != 1 || len(f.Extends) != 2 {
 		t.Fatalf("file = %+v", f)
 	}
-	f, err = Parse([]byte("version: 1\nextends: ./base.yaml\npack: [tripcord/core@2026.11, acme/extra@2026.10]\n"))
+	f, err = Parse([]byte("version: 1\nextends: ./base.yaml\npack: [tripcord/core@2026.11, vgmartinez/extra@2026.10]\n"))
 	if err != nil || len(f.Extends) != 1 || len(f.Pack) != 2 {
 		t.Fatalf("file = %+v, %v", f, err)
 	}
@@ -140,17 +140,17 @@ func TestParseSizeLimit(t *testing.T) {
 
 func TestParseExtends(t *testing.T) {
 	for s, want := range map[string]ExtendsKind{
-		"./base.yaml":             ExtendsPath,
-		"../org/policy.yaml":      ExtendsPath,
-		"/etc/tripcord/org.yaml":  ExtendsPath,
-		"acme/org-policy@2026.11": ExtendsPack,
+		"./base.yaml":                   ExtendsPath,
+		"../org/policy.yaml":            ExtendsPath,
+		"/etc/tripcord/org.yaml":        ExtendsPath,
+		"vgmartinez/org-policy@2026.11": ExtendsPack,
 	} {
 		kind, _, err := ParseExtends(s)
 		if err != nil || kind != want {
 			t.Errorf("ParseExtends(%q) = %v, %v", s, kind, err)
 		}
 	}
-	for _, s := range []string{"base.yaml", "acme/org-policy", "", "https://example.com/p.yaml"} {
+	for _, s := range []string{"base.yaml", "vgmartinez/org-policy", "", "https://example.com/p.yaml"} {
 		if _, _, err := ParseExtends(s); err == nil {
 			t.Errorf("ParseExtends(%q) succeeded", s)
 		}
@@ -160,7 +160,7 @@ func TestParseExtends(t *testing.T) {
 func FuzzParse(f *testing.F) {
 	f.Add([]byte(specSample))
 	f.Add([]byte("version: 1\nlocked:\n  mode: true\n  rules: [TC-CFG-*]\n"))
-	f.Add([]byte("version: 1\nextends: [./a.yaml, acme/p@2026.11]\n"))
+	f.Add([]byte("version: 1\nextends: [./a.yaml, vgmartinez/p@2026.11]\n"))
 	f.Add([]byte("a: &a [*a, *a, *a]\n"))
 	f.Fuzz(func(t *testing.T, data []byte) {
 		file, err := Parse(data)

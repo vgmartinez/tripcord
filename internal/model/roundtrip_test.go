@@ -37,7 +37,7 @@ func TestEventSampleRoundTrip(t *testing.T) {
 	if ev.Source.Harness != HarnessClaude || ev.Source.Surface != "cloud" || ev.Source.Version != "2.1.310" || ev.Source.Origin != "hook:PreToolUse" {
 		t.Fatalf("source = %+v", ev.Source)
 	}
-	if ev.Session.ID != "00893aaf-19fa-41d2" || ev.Session.Repo != "acme/api" || ev.Session.Branch != "claude/fix-auth" || ev.Session.Actor != "agent" || ev.Session.Parent != nil {
+	if ev.Session.ID != "00893aaf-19fa-41d2" || ev.Session.Repo != "vgmartinez/api" || ev.Session.Branch != "claude/fix-auth" || ev.Session.Actor != "agent" || ev.Session.Parent != nil {
 		t.Fatalf("session = %+v", ev.Session)
 	}
 	if ev.Kind != EventKindToolCall || ev.Tool != "shell" || ev.Command != "cat /proc/$PPID/environ" {

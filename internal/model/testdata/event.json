@@ -10,7 +10,7 @@
   },
   "session": {
     "id": "00893aaf-19fa-41d2",
-    "repo": "acme/api",
+    "repo": "vgmartinez/api",
     "branch": "claude/fix-auth",
     "actor": "agent",
     "parent": null

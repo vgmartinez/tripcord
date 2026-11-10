@@ -1,2 +1,2 @@
-HIGH TC-CFG-010 configs/a:b,c.json:7: Run \x1b[2K\rforged [x](https://evil) @org/team | evidence: \n::stop-commands::tok\n``` [x](https://evil) @org/team \d | fix: See\n\n## Pwned <img src=x> `tick` a|b \u202eevil | fingerprint: tcf_cb0e8331069c12d7
+HIGH TC-CFG-010 configs/a:b,c.json:7: Run \x1b[2K\rforged [x](https://example.invalid) @org/team | evidence: \n::stop-commands::tok\n``` [x](https://example.invalid) @org/team \d | fix: See\n\n## Pwned <img src=x> `tick` a|b \u202eevil | fingerprint: tcf_f733fddc9b653e65
 1 finding(s): 0 critical, 1 high, 0 medium, 0 low; 0 warning(s)

@@ -4,9 +4,9 @@ Total: 1. Critical: 0, high: 1, medium: 0, low: 0.
 
 | Severity | Rule | Location | Finding |
 | --- | --- | --- | --- |
-| `high` | `TC-CFG-010` | `configs/a:b,c.json:7` | `Run \x1b[2K\rforged [x](https://evil) @​org/team` |
+| `high` | `TC-CFG-010` | `configs/a:b,c.json:7` | `Run \x1b[2K\rforged [x](https://example.invalid) @​org/team` |
 
-### `TC-CFG-010` — `Run \x1b[2K\rforged [x](https://evil) @​org/team`
+### `TC-CFG-010` — `Run \x1b[2K\rforged [x](https://example.invalid) @​org/team`
 
 Fix: ``See\n\n## Pwned <img src=x> `tick` a|b \u202eevil``
 
@@ -15,7 +15,7 @@ Location: `configs/a:b,c.json:7`
 Evidence:
 
 ````
-\n::stop-commands::tok\n``` [x](https://evil) @​org/team \d
+\n::stop-commands::tok\n``` [x](https://example.invalid) @​org/team \d
 ````
 
-Fingerprint: `tcf_cb0e8331069c12d7`
+Fingerprint: `tcf_f733fddc9b653e65`

@@ -139,7 +139,7 @@ func TestScanStagedRefRangeIncludesDeletion(t *testing.T) {
 func TestScanStagedRefRangeLinksPluginManifest(t *testing.T) {
 	bin := buildStagedBinary(t)
 	repo := stagedRepo(t)
-	stagedWrite(t, repo, "tools/acme-plugin/hooks/hooks.json", "{\n  \"hooks\": {\n    \"PostToolUse\": [\n      {\"matcher\": \"Write\", \"hooks\": [{\"type\": \"command\", \"command\": \"${HOME}/.acme/hooks/post-write.sh\"}]}\n    ]\n  }\n}\n")
+	stagedWrite(t, repo, "tools/acme-plugin/hooks/hooks.json", "{\n  \"hooks\": {\n    \"PostToolUse\": [\n      {\"matcher\": \"Write\", \"hooks\": [{\"type\": \"command\", \"command\": \"${HOME}/.vgmartinez/hooks/post-write.sh\"}]}\n    ]\n  }\n}\n")
 	stagedGit(t, repo, "add", ".")
 	stagedGit(t, repo, "commit", "-qm", "hooks only")
 	parent := strings.TrimSpace(stagedGitOut(t, repo, "rev-parse", "HEAD"))

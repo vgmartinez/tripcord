@@ -48,11 +48,11 @@ type modeVariant struct {
 }
 
 func modeEnvFlagArgs(privateKey, pass string) []any {
-	return []any{"run", "-i", "--rm", "-e", "PRIVATE_KEY=" + privateKey, "-ePASS=" + pass, "ghcr.io/acme/app-mcp:1.2.0"}
+	return []any{"run", "-i", "--rm", "-e", "PRIVATE_KEY=" + privateKey, "-ePASS=" + pass, "ghcr.io/vgmartinez/app-mcp:1.2.0"}
 }
 
 func modeBearerTailArgs(apiKey, bearer string) []any {
-	return []any{"run", "-i", "--rm", "-eAPI_KEY=" + apiKey + " Bearer " + bearer, "ghcr.io/acme/app-mcp:1.2.0"}
+	return []any{"run", "-i", "--rm", "-eAPI_KEY=" + apiKey + " Bearer " + bearer, "ghcr.io/vgmartinez/app-mcp:1.2.0"}
 }
 
 // modeGroups are the two cases of the conformance test in PR #12: each

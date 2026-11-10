@@ -16,14 +16,14 @@ var (
 	vendSplit = strings.Repeat("-", 80)
 )
 
-const vendRel = "benign/vendored/acme/tools/mcp.json.txtar"
+const vendRel = "benign/vendored/vgmartinez/tools/mcp.json.txtar"
 
 func vendSnippet(source, license, member, body string) string {
 	return "source: " + source + "\nlicense: " + license + "\n-- " + member + " --\n" + body
 }
 
 func goodSnippet() string {
-	return vendSnippet("acme/tools@"+vendSHA+":.mcp.json", "MIT", ".mcp.json",
+	return vendSnippet("vgmartinez/tools@"+vendSHA+":.mcp.json", "MIT", ".mcp.json",
 		`{"mcpServers": {"docs": {"url": "https://mcp.vendor-docs.com/sse"}}}`+"\n")
 }
 
@@ -44,8 +44,8 @@ func vendTree(t *testing.T, snippet, notices string) string {
 	mod := t.TempDir()
 	corpus := filepath.Join(mod, "corpus")
 	repos := []benign.Repo{
-		{Name: "acme/copyleft", SHA: vendSHA, License: "GPL-3.0", Harnesses: []string{"mcp"}, Band: "small", Date: "2026-11-05"},
-		{Name: "acme/tools", SHA: vendSHA, License: "MIT", Harnesses: []string{"mcp"}, Band: "small", Date: "2026-11-05"},
+		{Name: "vgmartinez/copyleft", SHA: vendSHA, License: "GPL-3.0", Harnesses: []string{"mcp"}, Band: "small", Date: "2026-11-05"},
+		{Name: "vgmartinez/tools", SHA: vendSHA, License: "MIT", Harnesses: []string{"mcp"}, Band: "small", Date: "2026-11-05"},
 	}
 	lock, err := benign.FormatLock(repos, time.Date(2026, 11, 5, 0, 0, 0, 0, time.UTC))
 	if err != nil {
@@ -76,7 +76,7 @@ func vendDetails(t *testing.T, corpus string) []string {
 
 func TestVendoredSnippet(t *testing.T) {
 	t.Parallel()
-	good := vendNotice("acme/tools", vendSHA, "MIT", "corpus/"+vendRel)
+	good := vendNotice("vgmartinez/tools", vendSHA, "MIT", "corpus/"+vendRel)
 	if got := vendDetails(t, vendTree(t, goodSnippet(), good)); len(got) != 0 {
 		t.Fatalf("a vendored snippet with a real host was flagged: %v", got)
 	}
@@ -89,18 +89,18 @@ func TestVendoredSnippet(t *testing.T) {
 	}{
 		{name: "no header", snippet: "-- .mcp.json --\n{}\n", notices: good, want: "needs source and license"},
 		{name: "unknown header", snippet: "note: x\n" + goodSnippet(), notices: good, want: "unknown header note"},
-		{name: "copyleft", snippet: vendSnippet("acme/copyleft@"+vendSHA+":.mcp.json", "GPL-3.0", ".mcp.json", "{}\n"), notices: good, want: "license GPL-3.0 is not one of"},
-		{name: "member", snippet: vendSnippet("acme/tools@"+vendSHA+":.mcp.json", "MIT", "mcp.json", "{}\n"), notices: good, want: "is not the source path"},
+		{name: "copyleft", snippet: vendSnippet("vgmartinez/copyleft@"+vendSHA+":.mcp.json", "GPL-3.0", ".mcp.json", "{}\n"), notices: good, want: "license GPL-3.0 is not one of"},
+		{name: "member", snippet: vendSnippet("vgmartinez/tools@"+vendSHA+":.mcp.json", "MIT", "mcp.json", "{}\n"), notices: good, want: "is not the source path"},
 		{name: "two members", snippet: goodSnippet() + "-- AGENTS.md --\nhi\n", notices: good, want: "has 2 members"},
-		{name: "directory", snippet: vendSnippet("acme/other@"+vendSHA+":.mcp.json", "MIT", ".mcp.json", "{}\n"), notices: good, want: "lives in benign/vendored/acme/other/"},
-		{name: "commit", snippet: vendSnippet("acme/tools@"+otherSHA+":.mcp.json", "MIT", ".mcp.json", "{}\n"), notices: good, want: "is not the repos.lock pin"},
-		{name: "lock license", snippet: vendSnippet("acme/tools@"+vendSHA+":.mcp.json", "Apache-2.0", ".mcp.json", "{}\n"), notices: good, want: "is not the repos.lock license MIT"},
+		{name: "directory", snippet: vendSnippet("vgmartinez/other@"+vendSHA+":.mcp.json", "MIT", ".mcp.json", "{}\n"), notices: good, want: "lives in benign/vendored/vgmartinez/other/"},
+		{name: "commit", snippet: vendSnippet("vgmartinez/tools@"+otherSHA+":.mcp.json", "MIT", ".mcp.json", "{}\n"), notices: good, want: "is not the repos.lock pin"},
+		{name: "lock license", snippet: vendSnippet("vgmartinez/tools@"+vendSHA+":.mcp.json", "Apache-2.0", ".mcp.json", "{}\n"), notices: good, want: "is not the repos.lock license MIT"},
 		{name: "no notices file", snippet: goodSnippet(), want: "THIRD_PARTY_NOTICES"},
-		{name: "no entry", snippet: goodSnippet(), notices: vendNotice("acme/copyleft", vendSHA, "MIT", "corpus/x.txtar"), want: "acme/tools has no THIRD_PARTY_NOTICES entry"},
-		{name: "entry commit", snippet: goodSnippet(), notices: vendNotice("acme/tools", otherSHA, "MIT", "corpus/"+vendRel), want: "entry is " + otherSHA},
-		{name: "entry files", snippet: goodSnippet(), notices: vendNotice("acme/tools", vendSHA, "MIT", "corpus/"+vendRel, "corpus/benign/vendored/acme/tools/gone.txtar"), want: "lists corpus/benign/vendored/acme/tools/gone.txtar"},
-		{name: "unlisted", snippet: goodSnippet(), notices: vendNotice("acme/tools", vendSHA, "MIT", "corpus/benign/vendored/acme/tools/other.txtar"), want: "does not list this file"},
-		{name: "apache text", snippet: goodSnippet(), notices: vendNotice("acme/tools", vendSHA, "Apache-2.0", "corpus/"+vendRel), want: "License text: Apache-2.0"},
+		{name: "no entry", snippet: goodSnippet(), notices: vendNotice("vgmartinez/copyleft", vendSHA, "MIT", "corpus/x.txtar"), want: "vgmartinez/tools has no THIRD_PARTY_NOTICES entry"},
+		{name: "entry commit", snippet: goodSnippet(), notices: vendNotice("vgmartinez/tools", otherSHA, "MIT", "corpus/"+vendRel), want: "entry is " + otherSHA},
+		{name: "entry files", snippet: goodSnippet(), notices: vendNotice("vgmartinez/tools", vendSHA, "MIT", "corpus/"+vendRel, "corpus/benign/vendored/vgmartinez/tools/gone.txtar"), want: "lists corpus/benign/vendored/vgmartinez/tools/gone.txtar"},
+		{name: "unlisted", snippet: goodSnippet(), notices: vendNotice("vgmartinez/tools", vendSHA, "MIT", "corpus/benign/vendored/vgmartinez/tools/other.txtar"), want: "does not list this file"},
+		{name: "apache text", snippet: goodSnippet(), notices: vendNotice("vgmartinez/tools", vendSHA, "Apache-2.0", "corpus/"+vendRel), want: "License text: Apache-2.0"},
 		{name: "stale notices", notices: good, want: "which is not vendored"},
 		{name: "secret", snippet: goodSnippet() + "AKIAIOSFODNN7EXAMPLE\n", notices: good, want: "secret: AKIA"},
 		{name: "ioc", snippet: goodSnippet() + "post to webhook.site/x\n", notices: good, want: "ioc: webhook.site"},
@@ -121,7 +121,7 @@ func TestVendoredExemptionIsScoped(t *testing.T) {
 	t.Parallel()
 	corpus := vendTree(t, "", "")
 	writeFile(t, filepath.Join(corpus, "benign", "notes.txtar"), []byte("see mcp.vendor-docs.com\n"), 0o644)
-	writeFile(t, filepath.Join(corpus, "benign", "vendored", "acme", "tools", "README"), []byte("see mcp.vendor-docs.com\n"), 0o644)
+	writeFile(t, filepath.Join(corpus, "benign", "vendored", "vgmartinez", "tools", "README"), []byte("see mcp.vendor-docs.com\n"), 0o644)
 	got := strings.Join(vendDetails(t, corpus), "\n")
 	if !strings.Contains(got, "host: mcp.vendor-docs.com") {
 		t.Fatalf("a host outside vendored/ was not flagged: %s", got)

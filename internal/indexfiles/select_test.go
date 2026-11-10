@@ -50,7 +50,7 @@ func TestHookPathCoversKnownShapes(t *testing.T) {
 	for _, path := range []string{
 		"GEMINI.md",
 		"pkg/GEMINI.md",
-		"tools/acme/skills/review/SKILL.md",
+		"tools/vgmartinez/skills/review/SKILL.md",
 		".DevContainer/devcontainer.json",
 		".DevContainer/Py/DevContainer.JSON",
 		"services/api/.agents/skills/nested/SKILL.md",

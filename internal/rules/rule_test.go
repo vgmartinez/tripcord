@@ -48,7 +48,7 @@ func TestParsePackRef(t *testing.T) {
 	if err != nil || ref.Name != "tripcord/core" || ref.Version != "2026.11" || ref.String() != "tripcord/core@2026.11" {
 		t.Fatalf("got %+v, %v", ref, err)
 	}
-	if _, err := ParsePackRef("acme/org-policy@2027.01.3"); err != nil {
+	if _, err := ParsePackRef("vgmartinez/org-policy@2027.01.3"); err != nil {
 		t.Error(err)
 	}
 	for _, s := range []string{"", "tripcord/core", "core@2026.11", "Tripcord/core@2026.11", "tripcord/core@2026.13", "tripcord/core@26.11", "tripcord/core@2026.11.01", "tripcord/core@latest", "a/b/c@2026.11"} {

@@ -23,9 +23,9 @@ var injectionPayloads = map[string]string{
 	"indented-cmd":    "\n   \t::warning::forged",
 	"ansi-erase":      "\x1b[2K\rforged",
 	"csi-c1":          "\u009b2Kforged\u0085next",
-	"link":            "[x](https://evil)",
-	"image":           "![i](https://evil/i.png)",
-	"autolink":        "<https://evil>",
+	"link":            "[x](https://example.invalid)",
+	"image":           "![i](https://example.invalid/i.png)",
+	"autolink":        "<https://example.invalid>",
 	"html":            "<img src=x onerror=alert(1)>",
 	"entity":          "&lt;b&gt;&amp;",
 	"mention-team":    "@org/team",
@@ -34,7 +34,7 @@ var injectionPayloads = map[string]string{
 	"heading":         "\n\n## Pwned",
 	"emphasis":        "**bold** _it_ ~~s~~",
 	"backticks":       "`` ` ``` x",
-	"fence-line":      "\n```\n[x](https://evil)\n```",
+	"fence-line":      "\n```\n[x](https://example.invalid)\n```",
 	"pipe":            "a|b\\|c",
 	"bidi":            "safe\u202eevil\u2066x\u2069",
 	"line-separator":  "a\u2028b\u2029c",
@@ -130,9 +130,9 @@ func TestInjectionGoldens(t *testing.T) {
 
 func injectionFinding() model.Finding {
 	finding := findings()[0]
-	finding.Title = "Run \x1b[2K\rforged [x](https://evil) @org/team"
+	finding.Title = "Run \x1b[2K\rforged [x](https://example.invalid) @org/team"
 	finding.Fix = "See\n\n## Pwned <img src=x> `tick` a|b \u202eevil"
-	finding.Evidence[0].Excerpt = "\n::stop-commands::tok\n``` [x](https://evil) @org/team \\d"
+	finding.Evidence[0].Excerpt = "\n::stop-commands::tok\n``` [x](https://example.invalid) @org/team \\d"
 	finding.Location.Path = "configs/a:b,c.json"
 	return finding
 }

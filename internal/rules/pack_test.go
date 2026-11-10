@@ -33,9 +33,9 @@ func mapPack(files map[string]string) fstest.MapFS {
 
 func goodPackFiles() map[string]string {
 	return map[string]string{
-		ManifestFile:                         "pack: acme/demo@2026.11\n",
-		RegistryFile:                         "ACME-CFG-001 active acme/demo@2026.11\nACME-CFG-002 retired acme/demo@2026.11\n",
-		"ACME-CFG-001.yaml":                  fixtureRule("ACME-CFG-001", "acme/demo"),
+		ManifestFile:                         "pack: vgmartinez/demo@2026.11\n",
+		RegistryFile:                         "ACME-CFG-001 active vgmartinez/demo@2026.11\nACME-CFG-002 retired vgmartinez/demo@2026.11\n",
+		"ACME-CFG-001.yaml":                  fixtureRule("ACME-CFG-001", "vgmartinez/demo"),
 		"README.md":                          "ignored",
 		"ACME-CFG-001.test/positivos/x.json": "{}",
 	}
@@ -116,34 +116,34 @@ func TestLoadPackRejects(t *testing.T) {
 		"no manifest":          {func(m map[string]string) { delete(m, ManifestFile) }, "pack.yaml"},
 		"no registry":          {func(m map[string]string) { delete(m, RegistryFile) }, "REGISTRY"},
 		"bad manifest":         {func(m map[string]string) { m[ManifestFile] = "pack: demo\n" }, "pack"},
-		"manifest unknown key": {func(m map[string]string) { m[ManifestFile] = "pack: acme/demo@2026.11\nx: 1\n" }, "x"},
+		"manifest unknown key": {func(m map[string]string) { m[ManifestFile] = "pack: vgmartinez/demo@2026.11\nx: 1\n" }, "x"},
 		"file name mismatch": {func(m map[string]string) {
-			m["ACME-CFG-003.yaml"] = fixtureRule("ACME-CFG-001", "acme/demo")
-			m[RegistryFile] += "ACME-CFG-003 active acme/demo@2026.11\n"
+			m["ACME-CFG-003.yaml"] = fixtureRule("ACME-CFG-001", "vgmartinez/demo")
+			m[RegistryFile] += "ACME-CFG-003 active vgmartinez/demo@2026.11\n"
 		}, "does not match the file name"},
 		"pack mismatch": {func(m map[string]string) {
 			m["ACME-CFG-001.yaml"] = fixtureRule("ACME-CFG-001", "other/demo")
 		}, "does not match the manifest"},
 		"version on the rule": {func(m map[string]string) {
-			m["ACME-CFG-001.yaml"] = fixtureRule("ACME-CFG-001", "acme/demo@2026.11")
+			m["ACME-CFG-001.yaml"] = fixtureRule("ACME-CFG-001", "vgmartinez/demo@2026.11")
 		}, "version lives in pack.yaml"},
 		"not registered": {func(m map[string]string) {
-			m["ACME-CFG-009.yaml"] = fixtureRule("ACME-CFG-009", "acme/demo")
+			m["ACME-CFG-009.yaml"] = fixtureRule("ACME-CFG-009", "vgmartinez/demo")
 		}, "not in REGISTRY"},
 		"retired id reused": {func(m map[string]string) {
-			m["ACME-CFG-002.yaml"] = fixtureRule("ACME-CFG-002", "acme/demo")
+			m["ACME-CFG-002.yaml"] = fixtureRule("ACME-CFG-002", "vgmartinez/demo")
 		}, "never reused"},
 		"active without file": {func(m map[string]string) { delete(m, "ACME-CFG-001.yaml") }, "is active but"},
 		"registry from other pack": {func(m map[string]string) {
 			m[RegistryFile] += "ACME-CFG-005 retired other/pack@2026.11\n"
-		}, "not pack acme/demo"},
+		}, "not pack vgmartinez/demo"},
 		"yml extension": {func(m map[string]string) { m["ACME-CFG-004.yml"] = "x" }, ".yaml extension"},
 		"bad file name": {func(m map[string]string) { m["notes.yaml"] = "x: 1" }, "file name must be"},
 		"bad when": {func(m map[string]string) {
-			m["ACME-CFG-001.yaml"] = strings.Replace(fixtureRule("ACME-CFG-001", "acme/demo"), `config.kind == "mcp-server"`, `config.kind`, 1)
+			m["ACME-CFG-001.yaml"] = strings.Replace(fixtureRule("ACME-CFG-001", "vgmartinez/demo"), `config.kind == "mcp-server"`, `config.kind`, 1)
 		}, "want bool"},
 		"missing refs": {func(m map[string]string) {
-			m["ACME-CFG-001.yaml"] = strings.Replace(fixtureRule("ACME-CFG-001", "acme/demo"), "refs: [https://example.com/doc]\n", "", 1)
+			m["ACME-CFG-001.yaml"] = strings.Replace(fixtureRule("ACME-CFG-001", "vgmartinez/demo"), "refs: [https://example.com/doc]\n", "", 1)
 		}, "refs"},
 		"bad advisories": {func(m map[string]string) { m["ADVISORIES.json"] = "{" }, "advisories"},
 	}
@@ -168,8 +168,8 @@ func TestLoadPackRejects(t *testing.T) {
 
 func TestLoadPackReportsAllProblems(t *testing.T) {
 	files := goodPackFiles()
-	files["ACME-CFG-002.yaml"] = fixtureRule("ACME-CFG-002", "acme/demo")
-	files["ACME-CFG-009.yaml"] = fixtureRule("ACME-CFG-009", "acme/demo")
+	files["ACME-CFG-002.yaml"] = fixtureRule("ACME-CFG-002", "vgmartinez/demo")
+	files["ACME-CFG-009.yaml"] = fixtureRule("ACME-CFG-009", "vgmartinez/demo")
 	_, err := LoadPack(mapPack(files), "mem", testEnv(t))
 	if err == nil || !strings.Contains(err.Error(), "ACME-CFG-002") || !strings.Contains(err.Error(), "ACME-CFG-009") {
 		t.Fatalf("err = %v", err)

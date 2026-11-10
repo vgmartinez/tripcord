@@ -75,7 +75,7 @@ func TestLocate(t *testing.T) {
 
 		// Other absolute paths, and system directories holding a script.
 		{`/srv/agent/hooks/check`, []string{Absolute}},
-		{`/opt/acme/hooks/check.sh`, []string{Absolute}},
+		{`/opt/vgmartinez/hooks/check.sh`, []string{Absolute}},
 		{`/etc/agent/hook.py`, []string{Absolute}},
 		{`D:\tools\hook.ps1`, []string{Absolute}},
 		{`deno run /srv/hooks/x.ts`, []string{Absolute}},

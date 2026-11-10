@@ -80,11 +80,11 @@ func repoList(names ...string) []benign.Repo {
 func TestRunBoundsWorkersAndCleansUp(t *testing.T) {
 	var names []string
 	for i := 0; i < 20; i++ {
-		names = append(names, "acme/r"+string(rune('a'+i)))
+		names = append(names, "vgmartinez/r"+string(rune('a'+i)))
 	}
-	names[3] = "acme/broken"
-	names[7] = "acme/r-hot"
-	f := &fakeFetcher{fail: "acme/broken"}
+	names[3] = "vgmartinez/broken"
+	names[7] = "vgmartinez/r-hot"
+	f := &fakeFetcher{fail: "vgmartinez/broken"}
 	temp := t.TempDir()
 	results := Run(context.Background(), repoList(names...), f, fakeScanner{}, Options{Workers: 3, PerRepo: time.Second, Temp: temp})
 	if f.peak > 3 || f.peak < 2 {

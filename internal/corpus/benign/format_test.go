@@ -196,7 +196,7 @@ func TestRejectedRows(t *testing.T) {
 	row := func(name, license string) []byte {
 		return []byte(head + name + "\t" + sha + "\t" + license + "\tagents\tsmall\t2026-11-04\n")
 	}
-	beacon := "see https://tracking.evil.com/beacon " + "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
+	beacon := "see https://tracking.example.invalid/beacon " + "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
 	payload100 := strings.Repeat("Q2hhcmFjdGVyc0FuZFBheWxvYWQ", 4)[:100]
 	for _, tc := range []struct {
 		name string
@@ -205,7 +205,7 @@ func TestRejectedRows(t *testing.T) {
 	}{
 		{"comment URL", []byte(head + "# " + beacon + "\n"), "comment or blank line"},
 		{"40KB line", []byte(head + strings.Repeat("x", 40*1024) + "\n"), "limit"},
-		{"repo URL", row("zzzz/https://tracking.evil.com/beacon", "MIT"), "bad repository"},
+		{"repo URL", row("zzzz/https://tracking.example.invalid/beacon", "MIT"), "bad repository"},
 		{"repo base64", row("zzzz/AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=", "MIT"), "bad repository"},
 		{"repo dotdot", row("zzzz/..", "MIT"), "bad repository"},
 		{"repo 100-char payload", row("zzzz/"+payload100, "MIT"), "bad repository"},
@@ -215,7 +215,7 @@ func TestRejectedRows(t *testing.T) {
 		{"repo random split by hyphens", row("AbCdEfGhIjKlMnOpQr/StUvWx-Yz0123-456789-gHiJ", "MIT"), "bad repository"},
 		{"repo padded owner", row(strings.Repeat("z", 39)+"/"+strings.Repeat("Q", 24)+"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmn", "MIT"), "bad repository"},
 		{"repo padded payload", row("zzzz/"+strings.Repeat("z", 28)+"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij", "MIT"), "bad repository"},
-		{"repo 24-char hex run", row("acme/0123456789abcdef01234567", "MIT"), "bad repository"},
+		{"repo 24-char hex run", row("vgmartinez/0123456789abcdef01234567", "MIT"), "bad repository"},
 		{"unknown license", row("zzzz/name", "NotALicense"), "unknown license"},
 		{"license junk", row("zzzz/name", "MIT "+beacon), "unknown license"},
 	} {
@@ -236,7 +236,7 @@ func TestRejectedRows(t *testing.T) {
 	}{
 		{"bad rule", triage("nope", fp, "local task only echoes"), "bad rule id"},
 		{"bad fingerprint", triage("TC-CFG-001", "fp-1", "local task only echoes"), "bad fingerprint"},
-		{"reason URL", triage("TC-CFG-001", fp, "see https://tracking.evil.com/beacon today"), "URL or host"},
+		{"reason URL", triage("TC-CFG-001", fp, "see https://tracking.example.invalid/beacon today"), "URL or host"},
 		{"reason base64", triage("TC-CFG-001", fp, "token AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="), "high-entropy"},
 		{"over-long reason", triage("TC-CFG-001", fp, strings.Repeat("x", maxReasonBytes+1)), "reason length"},
 		{"anything goes", triage("TC-CFG-001", fp, "anything goes"), "reason length"},
@@ -289,7 +289,7 @@ func TestAcceptedNamesAndReasons(t *testing.T) {
 		"RinDevJunior/matterbridge-roborock-vacuum-plugin",
 		"PrayerfulDrop/ESPHome-Guition-ESP32-S3-4848S040",
 		"AzureAD/microsoft-authentication-library-common-for-objc",
-		"acme/0123456789abcdef0123456",
+		"vgmartinez/0123456789abcdef0123456",
 	} {
 		if !validRepoName(name) {
 			t.Errorf("rejected %s", name)

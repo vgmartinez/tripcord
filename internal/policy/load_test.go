@@ -90,8 +90,8 @@ func TestLoadLayers(t *testing.T) {
 	repo := filepath.Join(root, "repo")
 	packs := filepath.Join(root, "packs")
 	managed := filepath.Join(root, "managed", "policy.yaml")
-	write(t, filepath.Join(packs, "acme", "base@2026.11", PackPolicyFile), "version: 1\nmode: enforce\nlocked: {mode: true}\n")
-	write(t, managed, "version: 1\nextends: acme/base@2026.11\nrules:\n  severity_overrides: {TC-CFG-011: high}\n")
+	write(t, filepath.Join(packs, "vgmartinez", "base@2026.11", PackPolicyFile), "version: 1\nmode: enforce\nlocked: {mode: true}\n")
+	write(t, managed, "version: 1\nextends: vgmartinez/base@2026.11\nrules:\n  severity_overrides: {TC-CFG-011: high}\n")
 	write(t, filepath.Join(root, "flag", "org.yaml"), "version: 1\nsecrets: {rulesets: [default]}\n")
 	write(t, filepath.Join(root, "team", "extra.yaml"), "version: 1\nprivacy: {redact: true}\n")
 	write(t, filepath.Join(repo, RepoFile), "version: 1\nextends: [../../team/extra.yaml, ../../managed/policy.yaml]\nharnesses: [claude]\n")
@@ -212,7 +212,7 @@ func TestLoadErrors(t *testing.T) {
 			want: "cycle", code: exitcode.Config,
 		},
 		"pack without resolver": {
-			files: map[string]string{RepoFile: "version: 1\nextends: acme/base@2026.11\n"},
+			files: map[string]string{RepoFile: "version: 1\nextends: vgmartinez/base@2026.11\n"},
 			want:  "no pack resolver", code: exitcode.Config,
 		},
 		"local extends": {

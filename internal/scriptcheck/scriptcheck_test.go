@@ -25,7 +25,7 @@ func TestScripts(t *testing.T) {
 		{hook(".github/hooks/a.json", `{"bash":"./a.sh","cwd":"../elsewhere"}`), nil},
 		{hook(".github/hooks/a.json", `{"bash":"./a.sh","cwd":1}`), nil},
 		{hook(".claude/skills/fmt/SKILL.md", `{"command":"./scripts/fmt.sh"}`), []string{"scripts/fmt.sh"}},
-		{hook("tools/acme/hooks/hooks.json", `{"command":"./scripts/x.sh"}`), nil},
+		{hook("tools/vgmartinez/hooks/hooks.json", `{"command":"./scripts/x.sh"}`), nil},
 		{hook(".claude/settings.json", `{"type":"http","url":"https://x.invalid"}`), nil},
 	}
 	for _, c := range cases {

@@ -9,35 +9,35 @@ import (
 
 func TestBuildMetrics(t *testing.T) {
 	results := []Result{
-		{Repo: "acme/one", Findings: []Finding{
+		{Repo: "vgmartinez/one", Findings: []Finding{
 			{Rule: "TC-CFG-002", Severity: "high", Fingerprint: "tcf_0000000000000001"},
 			{Rule: "TC-CFG-010", Severity: "medium", Fingerprint: "tcf_0000000000000002"},
 		}},
-		{Repo: "acme/two", Findings: []Finding{
+		{Repo: "vgmartinez/two", Findings: []Finding{
 			{Rule: "TC-CFG-002", Severity: "critical", Fingerprint: "tcf_0000000000000003", Path: ".vscode/tasks.json"},
 			{Rule: "TC-CFG-010", Severity: "medium", Fingerprint: "tcf_0000000000000004"},
 		}},
-		{Repo: "acme/three", Findings: []Finding{}},
-		{Repo: "acme/gone", Err: "fetch: boom"},
+		{Repo: "vgmartinez/three", Findings: []Finding{}},
+		{Repo: "vgmartinez/gone", Err: "fetch: boom"},
 	}
 	triage := []benign.Triage{
-		{Repo: "Acme/One", Fingerprint: "tcf_0000000000000001", RuleID: "TC-CFG-002", Verdict: "FP"},
-		{Repo: "acme/one", Fingerprint: "tcf_0000000000000002", RuleID: "TC-CFG-010", Verdict: "TP"},
+		{Repo: "VGMartinez/One", Fingerprint: "tcf_0000000000000001", RuleID: "TC-CFG-002", Verdict: "FP"},
+		{Repo: "vgmartinez/one", Fingerprint: "tcf_0000000000000002", RuleID: "TC-CFG-010", Verdict: "TP"},
 		// Same fingerprint, other rule: does not triage the finding.
-		{Repo: "acme/two", Fingerprint: "tcf_0000000000000003", RuleID: "TC-CFG-001", Verdict: "FP"},
-		{Repo: "acme/two", Fingerprint: "tcf_0000000000000004", RuleID: "TC-CFG-010", Verdict: "FP"},
+		{Repo: "vgmartinez/two", Fingerprint: "tcf_0000000000000003", RuleID: "TC-CFG-001", Verdict: "FP"},
+		{Repo: "vgmartinez/two", Fingerprint: "tcf_0000000000000004", RuleID: "TC-CFG-010", Verdict: "FP"},
 	}
 	r := Build(results, triage)
 	if r.Repos != 4 || r.Scanned != 3 || r.Findings != 4 {
 		t.Fatalf("counts: %+v", r)
 	}
-	if len(r.Failed) != 1 || r.Failed[0].Repo != "acme/gone" {
+	if len(r.Failed) != 1 || r.Failed[0].Repo != "vgmartinez/gone" {
 		t.Fatalf("failed: %+v", r.Failed)
 	}
-	if r.FPPerRepo["acme/one"] != 1 || r.FPPerRepo["acme/two"] != 1 || r.FPPerRepo["acme/three"] != 0 {
+	if r.FPPerRepo["vgmartinez/one"] != 1 || r.FPPerRepo["vgmartinez/two"] != 1 || r.FPPerRepo["vgmartinez/three"] != 0 {
 		t.Fatalf("fp per repo: %v", r.FPPerRepo)
 	}
-	if _, ok := r.FPPerRepo["acme/gone"]; ok {
+	if _, ok := r.FPPerRepo["vgmartinez/gone"]; ok {
 		t.Fatal("a failed repository has an FP count")
 	}
 	if got := r.MeanFPPerRepo; got < 0.66 || got > 0.67 {
@@ -56,7 +56,7 @@ func TestBuildMetrics(t *testing.T) {
 		t.Fatalf("untriaged: %+v", r.NewUntriagedHigh)
 	}
 	u := r.NewUntriagedHigh[0]
-	if u.Repo != "acme/two" || u.Fingerprint != "tcf_0000000000000003" || u.Severity != "critical" || u.Path != ".vscode/tasks.json" {
+	if u.Repo != "vgmartinez/two" || u.Fingerprint != "tcf_0000000000000003" || u.Severity != "critical" || u.Path != ".vscode/tasks.json" {
 		t.Fatalf("untriaged: %+v", u)
 	}
 	if ExitCode(r, 0.5) != 1 {

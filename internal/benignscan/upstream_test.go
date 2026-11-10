@@ -16,7 +16,7 @@ func hexSum(s string) string {
 	return hex.EncodeToString(h[:])
 }
 
-const pinA = "https://raw.githubusercontent.com/acme/schemas/0123456789abcdef0123456789abcdef01234567/a.json"
+const pinA = "https://raw.githubusercontent.com/vgmartinez/schemas/0123456789abcdef0123456789abcdef01234567/a.json"
 
 func TestCommittedUpstreamLock(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join("..", "..", "schemas", "upstream.lock"))
@@ -52,7 +52,7 @@ func TestParseUpstreamRejects(t *testing.T) {
 		"http":          "a.json\thttp://example.test/a.json\t" + hexSum("a") + "\t" + pinA + "\n",
 		"short hash":    "a.json\thttps://example.test/a.json\tabc\t" + pinA + "\n",
 		"upper hash":    "a.json\thttps://example.test/a.json\t" + strings.ToUpper(hexSum("a")) + "\t" + pinA + "\n",
-		"branch pin":    "a.json\thttps://example.test/a.json\t" + hexSum("a") + "\thttps://raw.githubusercontent.com/acme/schemas/main/a.json\n",
+		"branch pin":    "a.json\thttps://example.test/a.json\t" + hexSum("a") + "\thttps://raw.githubusercontent.com/vgmartinez/schemas/main/a.json\n",
 		"bad name":      "../a\thttps://example.test/a.json\t" + hexSum("a") + "\t" + pinA + "\n",
 		"duplicate":     good + "\n" + good + "\n",
 	} {

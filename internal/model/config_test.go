@@ -175,7 +175,7 @@ func TestConfigItemIDRejectsBadPath(t *testing.T) {
 	bad := ConfigItem{
 		Harness: HarnessClaude,
 		Scope:   ScopeRepo,
-		Path:    "/home/runner/work/acme/acme/.claude/settings.json",
+		Path:    "/home/runner/work/vgmartinez/vgmartinez/.claude/settings.json",
 		SHA256:  hex.EncodeToString(sum[:]),
 		Kind:    ConfigKindHook,
 	}
