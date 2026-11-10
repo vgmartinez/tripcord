@@ -299,11 +299,38 @@ runs:
             const comments = await github.paginate(github.rest.issues.listComments, {
               owner, repo, issue_number: issueNumber, per_page: 100,
             });
-            const me = await github.rest.users.getAuthenticated();
-            const actor = me.data || {};
-            const actorLogin = typeof actor.login === "string" ? actor.login : "";
-            const actorID = actor.id;
-            if (actorLogin === "" && actorID == null) {
+            // GET /user accepts a user or PAT. An installation token, including
+            // the default GITHUB_TOKEN, is not in that list and returns 403.
+            // GraphQL viewer is the authenticated identity and accepts an
+            // installation token. If neither answers, skip: do not edit a
+            // comment and do not create one, and do not fail the job.
+            let actorLogin = "";
+            let actorID = null;
+            try {
+              const me = await github.rest.users.getAuthenticated();
+              const actor = me.data || {};
+              actorLogin = typeof actor.login === "string" ? actor.login : "";
+              actorID = actor.id;
+            } catch (error) {
+              const status = error.status || (error.response && error.response.status);
+              const message = String(error && error.message || "");
+              if (status !== 403 && !message.includes("Resource not accessible by integration")) {
+                throw error;
+              }
+              let viewer = null;
+              try {
+                const result = await github.graphql("query { viewer { login databaseId } }");
+                viewer = result && result.viewer;
+              } catch (graphqlError) {
+                core.warning(`Tripcord comment skipped: the token identity could not be read (${graphqlError.message}).`);
+                return;
+              }
+              if (viewer) {
+                actorLogin = typeof viewer.login === "string" ? viewer.login : "";
+                actorID = viewer.databaseId;
+              }
+            }
+            if ((actorLogin === "" || actorLogin == null) && actorID == null) {
               core.warning("Tripcord comment skipped: the token identity could not be read.");
               return;
             }

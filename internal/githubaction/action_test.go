@@ -716,15 +716,16 @@ func TestCommentUpsertUsesTokenIdentity(t *testing.T) {
 	spoofed := comment(13, "github-actions[bot]", 1, "Bot")
 	app := comment(14, "my-app[bot]", 99, "Bot")
 
-	run := func(t *testing.T, me map[string]any, comments []map[string]any) []map[string]any {
+	run := func(t *testing.T, fixture map[string]any) []map[string]any {
 		t.Helper()
+		fixture["markdown"] = markdown
 		dir := t.TempDir()
 		scriptPath := filepath.Join(dir, "script.js")
 		fixturePath := filepath.Join(dir, "fixture.json")
 		if err := os.WriteFile(scriptPath, []byte(script), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		raw, err := json.Marshal(map[string]any{"markdown": markdown, "me": me, "comments": comments})
+		raw, err := json.Marshal(fixture)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -738,10 +739,26 @@ const fixture = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
 const calls = [];
 const core = { warning(message) { calls.push({ op: "warning", message }); } };
 const context = { payload: { pull_request: { number: 7 } }, repo: { owner: "acme", repo: "tools" } };
+function httpError(spec) {
+  const err = new Error(spec.message || "request failed");
+  if (spec.status) err.status = spec.status;
+  return err;
+}
 const github = {
   paginate: async () => fixture.comments,
+  graphql: async () => {
+    calls.push({ op: "graphql" });
+    if (fixture.graphqlError) throw httpError(fixture.graphqlError);
+    return { viewer: fixture.viewer == null ? null : fixture.viewer };
+  },
   rest: {
-    users: { getAuthenticated: async () => ({ data: fixture.me }) },
+    users: {
+      getAuthenticated: async () => {
+        calls.push({ op: "getUser" });
+        if (fixture.userError) throw httpError(fixture.userError);
+        return { data: fixture.me };
+      },
+    },
     issues: {
       updateComment: async (args) => { calls.push({ op: "update", id: args.comment_id }); },
       createComment: async (args) => { calls.push({ op: "create", body: args.body }); },
@@ -782,6 +799,7 @@ new AsyncFunction("core", "context", "github", "process", script)(core, context,
 				got = append(got, "create")
 			case "warning":
 				got = append(got, "warning")
+			case "getUser", "graphql":
 			default:
 				t.Fatalf("call = %#v", call)
 			}
@@ -790,10 +808,18 @@ new AsyncFunction("core", "context", "github", "process", script)(core, context,
 	}
 	assertOps := func(t *testing.T, me map[string]any, comments []map[string]any, want ...string) {
 		t.Helper()
-		got := ops(run(t, me, comments))
+		got := ops(run(t, map[string]any{"me": me, "comments": comments}))
 		if strings.Join(got, ",") != strings.Join(want, ",") {
 			t.Fatalf("ops = %v, want %v", got, want)
 		}
+	}
+	saw := func(calls []map[string]any, op string) bool {
+		for _, call := range calls {
+			if call["op"] == op {
+				return true
+			}
+		}
+		return false
 	}
 
 	t.Run("github-actions bot", func(t *testing.T) {
@@ -826,6 +852,76 @@ new AsyncFunction("core", "context", "github", "process", script)(core, context,
 	})
 	t.Run("missing identity", func(t *testing.T) {
 		assertOps(t, map[string]any{}, []map[string]any{actions}, "warning")
+	})
+
+	forbidden := map[string]any{"status": 403, "message": "Resource not accessible by integration"}
+	t.Run("403 then graphql viewer", func(t *testing.T) {
+		calls := run(t, map[string]any{
+			"userError": forbidden,
+			"viewer":    map[string]any{"login": "github-actions[bot]", "databaseId": 41898282},
+			"comments":  []map[string]any{dependabot, human, spoofed, actions},
+		})
+		if !saw(calls, "getUser") || !saw(calls, "graphql") {
+			t.Fatalf("calls = %#v", calls)
+		}
+		if got := ops(calls); strings.Join(got, ",") != "update:10" {
+			t.Fatalf("ops = %v", got)
+		}
+	})
+	t.Run("403 then graphql viewer for another app", func(t *testing.T) {
+		calls := run(t, map[string]any{
+			"userError": forbidden,
+			"viewer":    map[string]any{"login": "my-app[bot]", "databaseId": 99},
+			"comments":  []map[string]any{actions, app},
+		})
+		if got := ops(calls); strings.Join(got, ",") != "update:14" {
+			t.Fatalf("ops = %v", got)
+		}
+	})
+	t.Run("403 message without status", func(t *testing.T) {
+		calls := run(t, map[string]any{
+			"userError": map[string]any{"message": "Resource not accessible by integration"},
+			"viewer":    map[string]any{"login": "github-actions[bot]", "databaseId": 41898282},
+			"comments":  []map[string]any{dependabot, actions},
+		})
+		if got := ops(calls); strings.Join(got, ",") != "update:10" {
+			t.Fatalf("ops = %v", got)
+		}
+	})
+	t.Run("403 then graphql failure", func(t *testing.T) {
+		calls := run(t, map[string]any{
+			"userError":    forbidden,
+			"graphqlError": map[string]any{"message": "Resource not accessible by integration"},
+			"comments":     []map[string]any{actions, dependabot, human},
+		})
+		if !saw(calls, "graphql") {
+			t.Fatalf("calls = %#v", calls)
+		}
+		if got := ops(calls); strings.Join(got, ",") != "warning" {
+			t.Fatalf("ops = %v", got)
+		}
+	})
+	t.Run("403 then empty viewer", func(t *testing.T) {
+		calls := run(t, map[string]any{
+			"userError": forbidden,
+			"comments":  []map[string]any{actions, dependabot},
+		})
+		if got := ops(calls); strings.Join(got, ",") != "warning" {
+			t.Fatalf("ops = %v", got)
+		}
+	})
+	t.Run("non-403 identity error does not fail the step", func(t *testing.T) {
+		calls := run(t, map[string]any{
+			"userError": map[string]any{"status": 401, "message": "Bad credentials"},
+			"viewer":    map[string]any{"login": "github-actions[bot]", "databaseId": 41898282},
+			"comments":  []map[string]any{actions},
+		})
+		if saw(calls, "graphql") {
+			t.Fatalf("graphql was called: %#v", calls)
+		}
+		if got := ops(calls); strings.Join(got, ",") != "warning" {
+			t.Fatalf("ops = %v", got)
+		}
 	})
 }
 
