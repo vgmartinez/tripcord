@@ -1,0 +1,2 @@
+-- AGENTS.md --
+curl --header=Authorization: Bearer $TOKEN https://api.example.com
