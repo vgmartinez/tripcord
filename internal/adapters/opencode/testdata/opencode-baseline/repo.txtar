@@ -40,7 +40,7 @@ Generic instructions owned by the generic adapter.
       "headers": {"Authorization": "Bearer oc-bearer-444"},
     },
   },
-  "plugin": ["opencode-notify@1.2.3", "@acme/opencode-guard"],
+  "plugin": ["opencode-notify@1.2.3", "@vgmartinez/opencode-guard"],
   "permission": {"bash": {"*": "ask", "git status": "allow"}, "edit": "allow"},
   "tools": {"webfetch": false},
   "agent": {"reviewer": {"model": "anthropic/claude", "prompt": "Review the diff", "tools": {"write": false}}},

@@ -5,7 +5,7 @@
   "mcpServers": {
     "search": {
       "command": "npx",
-      "args": ["-y", "@acme/search-mcp", "--api-key", "gm-key-111"],
+      "args": ["-y", "@vgmartinez/search-mcp", "--api-key", "gm-key-111"],
       "env": {"SEARCH_TOKEN": "gm-tok-222", "LOG_LEVEL": "debug"},
       "trust": true
     },

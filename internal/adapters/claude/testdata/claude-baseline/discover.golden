@@ -77,16 +77,16 @@
       "harness": "claude",
       "scope": "repo",
       "path": ".claude-plugin/marketplace.json",
-      "sha256": "434658506e054d7c3dd6900421afa51d627badda211890dd95dbc19deea86c50",
+      "sha256": "2f34290312320730924b4a284dc60d1defb5065d6fe5365811bd2d5d526dd7aa",
       "kind": "plugin",
       "payload": {
-        "key": "[\"plugin\",\"acme\",\"sig:ba6aa7d661bb2acc\"]",
-        "plugin_root": "plugins/acme",
+        "key": "[\"plugin\",\"acme\",\"sig:414baa8547eff03d\"]",
+        "plugin_root": "plugins/vgmartinez",
         "setting": "marketplace",
         "value": {
           "description": "Acme helpers",
           "name": "acme",
-          "source": "./plugins/acme"
+          "source": "./plugins/vgmartinez"
         }
       }
     },
@@ -94,15 +94,15 @@
       "harness": "claude",
       "scope": "repo",
       "path": ".claude-plugin/marketplace.json",
-      "sha256": "434658506e054d7c3dd6900421afa51d627badda211890dd95dbc19deea86c50",
+      "sha256": "2f34290312320730924b4a284dc60d1defb5065d6fe5365811bd2d5d526dd7aa",
       "kind": "plugin",
       "payload": {
-        "key": "[\"plugin\",\"remote\",\"sig:8483b8b3aa682ee3\"]",
+        "key": "[\"plugin\",\"remote\",\"sig:aebbce79090d12c2\"]",
         "setting": "marketplace",
         "value": {
           "name": "remote",
           "source": {
-            "repo": "acme/remote-plugin",
+            "repo": "vgmartinez/remote-plugin",
             "source": "github"
           }
         }
@@ -201,7 +201,7 @@
       "harness": "claude",
       "scope": "repo",
       "path": ".claude/settings.json",
-      "sha256": "1dde5ca595c39342e24177a08d97d81be4558a6a99a965b1f8a1879b462a333e",
+      "sha256": "cb9234050c9b5f785549a9784ea6320c3c5711fd46babeb1be72a4b01802ce6a",
       "kind": "env-setup",
       "payload": {
         "command": "/usr/local/bin/otel-headers",
@@ -214,7 +214,7 @@
       "harness": "claude",
       "scope": "repo",
       "path": ".claude/settings.json",
-      "sha256": "1dde5ca595c39342e24177a08d97d81be4558a6a99a965b1f8a1879b462a333e",
+      "sha256": "cb9234050c9b5f785549a9784ea6320c3c5711fd46babeb1be72a4b01802ce6a",
       "kind": "env-setup",
       "payload": {
         "command": "aws sso login",
@@ -227,7 +227,7 @@
       "harness": "claude",
       "scope": "repo",
       "path": ".claude/settings.json",
-      "sha256": "1dde5ca595c39342e24177a08d97d81be4558a6a99a965b1f8a1879b462a333e",
+      "sha256": "cb9234050c9b5f785549a9784ea6320c3c5711fd46babeb1be72a4b01802ce6a",
       "kind": "env-setup",
       "payload": {
         "command": "security find-generic-password -w",
@@ -240,7 +240,7 @@
       "harness": "claude",
       "scope": "repo",
       "path": ".claude/settings.json",
-      "sha256": "1dde5ca595c39342e24177a08d97d81be4558a6a99a965b1f8a1879b462a333e",
+      "sha256": "cb9234050c9b5f785549a9784ea6320c3c5711fd46babeb1be72a4b01802ce6a",
       "kind": "env-setup",
       "payload": {
         "command": "~/.claude/statusline.sh",
@@ -256,7 +256,7 @@
       "harness": "claude",
       "scope": "repo",
       "path": ".claude/settings.json",
-      "sha256": "1dde5ca595c39342e24177a08d97d81be4558a6a99a965b1f8a1879b462a333e",
+      "sha256": "cb9234050c9b5f785549a9784ea6320c3c5711fd46babeb1be72a4b01802ce6a",
       "kind": "env-setup",
       "payload": {
         "env_keys": [
@@ -275,7 +275,7 @@
       "harness": "claude",
       "scope": "repo",
       "path": ".claude/settings.json",
-      "sha256": "1dde5ca595c39342e24177a08d97d81be4558a6a99a965b1f8a1879b462a333e",
+      "sha256": "cb9234050c9b5f785549a9784ea6320c3c5711fd46babeb1be72a4b01802ce6a",
       "kind": "hook",
       "payload": {
         "command": "./scripts/setup.sh",
@@ -289,7 +289,7 @@
       "harness": "claude",
       "scope": "repo",
       "path": ".claude/settings.json",
-      "sha256": "1dde5ca595c39342e24177a08d97d81be4558a6a99a965b1f8a1879b462a333e",
+      "sha256": "cb9234050c9b5f785549a9784ea6320c3c5711fd46babeb1be72a4b01802ce6a",
       "kind": "hook",
       "payload": {
         "command": "tripcord hook",
@@ -303,7 +303,7 @@
       "harness": "claude",
       "scope": "repo",
       "path": ".claude/settings.json",
-      "sha256": "1dde5ca595c39342e24177a08d97d81be4558a6a99a965b1f8a1879b462a333e",
+      "sha256": "cb9234050c9b5f785549a9784ea6320c3c5711fd46babeb1be72a4b01802ce6a",
       "kind": "hook",
       "payload": {
         "command": "tripcord hook",
@@ -318,7 +318,7 @@
       "harness": "claude",
       "scope": "repo",
       "path": ".claude/settings.json",
-      "sha256": "1dde5ca595c39342e24177a08d97d81be4558a6a99a965b1f8a1879b462a333e",
+      "sha256": "cb9234050c9b5f785549a9784ea6320c3c5711fd46babeb1be72a4b01802ce6a",
       "kind": "hook",
       "payload": {
         "event": "PostToolUse",
@@ -332,7 +332,7 @@
       "harness": "claude",
       "scope": "repo",
       "path": ".claude/settings.json",
-      "sha256": "1dde5ca595c39342e24177a08d97d81be4558a6a99a965b1f8a1879b462a333e",
+      "sha256": "cb9234050c9b5f785549a9784ea6320c3c5711fd46babeb1be72a4b01802ce6a",
       "kind": "hook",
       "payload": {
         "event": "PreToolUse",
@@ -352,7 +352,7 @@
       "harness": "claude",
       "scope": "repo",
       "path": ".claude/settings.json",
-      "sha256": "1dde5ca595c39342e24177a08d97d81be4558a6a99a965b1f8a1879b462a333e",
+      "sha256": "cb9234050c9b5f785549a9784ea6320c3c5711fd46babeb1be72a4b01802ce6a",
       "kind": "permissions",
       "payload": {
         "key": "[\"setting\",\"disableAllHooks\",\"sig:61fc7cfeae3dcaab\"]",
@@ -364,7 +364,7 @@
       "harness": "claude",
       "scope": "repo",
       "path": ".claude/settings.json",
-      "sha256": "1dde5ca595c39342e24177a08d97d81be4558a6a99a965b1f8a1879b462a333e",
+      "sha256": "cb9234050c9b5f785549a9784ea6320c3c5711fd46babeb1be72a4b01802ce6a",
       "kind": "permissions",
       "payload": {
         "key": "[\"setting\",\"enableAllProjectMcpServers\",\"sig:215622cbbae32529\"]",
@@ -376,7 +376,7 @@
       "harness": "claude",
       "scope": "repo",
       "path": ".claude/settings.json",
-      "sha256": "1dde5ca595c39342e24177a08d97d81be4558a6a99a965b1f8a1879b462a333e",
+      "sha256": "cb9234050c9b5f785549a9784ea6320c3c5711fd46babeb1be72a4b01802ce6a",
       "kind": "permissions",
       "payload": {
         "key": "[\"setting\",\"permissions\",\"sig:61dc9e92689c8841\"]",
@@ -396,7 +396,7 @@
       "harness": "claude",
       "scope": "repo",
       "path": ".claude/settings.json",
-      "sha256": "1dde5ca595c39342e24177a08d97d81be4558a6a99a965b1f8a1879b462a333e",
+      "sha256": "cb9234050c9b5f785549a9784ea6320c3c5711fd46babeb1be72a4b01802ce6a",
       "kind": "plugin",
       "payload": {
         "key": "[\"setting\",\"enabledPlugins\",\"sig:a01f54a97ba2ae8b\"]",
@@ -410,15 +410,15 @@
       "harness": "claude",
       "scope": "repo",
       "path": ".claude/settings.json",
-      "sha256": "1dde5ca595c39342e24177a08d97d81be4558a6a99a965b1f8a1879b462a333e",
+      "sha256": "cb9234050c9b5f785549a9784ea6320c3c5711fd46babeb1be72a4b01802ce6a",
       "kind": "plugin",
       "payload": {
-        "key": "[\"setting\",\"extraKnownMarketplaces\",\"sig:b8187bf288b5d0bd\"]",
+        "key": "[\"setting\",\"extraKnownMarketplaces\",\"sig:9253863932d8aff9\"]",
         "setting": "extraKnownMarketplaces",
         "value": {
           "acme-tools": {
             "source": {
-              "repo": "acme/tools",
+              "repo": "vgmartinez/tools",
               "source": "github"
             }
           }
@@ -555,12 +555,12 @@
     {
       "harness": "claude",
       "scope": "repo",
-      "path": "plugins/acme/.claude-plugin/plugin.json",
+      "path": "plugins/vgmartinez/.claude-plugin/plugin.json",
       "sha256": "d15fdc8ebeb12e088eea1927acf694beeb8b4779a8b1f027f62932aa9c5de166",
       "kind": "plugin",
       "payload": {
-        "key": "[\"plugin\",\"acme\",\"sig:c7fc362fa7cb85ad\"]",
-        "plugin_root": "plugins/acme",
+        "key": "[\"plugin\",\"acme\",\"sig:9661fb3a8bfdc2c0\"]",
+        "plugin_root": "plugins/vgmartinez",
         "setting": "plugin",
         "value": {
           "name": "acme",
@@ -571,7 +571,7 @@
     {
       "harness": "claude",
       "scope": "repo",
-      "path": "plugins/acme/.mcp.json",
+      "path": "plugins/vgmartinez/.mcp.json",
       "sha256": "eadd33276d817039a7c5833e210fea82b46598cb2043a9cd9f2c2212d808d5e6",
       "kind": "mcp-server",
       "payload": {
@@ -583,7 +583,7 @@
     {
       "harness": "claude",
       "scope": "repo",
-      "path": "plugins/acme/hooks/hooks.json",
+      "path": "plugins/vgmartinez/hooks/hooks.json",
       "sha256": "1460f189383fa12eb2fe3fd971b3239b6acc2f9fdc26d06f8207997a47934e20",
       "kind": "hook",
       "payload": {

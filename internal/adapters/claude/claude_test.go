@@ -572,10 +572,10 @@ func TestPluginSkillsAreRead(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	skill := "---\nname: review\nhooks:\n  Stop:\n    - hooks:\n        - type: command\n          command: ./notify.sh\n---\nReview the diff.\n"
-	writeFile(t, filepath.Join(root, "tools", "acme", ".claude-plugin", "plugin.json"), `{"name":"acme"}`)
-	writeFile(t, filepath.Join(root, "tools", "acme", "skills", "review", "SKILL.md"), skill)
-	writeFile(t, filepath.Join(root, "tools", "acme", "skills", "lower", "skill.md"), skill)
-	writeFile(t, filepath.Join(root, "tools", "acme", "docs", "SKILL.md"), skill)
+	writeFile(t, filepath.Join(root, "tools", "vgmartinez", ".claude-plugin", "plugin.json"), `{"name":"vgmartinez"}`)
+	writeFile(t, filepath.Join(root, "tools", "vgmartinez", "skills", "review", "SKILL.md"), skill)
+	writeFile(t, filepath.Join(root, "tools", "vgmartinez", "skills", "lower", "skill.md"), skill)
+	writeFile(t, filepath.Join(root, "tools", "vgmartinez", "docs", "SKILL.md"), skill)
 	writeFile(t, filepath.Join(root, ".claude-plugin", "marketplace.json"), `{"plugins":[{"name":"m","source":"./plugins/m"}]}`)
 	writeFile(t, filepath.Join(root, "plugins", "m", "skills", "fmt", "SKILL.md"), skill)
 	got := discover(t, New(Options{}), root)
@@ -583,13 +583,13 @@ func TestPluginSkillsAreRead(t *testing.T) {
 	for _, item := range got.Items {
 		kinds[item.Path] = append(kinds[item.Path], item.Kind)
 	}
-	for _, p := range []string{"tools/acme/skills/review/SKILL.md", "tools/acme/skills/lower/skill.md", "plugins/m/skills/fmt/SKILL.md"} {
+	for _, p := range []string{"tools/vgmartinez/skills/review/SKILL.md", "tools/vgmartinez/skills/lower/skill.md", "plugins/m/skills/fmt/SKILL.md"} {
 		slices.Sort(kinds[p])
 		if !slices.Equal(kinds[p], []model.ConfigKind{model.ConfigKindHook, model.ConfigKindSkill}) {
 			t.Errorf("%s: kinds = %v, want skill and hook", p, kinds[p])
 		}
 	}
-	if k, ok := kinds["tools/acme/docs/SKILL.md"]; ok {
+	if k, ok := kinds["tools/vgmartinez/docs/SKILL.md"]; ok {
 		t.Errorf("docs/SKILL.md read as %v", k)
 	}
 }
@@ -845,9 +845,9 @@ func FuzzParseConfig(f *testing.F) {
 		"mcp":         "testdata/claude-baseline/repo/.mcp.json",
 		"skill":       "testdata/claude-baseline/repo/.claude/skills/review/SKILL.md",
 		"agent":       "testdata/claude-baseline/repo/.claude/agents/reviewer.md",
-		"pluginhooks": "testdata/claude-baseline/repo/plugins/acme/hooks/hooks.json",
+		"pluginhooks": "testdata/claude-baseline/repo/plugins/vgmartinez/hooks/hooks.json",
 		"marketplace": "testdata/claude-baseline/repo/.claude-plugin/marketplace.json",
-		"manifest":    "testdata/claude-baseline/repo/plugins/acme/.claude-plugin/plugin.json",
+		"manifest":    "testdata/claude-baseline/repo/plugins/vgmartinez/.claude-plugin/plugin.json",
 	}
 	for kind, path := range seeds {
 		if data, err := kittest.ReadFixture(path); err == nil {

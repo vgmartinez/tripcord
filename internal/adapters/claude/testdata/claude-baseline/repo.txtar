@@ -14,8 +14,8 @@ Lint after edits.
   "name": "acme-tools",
   "owner": {"name": "Acme"},
   "plugins": [
-    {"name": "acme", "source": "./plugins/acme", "description": "Acme helpers"},
-    {"name": "remote", "source": {"source": "github", "repo": "acme/remote-plugin"}}
+    {"name": "acme", "source": "./plugins/vgmartinez", "description": "Acme helpers"},
+    {"name": "remote", "source": {"source": "github", "repo": "vgmartinez/remote-plugin"}}
   ]
 }
 -- .claude/CLAUDE.md --
@@ -85,7 +85,7 @@ Prefer small functions.
   "otelHeadersHelper": "/usr/local/bin/otel-headers",
   "awsAuthRefresh": "aws sso login",
   "enabledPlugins": {"acme@acme-tools": true},
-  "extraKnownMarketplaces": {"acme-tools": {"source": {"source": "github", "repo": "acme/tools"}}},
+  "extraKnownMarketplaces": {"acme-tools": {"source": {"source": "github", "repo": "vgmartinez/tools"}}},
   "enableAllProjectMcpServers": true,
   "disableAllHooks": false,
   "model": "opus"
@@ -132,11 +132,11 @@ Write docs.
 Use go test before committing.
 -- hooks/hooks.json --
 {"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "not-a-plugin"}]}]}}
--- plugins/acme/.claude-plugin/plugin.json --
+-- plugins/vgmartinez/.claude-plugin/plugin.json --
 {"name": "acme", "version": "1.0.0"}
--- plugins/acme/.mcp.json --
+-- plugins/vgmartinez/.mcp.json --
 {"mcpServers": {"acme": {"command": "${CLAUDE_PLUGIN_ROOT}/bin/mcp"}}}
--- plugins/acme/hooks/hooks.json --
+-- plugins/vgmartinez/hooks/hooks.json --
 {"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/bin/start"}]}]}}
 -- services/api/.claude/settings.json --
 {"hooks": {"UserPromptSubmit": [{"hooks": [{"type": "command", "command": "../../scripts/nested.sh"}]}]}}

@@ -93,7 +93,7 @@
       "harness": "opencode",
       "scope": "repo",
       "path": "opencode.jsonc",
-      "sha256": "04d11c1fa5bc9be5afe5f1b98f90068388fa77afb46be559cde15b089c312aea",
+      "sha256": "d6d5b3a6caf0c494159d3a3d72d4f54f402bde07f3fa873d963a475762cdb81a",
       "kind": "env-setup",
       "payload": {
         "key": "[\"setting\",\"formatter\",\"sig:4a796754ed9b930b\"]",
@@ -114,7 +114,7 @@
       "harness": "opencode",
       "scope": "repo",
       "path": "opencode.jsonc",
-      "sha256": "04d11c1fa5bc9be5afe5f1b98f90068388fa77afb46be559cde15b089c312aea",
+      "sha256": "d6d5b3a6caf0c494159d3a3d72d4f54f402bde07f3fa873d963a475762cdb81a",
       "kind": "env-setup",
       "payload": {
         "key": "[\"setting\",\"lsp\",\"sig:5ebfda3e1d037a79\"]",
@@ -132,7 +132,7 @@
       "harness": "opencode",
       "scope": "repo",
       "path": "opencode.jsonc",
-      "sha256": "04d11c1fa5bc9be5afe5f1b98f90068388fa77afb46be559cde15b089c312aea",
+      "sha256": "d6d5b3a6caf0c494159d3a3d72d4f54f402bde07f3fa873d963a475762cdb81a",
       "kind": "instructions",
       "payload": {
         "key": "[\"agent\",\"reviewer\",\"sig:66123d6ca01e1a9a\"]",
@@ -152,7 +152,7 @@
       "harness": "opencode",
       "scope": "repo",
       "path": "opencode.jsonc",
-      "sha256": "04d11c1fa5bc9be5afe5f1b98f90068388fa77afb46be559cde15b089c312aea",
+      "sha256": "d6d5b3a6caf0c494159d3a3d72d4f54f402bde07f3fa873d963a475762cdb81a",
       "kind": "instructions",
       "payload": {
         "key": "[\"command\",\"deploy\",\"sig:9194250ea67f1591\",\"sig:s1:value[0]#0\"]",
@@ -169,7 +169,7 @@
       "harness": "opencode",
       "scope": "repo",
       "path": "opencode.jsonc",
-      "sha256": "04d11c1fa5bc9be5afe5f1b98f90068388fa77afb46be559cde15b089c312aea",
+      "sha256": "d6d5b3a6caf0c494159d3a3d72d4f54f402bde07f3fa873d963a475762cdb81a",
       "kind": "instructions",
       "payload": {
         "key": "[\"setting\",\"instructions\",\"sig:be56c4c1148745d0\"]",
@@ -184,7 +184,7 @@
       "harness": "opencode",
       "scope": "repo",
       "path": "opencode.jsonc",
-      "sha256": "04d11c1fa5bc9be5afe5f1b98f90068388fa77afb46be559cde15b089c312aea",
+      "sha256": "d6d5b3a6caf0c494159d3a3d72d4f54f402bde07f3fa873d963a475762cdb81a",
       "kind": "mcp-server",
       "payload": {
         "command": [
@@ -212,7 +212,7 @@
       "harness": "opencode",
       "scope": "repo",
       "path": "opencode.jsonc",
-      "sha256": "04d11c1fa5bc9be5afe5f1b98f90068388fa77afb46be559cde15b089c312aea",
+      "sha256": "d6d5b3a6caf0c494159d3a3d72d4f54f402bde07f3fa873d963a475762cdb81a",
       "kind": "mcp-server",
       "payload": {
         "header_keys": [
@@ -231,7 +231,7 @@
       "harness": "opencode",
       "scope": "repo",
       "path": "opencode.jsonc",
-      "sha256": "04d11c1fa5bc9be5afe5f1b98f90068388fa77afb46be559cde15b089c312aea",
+      "sha256": "d6d5b3a6caf0c494159d3a3d72d4f54f402bde07f3fa873d963a475762cdb81a",
       "kind": "permissions",
       "payload": {
         "key": "[\"setting\",\"permission\",\"sig:e39d901b61a887fb\"]",
@@ -249,7 +249,7 @@
       "harness": "opencode",
       "scope": "repo",
       "path": "opencode.jsonc",
-      "sha256": "04d11c1fa5bc9be5afe5f1b98f90068388fa77afb46be559cde15b089c312aea",
+      "sha256": "d6d5b3a6caf0c494159d3a3d72d4f54f402bde07f3fa873d963a475762cdb81a",
       "kind": "permissions",
       "payload": {
         "key": "[\"setting\",\"tools\",\"sig:578751ad84889411\"]",
@@ -263,11 +263,11 @@
       "harness": "opencode",
       "scope": "repo",
       "path": "opencode.jsonc",
-      "sha256": "04d11c1fa5bc9be5afe5f1b98f90068388fa77afb46be559cde15b089c312aea",
+      "sha256": "d6d5b3a6caf0c494159d3a3d72d4f54f402bde07f3fa873d963a475762cdb81a",
       "kind": "plugin",
       "payload": {
-        "key": "[\"plugin\",\"@acme/opencode-guard\",\"sig:0c8de8daf6d19cce\"]",
-        "plugin": "@acme/opencode-guard",
+        "key": "[\"plugin\",\"@vgmartinez/opencode-guard\",\"sig:63ef956fed1c5fb6\"]",
+        "plugin": "@vgmartinez/opencode-guard",
         "setting": "plugin"
       }
     },
@@ -275,7 +275,7 @@
       "harness": "opencode",
       "scope": "repo",
       "path": "opencode.jsonc",
-      "sha256": "04d11c1fa5bc9be5afe5f1b98f90068388fa77afb46be559cde15b089c312aea",
+      "sha256": "d6d5b3a6caf0c494159d3a3d72d4f54f402bde07f3fa873d963a475762cdb81a",
       "kind": "plugin",
       "payload": {
         "key": "[\"plugin\",\"opencode-notify@1.2.3\",\"sig:443415eaa46c4828\"]",
