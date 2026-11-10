@@ -168,3 +168,10 @@ init writes reports those differences as further highs.
   scan PATH` and the Action's `path` input resolve a path inside a Git
   repository to that repository's root
   ([#59](https://github.com/vgmartinez/tripcord/issues/59)).
+- Hook suffix checks, and the instruction reader, do not NFKC-normalize
+  or fold homoglyphs. A lookalike letter (a Cyrillic `е` in `.еnv`) does
+  not match the suffix or the word the rule wrote. See [hook.md](hook.md).
+- On a Unix host, a Windows tool path is not rewritten. Backslash is not
+  a separator and ASCII case is kept, so a suffix such as `/.env` does
+  not match `C:\repo\.ENV`. That folding runs only when `tripcord` itself
+  is running on Windows.

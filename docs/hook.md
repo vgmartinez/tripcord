@@ -63,10 +63,20 @@ custom:
     severity: critical
 ```
 
-Tool paths are cleaned and made absolute against the hook's cwd, or the
-project directory when the harness sends no cwd, before the policy runs.
-A trailing slash is removed. On Windows the path is ASCII-case-folded.
-`lowerAscii()` matches `.ENV` on a case-sensitive filesystem too.
+Tool paths are cleaned and made absolute before the policy runs. Claude
+Code and Copilot resolve a relative path against the process working
+directory (`Getwd()`) when the hook JSON has no `cwd`; a `cwd` in that
+JSON is used when the harness sends one. They do not use the project
+directory. Cursor resolves a relative path against the hook JSON `cwd`,
+or `workspace_roots[0]` when `cwd` is empty, and against the process
+working directory when both are empty. A trailing slash is removed. The
+cleaned path is the string a suffix check sees. That walk does not
+follow symlinks, so a link named `notes` that points at `.env` does not
+match `/.env`. On Windows the path is ASCII-case-folded. A Unix host
+does not rewrite a Windows path: `\` stays a character and ASCII case
+is kept, so `/.env` does not match `C:\repo\.ENV`. `lowerAscii()` matches
+`.ENV` on a case-sensitive filesystem. It does not apply NFKC or fold
+homoglyphs, so a lookalike letter in the suffix does not match.
 
 A rule whose `deny_if` holds is a hit, with its `severity` (default
 `high`) after `rules.severity_overrides`. A rule left out of
