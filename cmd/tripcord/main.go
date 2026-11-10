@@ -48,6 +48,7 @@ import (
 	"github.com/vgmartinez/tripcord/internal/pathx"
 	"github.com/vgmartinez/tripcord/internal/policy"
 	"github.com/vgmartinez/tripcord/internal/preopen"
+	"github.com/vgmartinez/tripcord/internal/project"
 	"github.com/vgmartinez/tripcord/internal/rules"
 	"github.com/vgmartinez/tripcord/internal/scriptcheck"
 )
@@ -157,6 +158,13 @@ type scanOptions struct {
 	path        string
 	staged      bool
 	stagedFiles map[string]bool
+	// executing is --executing-workflow: the reusable workflow this scan
+	// runs inside, which tripcord-pr.yml's action passes.
+	executing *embedded.WorkflowRef
+	// ci is set for a scan inside a workflow: --executing-workflow, or
+	// GITHUB_ACTIONS=true from the runner. A --staged scan, and
+	// preopen, are always trusted.
+	ci bool
 }
 
 func runScan(args []string, stdout, stderr io.Writer) int {
@@ -571,7 +579,10 @@ func scanTree(ctx context.Context, t scanTarget, opts scanOptions, stdout, stder
 		if err := scriptcheck.Annotate(root, items); err != nil {
 			return t.internalError(stderr, fmt.Errorf("hook scripts: %w", err))
 		}
-		check := embedded.CheckOptions{Only: requested, Tracked: tracked, TrackedCaseVariants: caseVariants, IndexTree: t.indexTree}
+		check := embedded.CheckOptions{Only: requested, Tracked: tracked, TrackedCaseVariants: caseVariants, IndexTree: t.indexTree, Executing: opts.executing, ScannerVersion: version}
+		if opts.ci {
+			check.Context = embedded.ContextCI
+		}
 		if baseSHA != "" {
 			check.Base = baseReader(ctx, root, baseSHA)
 		}
@@ -720,6 +731,10 @@ func parseCommandFlags(cmd flagCommand, args []string, stdout io.Writer) (scanOp
 	flags.StringVar(&opts.policy, "policy", "", "policy file")
 	flags.StringVar(&opts.orgPolicy, "org-policy", "", "organization policy file")
 	flags.BoolVar(&opts.staged, "staged", false, "scan Git's staged index; paths are unioned with the staged change set")
+	var executing string
+	if cmd == scanCommand {
+		flags.StringVar(&executing, "executing-workflow", "", "CI only: "+project.Repository+"/"+embedded.ReusableWorkflowPath+"@<sha> this scan runs inside, from job.workflow_*; accepts a tripcord.yml pin equal to it only when --base pins it too (TC-CFG-016)")
+	}
 	if err := flags.Parse(normalized); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			var buf bytes.Buffer
@@ -759,6 +774,17 @@ func parseCommandFlags(cmd flagCommand, args []string, stdout io.Writer) (scanOp
 			return scanOptions{}, errors.New("--base and --since name different revisions; --since alone compares with its ref")
 		}
 	}
+	executingSet := false
+	flags.Visit(func(f *flag.Flag) { executingSet = executingSet || f.Name == "executing-workflow" })
+	if executingSet {
+		if opts.staged {
+			return opts, errors.New("--executing-workflow is not available with --staged: a staged scan is a local, trusted scan")
+		}
+		if opts.executing, err = embedded.ParseWorkflowRef(executing); err != nil {
+			return opts, err
+		}
+	}
+	opts.ci = cmd == scanCommand && !opts.staged && (opts.executing != nil || os.Getenv("GITHUB_ACTIONS") == "true")
 	switch {
 	case cmd == preopenCommand && flags.NArg() != 1:
 		return opts, errors.New("preopen takes exactly one git URL or local path")
@@ -921,7 +947,7 @@ func repoRoot(dir string) bool {
 func normalizeScanArgs(args []string) ([]string, error) {
 	valueFlags := map[string]bool{
 		"harness": true, "format": true, "output": true, "since": true, "base": true,
-		"fail-on": true, "policy": true, "org-policy": true, "scope": true,
+		"fail-on": true, "policy": true, "org-policy": true, "scope": true, "executing-workflow": true,
 	}
 	var flags []string
 	var positionals []string
