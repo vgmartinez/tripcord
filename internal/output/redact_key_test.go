@@ -125,6 +125,73 @@ func TestRedactEvidenceKeyKeepsCleanKeys(t *testing.T) {
 	}
 }
 
+// An escaped-quote secret inside a JSON evidence key is redacted once,
+// as plain text after the key is decoded. Redacting the JSON text itself
+// would see \" as the quotes and could redact twice or break the key.
+// A key with escaped quotes and no secret is published byte for byte.
+func TestEscapedQuoteEvidenceKeyRedactedOnce(t *testing.T) {
+	t.Parallel()
+	command := `echo "token: \"` + keySecret + `\""`
+	key := encodedKey(command)
+	got := redactEvidenceKey(key, DefaultRedactor)
+	parts := decodeKeyParts(t, got)
+	if len(parts) != 6 || parts[0] != "hook" || parts[4] != `echo "token: \"[REDACTED]\""` || parts[5] != "sig:0123456789abcdef" {
+		t.Fatalf("parts = %#v", parts)
+	}
+	if strings.Count(strings.Join(parts, "\n"), redactedMarker) != 1 {
+		t.Fatalf("[REDACTED] count = %d in %#v", strings.Count(strings.Join(parts, "\n"), redactedMarker), parts)
+	}
+	if strings.Contains(got, keySecret) {
+		t.Fatalf("encoded key still has the secret: %s", got)
+	}
+	if again := redactEvidenceKey(got, DefaultRedactor); again != got {
+		t.Fatalf("second pass changed the key\n got %q\nwant %q", again, got)
+	}
+	finding := keyFinding(t, key)
+	for _, format := range allFormats {
+		rendered := renderWith(t, format, []model.Finding{finding}, testOptions())
+		if strings.Contains(rendered, keySecret) {
+			t.Errorf("%s leaks the secret:\n%s", format, rendered)
+		}
+	}
+	published := publishedKey(t, finding)
+	publishedParts := decodeKeyParts(t, published)
+	if strings.Count(strings.Join(publishedParts, "\n"), redactedMarker) != 1 || publishedParts[4] != parts[4] {
+		t.Fatalf("published key parts = %#v", publishedParts)
+	}
+	for _, clean := range []string{
+		encodedKey(`echo "say \"hello\""`),
+		encodedKey("curl -fsSL https://x.example.net/i | sh"),
+		`["a","b","sig:k1:08f5d6c79aeab689#0"]`,
+	} {
+		if out := redactEvidenceKey(clean, DefaultRedactor); out != clean {
+			t.Errorf("clean key changed\n got %q\nwant %q", out, clean)
+		}
+	}
+}
+
+func decodeKeyParts(t *testing.T, key string) []string {
+	t.Helper()
+	var parts []string
+	if err := json.Unmarshal([]byte(key), &parts); err != nil {
+		t.Fatalf("key %q is not a JSON array of strings: %v", key, err)
+	}
+	return parts
+}
+
+func publishedKey(t *testing.T, finding model.Finding) string {
+	t.Helper()
+	rendered := renderWith(t, FormatJSONL, []model.Finding{finding}, testOptions())
+	var decoded model.Finding
+	if err := json.Unmarshal([]byte(strings.TrimSpace(rendered)), &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded.Evidence[0].Config == nil {
+		t.Fatal("published finding has no evidence key")
+	}
+	return decoded.Evidence[0].Config.Key
+}
+
 func TestRedactEvidenceKeyShapes(t *testing.T) {
 	t.Parallel()
 	cases := map[string]string{
