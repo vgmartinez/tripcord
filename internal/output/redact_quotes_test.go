@@ -35,6 +35,7 @@ func TestShellEscapedQuotesRedacted(t *testing.T) {
 		`regcli --user bot -p \"` + quoteSecret + `\"`:       `regcli --user bot -p \"[REDACTED]\"`,
 		`sshpass -p ` + quoteSecret + ` echo "say \"hi\""`:   `sshpass -p [REDACTED] echo "say \"hi\""`,
 		`{"password":"a\"b"}`:                                `{"password":"[REDACTED]"}`,
+		`echo "token: \\\"` + quoteSecret + `\\\""`:          `echo "token: \\\"[REDACTED]\\\""`,
 	}
 	for in, want := range cases {
 		got := DefaultRedactor(in)
@@ -58,9 +59,30 @@ func TestShellEscapedQuotesKeepNonSecrets(t *testing.T) {
 		`echo "say \"hello\""`,
 		`git commit -m "fix token: \"` + quoteSecret + `\""`,
 		`echo "note: \"` + quoteSecret + `\""`,
+		`echo "say \\"hello\\""`,
 	} {
 		if got := DefaultRedactor(in); got != in {
 			t.Errorf("DefaultRedactor(%q) = %q, want unchanged", in, got)
 		}
+	}
+}
+
+// A quote is escaped only after an odd run of backslashes. \\\"X\\\" is
+// one escaped value, so the span starts at the first backslash. \\" is
+// an even run: the quote is real and no span is opened.
+func TestIndexEscapedQuotesBackslashParity(t *testing.T) {
+	t.Parallel()
+	odd := `echo "token: \\\"X\\\""`
+	spans := indexEscapedQuotes(odd)
+	if len(spans) != 1 || odd[spans[0][0]:spans[0][1]] != `\\\"X\\\"` {
+		t.Fatalf("indexEscapedQuotes(%q) = %#v", odd, spans)
+	}
+	even := `echo "say \\"hello\\""`
+	if spans := indexEscapedQuotes(even); len(spans) != 0 {
+		got := make([]string, len(spans))
+		for i, sp := range spans {
+			got[i] = even[sp[0]:sp[1]]
+		}
+		t.Fatalf("even run spans = %q", got)
 	}
 }

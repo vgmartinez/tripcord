@@ -60,6 +60,7 @@ var evidenceCases = []evidenceCase{
 	{"secret flag", "tool --password=%[1]s --key sk-proj-%[1]s", false},
 	{"JSON body", `curl -d '{"token":"%[1]s"}' https://x.example.net/i`, false},
 	{"shell-escaped quotes", `echo "token: \"%[1]s\""`, false},
+	{"shell-escaped quotes, triple backslash", `echo "token: \\\"%[1]s\\\""`, false},
 }
 
 func (c evidenceCase) command(secret string) string {
