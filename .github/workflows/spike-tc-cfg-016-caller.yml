@@ -1,0 +1,34 @@
+name: spike-tc-cfg-016-caller
+
+# Throwaway TC-CFG-016 version-skew spike: calls the spike reusable
+# workflow by full commit SHA from a pull_request event, the way an
+# embed's tripcord.yml calls tripcord-pr.yml. Lives only on the spike
+# branch; never merge.
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/spike-tc-cfg-016-*.yml"
+      - ".github/actions/spike-tc-cfg-016/**"
+
+permissions: {}
+
+jobs:
+  caller:
+    name: Caller identity
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Echo caller contexts
+        env:
+          SPIKE_JOB: ${{ toJSON(job) }}
+          SPIKE_GITHUB: ${{ toJSON(github) }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$SPIKE_JOB" | jq -S '{workflow_ref, workflow_sha, workflow_repository, workflow_file_path}'
+          printf '%s\n' "$SPIKE_GITHUB" | jq -S '{workflow_ref, workflow_sha, sha, pr_head_sha: .event.pull_request.head.sha}'
+  called:
+    permissions:
+      id-token: write # spike only: lets the called job read its own OIDC claims
+    uses: vgmartinez/tripcord/.github/workflows/spike-tc-cfg-016-called.yml@959a98854a23350de2fc6ad8d66fe1308d13b3f1
