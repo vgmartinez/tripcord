@@ -512,18 +512,20 @@ func TestBootstrapSwapBetweenHashAndExec(t *testing.T) {
 }
 
 // TestBootstrapRefusesCacheDirOfAnotherUser needs root to hand a cache
-// directory to another user.
+// directory to another user. The process is uid 0, so the refusal names
+// that uid: bootstrap.sh still exits 2 and does not run the cached binary.
 func TestBootstrapRefusesCacheDirOfAnotherUser(t *testing.T) {
 	if os.Geteuid() != 0 {
 		t.Skip("needs root to chown a cache directory to another user")
 	}
 	e := newBootstrapEnv(t, nil)
 	e.putCache(t, fakeBinary)
-	if err := os.Chown(filepath.Dir(e.cached()), 65534, 65534); err != nil {
+	dir := filepath.Dir(e.cached())
+	if err := os.Chown(dir, 65534, 65534); err != nil {
 		t.Fatal(err)
 	}
 	code, _, stderr := e.runSplit(t, "hook", "--harness", "claude", "--event", HookEvent)
-	if code != 2 || !strings.Contains(stderr, "is owned by another user") || e.ran(t) != "" {
+	if code != 2 || !strings.Contains(stderr, "unsafe cache directories:") || !strings.Contains(stderr, dir) || !strings.Contains(stderr, "cache directories must be owned by uid 0") || e.ran(t) != "" {
 		t.Fatalf("exit %d, stderr %q", code, stderr)
 	}
 }
