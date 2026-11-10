@@ -28,6 +28,9 @@ func TestRedactionScalesLinearly(t *testing.T) {
 		"header placeholder": "-H token:$X ",
 		"user flag":          "-u root ",
 		"tool flag":          "sshpass -p $X ",
+		"yaml continuation":  "token: \"a\" # c\n  b\n",
+		"unterminated quote": "token: \"a\n",
+		"commented key run":  "# token: # c\n  x\n",
 	}
 	for name, unit := range units {
 		small := fastestRedaction(strings.Repeat(unit, (64<<10)/len(unit)))
