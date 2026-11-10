@@ -52,7 +52,11 @@ Not reported:
   `bash scripts/run.sh`, `bash ${CLAUDE_PLUGIN_ROOT}/scripts/launch`,
   `bash -c 'exec "$(git rev-parse --show-toplevel)/scripts/x.sh"'`,
   `powershell -File ./scripts/start.ps1`, or a short loader whose last
-  command is one launcher (`set -a && source .env && npx -y pkg`).
+  command is one known launcher (`set -a && source .env && npx -y pkg`).
+  The signal checks the script's location. A script inside the tree is
+  not inspected for content. The launchers that may name no file are
+  `npx`, `bunx`, `uvx`, `uv`, `pipx`, `pnpm dlx`, `yarn dlx`,
+  `npm exec`, `npm dlx`, and `bun x`.
   The only dotenv names are `.env`, `.env.local`, and `.env.claude`.
   Under `set -a`, one of those that is not in the tree is still that
   wrapper. When the file is in the tree, with or without `set -a`, it
@@ -82,6 +86,17 @@ Not reported:
   `shell.risks` treats as downloaders) is not simple. The shell stays
   matched. A `|` inside ordinary POSIX quotes is not itself a pipe
   (`echo 'a|b'`).
+- `cd`, `pushd`, `env -C`, `sudo -D`, `sudo --chdir`, and any
+  `--cwd` or `--chdir` wrapper stay matched. A relative script after
+  `cd` is not resolved against the directory the shell enters, so a
+  decoy script at the repository root does not hide `bash run.sh` or
+  `./run.sh`. The one `cd`
+  that is followed is `repo=$(git rev-parse --show-toplevel) || exit 1;
+  cd "$repo" || exit 1; exec bun run <file>`: that directory is the
+  repository root, and the path is resolved from that root.
+- A `$` in program position is not expanded. `${X:-rm}` stays matched.
+  `rm`, `notes-mcp`, and `evil-mcp "$TOKEN"` stay matched, including
+  when the loader is separated by newlines.
 - `bash script.sh` stays matched when that script is missing from the
   scanned tree, leaves it through `..` or an absolute path, or is a
   symlink that resolves outside it. The same is true of a fetched

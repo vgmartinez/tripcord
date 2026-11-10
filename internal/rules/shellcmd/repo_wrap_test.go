@@ -27,6 +27,12 @@ func TestRepoWrapper(t *testing.T) {
 		{[]string{"sh", "-lc", `exec npx -y @bytebase/dbhub --dsn "postgresql://$POSTGRES_USER:$POSTGRES_PASSWORD@localhost/$POSTGRES_DB"`}, nil},
 		{[]string{"/bin/sh", "-c", `chmod +x ./bin/utp >/dev/null 2>&1; xattr -d com.apple.quarantine ./bin/utp >/dev/null 2>&1; exec ./bin/utp mcp serve`}, []RepoFile{{Path: "bin/utp"}}},
 		{[]string{"powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "./scripts/start.ps1"}, []RepoFile{{Path: "scripts/start.ps1"}}},
+		{[]string{"bash", "-c", "set -a\nsource .env\nnpx -y pkg"}, []RepoFile{{Path: ".env", Dotenv: true, DotenvOptional: true}}},
+		{[]string{"bash", "-c", "pnpm dlx pkg"}, nil},
+		{[]string{"bash", "-c", "bunx pkg"}, nil},
+		{[]string{"bash", "-c", "npm exec pkg"}, nil},
+		{[]string{"bash", "-c", "yarn dlx pkg"}, nil},
+		{[]string{"bash", "-c", "bun x pkg"}, nil},
 	}
 	for _, c := range ok {
 		files, good := RepoWrapper(c.argv)
@@ -61,6 +67,22 @@ func TestRepoWrapper(t *testing.T) {
 		{"bash", "-c", `npx one && npx two`},
 		{"cmd", "/c", `scripts\launch.cmd`},
 		{"npx", "-y", "pkg"},
+		{"bash", "-c", `set -a && source .env && rm -rf /`},
+		{"bash", "-c", `set -a && source .env && notes-mcp`},
+		{"bash", "-c", `set -a && source .env && evil-mcp "$TOKEN"`},
+		{"bash", "-c", `${X:-rm} -rf /`},
+		{"bash", "-c", "set -a\nsource .env\nrm -rf /"},
+		{"bash", "-c", "set -a\nsource .env\nnotes-mcp"},
+		{"bash", "-c", "set -a\nsource .env\nevil-mcp \"$TOKEN\""},
+		{"bash", "-c", `cd evildir && bash run.sh`},
+		{"bash", "-c", `cd evildir && ./run.sh`},
+		{"bash", "-c", `pushd evildir && bash run.sh`},
+		{"env", "-C", "/tmp", "bash", "scripts/run.sh"},
+		{"sudo", "--chdir", "/tmp", "bash", "scripts/run.sh"},
+		{"sudo", "-D", "/tmp", "bash", "scripts/run.sh"},
+		{"bash", "-c", `env -C /tmp bash scripts/run.sh`},
+		{"bash", "-c", `sudo --chdir /tmp bash scripts/run.sh`},
+		{"bash", "-c", `sudo -D /tmp bash scripts/run.sh`},
 	}
 	for _, argv := range no {
 		if files, good := RepoWrapper(argv); good {

@@ -212,11 +212,26 @@ func simpleInner(payload string) ([]string, bool) {
 			return nil, false
 		}
 	}
+	// cd evildir && ./run.sh is not the file next to the config. Leave
+	// the shell in place so TC-CFG-003 still sees it. A relative program
+	// with no cd (bash -c './server.js') is still unwrapped.
+	if len(cmds) == 2 && relativeScript(words[0]) {
+		return nil, false
+	}
 	switch progName(words[0]) {
 	case "eval", "source", ".", "iex", "invoke-expression":
 		return nil, false
 	}
 	return words, true
+}
+
+// relativeScript is ./run.sh or bin/run.sh. An absolute path and a
+// bare program name are not.
+func relativeScript(word string) bool {
+	if word == "" || word[0] == '/' || word[0] == '\\' || word[0] == '-' {
+		return false
+	}
+	return strings.HasPrefix(word, "./") || strings.HasPrefix(word, "../") || strings.ContainsAny(word, `/\`)
 }
 
 func isCD(words []string) bool {

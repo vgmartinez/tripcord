@@ -48,9 +48,18 @@
 # scanned tree: bash script.sh, bash -c 'exec "$(git rev-parse
 # --show-toplevel)/scripts/x.sh"', the same git toplevel assigned to
 # repo and then bun run, powershell -File ./script.ps1, and a short
-# loader (set -a, set +a, source or . of one relative path, cd of one
-# relative directory, chmod +x of one relative path, xattr -d of one
-# relative path) whose last command is one launcher. The only dotenv
+# loader (set -a, set +a, source or . of one relative path, chmod +x
+# of one relative path, xattr -d of one relative path) whose last
+# command is one known launcher or a relative file. The signal checks
+# where that file is. A script inside the tree is not inspected for
+# content. A launcher with no file is only npx, bunx, uvx, uv, pipx,
+# pnpm dlx, yarn dlx, npm exec, npm dlx, or bun x. Any other bare
+# program stays matched. A $ in program position is not expanded, so
+# ${X:-rm} stays matched. cd, pushd, env -C, sudo -D, sudo --chdir,
+# and any --cwd or --chdir wrapper stay matched. The one cd that is
+# followed is repo=$(git rev-parse --show-toplevel) || exit 1; cd
+# "$repo" || exit 1; exec bun run <file>, because that directory is
+# the repository root. The only dotenv
 # names are .env, .env.local, and .env.claude. Under set -a one of
 # those does not have to be in the tree. When it is, and when the same
 # file is sourced without set -a, every line has to be blank, a

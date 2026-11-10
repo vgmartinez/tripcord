@@ -43,8 +43,8 @@ func RepoWrapper(argv []string) ([]RepoFile, bool) {
 			return RepoWrapper(words)
 		}
 	}
-	w := unwrap(argv)
-	if len(w) == 0 {
+	w, ok := repoUnwrap(argv)
+	if !ok || len(w) == 0 || mentionsDirChange(w) {
 		return nil, false
 	}
 	name, args := progName(w[0]), w[1:]
@@ -119,8 +119,8 @@ func gitExec(payload string) ([]RepoFile, bool) {
 	if len(cmds) != 1 || cmds[0].pipeIn || cmds[0].depth != 0 {
 		return nil, false
 	}
-	w := unwrap(cmds[0].words)
-	if len(w) == 0 {
+	w, ok := repoUnwrap(cmds[0].words)
+	if !ok || len(w) == 0 {
 		return nil, false
 	}
 	rel, ok := topRel(w[0])
@@ -160,7 +160,11 @@ func gitAssignChain(payload string) ([]RepoFile, bool) {
 	if len(cmds[2].words) != 2 || cmds[2].words[0] != "cd" || (cmds[2].words[1] != "$repo" && cmds[2].words[1] != "${repo}") {
 		return nil, false
 	}
-	return bunRun(unwrap(cmds[4].words))
+	w, ok := repoUnwrap(cmds[4].words)
+	if !ok {
+		return nil, false
+	}
+	return bunRun(w)
 }
 
 func bunRun(w []string) ([]RepoFile, bool) {
@@ -184,14 +188,16 @@ const (
 	prefixSet prefixKind = iota
 	prefixSetA
 	prefixSource
-	prefixCD
 	prefixFile
 )
 
 // envLoader is `set -a && source .env && npx -y pkg` and the same
-// commands joined with `;`. Every command but the last is `set -a`,
-// `set +a`, `source` or `.` of one relative path, or `cd` of one
-// relative directory. The last command is one launcher.
+// commands joined with `;` or a newline. Every command but the last is
+// `set -a`, `set +a`, `source` or `.` of one relative path, `chmod +x`
+// of one relative path, or `xattr -d` of one relative path. `cd` and
+// `pushd` are rejected: the following relative script would be resolved
+// against the config directory, not the directory the shell enters.
+// The last command is one known launcher, or a relative file.
 func envLoader(payload string) ([]RepoFile, bool) {
 	toks, subs := lex(payload, false)
 	if len(subs) > 0 {
@@ -211,7 +217,7 @@ func envLoader(payload string) ([]RepoFile, bool) {
 		return nil, false
 	}
 	sawSetA := false
-	var sources, dirs, must []string
+	var sources, must []string
 	for i := 0; i < len(cmds)-1; i++ {
 		c := cmds[i]
 		if c.pipeIn || c.depth != 0 || (c.sep != "&&" && c.sep != ";") {
@@ -227,8 +233,6 @@ func envLoader(payload string) ([]RepoFile, bool) {
 		case prefixSet:
 		case prefixSource:
 			sources = append(sources, rel)
-		case prefixCD:
-			dirs = append(dirs, rel)
 		case prefixFile:
 			must = append(must, rel)
 		default:
@@ -249,9 +253,6 @@ func envLoader(payload string) ([]RepoFile, bool) {
 			files = append(files, RepoFile{Path: rel, Dotenv: true, DotenvOptional: sawSetA})
 			continue
 		}
-		files = append(files, RepoFile{Path: rel})
-	}
-	for _, rel := range dirs {
 		files = append(files, RepoFile{Path: rel})
 	}
 	for _, rel := range must {
@@ -296,7 +297,10 @@ func dropNullRedirects(toks []token) ([]token, bool) {
 }
 
 func loaderPrefix(words []string) (prefixKind, string, bool) {
-	w := unwrap(words)
+	w, ok := repoUnwrap(words)
+	if !ok {
+		return 0, "", false
+	}
 	switch {
 	case len(w) == 2 && w[0] == "set" && w[1] == "-a":
 		return prefixSetA, "", true
@@ -308,12 +312,10 @@ func loaderPrefix(words []string) (prefixKind, string, bool) {
 			return 0, "", false
 		}
 		return prefixSource, rel, true
-	case len(w) == 2 && progName(w[0]) == "cd":
-		rel, ok := relInside(w[1])
-		if !ok {
-			return 0, "", false
-		}
-		return prefixCD, rel, true
+	case len(w) >= 1 && (progName(w[0]) == "cd" || progName(w[0]) == "pushd"):
+		// A relative script after cd or pushd is not the file next to
+		// the config. Reject instead of resolving it.
+		return 0, "", false
 	case len(w) == 3 && w[0] == "chmod" && (w[1] == "+x" || w[1] == "a+x"):
 		rel, ok := relInside(w[2])
 		if !ok {
@@ -345,8 +347,8 @@ func xattrName(s string) bool {
 }
 
 func launchFiles(words []string) ([]RepoFile, bool) {
-	w := unwrap(words)
-	if len(w) == 0 {
+	w, ok := repoUnwrap(words)
+	if !ok || len(w) == 0 || mentionsDirChange(w) {
 		return nil, false
 	}
 	if strings.Contains(w[0], subst) || badArgs(w) || !literalProgram(w[0]) || location(w[0]) != "" || isMCPDownload(w[0]) {
@@ -370,6 +372,11 @@ func launchFiles(words []string) ([]RepoFile, bool) {
 	if inlineCode(name, w[1:]) {
 		return nil, false
 	}
+	// A package runner may be the server. Any other bare program,
+	// including rm, notes-mcp, or evil-mcp, stays a finding.
+	if noFileLauncher(name, w[1:]) {
+		return nil, true
+	}
 	if script, ok := scriptOperand(name, w[1:]); ok {
 		rel, ok := relInside(script)
 		if !ok {
@@ -380,7 +387,121 @@ func launchFiles(words []string) ([]RepoFile, bool) {
 	if interpreter(name) {
 		return nil, false
 	}
-	return nil, true
+	return nil, false
+}
+
+// noFileLauncher is the closed list of package runners that name no
+// file in the tree. The words are the arguments after the program.
+func noFileLauncher(name string, args []string) bool {
+	switch name {
+	case "npx", "bunx", "uvx", "uv", "pipx":
+		return true
+	case "pnpm", "yarn":
+		return len(args) > 0 && args[0] == "dlx"
+	case "npm":
+		return len(args) > 0 && (args[0] == "exec" || args[0] == "dlx")
+	case "bun":
+		return len(args) > 0 && args[0] == "x"
+	default:
+		return false
+	}
+}
+
+// repoUnwrap drops assignments and the wrappers unwrap drops, and fails
+// closed when that would hide a different command. A `$` in program
+// position is not rewritten with commandDefault, so ${X:-rm} stays a
+// finding. env -C, sudo -D or --chdir, and any --cwd or --chdir option
+// on those wrappers fail closed too: the directory change is not a
+// path inside the tree.
+func repoUnwrap(w []string) ([]string, bool) {
+	for len(w) > 0 {
+		if strings.Contains(w[0], "$") {
+			return nil, false
+		}
+		if isAssignment(w[0]) || reserved[w[0]] {
+			w = w[1:]
+			continue
+		}
+		if _, rhs, ok := psAssign(w); ok {
+			w = rhs
+			continue
+		}
+		switch progName(w[0]) {
+		case "sudo", "doas":
+			next, ok := dropWrapperOpts(w[1:], sudoValues)
+			if !ok {
+				return nil, false
+			}
+			w = next
+		case "env":
+			next, ok := dropWrapperOpts(w[1:], envValues)
+			if !ok {
+				return nil, false
+			}
+			w = next
+		case "exec":
+			next, ok := dropWrapperOpts(w[1:], map[string]bool{"-a": true})
+			if !ok {
+				return nil, false
+			}
+			w = next
+		case "command":
+			if len(w) > 1 && (w[1] == "-v" || w[1] == "-V") {
+				return nil, false
+			}
+			next, ok := dropWrapperOpts(w[1:], nil)
+			if !ok {
+				return nil, false
+			}
+			w = next
+		default:
+			return w, true
+		}
+	}
+	return w, true
+}
+
+// dropWrapperOpts drops leading options the way skipOptions does, and
+// rejects a directory change. -C and -D are directory changes when the
+// caller lists them as options that take a value (env -C, sudo -D).
+func dropWrapperOpts(args []string, valued map[string]bool) ([]string, bool) {
+	for len(args) > 0 {
+		a := args[0]
+		if a == "--" {
+			return args[1:], true
+		}
+		if len(a) < 2 || a[0] != '-' {
+			return args, true
+		}
+		if dirOpt(a, valued) {
+			return nil, false
+		}
+		args = args[1:]
+		if valued[a] && len(args) > 0 {
+			args = args[1:]
+		}
+	}
+	return args, true
+}
+
+func dirOpt(a string, valued map[string]bool) bool {
+	switch a {
+	case "--chdir", "--cwd":
+		return true
+	case "-C", "-D":
+		return valued[a]
+	default:
+		return strings.HasPrefix(a, "--chdir=") || strings.HasPrefix(a, "--cwd=")
+	}
+}
+
+func mentionsDirChange(words []string) bool {
+	for _, w := range words {
+		if w == "--chdir" || w == "--cwd" || strings.HasPrefix(w, "--chdir=") || strings.HasPrefix(w, "--cwd=") {
+			return true
+		}
+	}
+	return false
 }
 
 func inlineCode(name string, args []string) bool {

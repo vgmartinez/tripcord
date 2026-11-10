@@ -70,6 +70,35 @@ keyed `k1` discriminator developers get locally, rather than defaulting
 to `s1`. See
 [fingerprint.md](fingerprint.md#fingerprint-key).
 
+### TC-CFG-003 and a repository's own scripts
+
+`config.repo_script` quiets TC-CFG-003 when a repository MCP server is
+a shell wrapper around a file in the scanned tree, or around a known
+package runner (`npx`, `bunx`, `uvx`, `uv`, `pipx`, `pnpm dlx`,
+`yarn dlx`, `npm exec`, `npm dlx`, `bun x`). The signal checks the
+script's location. A script inside the tree is not inspected for
+content.
+
+Anything else stays a finding: a bare program that is not in that
+list (`rm`, `notes-mcp`, `evil-mcp "$TOKEN"`), a `$` in program
+position (`${X:-rm}`, which is not rewritten to its default), the
+same loader written with newlines, `cd` or `pushd` before a relative
+script, and `env -C`, `sudo -D`, `sudo --chdir`, or any `--cwd` or
+`--chdir` wrapper. The one `cd` that is followed is
+`repo=$(git rev-parse --show-toplevel) || exit 1; cd "$repo" || exit 1; exec bun run <file>`,
+because that directory is the repository root and the path is resolved
+from that root.
+
+The only dotenv names are `.env`, `.env.local`, and `.env.claude`.
+Under `set -a` one of those may be absent. When the file is in the
+tree, with or without `set -a`, every line has to be blank, a comment,
+or `KEY=VALUE` (`KEY` matches `[A-Za-z_][A-Za-z0-9_]*`, with an
+optional `export ` prefix; the value has no `$`, backtick, `;`, `&`,
+`|`, `<`, `>`, newline inside quotes, or trailing backslash). A
+symlink that leaves the tree, a file that cannot be read, and a file
+larger than 64 KiB stay findings. Any other sourced path has to be in
+the tree, and its bytes are not read.
+
 ### Known gaps
 
 - [TC-CFG-013](rules/TC-CFG-013.md), an AI coding-agent workflow
