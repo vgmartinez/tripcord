@@ -190,3 +190,35 @@ func TestEvidenceCasesThroughRedactors(t *testing.T) {
 		}
 	}
 }
+
+// TestEvidenceFingerprintIgnoresSecretValue: with the structural
+// discriminator (s1: CI set, no key, in a home of its own), rotating a secret leaves every
+// fingerprint alone. That holds only when the whole secret is redacted
+// before the key is hashed: a secret left in the key made the
+// fingerprint a hash of it.
+func TestEvidenceFingerprintIgnoresSecretValue(t *testing.T) {
+	setKeyEnv(t, t.TempDir(), map[string]string{"CI": "true"})
+	for i, c := range evidenceCases {
+		for _, host := range evidenceHosts {
+			t.Run(c.name+"/"+host.name, func(t *testing.T) {
+				t.Parallel()
+				var fingerprints [2]string
+				for n, secret := range []string{fmt.Sprintf("Zq%02dLm2Nv9Rx4Kt8W", i), fmt.Sprintf("Wx%02dPq7Rs3Tu6Vy5A", i)} {
+					root := t.TempDir()
+					if err := os.Mkdir(filepath.Join(root, ".git"), 0o700); err != nil {
+						t.Fatal(err)
+					}
+					host.write(t, root, c.command(secret))
+					var stdout, stderr bytes.Buffer
+					if code := run([]string{"scan", "--format", "jsonl", root}, &stdout, &stderr); code != int(exitcode.Findings) {
+						t.Fatalf("exit %d, stderr %q", code, stderr.String())
+					}
+					fingerprints[n] = strings.Join(fingerprintPattern.FindAllString(stdout.String(), -1), " ")
+				}
+				if fingerprints[0] == "" || fingerprints[0] != fingerprints[1] {
+					t.Errorf("fingerprints depend on the secret: %q vs %q", fingerprints[0], fingerprints[1])
+				}
+			})
+		}
+	}
+}
