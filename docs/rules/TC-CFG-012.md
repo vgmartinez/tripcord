@@ -96,15 +96,20 @@ http(s) URLs are ignored. That includes a flag glued to a quoted
 value (`-H"X-Api-Token: $TOKEN"`), an equals form
 (`--header=Authorization: Bearer $TOKEN`), and an unquoted header
 whose value continues past the colon
-(`-H Authorization: Bearer $TOKEN`). The whole header value is
+(`-H Authorization: Bearer $TOKEN`). The unquoted value stops at
+`&&`, `||`, `|`, `;`, or the end of the clause, so
+`curl -H Authorization: Bearer $TOKEN && source .env` (and the same
+with `||` or `|`) still counts. The whole header value is
 ignored, so a `$(...)` that sits inside the header rather than the
 URL stays quiet. A URL that contains `$(` or a backtick is
 kept, so `$(cat .env)` inside it still counts. A secret value that is
 the direct object, and whose tail says `come from` or `comes from`
 without naming a local path, is an origin (`Source credentials for the
 bteq run come from the connection`), not a request to source a file.
-`Source the credentials from .env` and `Source .env.production` still
-count. A target followed by a
+`Source the credentials from .env`, `Source credentials come from .env`,
+`Source credentials come from .env.production`, and
+`Source .env.production` still count. A leading dot is part of the
+path. A target followed by a
 documentation modifier, singular or plural—such as `credentials
 section`, `token budgets`, `API key policies`, or `secrets
 template`—is quiet.

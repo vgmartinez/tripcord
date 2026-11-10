@@ -178,14 +178,16 @@ func containerRunAfter(words []string) bool {
 }
 
 // composeRunAfter reports whether the words after "compose" or the
-// docker-compose binary are a run subcommand.
+// docker-compose binary are a run subcommand. -f, --file, and
+// --profile take a value before that subcommand. A value glued with
+// "=" is part of the same word and does not consume the next one.
 func composeRunAfter(words []string) bool {
 	for i := 0; i < len(words); {
 		w := strings.ToLower(strings.Trim(words[i], `"'`))
 		switch {
 		case w == "run":
 			return true
-		case optionTakesValue(w):
+		case composeTakesValue(w):
 			i += 2
 		case strings.HasPrefix(w, "-"):
 			i++
@@ -194,6 +196,21 @@ func composeRunAfter(words []string) bool {
 		}
 	}
 	return false
+}
+
+// composeTakesValue reports a compose option whose next word is an
+// argument, not the subcommand. The "=" form is one word, so it is
+// not listed here and the caller skips only that word.
+func composeTakesValue(flag string) bool {
+	if optionTakesValue(flag) {
+		return true
+	}
+	switch flag {
+	case "-f", "--file", "--profile":
+		return true
+	default:
+		return false
+	}
 }
 
 func containerThenRun(words []string) bool {
