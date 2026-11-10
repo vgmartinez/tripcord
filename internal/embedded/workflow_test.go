@@ -48,7 +48,7 @@ func TestWorkflowShape(t *testing.T) {
 	if err := yaml.Unmarshal(raw, &wf); err != nil {
 		t.Fatal(err)
 	}
-	if len(wf.On) != 1 || wf.On["pull_request"] == nil {
+	if _, ok := wf.On["pull_request"]; len(wf.On) != 1 || !ok {
 		t.Fatalf("on = %v", wf.On)
 	}
 	if len(wf.Permissions) != 1 || wf.Permissions["contents"] != "read" {

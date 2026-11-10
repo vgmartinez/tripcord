@@ -27,6 +27,11 @@ jobs:
           # .pre-commit-hooks.yaml. TestPinsHaveEmbedCheck reads the
           # pinned commits on main. A depth-1 checkout is shallow, and
           # in CI that test fails instead of skipping.
+          # TestPinsReachableFromHead needs each pin and its history to
+          # prove it is an ancestor of HEAD. With full history it needs
+          # no network; otherwise it fetches the pin from origin, which
+          # needs no credentials on this public repository, and fails
+          # if that fetch fails.
           # TestVetAndTestFetchesFullHistory keeps this at 0.
           fetch-depth: 0
 
@@ -873,14 +878,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          out="${RUNNER_TEMP}/embed-out"
-          mkdir -p "$out/.git"
           sum=0000000000000000000000000000000000000000000000000000000000000000
-          go run ./cmd/tripcord init --embed --version 0.1.0 \
-            --sha256 "darwin-arm64=${sum}" --sha256 "darwin-x64=${sum}" \
-            --sha256 "linux-arm64=${sum}" --sha256 "linux-x64=${sum}" "$out"
-          rm -rf "$out/.git"
-          cp -R "$out" "${GITHUB_WORKSPACE}/embed-out"
+          gen() {
+            local dest="$1"
+            shift
+            local out="${RUNNER_TEMP}/${dest}"
+            mkdir -p "$out/.git"
+            go run ./cmd/tripcord init --embed "$@" --version 0.1.0 \
+              --sha256 "darwin-arm64=${sum}" --sha256 "darwin-x64=${sum}" \
+              --sha256 "linux-arm64=${sum}" --sha256 "linux-x64=${sum}" "$out"
+            rm -rf "$out/.git"
+            cp -R "$out" "${GITHUB_WORKSPACE}/${dest}"
+          }
+          gen embed-out
+          gen cloud-out --cloud-setup
 
       - name: shellcheck bootstrap.sh
         shell: bash
@@ -900,7 +911,7 @@ jobs:
           curl --retry 5 --retry-all-errors --connect-timeout 10 -fsSL -o "$archive" https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
           echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  ${archive}" | sha256sum -c -
           tar -xzf "$archive" -C "$RUNNER_TEMP" actionlint
-          "$RUNNER_TEMP/actionlint" embed-out/.github/workflows/*.yml
+          "$RUNNER_TEMP/actionlint" embed-out/.github/workflows/*.yml cloud-out/.github/workflows/copilot-setup-steps.yml
 
       - name: zizmor generated workflows
         uses: zizmorcore/zizmor-action@53290badfa369cb0bf7ad16342cb62c2fa47ac7b # v0.8.0
@@ -917,7 +928,7 @@ jobs:
           advanced-security: false
           annotations: true
           persona: pedantic
-          inputs: embed-out/.github/workflows/copilot-setup-steps.yml
+          inputs: cloud-out/.github/workflows/copilot-setup-steps.yml
 
   dco:
     name: DCO
