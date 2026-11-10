@@ -69,10 +69,22 @@ func errReason(s string) error { return reasonError(s) }
 
 func (e reasonError) Error() string { return string(e) }
 
+// reasonDotenvLabel is the closed list of labels a dotenv name may carry
+// after ".env", as in ".env.local" or ".env.development.local".
+var reasonDotenvLabel = map[string]bool{
+	"local": true, "development": true, "dev": true, "production": true, "prod": true,
+	"test": true, "staging": true, "example": true, "sample": true, "template": true,
+}
+
 // reasonHost reports a dotted label.label word whose suffix is not in
 // reasonFileExt. "e.g." and "v1.2" count as hosts too; spell them out.
+// A dotenv name written with its leading dot is a file, not a host.
 func reasonHost(s string) bool {
-	for _, w := range reasonWords(s) {
+	for _, raw := range reasonRuns(s) {
+		if reasonDotenv(raw) {
+			continue
+		}
+		w := strings.Trim(raw, ".")
 		if !strings.Contains(w, ".") {
 			continue
 		}
@@ -112,9 +124,37 @@ func reasonIP(s string) bool {
 	return false
 }
 
+// reasonDotenv reports ".env" followed by at most two labels from
+// reasonDotenvLabel. A trailing full stop is allowed. Without the leading
+// dot, "env.local" stays a host.
+func reasonDotenv(raw string) bool {
+	labels := strings.Split(strings.ToLower(strings.TrimRight(raw, ".")), ".")
+	if len(labels) < 2 || len(labels) > 4 || labels[0] != "" || labels[1] != "env" {
+		return false
+	}
+	for _, l := range labels[2:] {
+		if !reasonDotenvLabel[l] {
+			return false
+		}
+	}
+	return true
+}
+
 // reasonWords splits s into runs of letters, digits, '_', '-', and '.',
 // with leading and trailing dots trimmed so a full stop is not a label.
 func reasonWords(s string) []string {
+	var out []string
+	for _, raw := range reasonRuns(s) {
+		if w := strings.Trim(raw, "."); w != "" {
+			out = append(out, w)
+		}
+	}
+	return out
+}
+
+// reasonRuns splits s into runs of letters, digits, '_', '-', and '.',
+// as written.
+func reasonRuns(s string) []string {
 	var out []string
 	for i := 0; i < len(s); {
 		if !reasonWordByte(s[i]) {
@@ -125,9 +165,7 @@ func reasonWords(s string) []string {
 		for j < len(s) && reasonWordByte(s[j]) {
 			j++
 		}
-		if w := strings.Trim(s[i:j], "."); w != "" {
-			out = append(out, w)
-		}
+		out = append(out, s[i:j])
 		i = j
 	}
 	return out

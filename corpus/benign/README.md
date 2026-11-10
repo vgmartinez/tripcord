@@ -187,7 +187,12 @@ name is rejected when any 40-character window has Shannon entropy above
 printable ASCII. A dotted word in a reason is rejected unless it ends
 in a known file extension (`.md`, `.json`, `.yml`, and so on), so no
 list of top-level domains is involved; "e.g." and version numbers like
-"v1.2" are rejected too and have to be spelled out. Decimal, hex, and
+"v1.2" are rejected too and have to be spelled out. A dotenv name
+written with its leading dot is a file: `.env`, then at most two of
+`local`, `development`, `dev`, `production`, `prod`, `test`, `staging`,
+`example`, `sample`, and `template` (`.env.local`,
+`.env.development.local`). `env.local` and `.env.evil.invalid` are still
+hosts. Decimal, hex, and
 octal IPv4 literals and IPv6 addresses, bracketed or not, are rejected.
 
 ## Nightly scan

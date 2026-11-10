@@ -251,6 +251,11 @@ func TestRejectedRows(t *testing.T) {
 		{"reason hex IP", triage("TC-CFG-001", fp, "the task posts to 0xC0A80101"), "IP address"},
 		{"reason octal IP", triage("TC-CFG-001", fp, "the task posts to 0300.0250.1.1"), "IP address"},
 		{"reason bracketed IPv6", triage("TC-CFG-001", fp, "the task posts to [::ffff:c0a8:101]"), "IP address"},
+		{"reason dotenv-like host", triage("TC-CFG-001", fp, "the task posts to .env.evil.com"), "URL or host"},
+		{"reason dotenv label host", triage("TC-CFG-001", fp, "the task posts to .env.local.evil.top"), "URL or host"},
+		{"reason dotenv without dot", triage("TC-CFG-001", fp, "the task posts to env.local today"), "URL or host"},
+		{"reason dotenv inside word", triage("TC-CFG-001", fp, "the task posts to evil.env.local now"), "URL or host"},
+		{"reason dotenv five labels", triage("TC-CFG-001", fp, "reads .env.dev.test.local.prod only"), "URL or host"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if _, err := ParseTriage(tc.raw); err == nil || !strings.Contains(err.Error(), tc.want) {
@@ -299,6 +304,13 @@ func TestAcceptedNamesAndReasons(t *testing.T) {
 		"local task only echoes package.json.",
 		"runs 2 times, then reads SKILL.md and tasks.json",
 		"hook prints the branch name, nothing else",
+		"task only reads .env and prints nothing",
+		"task only copies .env.local into the build",
+		"loads .env.production for the deploy step",
+		"reads .env.development.local, never sends it",
+		"copies .env.example to the working tree",
+		"the hook sources config from .env.local.",
+		"reads .ENV.LOCAL from the repository root",
 	} {
 		if err := checkReason(reason); err != nil {
 			t.Errorf("rejected %q: %v", reason, err)
