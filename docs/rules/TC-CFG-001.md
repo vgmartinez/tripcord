@@ -54,6 +54,10 @@ Not reported:
 - Local output into Invoke-Expression (`oh-my-posh init pwsh | iex`).
 - `npx tsc` and other bare names, read as a devDependency binary.
 - `settings.local.json`, which is personal.
+- User-scope files. `negativos/malformed-fields.json` includes a
+  user-scope SessionStart hook that pipes a remote script to a shell,
+  and that negative stays as it is, so the rule still requires
+  repository scope.
 
 ## Limits
 

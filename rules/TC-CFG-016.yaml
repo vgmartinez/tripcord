@@ -107,6 +107,8 @@ files:
   - "**/.github/hooks/*.json"
   - "**/.gemini/settings.json"
   - "**/.cursor/hooks.json"
+  - "**/.copilot/hooks/*.json"
+  - "**/.copilot/settings.json"
   - "**/.tripcord/bootstrap.sh"
   - "**/.tripcord/embed.json"
   - "**/.github/workflows/tripcord.yml"
@@ -126,7 +128,7 @@ files:
   - "**/.[tT][rR][iI][pP][cC][oO][rR][dD]/[pP][oO][lL][iI][cC][yY].[lL][oO][cC][aA][lL].[yY][aA][mM][lL]"
   - "**/.gitattributes"
 when: |
-  config.kind == "permissions" && config.scope == "repo" && has(payload.setting)
+  config.kind == "permissions" && config.scope in ["repo", "user"] && has(payload.setting)
 severity_when:
   - severity: high
     when: |

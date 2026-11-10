@@ -61,6 +61,10 @@ Not reported:
 {"permissions": {"allow": ["Bash(go test ./...)", "Read(./docs/**)"]}}
 ```
 
+User-scope settings are not reported. `negativos/malformed-and-out-of-scope.json`
+includes `~/.claude/settings.json` allowing `Bash(*)`, and that negative
+stays as it is, so the rule still requires repository scope.
+
 ## How to fix
 
 Replace the broad allow with the specific commands or paths the project

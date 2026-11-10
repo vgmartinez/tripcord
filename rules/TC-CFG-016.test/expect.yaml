@@ -32,3 +32,5 @@ positivos:
   base-local-policy-tracked.json: high
   embed-gitattributes-removed: high
   embed-gitattributes-weakened: high
+  user-disable-all-hooks: high
+  user-copilot-disable-all-hooks: high

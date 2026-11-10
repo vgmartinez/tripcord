@@ -597,6 +597,19 @@ func permItem(t *testing.T, allow []any) model.ConfigItem {
 	}))
 }
 
+func TestCFG015UserScope(t *testing.T) {
+	engine, _ := coreEngine(t, "TC-CFG-015")
+	it := item(model.HarnessClaude, "~/.claude/settings.json", model.ConfigKindPermissions, mustJSON(t, map[string]any{
+		"setting": "permissions",
+		"value":   map[string]any{"allow": []any{"WebFetch(domain:huggingface.co)"}},
+	}))
+	it.Scope = model.ScopeUser
+	res := scanOne(t, engine, it)
+	if len(res.Matches) != 1 || res.Matches[0].Severity != model.SeverityHigh {
+		t.Fatalf("user settings: got %d %s", len(res.Matches), severityOf(res))
+	}
+}
+
 // TestRulesEvaluateDetectView is the raw-detection contract: a rule
 // reads the item's unsanitized Detect view, so sanitizing cannot hide a
 // command from it, while the finding is built from the sanitized Payload

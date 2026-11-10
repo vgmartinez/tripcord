@@ -4,13 +4,13 @@
 | --- | --- |
 | Severity | high |
 | Harnesses | Claude Code, GitHub Copilot, Gemini CLI; Cursor and the embed's own files for the embed case only |
-| Files | `.claude/settings.json`, `.github/copilot/settings.json`, `.github/hooks/*.json`, `.gemini/settings.json`, `.cursor/hooks.json`; for the embed, `.tripcord/bootstrap.sh`, `.tripcord/embed.json`, `.github/workflows/tripcord.yml`, `.github/workflows/copilot-setup-steps.yml`, `.gitattributes`; tracked, or staged, `.claude/settings.local.json`, `.github/copilot/settings.local.json`, and `.tripcord/policy.local.yaml`; `.tripcord/policy.yaml` with a base (any depth, repository scope) |
+| Files | `.claude/settings.json`, `.github/copilot/settings.json`, `.github/hooks/*.json`, `.copilot/hooks/*.json`, `.copilot/settings.json`, `.gemini/settings.json`, `.cursor/hooks.json` (any depth, repository or user scope); for the embed, `.tripcord/bootstrap.sh`, `.tripcord/embed.json`, `.github/workflows/tripcord.yml`, `.github/workflows/copilot-setup-steps.yml`, `.gitattributes`; tracked, or staged, `.claude/settings.local.json`, `.github/copilot/settings.local.json`, and `.tripcord/policy.local.yaml`; `.tripcord/policy.yaml` with a base (repository scope; the embed is a repository tree) |
 | Rule | [`rules/TC-CFG-016.yaml`](../../rules/TC-CFG-016.yaml) |
 
 ## What it detects
 
 A hook-based guard only runs when the harness actually invokes hooks at
-all. A shared setting that turns every hook off at once defeats that,
+all. A repository or user setting that turns every hook off at once defeats that,
 regardless of which specific hook is the guard, including the one
 [`tripcord init --embed`](../init.md) registers.
 

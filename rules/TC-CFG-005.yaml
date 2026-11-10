@@ -71,6 +71,9 @@ files:
   - "**/.claude/settings.json"
   - "**/.codex/config.toml"
   - "**/.gemini/settings.json"
+# User scope stays off. negativos/malformed-fields.json includes a
+# user Codex sandbox_mode of danger-full-access and a user Gemini
+# autoAccept, and that negative is not edited.
 when: |
   config.kind == "permissions" && config.scope == "repo"
 fix: "Remove the mode from the shared file. Claude Code: delete permissions.defaultMode bypassPermissions and skipDangerousModePermissionPrompt, or use acceptEdits with a narrow allow list. Codex: use sandbox_mode workspace-write and an approval_policy other than never, in profiles too. Gemini CLI: remove the yolo approval mode and autoAccept. Anyone who needs the mode can pass it on their own command line."

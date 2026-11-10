@@ -59,6 +59,10 @@ are case-sensitive in all three:
 
 Not reported:
 
+- User-scope settings. `negativos/malformed-fields.json` includes a user
+  Codex `sandbox_mode` of `danger-full-access` and a user Gemini
+  `autoAccept`, and that negative stays as it is, so the rule still
+  requires repository scope.
 - `.claude/settings.local.json`, which is personal and not shared.
 - Other modes: `acceptEdits`, `plan`, `default`, `workspace-write`,
   `read-only`, `on-request`, `auto_edit`.
