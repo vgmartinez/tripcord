@@ -310,6 +310,31 @@ func TestSinceMissingGit(t *testing.T) {
 	}
 }
 
+func TestScanFileOutsideGitDoesNotScanParent(t *testing.T) {
+	dir := outsideGit(t)
+	writeTestFile(t, dir, ".claude/settings.json", stagedBad)
+	writeTestFile(t, dir, "notes.txt", "notes\n")
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"scan", filepath.Join(dir, "notes.txt")}, &stdout, &stderr)
+	if code != int(exitcode.Config) || strings.Contains(stdout.String(), "TC-CFG-001") || !strings.Contains(stderr.String(), "file outside a Git repository") {
+		t.Fatalf("file: exit %d\nstdout %s\nstderr %s", code, stdout.String(), stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"scan", dir}, &stdout, &stderr)
+	if code != int(exitcode.Findings) || !strings.Contains(stdout.String(), "TC-CFG-001") {
+		t.Fatalf("directory: exit %d\nstdout %s\nstderr %s", code, stdout.String(), stderr.String())
+	}
+	repo := gitRepo(t)
+	writeTestFile(t, repo, ".claude/settings.json", stagedBad)
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"scan", filepath.Join(repo, "a.txt")}, &stdout, &stderr)
+	if code != int(exitcode.Findings) || !strings.Contains(stdout.String(), "TC-CFG-001") {
+		t.Fatalf("repo file: exit %d\nstdout %s\nstderr %s", code, stdout.String(), stderr.String())
+	}
+}
+
 func TestScanOutsideGit(t *testing.T) {
 	dir := outsideGit(t)
 	var stdout, stderr bytes.Buffer

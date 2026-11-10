@@ -869,7 +869,11 @@ func scanRoot(scanPath string) (string, error) {
 		return "", fmt.Errorf("scan path %q: %w", output.Message(foldHome(scanPath)), err)
 	}
 	if !info.IsDir() {
-		absolute = filepath.Dir(absolute)
+		dir := filepath.Dir(absolute)
+		if gitRoot(dir) == "" {
+			return "", fmt.Errorf("scan path %q is a file outside a Git repository; pass a directory to scan it", output.Message(foldHome(scanPath)))
+		}
+		absolute = dir
 	}
 	if root := gitRoot(absolute); root != "" {
 		return root, nil

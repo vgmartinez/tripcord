@@ -3,9 +3,11 @@
 `tripcord scan [PATH]` statically scans executable coding-agent configuration.
 It reads configuration only: it never executes repository content, starts
 hooks, or contacts a network service. `PATH` defaults to the current directory.
-A directory that is not a Git repository can still be scanned. `--since` is
-the only mode that requires Git. To scan a repository before cloning it
-yourself, use [`tripcord preopen`](preopen.md).
+A directory that is not a Git repository can still be scanned. A file
+outside a Git repository is an error; pass the directory that holds it.
+A file inside a repository scans that repository from its git root.
+`--since` is the only mode that requires Git. To scan a repository before
+cloning it yourself, use [`tripcord preopen`](preopen.md).
 
 `--staged` reads the Git index into a private temporary tree and uses the
 staged version of each file, except when `PRE_COMMIT_FROM_REF` and
