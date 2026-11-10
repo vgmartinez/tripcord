@@ -170,6 +170,12 @@ runs:
         TRIPCORD_BUILT: ${{ steps.build.outputs.path }}
       run: |
         if [ -n "$TRIPCORD_BINARY" ]; then
+          case "$TRIPCORD_BINARY" in
+            *$'\n'*|*$'\r'*)
+              echo "::error::tripcord binary contains a newline"
+              exit 1
+              ;;
+          esac
           echo "path=${TRIPCORD_BINARY}" >> "$GITHUB_OUTPUT"
         else
           echo "path=${TRIPCORD_BUILT}" >> "$GITHUB_OUTPUT"

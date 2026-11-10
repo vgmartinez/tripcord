@@ -205,6 +205,55 @@ func TestTripcordActionContract(t *testing.T) {
 	})
 }
 
+func TestActionRejectsBinaryNewline(t *testing.T) {
+	var tool actionStep
+	for _, step := range parseAction(t).Runs.Steps {
+		if step.ID == "tool" {
+			tool = step
+		}
+	}
+	if tool.Run == "" {
+		t.Fatal("action has no tool step")
+	}
+	for _, tc := range []struct {
+		name, binary string
+	}{
+		{name: "line feed", binary: "/tmp/tripcord\ninjected=1"},
+		{name: "carriage return", binary: "/tmp/tripcord\rinjected=1"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			output := filepath.Join(t.TempDir(), "output")
+			cmd := exec.Command("bash", "-c", tool.Run)
+			cmd.Env = append(os.Environ(), "TRIPCORD_BINARY="+tc.binary, "TRIPCORD_BUILT=", "GITHUB_OUTPUT="+output)
+			out, err := cmd.CombinedOutput()
+			if exitCode(t, err) == 0 || !strings.Contains(string(out), "binary contains a newline") {
+				t.Fatalf("exit error %v\n%s", err, out)
+			}
+			raw, readErr := os.ReadFile(output)
+			if readErr != nil && !os.IsNotExist(readErr) {
+				t.Fatal(readErr)
+			}
+			if strings.Contains(string(raw), "injected=") || strings.Contains(string(raw), "\npath=") {
+				t.Fatalf("GITHUB_OUTPUT = %q", raw)
+			}
+		})
+	}
+	output := filepath.Join(t.TempDir(), "output")
+	cmd := exec.Command("bash", "-c", tool.Run)
+	cmd.Env = append(os.Environ(), "TRIPCORD_BINARY=/tmp/tripcord", "GITHUB_OUTPUT="+output)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("plain binary: %v\n%s", err, out)
+	}
+	raw, err := os.ReadFile(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) != "path=/tmp/tripcord\n" {
+		t.Fatalf("GITHUB_OUTPUT = %q", raw)
+	}
+}
+
 func TestActionRejectsMissingOrEmptyPath(t *testing.T) {
 	action := parseAction(t)
 	var check actionStep
