@@ -192,7 +192,9 @@ record with one `stat` and do not copy or hash the binary. If the file
 changed, is group- or world-writable, or the record is not a private
 regular file, `bootstrap.sh` exits 2 and runs nothing. With no record,
 `hook` verifies once, and a failed check exits 2 as well. Either
-reason blocks the call. See [Init](init.md#bootstrap).
+reason blocks the call. See [Init](init.md#bootstrap), including the
+same-user residual (a binary and record rewritten together stay
+attested) and the residual on filesystems with coarse ctime.
 
 `scripts/hook-latency.sh` prints the p50, p95, and max of a locked
 `tripcord hook`, of `bootstrap.sh hook`, and of the difference between

@@ -150,6 +150,18 @@ init writes reports those differences as further highs.
 
 ### Known gaps
 
+- The same-user residual is not equivalent to the old private-copy
+  behaviour. Before, if the binary changed, the next hook detected it.
+  Now, if the binary and the registry (the `verified` record) are
+  rewritten together, the malicious binary stays attested until the
+  registry is deleted or the identity changes. It is accepted as a
+  design tradeoff because it is the same principal. See
+  [Init](init.md#bootstrap).
+- On a filesystem with coarse ctime (a granularity of a second or
+  more, or none, as on FAT, exFAT, and some network filesystems), a
+  rewrite in place of the cached binary that keeps its inode and size
+  and lands in the same ctime tick still matches the `verified`
+  record, so `hook` runs it without re-hashing. This is a residual.
 - `-p X` is redacted only when the same command also names a user
   (`-u`, `-U`, `-l`, `--user`, `--username`, `--login`, or a `login`
   subcommand). A `-p` with no user flag in the command, such as

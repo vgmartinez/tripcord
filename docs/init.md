@@ -272,6 +272,21 @@ running as the same user: that process can read and replace the private
 copy. That local same-user compromise is outside this bootstrap's threat
 model.
 
+The same-user residual is not equivalent to the old private-copy
+behaviour. Before, if the binary changed, the next hook detected it.
+Now, if the binary and the registry (the `verified` record) are
+rewritten together, the malicious binary stays attested until the
+registry is deleted or the identity changes. It is accepted as a
+design tradeoff because it is the same principal.
+
+On a filesystem with coarse ctime, where ctime has a granularity of a
+second or more or is not kept at all (FAT and exFAT, some network
+filesystems), the record is weaker. A rewrite in place that keeps the
+inode and the size, and lands in the same ctime tick (the writer can
+reset mtime), leaves the device, inode, size, mtime, and ctime the
+record compares unchanged, so `hook` runs the rewritten file. This is
+a residual: fill the cache on a filesystem with fine-grained ctime.
+
 Output: diagnostics and the scan report go to stderr. stdout carries
 only what the harness parses: `{}` for a Cursor `session-start`, even
 when the bootstrap fails, and the binary's own output in `hook` mode.
