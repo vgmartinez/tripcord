@@ -97,6 +97,10 @@ to `s1`. See
 
 ### Known gaps
 
+- `-p X` is redacted only when the same command also names a user
+  (`-u`, `-U`, `-l`, `--user`, `--username`, `--login`, or a `login`
+  subcommand). A `-p` with no user flag in the command, such as
+  `ssh -p 22` or `mkdir -p`, is left as written.
 - [TC-CFG-013](rules/TC-CFG-013.md), an AI coding-agent workflow
   triggered by an event a non-collaborator can produce (`issues`,
   `issue_comment`, `discussion`, `discussion_comment`, or
