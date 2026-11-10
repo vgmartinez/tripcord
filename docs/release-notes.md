@@ -21,10 +21,11 @@ shapes. Its key and fingerprint are built from the sanitized command,
 which before still held the secret, so the fingerprint depended on it
 (under `s1`, rotating it changed the fingerprint). It is now redacted
 before it is hashed, so under `s1` the fingerprint no longer depends on
-the secret. Every other fingerprint is unchanged: the 95 corpus
-directories scan to byte-identical JSONL. The sink itself never changes
-a fingerprint, since it is computed before the sink runs. As with the
-section below, this lands before the first release, so a baseline keyed
+the secret. Every other fingerprint is unchanged: the 81 corpus
+seeds (50 benign and 31 malicious) scan to byte-identical JSONL. The
+sink itself never changes a fingerprint, since it is computed before
+the sink runs. As with the section below, this lands before the first
+release, so a baseline keyed
 by a fingerprint of one of these entries is recorded once.
 
 ### Fingerprints of secret-bearing entries change
