@@ -19,6 +19,7 @@ order:
 | `-u` / `--user` value of the form `user:pass` (S2) | `curl -u admin:X` | `RedactUserFlags` |
 | A tool's own short password or token flag (S2) | `sshpass -p X`, `redis-cli -a X`, `mysql -pX`, `docker login -p X`, `openssl -k X`, `vercel -t X` | `RedactToolFlags` |
 | A quoted value, as a whole (S3) | `--password "a b X"` | all flag and assignment classes |
+| A shell-escaped quoted value (`\"...\"`) | `echo "token: \"X\""`, `TOKEN=\"X\"`, `--password \"X\"` | `indexEscapedQuotes`, every value reader |
 | URL userinfo, with an empty username or percent-encoded too (S4) | `https://u:X@host`, `redis://:X@host`, `https://u:p%40X@host` | `RedactURLUserinfo` |
 | MCP argv with the value in the next element (S4) | `["--token", "X"]` | `RedactToolArgv` (source side) |
 | Token shapes | private key blocks, `AKIA…`, AWS secret keys, `ghp_…`, `github_pat_…`, `glpat-…`, `sk-…`, `sk_live_…`, `xox?-…`, `xapp-…`, `npm_…`, `hf_…`, `ya29.…`, `AIza…`, JWTs, `bearer X`, Slack webhook URLs | `secretPatterns` |
@@ -29,7 +30,10 @@ order:
 | `-p X` in a command that also names a user (`-u`, `-U`, `-l`, `--user`, `--username`, `--login`, or a `login` subcommand), for any tool | `docker login -u bot -p X`, `regcli --user bot -p X` | `RedactToolFlags` (`redactUserContextPassword`) |
 
 A shell line continuation (`\` and a newline) between a flag, a header,
-or `bearer` and its value is skipped, as the shell deletes it.
+or `bearer` and its value is skipped, as the shell deletes it. A value
+whose quotes are themselves escaped (`echo "token: \"X\""`,
+`TOKEN=\"X\"`, `--password \"X\"`) is read as one value, quotes kept
+around `[REDACTED]`. The pair does not cross a newline.
 
 A credential name's value may start on the next line. If that line is
 a key, the more-indented lines are a nested mapping and are redacted

@@ -36,6 +36,7 @@ func redactPasswordWords(command string) (string, []string) {
 	var b strings.Builder
 	var spans literalSpans
 	spansFound := false
+	quotes := indexEscapedQuotes(command)
 	pos, written := 0, 0
 	for pos < len(command) {
 		m := passwordWordHead.FindStringSubmatchIndex(command[pos:])
@@ -44,11 +45,16 @@ func redactPasswordWords(command string) (string, []string) {
 		}
 		wordStart, sepEnd := pos+m[4], pos+m[1]
 		pos = sepEnd
-		loc := passwordWordValue.FindStringIndex(command[sepEnd:])
-		if loc == nil {
-			continue
+		var body string
+		if alt, ok := quotes.at(command, sepEnd); ok {
+			body = alt
+		} else {
+			loc := passwordWordValue.FindStringIndex(command[sepEnd:])
+			if loc == nil {
+				continue
+			}
+			body = command[sepEnd : sepEnd+loc[1]]
 		}
-		body := command[sepEnd : sepEnd+loc[1]]
 		if placeholderSecret(body) {
 			continue
 		}
@@ -135,6 +141,7 @@ func redactUserContextPassword(segment string) (string, []string) {
 	}
 	var removed []string
 	var b strings.Builder
+	quotes := indexEscapedQuotes(segment)
 	pos, written := 0, 0
 	for pos < len(segment) {
 		m := shortPasswordFlag.FindStringSubmatchIndex(segment[pos:])
@@ -143,11 +150,16 @@ func redactUserContextPassword(segment string) (string, []string) {
 		}
 		sepEnd := pos + m[1]
 		pos = sepEnd
-		loc := secretFlagSpaceValue.FindStringIndex(segment[sepEnd:])
-		if loc == nil {
-			continue
+		var body string
+		if alt, ok := quotes.at(segment, sepEnd); ok {
+			body = alt
+		} else {
+			loc := secretFlagSpaceValue.FindStringIndex(segment[sepEnd:])
+			if loc == nil {
+				continue
+			}
+			body = segment[sepEnd : sepEnd+loc[1]]
 		}
-		body := segment[sepEnd : sepEnd+loc[1]]
 		if !passwordShortValue(body) {
 			continue
 		}
