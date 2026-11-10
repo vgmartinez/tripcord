@@ -33,6 +33,25 @@ custom:
     message: reading .env is not allowed
 `
 
+// hookLockedEnforcePolicy is hookTestPolicy with the hook surface locked
+// to enforce. locked.mode locks the mode and the fail-on ceiling
+// (docs/policy.md). locked.rules forces the core catalog to compile,
+// which is the cold-start path a lock adds on top of the custom rules.
+const hookLockedEnforcePolicy = `version: 1
+mode: enforce
+fail-on: high
+locked:
+  mode: true
+  rules: [TC-CFG-001]
+custom:
+  - id: ACME-001
+    deny_if: 'event.command != "" && "pipe" in shell.risks(event.command)'
+    message: piping a download into a shell is not allowed
+  - id: ACME-002
+    deny_if: 'event.paths.exists(p, p.endsWith("/.env"))'
+    message: reading .env is not allowed
+`
+
 const (
 	pipeReason = "tripcord blocked this tool call: ACME-001 (high): piping a download into a shell is not allowed"
 	envReason  = "tripcord blocked this tool call: ACME-002 (high): reading .env is not allowed"
@@ -556,9 +575,10 @@ func TestHookCustomRuleCoreIDRejected(t *testing.T) {
 const hookColdStartBudget = 25 * time.Millisecond
 
 // TestHookColdStartBudget builds tripcord and runs it as each harness's
-// hook would, as a new process per event, on a policy with custom rules.
-// It runs only with TRIPCORD_PERF_BUDGET set (the CI perf job): a
-// timing check is too noisy for -race runs.
+// hook would, as a new process per event, on a policy with custom rules
+// and on the same rules with mode locked to enforce. It runs only with
+// TRIPCORD_PERF_BUDGET set (the CI perf job): a timing check is too
+// noisy for -race runs.
 func TestHookColdStartBudget(t *testing.T) {
 	if os.Getenv("TRIPCORD_PERF_BUDGET") == "" {
 		t.Skip("set TRIPCORD_PERF_BUDGET=1 to check the hook cold-start budget")
@@ -569,7 +589,6 @@ func TestHookColdStartBudget(t *testing.T) {
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("go build: %v\n%s", err, out)
 	}
-	root := hookProject(t, hookTestPolicy)
 	cases := []struct {
 		harness        model.Harness
 		event, fixture string
@@ -580,28 +599,34 @@ func TestHookColdStartBudget(t *testing.T) {
 		{model.HarnessCopilot, hook.EventPreTool, "pre-tool-use-bash-deny.json", 2},
 	}
 	const runs = 100
-	for _, tc := range cases {
-		input := adapterFixture(t, tc.harness, tc.fixture)
-		samples := make([]time.Duration, 0, runs)
-		for range runs + 5 {
-			cmd := exec.Command(bin, "hook", "--harness", string(tc.harness), "--event", tc.event, "--on-failure", "block")
-			cmd.Dir = root
-			cmd.Stdin = bytes.NewReader(input)
-			start := time.Now()
-			err := cmd.Run()
-			elapsed := time.Since(start)
-			if code := cmd.ProcessState.ExitCode(); code != tc.exit {
-				t.Fatalf("%s %s: exit %d (%v), want %d", tc.harness, tc.fixture, code, err, tc.exit)
+	for _, policy := range []struct{ name, doc string }{
+		{"repo", hookTestPolicy},
+		{"locked", hookLockedEnforcePolicy},
+	} {
+		root := hookProject(t, policy.doc)
+		for _, tc := range cases {
+			input := adapterFixture(t, tc.harness, tc.fixture)
+			samples := make([]time.Duration, 0, runs+5)
+			for range runs + 5 {
+				cmd := exec.Command(bin, "hook", "--harness", string(tc.harness), "--event", tc.event, "--on-failure", "block")
+				cmd.Dir = root
+				cmd.Stdin = bytes.NewReader(input)
+				start := time.Now()
+				err := cmd.Run()
+				elapsed := time.Since(start)
+				if code := cmd.ProcessState.ExitCode(); code != tc.exit {
+					t.Fatalf("%s policy %s %s: exit %d (%v), want %d", policy.name, tc.harness, tc.fixture, code, err, tc.exit)
+				}
+				samples = append(samples, elapsed)
 			}
-			samples = append(samples, elapsed)
-		}
-		samples = samples[5:]
-		slices.Sort(samples)
-		p50 := samples[len(samples)/2]
-		p95 := samples[int(math.Ceil(0.95*float64(len(samples))))-1]
-		t.Logf("%s %s: p50 %v, p95 %v over %d runs (budget p95 %v)", tc.harness, tc.event, p50, p95, runs, hookColdStartBudget)
-		if p95 > hookColdStartBudget {
-			t.Errorf("%s %s: p95 %v is over the %v hook budget", tc.harness, tc.event, p95, hookColdStartBudget)
+			samples = samples[5:]
+			slices.Sort(samples)
+			p50 := samples[len(samples)/2]
+			p95 := samples[int(math.Ceil(0.95*float64(len(samples))))-1]
+			t.Logf("%s policy %s %s: p50 %v, p95 %v, max %v over %d runs (budget p95 %v)", policy.name, tc.harness, tc.event, p50, p95, samples[len(samples)-1], runs, hookColdStartBudget)
+			if p95 > hookColdStartBudget {
+				t.Errorf("%s policy %s %s: p95 %v is over the %v hook budget", policy.name, tc.harness, tc.event, p95, hookColdStartBudget)
+			}
 		}
 	}
 }
