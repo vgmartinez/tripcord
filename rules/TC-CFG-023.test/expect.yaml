@@ -46,6 +46,9 @@ positivos:
   claude-uvx-fast-agent-vulnerable: high
   claude-uvx-fast-agent-from: high
   claude-uvx-code-graph-rag-vulnerable: high
+  claude-uvx-code-graph-rag-0.0.345: high
   claude-uvx-code-graph-rag-0.0.586: high
   claude-npx-dynatrace-vulnerable: high
+  claude-npx-dynatrace-1.8.7: high
   claude-npx-dynatrace-2.0.0: high
+  claude-npx-dynatrace-2.1.0: high
