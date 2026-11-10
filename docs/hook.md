@@ -58,10 +58,15 @@ custom:
     deny_if: 'event.command != "" && "pipe" in shell.risks(event.command)'
     message: piping a download into a shell is not allowed
   - id: ACME-002
-    deny_if: 'event.paths.exists(p, p.endsWith("/.env"))'
+    deny_if: 'event.paths.exists(p, p.lowerAscii().endsWith("/.env"))'
     message: reading .env is not allowed
     severity: critical
 ```
+
+Tool paths are cleaned and made absolute against the hook's cwd, or the
+project directory when the harness sends no cwd, before the policy runs.
+A trailing slash is removed. On Windows the path is ASCII-case-folded.
+`lowerAscii()` matches `.ENV` on a case-sensitive filesystem too.
 
 A rule whose `deny_if` holds is a hit, with its `severity` (default
 `high`) after `rules.severity_overrides`. A rule left out of

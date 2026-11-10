@@ -1,8 +1,8 @@
 // Command registrycheck fails when a rule REGISTRY edit would let a
-// rule id be reused. CI runs it with the pull request base version of
-// rules/REGISTRY and the head version:
+// rule id be reused. CI builds this program from the base commit and
+// runs that binary with the base rules/REGISTRY and the head version:
 //
-//	go run ./internal/tools/registrycheck OLD NEW
+//	registrycheck OLD NEW
 //
 // An empty or missing OLD file is a registry with no entries.
 package main
@@ -54,10 +54,10 @@ func run(args []string, stderr io.Writer) int {
 // checkAdvisories validates ADVISORIES.json next to a head REGISTRY and
 // compares it with the base copy. CI invokes this tool as
 // `registrycheck OLD NEW` where NEW is rules/REGISTRY, so the advisory
-// file is NEW's sibling. The workflow is not changed: the base SHA is
-// read from the same environment variables that job already sets, and
-// a missing file in the base commit is an empty list. A file missing at
-// head fails when the base still has entries.
+// file is NEW's sibling. The base SHA is read from the same environment
+// variables the registry job sets, and a missing file in the base
+// commit is an empty list. A file missing at head fails when the base
+// still has entries.
 func checkAdvisories(oldReg, newReg string) error {
 	if filepath.Base(newReg) != rules.RegistryFile {
 		return nil

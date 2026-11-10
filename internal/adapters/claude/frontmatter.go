@@ -55,7 +55,32 @@ func splitFrontmatter(raw []byte) (front []byte, found bool, err error) {
 // decodeJSON. Aliases and merge keys are rejected so an alias bomb fails
 // closed; nesting is bounded by maxNesting. Duplicate and case-variant keys
 // are reported as warnings, with the last value used.
+//
+// A document whose only problem is a plain scalar YAML rejects (a
+// description containing ": ", or an argument hint written `[a] [b]`)
+// is read again with those scalars quoted. hooks and mcpServers are not
+// rewritten: a value for either that is not valid YAML still fails closed,
+// because that is the configuration a harness would execute.
 func decodeYAML(raw []byte) (any, []string, error) {
+	value, warnings, err := decodeYAMLDocument(raw)
+	if err == nil || !yamlSyntaxError(err) {
+		return value, warnings, err
+	}
+	repaired, ok := repairFrontmatterScalars(raw)
+	if !ok {
+		return nil, nil, err
+	}
+	value, warnings, err2 := decodeYAMLDocument(repaired)
+	if err2 != nil {
+		if yamlSyntaxError(err2) {
+			return nil, nil, err
+		}
+		return nil, warnings, err2
+	}
+	return value, warnings, nil
+}
+
+func decodeYAMLDocument(raw []byte) (any, []string, error) {
 	var doc yaml.Node
 	if err := yaml.Unmarshal(raw, &doc); err != nil {
 		return nil, nil, err
@@ -135,4 +160,136 @@ func yamlScalar(n *yaml.Node) any {
 		}
 	}
 	return strings.Clone(n.Value)
+}
+
+// yamlSyntaxError reports an error from yaml.Unmarshal. Decoder errors
+// (aliases, merge keys, nesting) are plain text and must not take the
+// tolerant path.
+func yamlSyntaxError(err error) bool {
+	return err != nil && strings.HasPrefix(err.Error(), "yaml:")
+}
+
+// securityFrontmatterKeys are the frontmatter fields a harness executes.
+// A value for one of them that is not valid YAML is not quoted into a
+// string: that would hide a hook or MCP server the strict parse refused.
+var securityFrontmatterKeys = map[string]bool{
+	"hooks":       true,
+	"mcpServers":  true,
+	"mcp-servers": true,
+}
+
+// repairFrontmatterScalars quotes plain scalar values that are not valid
+// YAML on their own, which is how a lenient frontmatter reader keeps the
+// rest of the document. It reports false when nothing can be repaired or
+// when a security-relevant key would have to be rewritten.
+func repairFrontmatterScalars(front []byte) ([]byte, bool) {
+	lines := strings.Split(string(front), "\n")
+	changed := false
+	blockIndent := -1
+	for i, line := range lines {
+		if blockIndent >= 0 {
+			if strings.TrimSpace(line) == "" || leadingSpaces(line) > blockIndent {
+				continue
+			}
+			blockIndent = -1
+		}
+		next, did, block, abort := rewriteLooseScalar(line)
+		if abort {
+			return nil, false
+		}
+		if block >= 0 {
+			blockIndent = block
+		}
+		if did {
+			lines[i] = next
+			changed = true
+		}
+	}
+	if !changed {
+		return nil, false
+	}
+	return []byte(strings.Join(lines, "\n")), true
+}
+
+func leadingSpaces(line string) int {
+	n := 0
+	for n < len(line) && line[n] == ' ' {
+		n++
+	}
+	return n
+}
+
+// rewriteLooseScalar returns the line with its value double-quoted when
+// the line is a mapping entry YAML itself rejects. block is the indent of
+// a block scalar that follows, or -1. abort is set when the entry is a
+// security-relevant key that cannot be parsed.
+func rewriteLooseScalar(line string) (next string, changed bool, block int, abort bool) {
+	block = -1
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" || trimmed[0] == '#' {
+		return line, false, block, false
+	}
+	indent := line[:leadingSpaces(line)]
+	rest := line[len(indent):]
+	dash := ""
+	if strings.HasPrefix(rest, "- ") {
+		dash = "- "
+		rest = rest[len("- "):]
+	}
+	key, value, ok := strings.Cut(rest, ":")
+	if !ok || key == "" || strings.TrimSpace(key) != key || strings.ContainsAny(key, " \t#{}[],&*!|>%@`") {
+		return line, false, block, false
+	}
+	trim := strings.TrimSpace(value)
+	if isBlockScalar(trim) {
+		return line, false, leadingSpaces(line), false
+	}
+	if yamlLineOK(line) {
+		return line, false, block, false
+	}
+	if securityFrontmatterKeys[key] {
+		return line, false, block, true
+	}
+	if trim == "" {
+		return line, false, block, false
+	}
+	return indent + dash + key + ": " + yamlDoubleQuote(trim), true, block, false
+}
+
+func isBlockScalar(value string) bool {
+	if value == "" {
+		return false
+	}
+	return value[0] == '|' || value[0] == '>'
+}
+
+func yamlLineOK(line string) bool {
+	var doc yaml.Node
+	return yaml.Unmarshal([]byte(line+"\n"), &doc) == nil
+}
+
+func yamlDoubleQuote(s string) string {
+	var b strings.Builder
+	b.WriteByte('"')
+	for _, r := range s {
+		switch r {
+		case '\\', '"':
+			b.WriteByte('\\')
+			b.WriteRune(r)
+		case '\n':
+			b.WriteString(`\n`)
+		case '\r':
+			b.WriteString(`\r`)
+		case '\t':
+			b.WriteString(`\t`)
+		default:
+			if r < 0x20 {
+				fmt.Fprintf(&b, `\u%04X`, r)
+			} else {
+				b.WriteRune(r)
+			}
+		}
+	}
+	b.WriteByte('"')
+	return b.String()
 }

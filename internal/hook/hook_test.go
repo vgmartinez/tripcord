@@ -2,6 +2,8 @@ package hook
 
 import (
 	"errors"
+	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -25,6 +27,50 @@ func TestCallEvent(t *testing.T) {
 		if got := (Call{Harness: model.HarnessClaude, Tool: tool}).Event(nil, time.Unix(0, 0)).Kind; got != want {
 			t.Errorf("%s: kind %s, want %s", tool, got, want)
 		}
+	}
+}
+
+func TestCleanToolPath(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, path, base string
+		windows          bool
+		want             string
+	}{
+		{name: "relative", path: ".env", base: "/proj", want: "/proj/.env"},
+		{name: "dot slash", path: "./.env", base: "/proj", want: "/proj/.env"},
+		{name: "parent", path: "foo/../.env", base: "/proj", want: "/proj/.env"},
+		{name: "upper stays", path: ".ENV", base: "/proj", want: "/proj/.ENV"},
+		{name: "upper windows", path: ".ENV", base: "/proj", windows: true, want: "/proj/.env"},
+		{name: "trailing slash", path: "/abs/.env/", want: "/abs/.env"},
+		{name: "trailing slash windows", path: "/Abs/.ENV/", windows: true, want: "/abs/.env"},
+		{name: "absolute parent", path: "/abs/foo/../.env", want: "/abs/.env"},
+		{name: "url userinfo stays", path: "( git clone https://u:secret@h.invalid/r", base: "/tmp/proj", want: "( git clone https://u:secret@h.invalid/r"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := cleanToolPath(tc.path, tc.base, tc.windows); got != tc.want {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestEventNormalizesPaths(t *testing.T) {
+	t.Parallel()
+	ev := Call{
+		Harness: model.HarnessClaude,
+		Tool:    "Read",
+		Dir:     "/proj",
+		Paths:   []string{".env"},
+		Input:   map[string]any{"file_path": "./.env", "path": "/abs/.env/"},
+	}.Event([]byte("raw"), time.Unix(0, 0))
+	want := []string{
+		filepath.ToSlash(filepath.Clean(filepath.Join("/proj", ".env"))),
+		filepath.ToSlash(filepath.Clean("/abs/.env/")),
+	}
+	if !slices.Equal(ev.Paths, want) {
+		t.Fatalf("paths = %q, want %q", ev.Paths, want)
 	}
 }
 
