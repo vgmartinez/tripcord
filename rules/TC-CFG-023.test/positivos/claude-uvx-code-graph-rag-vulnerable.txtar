@@ -1,0 +1,9 @@
+-- .mcp.json --
+{
+  "mcpServers": {
+    "code-graph": {
+      "command": "uvx",
+      "args": ["code-graph-rag==0.0.344"]
+    }
+  }
+}

@@ -368,6 +368,120 @@
       ],
       "added": "tripcord/core@2026.11",
       "reviewed": "2026-11-10"
+    },
+    {
+      "id": "TCA-2026-0018",
+      "aliases": ["CVE-2026-77604", "GHSA-vvr2-h2jp-838m"],
+      "summary": "code-graph-rag before 0.0.345 lets a paginated MCP read_file call traverse paths and read arbitrary files",
+      "severity": "high",
+      "affected": [
+        {
+          "ecosystem": "pypi",
+          "name": "code-graph-rag",
+          "ranges": [{"fixed": "0.0.345"}]
+        }
+      ],
+      "refs": [
+        "https://github.com/advisories/GHSA-vvr2-h2jp-838m",
+        "https://nvd.nist.gov/vuln/detail/CVE-2026-77604"
+      ],
+      "added": "tripcord/core@2026.11",
+      "reviewed": "2026-11-10"
+    },
+    {
+      "id": "TCA-2026-0019",
+      "aliases": ["CVE-2026-87008", "GHSA-85gg-2gfq-q95m"],
+      "summary": "code-graph-rag through 0.0.586 lets its structural tools follow symlinks that point outside the repository root",
+      "severity": "high",
+      "affected": [
+        {
+          "ecosystem": "pypi",
+          "name": "code-graph-rag",
+          "ranges": [{"fixed": "0.0.587"}]
+        }
+      ],
+      "refs": [
+        "https://github.com/advisories/GHSA-85gg-2gfq-q95m",
+        "https://nvd.nist.gov/vuln/detail/CVE-2026-87008"
+      ],
+      "added": "tripcord/core@2026.11",
+      "reviewed": "2026-11-10"
+    },
+    {
+      "id": "TCA-2026-0020",
+      "aliases": ["CVE-2026-123811", "GHSA-p7w7-4929-vpj5"],
+      "summary": "@dynatrace-oss/dynatrace-mcp-server through 1.8.7 serves tools/call over HTTP with no authentication and no Host or Origin check",
+      "severity": "high",
+      "affected": [
+        {
+          "ecosystem": "npm",
+          "name": "@dynatrace-oss/dynatrace-mcp-server",
+          "ranges": [{"fixed": "2.0.0"}]
+        }
+      ],
+      "refs": [
+        "https://github.com/advisories/GHSA-p7w7-4929-vpj5",
+        "https://nvd.nist.gov/vuln/detail/CVE-2026-123811"
+      ],
+      "added": "tripcord/core@2026.11",
+      "reviewed": "2026-11-10"
+    },
+    {
+      "id": "TCA-2026-0021",
+      "aliases": ["CVE-2026-123809", "GHSA-xrmj-5g4g-8987"],
+      "summary": "@dynatrace-oss/dynatrace-mcp-server before 2.0.0 has a Jinja2 template injection in create_workflow_for_notification",
+      "severity": "moderate",
+      "affected": [
+        {
+          "ecosystem": "npm",
+          "name": "@dynatrace-oss/dynatrace-mcp-server",
+          "ranges": [{"fixed": "2.0.0"}]
+        }
+      ],
+      "refs": [
+        "https://github.com/advisories/GHSA-xrmj-5g4g-8987",
+        "https://nvd.nist.gov/vuln/detail/CVE-2026-123809"
+      ],
+      "added": "tripcord/core@2026.11",
+      "reviewed": "2026-11-10"
+    },
+    {
+      "id": "TCA-2026-0022",
+      "aliases": ["CVE-2026-123810", "GHSA-pqh8-p93p-2rx7"],
+      "summary": "@dynatrace-oss/dynatrace-mcp-server before 2.1.1 has a parameter-based DQL injection",
+      "severity": "moderate",
+      "affected": [
+        {
+          "ecosystem": "npm",
+          "name": "@dynatrace-oss/dynatrace-mcp-server",
+          "ranges": [{"fixed": "2.1.1"}]
+        }
+      ],
+      "refs": [
+        "https://github.com/advisories/GHSA-pqh8-p93p-2rx7",
+        "https://nvd.nist.gov/vuln/detail/CVE-2026-123810"
+      ],
+      "added": "tripcord/core@2026.11",
+      "reviewed": "2026-11-10"
+    },
+    {
+      "id": "TCA-2026-0023",
+      "aliases": ["CVE-2026-123812", "GHSA-pc2w-4mq8-32qw"],
+      "summary": "@dynatrace-oss/dynatrace-mcp-server before 1.8.7 lets create_dynatrace_notebook write a notebook without human approval",
+      "severity": "low",
+      "affected": [
+        {
+          "ecosystem": "npm",
+          "name": "@dynatrace-oss/dynatrace-mcp-server",
+          "ranges": [{"fixed": "1.8.7"}]
+        }
+      ],
+      "refs": [
+        "https://github.com/advisories/GHSA-pc2w-4mq8-32qw",
+        "https://nvd.nist.gov/vuln/detail/CVE-2026-123812"
+      ],
+      "added": "tripcord/core@2026.11",
+      "reviewed": "2026-11-10"
     }
   ]
 }
