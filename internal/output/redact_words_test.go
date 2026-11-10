@@ -26,6 +26,10 @@ func TestRedactPasswordWordsAndUserContextPassword(t *testing.T) {
 		"helm registry login h -p " + wordSecret:                                 "helm registry login h -p [REDACTED]",
 		"regcli -u bot -p \\\n  " + wordSecret:                                   "regcli -u bot -p \\\n  [REDACTED]",
 		"useradd -u 1000 -p " + wordSecret + " bob":                              "useradd -u 1000 -p [REDACTED] bob",
+		"regcli --user bot -p deadbeef:22 push":                                  "regcli --user bot -p [REDACTED] push",
+		"ssh -l alice -p deadbeef:22 host":                                       "ssh -l alice -p [REDACTED] host",
+		"ssh -l alice -p 22 host":                                                "ssh -l alice -p [REDACTED] host",
+		"docker login -u bot -p deadbeef:22 ghcr.io":                             "docker login -u bot -p [REDACTED] ghcr.io",
 		"echo '" + "x" + "' | regcli --login bot -p " + wordSecret + " && ls -p": "echo 'x' | regcli --login bot -p [REDACTED] && ls -p",
 	}
 	for in, want := range cases {
@@ -34,6 +38,9 @@ func TestRedactPasswordWordsAndUserContextPassword(t *testing.T) {
 			t.Errorf("DefaultRedactor(%q) = %q, want %q", in, got, want)
 		}
 		cmd, removed := RedactCommand(in)
+		if !strings.Contains(in, wordSecret) {
+			continue
+		}
 		if strings.Contains(cmd, wordSecret) || !slices.ContainsFunc(removed, func(r string) bool { return strings.Contains(r, wordSecret) }) {
 			t.Errorf("RedactCommand(%q) = %q, %q; want the secret removed", in, cmd, removed)
 		}
@@ -60,6 +67,13 @@ func TestRedactPasswordWordsKeepsOtherText(t *testing.T) {
 		"docker run -p 8080:80 img",
 		"docker run -u 1000 -p 8080:80 img",
 		"docker run -u 1000 -p 127.0.0.1:8080:80/tcp img",
+		"podman run --user alice -p 8080:80 img",
+		"docker container run -u 1000 -p 8080:80 img",
+		"podman container run -u alice -p 127.0.0.1:8080:80/tcp img",
+		"sudo docker run -u 1000 -p 8080:80 img",
+		"/usr/bin/podman run -u alice -p 8080:80 img",
+		"docker -H tcp://h run -u 1000 -p 8080:80 img",
+		"useradd -p HASH bob",
 		"x -u a; mkdir -p dir",
 		"x -p $PW -u bot",
 		"x --user bot -p -v",
@@ -89,8 +103,12 @@ func TestRedactToolArgvPasswordWords(t *testing.T) {
 		{[]string{"--user", "bot", "-p", wordSecret}, []string{"--user", "bot", "-p", "[REDACTED]"}, []string{wordSecret}},
 		{[]string{"login", "-p", "'" + wordSecret + "'"}, []string{"login", "-p", "'[REDACTED]'"}, []string{wordSecret}},
 		{[]string{"-p", "8080:80"}, []string{"-p", "8080:80"}, nil},
-		{[]string{"-u", "1000", "-p", "8080:80"}, []string{"-u", "1000", "-p", "8080:80"}, nil},
+		{[]string{"-u", "1000", "-p", "8080:80"}, []string{"-u", "1000", "-p", "[REDACTED]"}, []string{"8080:80"}},
+		{[]string{"docker", "run", "-u", "1000", "-p", "8080:80"}, []string{"docker", "run", "-u", "1000", "-p", "8080:80"}, nil},
+		{[]string{"podman", "container", "run", "--user", "alice", "-p", "8080:80"}, []string{"podman", "container", "run", "--user", "alice", "-p", "8080:80"}, nil},
+		{[]string{"regcli", "--user", "bot", "-p", "deadbeef:22"}, []string{"regcli", "--user", "bot", "-p", "[REDACTED]"}, []string{"deadbeef:22"}},
 		{[]string{"mkdir", "-p", "x"}, []string{"mkdir", "-p", "x"}, nil},
+		{[]string{"useradd", "-p", "HASH"}, []string{"useradd", "-p", "HASH"}, nil},
 		{[]string{"password", "$PW"}, []string{"password", "$PW"}, nil},
 	}
 	for _, tc := range cases {
