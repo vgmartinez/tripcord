@@ -33,6 +33,9 @@ func TestRedactionScalesLinearly(t *testing.T) {
 		"password word":      "password x ",
 		"user context flag":  "-u a -p x ",
 		"commented key run":  "# token: # c\n  x\n",
+		"escaped quotes":     "token: \\\"x\\\" ",
+		"user context colon": "-u a -p deadbeef:22 ",
+		"container run port": "docker run -u a -p 8080:80 ",
 	}
 	for name, unit := range units {
 		small := fastestRedaction(strings.Repeat(unit, (64<<10)/len(unit)))
