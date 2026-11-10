@@ -1,0 +1,44 @@
+name: spike-tc-cfg-016-called
+
+# Throwaway TC-CFG-016 version-skew spike: a reusable workflow, called by
+# full commit SHA, that echoes every candidate for "the SHA this called
+# workflow runs at". Lives only on the spike branch; never merge.
+
+on:
+  workflow_call:
+
+permissions: {}
+
+jobs:
+  echo:
+    name: Echo identity
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      id-token: write # spike only: read the job_workflow_ref and job_workflow_sha OIDC claims
+    steps:
+      - name: Echo contexts and runner env
+        env:
+          SPIKE_JOB: ${{ toJSON(job) }}
+          SPIKE_GITHUB: ${{ toJSON(github) }}
+        run: |
+          set -euo pipefail
+          echo "--- job context (workflow identity fields) ---"
+          printf '%s\n' "$SPIKE_JOB" | jq -S '{workflow_ref, workflow_sha, workflow_repository, workflow_file_path}'
+          echo "--- github context (workflow/sha/ref fields; token excluded) ---"
+          printf '%s\n' "$SPIKE_GITHUB" | jq -S '{workflow, workflow_ref, workflow_sha, job_workflow_sha, job_workflow_ref, sha, ref, head_ref, base_ref, repository, event_name, pr_head_sha: .event.pull_request.head.sha}'
+          echo "--- runner env ---"
+          printf 'GITHUB_WORKFLOW_SHA=%s\n' "${GITHUB_WORKFLOW_SHA:-}"
+          printf 'GITHUB_WORKFLOW_REF=%s\n' "${GITHUB_WORKFLOW_REF:-}"
+          printf 'GITHUB_SHA=%s\n' "${GITHUB_SHA:-}"
+          printf 'GITHUB_REF=%s\n' "${GITHUB_REF:-}"
+      - name: Decode OIDC claims (job_workflow_ref and job_workflow_sha only)
+        run: |
+          set -euo pipefail
+          token=$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=tripcord-spike" | jq -r .value)
+          echo "::add-mask::${token}"
+          payload=$(printf '%s' "$token" | cut -d. -f2 | tr '_-' '/+')
+          while [ $(( ${#payload} % 4 )) -ne 0 ]; do payload="${payload}="; done
+          printf '%s' "$payload" | base64 -d | jq -S '{job_workflow_ref, job_workflow_sha}'
+      - name: Composite action pinned by full SHA
+        uses: vgmartinez/tripcord/.github/actions/spike-tc-cfg-016@27fdfbe3ad5952b16dddadc91aaabdf818e96a6b
