@@ -24,6 +24,14 @@ import (
 // not a tripcord.finding/v1 document.
 const diagnosticSchema = "tripcord.diagnostic/v1"
 
+// autorunSchema identifies one auto-run hook inventory entry in a JSONL
+// report. It is informational and is not a tripcord.finding/v1 document.
+const autorunSchema = "tripcord.autorun_hook/v1"
+
+// autorunNotice prefixes an inventory entry in text and SARIF, so a
+// reader does not take it for a finding.
+const autorunNotice = "auto-run hook (informational, not a finding): "
+
 // findingDocument adds the fingerprint mode to a Finding's JSON/JSONL
 // rendering without adding a field to Finding itself, which is the
 // frozen tripcord.finding/v1 wire type. MarshalJSON appends
@@ -67,7 +75,18 @@ type diagnosticDocument struct {
 	Message    string `json:"message"`
 }
 
-func renderJSONL(writer io.Writer, findings []model.Finding, diags []Diagnostic, options Options) error {
+type autorunDocument struct {
+	Schema        string `json:"schema"`
+	Informational bool   `json:"informational"`
+	Harness       string `json:"harness"`
+	Path          string `json:"path"`
+	Line          int    `json:"line,omitempty"`
+	Event         string `json:"event"`
+	Command       string `json:"command,omitempty"`
+	Target        string `json:"target"`
+}
+
+func renderJSONL(writer io.Writer, findings []model.Finding, diags []Diagnostic, autorun []AutorunHook, options Options) error {
 	var buffer bytes.Buffer
 	encoder := json.NewEncoder(&buffer)
 	encoder.SetEscapeHTML(true)
@@ -87,6 +106,21 @@ func renderJSONL(writer io.Writer, findings []model.Finding, diags []Diagnostic,
 			Scope:      truncateSanitized(d.Scope, MaxFieldBytes),
 			Path:       truncateSanitized(d.Path, MaxFieldBytes),
 			Message:    truncateSanitized(d.Message, MaxFieldBytes),
+		}
+		if err := encoder.Encode(doc); err != nil {
+			return err
+		}
+	}
+	for _, a := range autorun {
+		doc := autorunDocument{
+			Schema:        autorunSchema,
+			Informational: true,
+			Harness:       truncateSanitized(a.Harness, MaxFieldBytes),
+			Path:          truncateSanitized(a.Path, MaxFieldBytes),
+			Line:          max(a.Line, 0),
+			Event:         truncateSanitized(a.Event, MaxFieldBytes),
+			Command:       truncateSanitized(a.Command, MaxFieldBytes),
+			Target:        truncateSanitized(a.Target, MaxFieldBytes),
 		}
 		if err := encoder.Encode(doc); err != nil {
 			return err
@@ -180,9 +214,9 @@ var ruleDocID = regexp.MustCompile(`^TC-[A-Z]+-[0-9]{3}$`)
 // (Options.Verbose) writes the detailed line instead. Every
 // attacker-controlled field goes through present, so a finding line
 // starts with the severity. JSON and SARIF do not call this.
-func renderText(writer io.Writer, findings []model.Finding, diags []Diagnostic, options Options) error {
+func renderText(writer io.Writer, findings []model.Finding, diags []Diagnostic, autorun []AutorunHook, options Options) error {
 	if options.Verbose {
-		return renderTextDetail(writer, findings, diags, options.RepoRoot)
+		return renderTextDetail(writer, findings, diags, autorun, options.RepoRoot)
 	}
 	var b strings.Builder
 	writeTextSummary(&b, findings, diags, textExitCode(findings, diags, options))
@@ -190,6 +224,9 @@ func renderText(writer io.Writer, findings []model.Finding, diags []Diagnostic, 
 	for _, finding := range findings {
 		b.WriteString(compactFindingLine(finding, options.RepoRoot))
 		b.WriteByte('\n')
+	}
+	if options.ShowAutorun {
+		writeCompactAutorun(&b, autorun)
 	}
 	b.WriteString(textDetailHint)
 	b.WriteByte('\n')
@@ -199,7 +236,7 @@ func renderText(writer io.Writer, findings []model.Finding, diags []Diagnostic, 
 
 // renderTextDetail is the text view from before the one-screen summary:
 // one line per finding with evidence, fix, and fingerprint, then the counts.
-func renderTextDetail(writer io.Writer, findings []model.Finding, diags []Diagnostic, root string) error {
+func renderTextDetail(writer io.Writer, findings []model.Finding, diags []Diagnostic, autorun []AutorunHook, root string) error {
 	var b strings.Builder
 	writeTextDiagnostics(&b, diags)
 	for _, finding := range findings {
@@ -221,10 +258,34 @@ func renderTextDetail(writer io.Writer, findings []model.Finding, diags []Diagno
 		b.WriteString(strings.Join(parts, " | "))
 		b.WriteByte('\n')
 	}
+	for _, a := range autorun {
+		line := autorunNotice + present(a.Text())
+		if a.Command != "" {
+			line += " | command: " + present(a.Command)
+		}
+		b.WriteString(line)
+		b.WriteByte('\n')
+	}
 	summary := Summarize(findings)
 	fmt.Fprintf(&b, "%d finding(s): %d critical, %d high, %d medium, %d low; %d warning(s)\n", summary.Findings, summary.Critical, summary.High, summary.Medium, summary.Low, informationalDiagnostics(diags))
 	_, err := io.WriteString(writer, b.String())
 	return err
+}
+
+// autorunHeading introduces the inventory in the compact text view.
+const autorunHeading = "auto-run hooks (informational, not findings):"
+
+// writeCompactAutorun lists the inventory under a heading, one entry per
+// line, each at most textWidth visible columns. It writes nothing for an
+// empty inventory.
+func writeCompactAutorun(b *strings.Builder, autorun []AutorunHook) {
+	if len(autorun) == 0 {
+		return
+	}
+	b.WriteString(autorunHeading + "\n")
+	for _, a := range autorun {
+		b.WriteString("  " + shortenHard(present(a.Text()), textWidth-2) + "\n")
+	}
 }
 
 func writeTextDiagnostics(b *strings.Builder, diags []Diagnostic) {

@@ -41,10 +41,27 @@ directories are covered the same way as the root:
 | `<plugin>/skills`, `<plugin>/agents`, `<plugin>/commands` | as above |
 
 `hooks/hooks.json` is read only inside a plugin root, that is a directory
-with `.claude-plugin/plugin.json` or a relative marketplace source. Plugin
-`hooks.json` must use the `{"hooks": {...}}` wrapper. A missing wrapper or
-any other shape is a diagnostic, so the scan exits 3; it is never skipped
-silently. Plugin path references
+with `.claude-plugin/plugin.json` or a relative marketplace source. A
+plugin `hooks.json` holds settings hooks under the `{"hooks": {...}}`
+wrapper, the module of a Claude Code mod under `modules`, or both:
+
+- `modules` must be an array with exactly one non-empty string, a path
+  relative to the `hooks.json` that stays inside the plugin directory.
+  It is one `plugin` item with `setting: modules`, which no rule reports;
+  the module is listed in the [auto-run hook inventory](../autorun-hooks.md).
+  Any other `modules` value (not an array, not exactly one string, an
+  absolute path or URL, or a path that leaves the plugin directory) is a
+  diagnostic, so the scan exits 3.
+- A file with neither `hooks` nor `modules` declares nothing that runs.
+  When its only other key is `description` (or it is `{}`), it is read
+  like `{"hooks": {}}` with an informational warning,
+  `plugin hooks.json declares no hooks`, which does not change the exit
+  code. Any other key is a diagnostic that names it, so the scan exits 3:
+  it may be a shape that runs code and is not read yet.
+- A `hooks` member that is not an object, or a file that is not a JSON
+  object, is a diagnostic, so the scan exits 3.
+
+Nothing is skipped silently. Plugin path references
 that are absolute or contain `..` are reported and not read. Remote
 marketplace sources are recorded but never fetched.
 

@@ -205,7 +205,7 @@ func TestInitEmbedScanHasNoFindings(t *testing.T) {
 				t.Fatalf("init: exit %d: %s", code, stderr)
 			}
 			code, stdout, stderr := runCLI(t, "scan", "--format", "json", "--fail-on", "low", dir)
-			if code != 0 || stdout != "" {
+			if code != 0 || withoutBootstrapAutorun(t, stdout) != "" {
 				t.Fatalf("scan: exit %d\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
 			}
 		})
@@ -409,7 +409,7 @@ func TestInitMergesExistingFiles(t *testing.T) {
 	// The kept lint hook runs alongside the guard under PreToolUse, so it
 	// is the one finding: an entry Tripcord did not register.
 	code, stdout, stderr = runCLI(t, "scan", "--format", "json", dir)
-	lines := strings.Split(strings.TrimSpace(stdout), "\n")
+	lines := strings.Split(strings.TrimSpace(withoutBootstrapAutorun(t, stdout)), "\n")
 	var f model.Finding
 	if code != 0 || len(lines) != 1 {
 		t.Fatalf("scan: exit %d\n%s%s", code, stdout, stderr)
@@ -816,4 +816,29 @@ func mustSymlink(t *testing.T, target, link string) {
 	if err := os.Symlink(target, link); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// withoutBootstrapAutorun drops the auto-run hook inventory documents
+// for Tripcord's own session-start hook from JSON scan output. The
+// embedded wiring runs the committed .tripcord/bootstrap.sh when a
+// session starts, so the informational inventory lists it (see
+// docs/autorun-hooks.md); it is not a finding. Any other inventory
+// entry is left in place, so the caller's check still sees it.
+func withoutBootstrapAutorun(t *testing.T, stdout string) string {
+	t.Helper()
+	var kept []string
+	for _, line := range strings.SplitAfter(stdout, "\n") {
+		if line == "" {
+			continue
+		}
+		var doc struct {
+			Schema string `json:"schema"`
+			Target string `json:"target"`
+		}
+		if json.Unmarshal([]byte(line), &doc) == nil && doc.Schema == "tripcord.autorun_hook/v1" && doc.Target == ".tripcord/bootstrap.sh" {
+			continue
+		}
+		kept = append(kept, line)
+	}
+	return strings.Join(kept, "")
 }

@@ -1,0 +1,23 @@
+Hooks that run committed scripts on events that need a tool call or a
+prompt. They are not auto-run and are not listed.
+-- .claude/settings.json --
+{
+  "hooks": {
+    "PreToolUse": [
+      { "matcher": "Bash", "hooks": [ { "type": "command", "command": "./scripts/guard.sh" } ] }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [ { "type": "command", "command": "./scripts/guard.sh" } ] }
+    ]
+  }
+}
+-- .cursor/hooks.json --
+{
+  "version": 1,
+  "hooks": {
+    "beforeShellExecution": [ { "command": "./scripts/guard.sh" } ]
+  }
+}
+-- scripts/guard.sh --
+#!/bin/sh
+exit 0

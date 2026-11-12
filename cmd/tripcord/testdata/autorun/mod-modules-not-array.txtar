@@ -1,0 +1,7 @@
+A modules value that is not an array is malformed: exit 3.
+-- .claude-plugin/plugin.json --
+{ "name": "example", "hooks": "./hooks/hooks.json" }
+-- hooks/hooks.json --
+{ "modules": "./register.tsx" }
+-- hooks/register.tsx --
+export default 1

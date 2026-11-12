@@ -1,0 +1,7 @@
+A plugin hooks.json that is an empty object declares nothing that runs.
+It is read like {"hooks": {}}, with one informational warning, and the
+scan is complete.
+-- .claude-plugin/plugin.json --
+{ "name": "example", "hooks": "./hooks/hooks.json" }
+-- hooks/hooks.json --
+{}

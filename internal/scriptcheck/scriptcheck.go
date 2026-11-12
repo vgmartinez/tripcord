@@ -90,6 +90,24 @@ func Annotate(root string, items []model.ConfigItem) error {
 	return annotateChecksums(resolvedRoot, items)
 }
 
+// InTree returns the scripts of a repository hook (see Scripts) that
+// exist and resolve inside resolvedRoot, the scanned repository with its
+// own symlinks resolved. These are the scripts TC-CFG-006 stays quiet
+// about because they are committed. A missing script, a dependency
+// binary, and a path whose symlink leaves the tree are left out.
+func InTree(resolvedRoot string, item model.ConfigItem) []string {
+	if item.Kind != model.ConfigKindHook || item.Scope != model.ScopeRepo {
+		return nil
+	}
+	var out []string
+	for _, rel := range Scripts(item) {
+		if class, missing := lookupScript(resolvedRoot, rel); !missing && class == "" {
+			out = append(out, rel)
+		}
+	}
+	return out
+}
+
 // lookupScript reports whether rel is missing or resolves outside root.
 // Any error counts as missing, so an unreadable or broken path cannot pass
 // as present. The returned class is empty when the script stays inside root.

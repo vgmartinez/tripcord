@@ -1,0 +1,8 @@
+2 finding(s): 0 critical, 1 high, 1 medium, 0 low; 0 warning(s); exit 1
+MEDIUM ]8;;https://github.com/vgmartinez/tripcord/blob/main/docs/rules/TC-CFG-002.md\TC-CFG-002]8;;\ Task runs on folder open configs/tasks.json
+HIGH ]8;;https://github.com/vgmartinez/tripcord/blob/main/docs/rules/TC-CFG-010.md\TC-CFG-010]8;;\ Plugin executes arbitrary code configs/hook.json:7
+auto-run hooks (informational, not findings):
+  claude .claude/settings.json:6 SessionStart: scripts/setup.sh
+  claude plugins/p/hooks/hooks.json:1 modules: plugins/p/hooks/register.tsx
+  cursor .cursor/hooks.json sessionStart: .cursor/hooks/start.mjs
+re-run with -v for details

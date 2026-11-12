@@ -29,7 +29,7 @@ func runPreopen(args []string, stdout, stderr io.Writer) int {
 	if errors.Is(err, errHelpWrite) {
 		return int(exitcode.Internal)
 	}
-	target := scanTarget{prog: "tripcord preopen"}
+	target := scanTarget{prog: "tripcord preopen", showAutorun: true}
 	switch {
 	case err != nil:
 		return target.configError(stderr, err)

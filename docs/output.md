@@ -101,6 +101,20 @@ false and describes each diagnostic in `toolExecutionNotifications`.
 A report with no diagnostics is unchanged, including a SARIF run that
 omits `invocations`.
 
+## Auto-run hook inventory
+
+The [auto-run hook inventory](autorun-hooks.md) lists repository hooks
+that run committed code when a session starts, and Claude Code mod
+modules. It is informational: it is not a finding and does not change the
+exit code. JSONL appends one `tripcord.autorun_hook/v1` document per
+entry, after the diagnostics, with `"informational": true`. SARIF adds a
+`note` per entry to `toolExecutionNotifications` and no result; when the
+report has no diagnostics, `executionSuccessful` is true. `preopen` text
+lists the entries by default; `scan` text lists them only with `-v`.
+Markdown and GitHub Actions output do not include them. Every field gets
+the same redaction and field cap as finding text. A report with no entry
+is unchanged.
+
 ## JSONL
 
 `json` and `jsonl` write one `tripcord.finding/v1` document per line.

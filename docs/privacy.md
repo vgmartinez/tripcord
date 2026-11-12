@@ -105,6 +105,7 @@ then a cut at 1024 bytes (`MaxFieldBytes`).
 | `scan --format sarif`: result `message.text` | `redactFinding`; `sarifText` (escapes controls and `[` `]`) | field per part |
 | `scan --format sarif`: `properties.tripcord`, `partialFingerprints` | `redactFinding`; scope and path from the capped location; fingerprint is a hash | field |
 | `scan --format sarif`: rule text, notifications | catalog text through `sarifText`; diagnostics through `sink.SetDiagnostics` and `sarifText` | field |
+| Auto-run hook inventory: text, JSON/JSONL, SARIF notifications | `output.sink.SetAutorunHooks` runs the redactor on every string field; the command is the adapter's sanitized payload. `renderText` escapes with `present` (and the compact line is cut to 80 columns), `renderJSONL` caps each field, SARIF uses `sarifText` | field |
 | `scan --format gha` annotations | `redactFinding`; `ghaData` and `ghaProperty` encode `%`, CR, LF (and `:` `,` in properties), then `truncateGHA` | field |
 | `scan --format md` (the PR comment body) | `redactFinding`; `markdownValue`, `inlineCode`, `fencedCode` escape controls and break `@` mentions | field, and 60000 for the comment (`MaxMarkdownBytes`) |
 | PR comment artifact (the action's `--format md --output` file, posted by `github-script`) | the same Markdown sink, written by `publishSink` | as Markdown |

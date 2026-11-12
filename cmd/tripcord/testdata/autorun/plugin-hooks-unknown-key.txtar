@@ -1,0 +1,6 @@
+A plugin hooks.json with no hooks object and a key Tripcord does not
+read stays incomplete (exit 3), and the message names the key.
+-- .claude-plugin/plugin.json --
+{ "name": "example", "hooks": "./hooks/hooks.json" }
+-- hooks/hooks.json --
+{ "unknown": 1 }

@@ -1,0 +1,5 @@
+An absolute module path is malformed: exit 3.
+-- .claude-plugin/plugin.json --
+{ "name": "example", "hooks": "./hooks/hooks.json" }
+-- hooks/hooks.json --
+{ "modules": ["/opt/register.tsx"] }

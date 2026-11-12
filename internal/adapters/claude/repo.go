@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/vgmartinez/tripcord/internal/adapters"
@@ -389,7 +390,7 @@ func (a *Adapter) discoverRepo(ctx context.Context, repoRoot string, c *collecto
 		case roleSkill:
 			s.markdown(model.ConfigKindSkill, "skill", raw)
 		case rolePluginHooks:
-			s.pluginHooks(raw)
+			s.pluginHooksIn(raw, pluginRootOf(rel))
 		case rolePluginManifest:
 			for _, ref := range s.pluginManifest(raw) {
 				r.readRef(ref)
@@ -400,10 +401,12 @@ func (a *Adapter) discoverRepo(ctx context.Context, repoRoot string, c *collecto
 	return nil
 }
 
-// fileRef is a hooks or MCP file named by a plugin manifest.
+// fileRef is a hooks or MCP file named by a plugin manifest, and the
+// plugin directory that manifest belongs to.
 type fileRef struct {
 	rel  string
 	role fileRole
+	root string
 }
 
 func (r *repoRead) readRef(ref fileRef) {
@@ -417,7 +420,7 @@ func (r *repoRead) readRef(ref fileRef) {
 	s := newSrc(r.c, model.ScopeRepo, ref.rel, raw)
 	switch ref.role {
 	case rolePluginHooks:
-		s.pluginHooks(raw)
+		s.pluginHooksIn(raw, ref.root)
 	case roleMCP:
 		s.mcpFile(raw)
 	}
@@ -514,13 +517,13 @@ func (s *src) pluginManifest(raw []byte) []fileRef {
 		case nil:
 		case string:
 			if rel, ok := s.joinRef(root, v); ok {
-				refs = append(refs, fileRef{rel: rel, role: role})
+				refs = append(refs, fileRef{rel: rel, role: role, root: root})
 			}
 		case []any:
 			for _, item := range v {
 				if ref, ok := item.(string); ok {
 					if rel, ok := s.joinRef(root, ref); ok {
-						refs = append(refs, fileRef{rel: rel, role: role})
+						refs = append(refs, fileRef{rel: rel, role: role, root: root})
 					}
 				} else {
 					inline(item)
@@ -535,8 +538,20 @@ func (s *src) pluginManifest(raw []byte) []fileRef {
 	return refs
 }
 
-// pluginHooks normalizes hooks/hooks.json: {"hooks": {...}}.
+// pluginHooks normalizes hooks/hooks.json in the plugin directory two
+// levels up (see pluginHooksIn).
 func (s *src) pluginHooks(raw []byte) {
+	s.pluginHooksIn(raw, pluginRootOf(s.path))
+}
+
+// pluginHooksIn normalizes a plugin hooks file of the plugin at root.
+// The file holds settings hooks under hooks ({"hooks": {...}}), a mod's
+// module under modules ({"modules": ["./register.tsx"]}), or both. A
+// file with neither declares nothing that runs: when its only other key
+// is description it gets an informational warning, and any other key
+// keeps the scan incomplete, because it may be a shape that runs code
+// and is not read yet.
+func (s *src) pluginHooksIn(raw []byte, root string) {
 	tree, warnings, err := decodeJSON(raw)
 	s.warnAll(warnings)
 	if err != nil {
@@ -548,9 +563,29 @@ func (s *src) pluginHooks(raw []byte) {
 		s.warn("plugin hooks.json is not a JSON object")
 		return
 	}
-	hooks, ok := obj["hooks"]
-	if !ok {
-		s.warn("plugin hooks.json has no hooks object")
+	hooks, hasHooks := obj["hooks"]
+	modules, hasModules := obj["modules"]
+	if hasModules {
+		s.pluginModules(modules, root)
+	}
+	if !hasHooks {
+		if hasModules {
+			return
+		}
+		var unknown []string
+		for _, k := range sortedKeys(obj) {
+			if k != "description" {
+				unknown = append(unknown, strconv.Quote(k))
+			}
+		}
+		switch len(unknown) {
+		case 0:
+			s.c.note(s.scope, s.path, true, "plugin hooks.json declares no hooks")
+		case 1:
+			s.warn("plugin hooks.json has no hooks object; unknown key %s", unknown[0])
+		default:
+			s.warn("plugin hooks.json has no hooks object; unknown keys %s", strings.Join(unknown, ", "))
+		}
 		return
 	}
 	if _, ok := hooks.(map[string]any); !ok {
@@ -558,6 +593,42 @@ func (s *src) pluginHooks(raw []byte) {
 		return
 	}
 	s.hooks(hooks)
+}
+
+// pluginModules reads the modules member of a mod's hooks file: an array
+// with one path, relative to the hooks file, to the JS or TS module
+// Claude Code loads with the plugin. A well-formed value is one plugin
+// item with setting "modules", which no rule matches; the auto-run
+// inventory lists it (internal/autorun). Anything else keeps the scan
+// incomplete.
+func (s *src) pluginModules(value any, root string) {
+	list, ok := value.([]any)
+	if !ok || len(list) != 1 {
+		s.warn("plugin hooks.json modules must be an array with one path")
+		return
+	}
+	ref, ok := list[0].(string)
+	if !ok || strings.TrimSpace(ref) == "" {
+		s.warn("plugin hooks.json modules must be an array with one path")
+		return
+	}
+	slashed := strings.ReplaceAll(ref, `\`, "/")
+	if strings.Contains(slashed, "://") || path.IsAbs(slashed) || hasDriveLetter(slashed) {
+		s.warn("plugin hooks.json module %q is not a relative path; not scanned", ref)
+		return
+	}
+	joined := path.Join(path.Dir(s.path), slashed)
+	inside := joined != ".." && !strings.HasPrefix(joined, "../")
+	if root != "" {
+		inside = strings.HasPrefix(joined, root+"/")
+	}
+	if !inside || joined == path.Dir(s.path) {
+		s.warn("plugin hooks.json module %q is outside its plugin directory; not scanned", ref)
+		return
+	}
+	safe := s.safeString(ref)
+	payload := map[string]any{"setting": "modules", "module": safe, "module_path": joined, "plugin_root": root}
+	s.addDetect(model.ConfigKindPlugin, []string{"modules", safe}, payload, nil, map[string]any{"module": ref}, "setting", "module_path", "plugin_root")
 }
 
 // joinRef resolves a path a manifest names relative to base. Absolute and

@@ -163,6 +163,11 @@ Not reported, when `.claude/hooks/guard.sh` is in the tree:
   {"type": "command", "command": "/usr/local/bin/tripcord hook --harness claude --event pre-tool"}]}]}}
 ```
 
+A committed script that a `SessionStart` or `Setup` hook (Cursor:
+`sessionStart`) runs is not a finding either. It is listed in the
+informational [auto-run hook inventory](../autorun-hooks.md), so a
+reviewer still sees what runs when a session starts.
+
 ## How to fix
 
 Commit the script and reference it by a project-relative path, for
