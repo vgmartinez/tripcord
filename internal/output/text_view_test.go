@@ -151,3 +151,123 @@ func TestShortenHardKeepsMidComponentCut(t *testing.T) {
 		t.Fatalf("shortenHard(%q, 10) = %q, want %q", path, got, want)
 	}
 }
+
+func TestDocRef(t *testing.T) {
+	t.Parallel()
+	cases := []struct{ in, want string }{
+		{"v0.1.0", "v0.1.0"},
+		{"v0.2.0-rc.1", "v0.2.0-rc.1"},
+		{"", "main"},
+		{"dev", "main"},
+		{"v0.0.0-pr.42", "main"},
+		{"1.2.3", "main"},
+	}
+	for _, tc := range cases {
+		name := tc.in
+		if name == "" {
+			name = "empty"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			if got := docRef(tc.in); got != tc.want {
+				t.Fatalf("docRef(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCompactTextRuleDocLinkUsesReleaseTag(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		version, ref string
+	}{
+		{"v0.1.0", "v0.1.0"},
+		{"v0.2.0-rc.1", "v0.2.0-rc.1"},
+		{"", "main"},
+		{"dev", "main"},
+		{"v0.0.0-pr.42", "main"},
+		{"1.2.3", "main"},
+	}
+	sealed := sealAll(t, findings())
+	for _, tc := range cases {
+		t.Run(tc.version, func(t *testing.T) {
+			t.Parallel()
+			options := testOptions()
+			options.ToolVersion = tc.version
+			got := renderWith(t, FormatText, sealed, options)
+			for _, id := range []string{"TC-CFG-002", "TC-CFG-010"} {
+				url := "https://github.com/vgmartinez/tripcord/blob/" + tc.ref + "/docs/rules/" + id + ".md"
+				if !strings.Contains(got, url) || !strings.Contains(got, id) {
+					t.Fatalf("missing link %s in:\n%s", url, got)
+				}
+			}
+			if tc.ref != "main" && strings.Contains(got, "/blob/main/docs/rules/") {
+				t.Fatalf("release build still linked to main:\n%s", got)
+			}
+			if strings.Contains(got, "/blob/v0.0.0-pr.42/") {
+				t.Fatalf("PR build linked to a missing tag:\n%s", got)
+			}
+			for _, line := range strings.Split(strings.TrimSuffix(got, "\n"), "\n") {
+				visible := stripTextHyperlinks(line)
+				if n := utf8.RuneCountInString(visible); n > textWidth {
+					t.Fatalf("visible width %d > %d: %q", n, textWidth, visible)
+				}
+			}
+		})
+	}
+}
+
+func TestRuleDocURIRewritesCatalogLink(t *testing.T) {
+	t.Parallel()
+	mainURL := "https://github.com/vgmartinez/tripcord/blob/main/docs/rules/TC-CFG-011.md"
+	if got := ruleDocURI(mainURL, "v0.1.0"); got != "https://github.com/vgmartinez/tripcord/blob/v0.1.0/docs/rules/TC-CFG-011.md" {
+		t.Fatalf("ruleDocURI(main, v0.1.0) = %q", got)
+	}
+	if got := ruleDocURI(mainURL, "dev"); got != mainURL {
+		t.Fatalf("ruleDocURI(main, dev) = %q, want unchanged", got)
+	}
+	external := "https://example.invalid/rules/TC-CFG-011"
+	if got := ruleDocURI(external, "v0.1.0"); got != external {
+		t.Fatalf("ruleDocURI(external) = %q, want unchanged", got)
+	}
+}
+
+func TestSARIFHelpURIUsesReleaseTag(t *testing.T) {
+	t.Parallel()
+	options := testOptions()
+	options.ToolVersion = "v0.1.0"
+	options.Rules = map[string]RuleText{
+		"TC-CFG-010": {HelpURI: "https://github.com/vgmartinez/tripcord/blob/main/docs/rules/TC-CFG-010.md"},
+	}
+	got := renderWith(t, FormatSARIF, sealAll(t, findings()), options)
+	want := "https://github.com/vgmartinez/tripcord/blob/v0.1.0/docs/rules/TC-CFG-010.md"
+	if !strings.Contains(got, want) {
+		t.Fatalf("SARIF missing tagged helpUri %s:\n%s", want, got)
+	}
+	if strings.Contains(got, "blob/main/docs/rules/TC-CFG-010.md") {
+		t.Fatalf("SARIF kept the main helpUri:\n%s", got)
+	}
+}
+
+func TestCompactTextOmitsHyperlinksWhenDisabled(t *testing.T) {
+	t.Parallel()
+	options := testOptions()
+	options.Hyperlinks = false
+	got := renderWith(t, FormatText, sealAll(t, findings()), options)
+	if strings.Contains(got, "\x1b") {
+		t.Fatalf("compact text contained a terminal escape:\n%q", got)
+	}
+	for _, id := range []string{"TC-CFG-002", "TC-CFG-010"} {
+		if !strings.Contains(got, id) {
+			t.Fatalf("missing rule id %s:\n%s", id, got)
+		}
+		if strings.Contains(got, "/docs/rules/"+id+".md") {
+			t.Fatalf("disabled hyperlinks still included %s doc URL:\n%s", id, got)
+		}
+	}
+	for _, line := range strings.Split(strings.TrimSuffix(got, "\n"), "\n") {
+		if n := utf8.RuneCountInString(line); n > textWidth {
+			t.Fatalf("visible width %d > %d: %q", n, textWidth, line)
+		}
+	}
+}

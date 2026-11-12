@@ -188,7 +188,7 @@ func renderText(writer io.Writer, findings []model.Finding, diags []Diagnostic, 
 	writeTextSummary(&b, findings, diags, textExitCode(findings, diags, options))
 	writeTextDiagnostics(&b, diags)
 	for _, finding := range findings {
-		b.WriteString(compactFindingLine(finding, options.RepoRoot))
+		b.WriteString(compactFindingLine(finding, options.RepoRoot, options.ToolVersion, options.Hyperlinks))
 		b.WriteByte('\n')
 	}
 	b.WriteString(textDetailHint)
@@ -268,7 +268,7 @@ func textExitCode(findings []model.Finding, diags []Diagnostic, options Options)
 // compactFindingLine is one finding: severity, rule id, short title,
 // path:line. The rule id is a terminal hyperlink to its doc. The
 // visible line is at most textWidth columns.
-func compactFindingLine(finding model.Finding, root string) string {
+func compactFindingLine(finding model.Finding, root, version string, hyperlinks bool) string {
 	sev := strings.ToUpper(finding.Severity.String())
 	rule := present(finding.Rule)
 	title := present(finding.Title)
@@ -277,7 +277,7 @@ func compactFindingLine(finding model.Finding, root string) string {
 		loc = present(ref.display())
 	}
 	shownTitle, shownLoc := fitFinding(sev, rule, title, loc)
-	line := sev + " " + linkRuleID(rule)
+	line := sev + " " + linkRuleID(rule, version, hyperlinks)
 	if shownTitle != "" {
 		line += " " + shownTitle
 	}
@@ -412,27 +412,86 @@ func isTitleTrimToken(tok string) bool {
 	return unicode.IsSpace(r) || r == ',' || r == ':'
 }
 
+// releaseTag is a release version with an optional pre-release suffix.
+// The release workflow stamps this form with -X main.version=vX.Y.Z.
+var releaseTag = regexp.MustCompile(`^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$`)
+
+// prBuildVersion is a PR build stamped as v0.0.0-pr.N. Those builds
+// have no git tag, so rule-doc links stay on main.
+var prBuildVersion = regexp.MustCompile(`^v0\.0\.0-pr\.\d+$`)
+
+// docRef returns the git ref used in rule-doc URLs. A release tag is
+// used as-is, except PR builds, which have no tag. Anything else,
+// including dev and an empty version, uses main.
+func docRef(version string) string {
+	if releaseTag.MatchString(version) && !prBuildVersion.MatchString(version) {
+		return version
+	}
+	return "main"
+}
+
+func isDocRef(ref string) bool {
+	return ref == docRef(ref)
+}
+
+// ruleDocBase is the URL prefix shared by linkRuleID and
+// textHyperlinkLen: https://github.com/<repo>/blob/<ref>/docs/rules/.
+func ruleDocBase(version string) string {
+	return "https://github.com/" + project.Repository + "/blob/" + docRef(version) + "/docs/rules/"
+}
+
+func ruleDocURL(id, version string) string {
+	return ruleDocBase(version) + id + ".md"
+}
+
+// ruleDocURI rewrites a docs/rules link on this repository so it
+// points at the same ref docRef(version) would use. Other URIs are
+// returned unchanged.
+func ruleDocURI(uri, version string) string {
+	const suffix = ".md"
+	prefix := "https://github.com/" + project.Repository + "/blob/"
+	if !strings.HasPrefix(uri, prefix) {
+		return uri
+	}
+	rest := uri[len(prefix):]
+	_, after, ok := strings.Cut(rest, "/docs/rules/")
+	if !ok || !strings.HasSuffix(after, suffix) {
+		return uri
+	}
+	id := strings.TrimSuffix(after, suffix)
+	if !ruleDocID.MatchString(id) {
+		return uri
+	}
+	return ruleDocURL(id, version)
+}
+
 // linkRuleID wraps a catalog rule id in an OSC 8 hyperlink to its doc.
 // Anything else is returned unchanged, so a finding cannot set the URL.
-func linkRuleID(id string) string {
-	if !ruleDocID.MatchString(id) {
+func linkRuleID(id, version string, hyperlinks bool) string {
+	if !hyperlinks || !ruleDocID.MatchString(id) {
 		return id
 	}
-	target := "https://github.com/" + project.Repository + "/blob/main/docs/rules/" + id + ".md"
+	target := ruleDocURL(id, version)
 	return "\x1b]8;;" + target + "\x1b\\" + id + "\x1b]8;;\x1b\\"
 }
 
 // textHyperlinkLen is the byte length of one OSC 8 sequence compact text
 // emits, either the opener (the rule-doc URL included) or the closer.
 // It is zero when s does not start with one of those, so an escaped
-// control in a finding is not treated as a link.
+// control in a finding is not treated as a link. The opener is
+// recognized for main and for release-tag refs, so a longer tag URL
+// does not count toward visible width.
 func textHyperlinkLen(s string) int {
 	const closer = "\x1b]8;;\x1b\\"
-	open := "\x1b]8;;https://github.com/" + project.Repository + "/blob/main/docs/rules/"
-	if strings.HasPrefix(s, open) {
-		id, _, ok := strings.Cut(s[len(open):], ".md\x1b\\")
-		if ok && ruleDocID.MatchString(id) {
-			return len(open) + len(id) + len(".md\x1b\\")
+	openPrefix := "\x1b]8;;https://github.com/" + project.Repository + "/blob/"
+	if strings.HasPrefix(s, openPrefix) {
+		rest := s[len(openPrefix):]
+		ref, after, ok := strings.Cut(rest, "/docs/rules/")
+		if ok && isDocRef(ref) {
+			id, _, ok := strings.Cut(after, ".md\x1b\\")
+			if ok && ruleDocID.MatchString(id) {
+				return len(openPrefix) + len(ref) + len("/docs/rules/") + len(id) + len(".md\x1b\\")
+			}
 		}
 		return 0
 	}

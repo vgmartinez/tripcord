@@ -15,8 +15,9 @@ import (
 
 // TestPreopenTextFitsOneScreen checks the default text view of a typical
 // two-finding repository: at most 24 lines, each at most 80 visible
-// columns, a summary with the exit verdict, a doc link per rule, and
-// -v restoring the evidence, fix, and fingerprint.
+// columns, a summary with the exit verdict, the rule ids, no OSC 8
+// escapes on a piped stdout, and -v restoring the evidence, fix, and
+// fingerprint.
 func TestPreopenTextFitsOneScreen(t *testing.T) {
 	repo := preopenRepo(t, map[string]string{
 		".vscode/tasks.json":                        txtarMember(t, "rules/TC-CFG-002.test/positivos/folderopen-local-script.txtar", ".vscode/tasks.json"),
@@ -46,10 +47,12 @@ func TestPreopenTextFitsOneScreen(t *testing.T) {
 	if lines[len(lines)-1] != "re-run with -v for details" {
 		t.Fatalf("hint = %q", lines[len(lines)-1])
 	}
+	if strings.Contains(got, "\x1b") {
+		t.Fatalf("piped preopen contained a terminal escape:\n%q", got)
+	}
 	for _, id := range []string{"TC-CFG-002", "TC-CFG-009"} {
-		url := "https://github.com/vgmartinez/tripcord/blob/main/docs/rules/" + id + ".md"
-		if !strings.Contains(got, id) || !strings.Contains(got, url) {
-			t.Fatalf("missing %s link:\n%s", id, got)
+		if !strings.Contains(got, id) {
+			t.Fatalf("missing %s:\n%s", id, got)
 		}
 	}
 

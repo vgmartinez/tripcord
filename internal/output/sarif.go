@@ -199,7 +199,7 @@ func renderSARIF(writer io.Writer, findings []model.Finding, diags []Diagnostic,
 		results = append(results, result)
 	}
 
-	sarifRules, err := buildSARIFRules(rules, options.Rules)
+	sarifRules, err := buildSARIFRules(rules, options.Rules, options.ToolVersion)
 	if err != nil {
 		return err
 	}
@@ -246,7 +246,7 @@ func renderSARIF(writer io.Writer, findings []model.Finding, diags []Diagnostic,
 	return err
 }
 
-func buildSARIFRules(rules map[string]*sarifRuleInfo, catalog map[string]RuleText) ([]sarifRule, error) {
+func buildSARIFRules(rules map[string]*sarifRuleInfo, catalog map[string]RuleText, version string) ([]sarifRule, error) {
 	ids := make([]string, 0, len(rules))
 	for id := range rules {
 		ids = append(ids, id)
@@ -263,7 +263,7 @@ func buildSARIFRules(rules map[string]*sarifRuleInfo, catalog map[string]RuleTex
 		if err != nil {
 			return nil, err
 		}
-		full, help, helpURI := catalogRuleText(id, info, catalog)
+		full, help, helpURI := catalogRuleText(id, info, catalog, version)
 		out = append(out, sarifRule{
 			ID:                   id,
 			ShortDescription:     sarifMessage{Text: sarifText(info.title)},
@@ -280,7 +280,7 @@ func buildSARIFRules(rules map[string]*sarifRuleInfo, catalog map[string]RuleTex
 // catalogRuleText uses the rule catalog for fullDescription, help, and
 // helpUri, and the finding for anything the catalog does not supply.
 // TODO(PR 5): the catalog is the rule pack; this fallback stays.
-func catalogRuleText(id string, info *sarifRuleInfo, catalog map[string]RuleText) (string, string, string) {
+func catalogRuleText(id string, info *sarifRuleInfo, catalog map[string]RuleText, version string) (string, string, string) {
 	full, help, uri := info.title, info.fix, info.helpURI
 	extra, ok := catalog[id]
 	if !ok {
@@ -297,6 +297,7 @@ func catalogRuleText(id string, info *sarifRuleInfo, catalog map[string]RuleText
 			uri = safe
 		}
 	}
+	uri = ruleDocURI(uri, version)
 	return full, help, uri
 }
 

@@ -680,6 +680,7 @@ func scanTree(ctx context.Context, t scanTarget, opts scanOptions, stdout, stder
 		Rules:       sarifRuleText(catalog),
 		Verbose:     opts.verbose,
 		TextExit:    &textExit,
+		Hyperlinks:  textHyperlinks(opts.output, stdout),
 	})
 	if err != nil {
 		var pathErr *output.PathError

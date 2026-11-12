@@ -83,6 +83,10 @@ type Options struct {
 	// diagnostic, exit 1 for a finding at or above high, otherwise
 	// exit 0. Other formats ignore it.
 	TextExit *int
+	// Hyperlinks, when true, wraps catalog rule ids in OSC 8 terminal
+	// hyperlinks in compact text. False leaves the bare id. Other
+	// formats ignore it.
+	Hyperlinks bool
 }
 
 // RuleText is catalog metadata for one rule. Empty fields fall back to

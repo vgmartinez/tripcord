@@ -77,7 +77,14 @@ The summary lists counts by severity, the warning count, and the exit
 verdict for this run (the same code the process returns). Each finding
 line is severity, rule id, a short title, and `path:line`. A rule id of
 the form `TC-…-NNN` is a terminal link to
-`https://github.com/vgmartinez/tripcord/blob/main/docs/rules/<id>.md`.
+`https://github.com/vgmartinez/tripcord/blob/<ref>/docs/rules/<id>.md`.
+`<ref>` is the release tag when the binary was built as one (`vX.Y.Z`,
+including a pre-release such as `v0.2.0-rc.1`) and `main` otherwise,
+including `dev` builds and PR builds (`v0.0.0-pr.N`) that have no tag.
+The link is emitted only when compact text is written to a terminal on
+stdout (not `--output`), `TERM` is not `dumb`, and neither `NO_COLOR`
+nor `CI` is set. `FORCE_HYPERLINK=1` turns links on and
+`FORCE_HYPERLINK=0` turns them off, regardless of the other conditions.
 Visible text stays within 80 columns; a long title is shortened before
 the path is. `-v` / `--verbose` prints the detailed line instead:
 severity, rule, location, title, evidence, fix, and fingerprint, then
