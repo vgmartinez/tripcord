@@ -248,3 +248,26 @@ func TestSARIFHelpURIUsesReleaseTag(t *testing.T) {
 		t.Fatalf("SARIF kept the main helpUri:\n%s", got)
 	}
 }
+
+func TestCompactTextOmitsHyperlinksWhenDisabled(t *testing.T) {
+	t.Parallel()
+	options := testOptions()
+	options.Hyperlinks = false
+	got := renderWith(t, FormatText, sealAll(t, findings()), options)
+	if strings.Contains(got, "\x1b") {
+		t.Fatalf("compact text contained a terminal escape:\n%q", got)
+	}
+	for _, id := range []string{"TC-CFG-002", "TC-CFG-010"} {
+		if !strings.Contains(got, id) {
+			t.Fatalf("missing rule id %s:\n%s", id, got)
+		}
+		if strings.Contains(got, "/docs/rules/"+id+".md") {
+			t.Fatalf("disabled hyperlinks still included %s doc URL:\n%s", id, got)
+		}
+	}
+	for _, line := range strings.Split(strings.TrimSuffix(got, "\n"), "\n") {
+		if n := utf8.RuneCountInString(line); n > textWidth {
+			t.Fatalf("visible width %d > %d: %q", n, textWidth, line)
+		}
+	}
+}

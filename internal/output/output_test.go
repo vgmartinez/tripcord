@@ -471,7 +471,7 @@ func sealAll(t *testing.T, input []model.Finding) []model.Finding {
 }
 
 func testOptions() Options {
-	return Options{Redactor: DefaultRedactor, RepoRoot: "/work/repo", ToolVersion: "1.2.3"}
+	return Options{Redactor: DefaultRedactor, RepoRoot: "/work/repo", ToolVersion: "1.2.3", Hyperlinks: true}
 }
 
 // detailText is the view that still carries the fingerprint. Compact

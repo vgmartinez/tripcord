@@ -81,6 +81,10 @@ the form `TC-…-NNN` is a terminal link to
 `<ref>` is the release tag when the binary was built as one (`vX.Y.Z`,
 including a pre-release such as `v0.2.0-rc.1`) and `main` otherwise,
 including `dev` builds and PR builds (`v0.0.0-pr.N`) that have no tag.
+The link is emitted only when compact text is written to a terminal on
+stdout (not `--output`), `TERM` is not `dumb`, and neither `NO_COLOR`
+nor `CI` is set. `FORCE_HYPERLINK=1` turns links on and
+`FORCE_HYPERLINK=0` turns them off, regardless of the other conditions.
 Visible text stays within 80 columns; a long title is shortened before
 the path is. `-v` / `--verbose` prints the detailed line instead:
 severity, rule, location, title, evidence, fix, and fingerprint, then

@@ -188,7 +188,7 @@ func renderText(writer io.Writer, findings []model.Finding, diags []Diagnostic, 
 	writeTextSummary(&b, findings, diags, textExitCode(findings, diags, options))
 	writeTextDiagnostics(&b, diags)
 	for _, finding := range findings {
-		b.WriteString(compactFindingLine(finding, options.RepoRoot, options.ToolVersion))
+		b.WriteString(compactFindingLine(finding, options.RepoRoot, options.ToolVersion, options.Hyperlinks))
 		b.WriteByte('\n')
 	}
 	b.WriteString(textDetailHint)
@@ -268,7 +268,7 @@ func textExitCode(findings []model.Finding, diags []Diagnostic, options Options)
 // compactFindingLine is one finding: severity, rule id, short title,
 // path:line. The rule id is a terminal hyperlink to its doc. The
 // visible line is at most textWidth columns.
-func compactFindingLine(finding model.Finding, root, version string) string {
+func compactFindingLine(finding model.Finding, root, version string, hyperlinks bool) string {
 	sev := strings.ToUpper(finding.Severity.String())
 	rule := present(finding.Rule)
 	title := present(finding.Title)
@@ -277,7 +277,7 @@ func compactFindingLine(finding model.Finding, root, version string) string {
 		loc = present(ref.display())
 	}
 	shownTitle, shownLoc := fitFinding(sev, rule, title, loc)
-	line := sev + " " + linkRuleID(rule, version)
+	line := sev + " " + linkRuleID(rule, version, hyperlinks)
 	if shownTitle != "" {
 		line += " " + shownTitle
 	}
@@ -467,8 +467,8 @@ func ruleDocURI(uri, version string) string {
 
 // linkRuleID wraps a catalog rule id in an OSC 8 hyperlink to its doc.
 // Anything else is returned unchanged, so a finding cannot set the URL.
-func linkRuleID(id, version string) string {
-	if !ruleDocID.MatchString(id) {
+func linkRuleID(id, version string, hyperlinks bool) string {
+	if !hyperlinks || !ruleDocID.MatchString(id) {
 		return id
 	}
 	target := ruleDocURL(id, version)
