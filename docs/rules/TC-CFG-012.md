@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Severity | medium |
+| Severity | low |
 | Harnesses | generic (`AGENTS.md`), Claude Code, Gemini CLI, Windsurf, GitHub Copilot, Cursor, Devin |
 | Files | TC-CFG-011's repository paths, except `AGENTS.local.md` and `GEMINI.local.md`, plus every repository `skill` item and emitted Claude `agent` / `command` item (including plugin-root paths), `.windsurf/rules/**/*.md`, and Devin blueprint `knowledge` contents (blueprint `initialize` / `maintenance` text is shell input for TC-CFG-009, not instructions) |
 | Rule | [`rules/TC-CFG-012.yaml`](../../rules/TC-CFG-012.yaml) |
@@ -177,12 +177,12 @@ Not reported:
 - A Cyrillic letter standing in for `e` in `.env`, and a tag character
   or left-to-right mark left inside the target.
 
-## Why medium
+## Why low
 
 The same sentences appear in ordinary setup notes. Scan mode sees the
 wording, not whether a change added it and not whether a session
-followed it, so a match does not fail a scan at the default fail-on
-(high). It is listed for review.
+followed it, so a match is listed for review at low and does not fail a
+scan at the default fail-on (high).
 
 ## Examples
 

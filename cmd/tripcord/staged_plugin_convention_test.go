@@ -96,8 +96,8 @@ func TestScanStagedManifestOnlyActivatesConventionFiles(t *testing.T) {
 			}
 			stagedGit(t, repo, "add", tc.manifest)
 
-			// Findings here are medium severity, which does not fail the
-			// scan's default --fail-on high; the hunt cares about the
+			// Findings here are below the default --fail-on of high, so
+			// they do not fail the scan; the hunt cares about the
 			// finding being reported at all, not the exit code.
 			_, out := stagedScan(t, bin, repo)
 			if !strings.Contains(out, tc.wantRule) || !strings.Contains(out, tc.wantPath) {

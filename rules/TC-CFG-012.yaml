@@ -115,14 +115,14 @@
 # A repository skill, or a Claude-emitted agent or command, is in scope
 # even when it lives below a plugin root outside the usual path set.
 #
-# Medium: the wording is ordinary setup prose as often as it is an
+# Low: the wording is ordinary setup prose as often as it is an
 # exfiltration instruction, and scan mode cannot see whether a session
 # followed it. It is reported for review without failing a scan at the
 # default fail-on (high).
 id: TC-CFG-012
 pack: tripcord/core
 title: "Agent instructions ask to read secrets or send them out"
-severity: medium
+severity: low
 evidence: instruction_match
 harness: [claude, copilot, cursor, gemini, windsurf, generic, devin]
 files: ["**"]

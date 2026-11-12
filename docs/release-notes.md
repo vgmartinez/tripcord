@@ -1,5 +1,13 @@
 # Release notes
 
+## v0.1.1
+
+- TC-CFG-012 is reported at low. The check is a heuristic over
+  instruction wording, and the same sentences appear in ordinary setup
+  notes, so a match is listed for review without failing a scan at the
+  default fail-on (high). SARIF output for this rule now has level
+  `note` (was `warning`) and security-severity 3.0 (was 5.5).
+
 ## v0.1.0
 
 The first tagged release of Tripcord. `preopen` fails closed with exit 3
