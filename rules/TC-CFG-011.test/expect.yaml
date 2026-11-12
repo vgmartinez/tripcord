@@ -29,3 +29,16 @@ positivos:
   devin-maintenance-zero-width: high
   gemini-embedding: high
   windsurfrules-tags: high
+  agents-latin-zwnj-in-script-file: high
+  agents-mixed-script-joiner: high
+  agents-virama-joiner-latin: high
+  agents-zwj-persian-ascii-neighbor: high
+  agents-zwnj-latin-word: high
+  agents-zwnj-mixed-script: high
+  agents-zwnj-persian-run: high
+  agents-zwnj-persian-word-edge: high
+  agents-zwsp-latin-in-thai-file: high
+  agents-zwsp-persian: high
+  agents-zwsp-thai-word-edge: high
+  agents-bom-after-dot-before-word: high
+  agents-bom-pair-after-sentence: high

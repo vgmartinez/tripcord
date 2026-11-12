@@ -33,7 +33,14 @@ positivos:
   copilot-checksum-trap-err: high
   copilot-checksum-trap-exit: high
   copilot-checksum-without-errexit: high
+  copilot-clone-then-cd-make: high
+  copilot-clone-then-run: high
   copilot-curl-pipe-sh: high
+  copilot-data-then-wrapped-clone-run: high
+  copilot-download-chmod: high
+  copilot-download-extract-then-run: high
+  copilot-download-manifest: high
+  copilot-download-run-in-later-step: high
   copilot-download-then-run: high
   copilot-errexit-check-backgrounded: high
   copilot-errexit-check-in-and-list: high
@@ -49,6 +56,7 @@ positivos:
   copilot-errexit-variable-set-plus-e: high
   copilot-evil-host-sha: high
   copilot-export-openssl-conf: high
+  copilot-extract-into-node-modules: high
   copilot-fetch-curlrc-absolute: high
   copilot-fetch-curlrc-dotdot: high
   copilot-fetch-curlrc-relative: high
@@ -71,11 +79,13 @@ positivos:
   cursor-checksum-entry-dev-null: high
   cursor-checksum-entry-other-file: high
   cursor-checksum-printf-format: high
+  cursor-clone-glob-run: high
   cursor-install-curl-pipe: high
   cursor-oci-digest-wget: high
   cursor-start-encoded: high
   cursor-terminal-wget-pipe: high
   cursor-traversal-wget: high
+  devcontainer-clone-run-by-other-command: high
   devcontainer-feature-tarball: high
   devcontainer-initialize-host: high
   devcontainer-oncreate-array: high

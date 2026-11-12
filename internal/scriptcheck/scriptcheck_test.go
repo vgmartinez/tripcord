@@ -298,3 +298,32 @@ func loc(class string) []string {
 	}
 	return []string{class}
 }
+
+func TestDependencyBinary(t *testing.T) {
+	for _, tc := range []struct {
+		base, rel string
+		want      bool
+	}{
+		{"", "node_modules/.bin/fmt", true},
+		{"", ".venv/bin/python", true},
+		{"", "venv/bin/python", true},
+		{"", ".venv/Scripts/python.exe", true},
+		{"", "venv/Scripts/python.exe", true},
+		{"packages/web", "packages/web/node_modules/.bin/fmt", true},
+		{"", "node_modules/fmt/bin/fmt.js", false},
+		{"", "node_modules/.bin", false},
+		{"", "node_modules/.bin/sub/fmt", false},
+		{"", "tools/node_modules/.bin/fmt", false},
+		{"", "tools/node_modules_bin/fmt", false},
+		{"", "../node_modules/.bin/fmt", false},
+		{"", ".venv/lib/python", false},
+		{"", "env/bin/python", false},
+		{"", ".claude/hooks/check.sh", false},
+		{"packages/web", "node_modules/.bin/fmt", false},
+		{"packages/web", "packages/webx/node_modules/.bin/fmt", false},
+	} {
+		if got := dependencyBinary(tc.base, tc.rel); got != tc.want {
+			t.Errorf("dependencyBinary(%q, %q) = %v, want %v", tc.base, tc.rel, got, tc.want)
+		}
+	}
+}

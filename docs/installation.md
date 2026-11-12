@@ -107,6 +107,14 @@ tar -xzf "$file" tripcord
 ./tripcord --version
 ```
 
+`gh attestation verify` needs an authenticated GitHub CLI, even for
+this public repository. Run `gh auth login` once, or set `GH_TOKEN`
+(in GitHub Actions, `GH_TOKEN: ${{ github.token }}` is enough). The
+checksum step works without it. `gh release download` itself works
+without logging in. On a machine without `gh`, download with
+`curl -LO https://github.com/vgmartinez/tripcord/releases/download/<tag>/<file>`
+instead; attestation verification still needs `gh` and a token.
+
 `sha256sum -c SHA256SUMS` checks every archive; `--ignore-missing`
 skips the ones you did not download. On macOS, use
 `shasum -a 256 -c SHA256SUMS --ignore-missing`. `gh attestation verify`

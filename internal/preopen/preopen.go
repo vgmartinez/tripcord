@@ -32,9 +32,11 @@ import (
 	"github.com/vgmartinez/tripcord/internal/gitrun"
 )
 
-// Limits bound what a fetched tree may write to disk. A shallow clone is
-// already downloaded by the time the tree is known, but a small pack can
-// still expand into a very large tree, so materialize stops at these.
+// Limits bound what a fetched tree may write to disk. The clone uses a
+// blob size filter so large binaries are not downloaded, but a small
+// pack can still expand into a very large tree of placeholders and
+// regular files, so materialize checks the budget before writing and
+// stops at these.
 const (
 	MaxEntries    = 200_000
 	MaxTotalBytes = 1 << 30
@@ -42,6 +44,13 @@ const (
 	maxPathComponents = 64
 	// maxPathBytes is the longest tree-relative path, in bytes.
 	maxPathBytes = 4096
+	// blobFilterLimit is the git partial-clone blob limit, and equals
+	// adapters.MaxConfigFileBytes. Blobs larger than this are omitted
+	// from the clone (--filter=blob:limit=1m) and written as a
+	// placeholder of blobFilterLimit+1 bytes so the scan sees them as
+	// too large and does not read them.
+	blobFilterLimit = 1 << 20
+	blobFilterSpec  = "blob:limit=1m"
 )
 
 // maxEntries and maxTotalBytes are the budgets materialize enforces.
@@ -71,10 +80,11 @@ func (e *TargetError) Unwrap() error { return e.Err }
 // removes everything Fetch created. gitDir and index are set for a staged
 // workspace so later referenced paths can be added without listing again.
 type Workspace struct {
-	dir    string
-	tree   string
-	gitDir string
-	index  map[string]IndexObject
+	dir          string
+	tree         string
+	gitDir       string
+	index        map[string]IndexObject
+	placeholders int
 }
 
 // IndexObject is one git index record. Kind is "blob" or "commit"
@@ -110,6 +120,16 @@ func (w *Workspace) Index() map[string]IndexObject {
 // Dir is the temporary directory that holds the clone and the tree.
 func (w *Workspace) Dir() string { return w.dir }
 
+// Placeholders is the number of blobs Fetch wrote as sized holes
+// because they were filtered or larger than the configuration cap.
+// Those files are not scanned.
+func (w *Workspace) Placeholders() int {
+	if w == nil {
+		return 0
+	}
+	return w.placeholders
+}
+
 // Close removes the workspace. It is safe to call more than once.
 func (w *Workspace) Close() error {
 	if w == nil || w.dir == "" {
@@ -128,7 +148,13 @@ func (w *Workspace) Close() error {
 // file transport like any other repository rather than read in place.
 // On any error, including ctx being cancelled, everything Fetch created
 // is removed before it returns.
-func Fetch(ctx context.Context, target string) (ws *Workspace, err error) {
+func Fetch(ctx context.Context, target string) (*Workspace, error) {
+	return FetchWithProgress(ctx, target, nil)
+}
+
+// FetchWithProgress is Fetch, and when progress is non-nil it writes
+// short status lines ("cloning ...", "writing N files ...").
+func FetchWithProgress(ctx context.Context, target string, progress io.Writer) (ws *Workspace, err error) {
 	url, err := resolveTarget(target)
 	if err != nil {
 		return nil, &TargetError{Target: target, Err: err}
@@ -149,13 +175,15 @@ func Fetch(ctx context.Context, target string) (ws *Workspace, err error) {
 		}
 	}()
 	gitDir := filepath.Join(dir, "git")
+	logProgress(progress, "cloning ...")
 	if err := clone(ctx, url, gitDir); err != nil {
 		return nil, wrapGitError(target, err)
 	}
 	if err := os.Mkdir(created.tree, 0o700); err != nil {
 		return nil, err
 	}
-	if err := materialize(ctx, gitDir, created.tree); err != nil {
+	n, err := materialize(ctx, gitDir, created.tree, progress)
+	if err != nil {
 		// An interrupt kills cat-file, and the write then fails with a
 		// broken pipe. Report the interrupt instead of that write error.
 		return nil, preferCancel(ctx, wrapTreeError(target, err))
@@ -163,7 +191,15 @@ func Fetch(ctx context.Context, target string) (ws *Workspace, err error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	created.placeholders = n
 	return created, nil
+}
+
+func logProgress(w io.Writer, format string, args ...any) {
+	if w == nil {
+		return
+	}
+	_, _ = fmt.Fprintf(w, format+"\n", args...)
 }
 
 // ListIndex reads the staged index. Blobs are not written. A gitlink is
@@ -334,6 +370,32 @@ func ReadBlobs(ctx context.Context, gitDir string, oids []string) (map[string][]
 	return catBatch(ctx, gitDir, oids, false)
 }
 
+// startCatFileWrites writes each oid to stdin in a goroutine and closes
+// stdin when the list is sent. The caller must read stdout concurrently:
+// writing the whole list first can fill the pipe and deadlock against
+// unread responses.
+func startCatFileWrites(ctx context.Context, stdin io.WriteCloser, oids []string) <-chan error {
+	done := make(chan error, 1)
+	go func() {
+		var err error
+		for _, oid := range oids {
+			if ctx.Err() != nil {
+				err = ctx.Err()
+				break
+			}
+			if _, werr := io.WriteString(stdin, oid+"\n"); werr != nil {
+				err = werr
+				break
+			}
+		}
+		if cerr := stdin.Close(); err == nil {
+			err = cerr
+		}
+		done <- err
+	}()
+	return done
+}
+
 // BlobSizes returns object sizes without reading the bytes.
 func BlobSizes(ctx context.Context, gitDir string, oids []string) (map[string]int64, error) {
 	if len(oids) == 0 {
@@ -359,43 +421,32 @@ func BlobSizes(ctx context.Context, gitDir string, oids []string) (map[string]in
 		return nil, fmt.Errorf("%w: %w", ErrGitMissing, err)
 	}
 	out := map[string]int64{}
-	writeErr := func() error {
-		for _, oid := range oids {
-			if _, err := io.WriteString(stdin, oid+"\n"); err != nil {
-				return err
-			}
-		}
-		return nil
-	}()
-	if writeErr == nil {
-		writeErr = stdin.Close()
-	} else {
-		cancel()
-		_ = stdin.Close()
-	}
+	writeDone := startCatFileWrites(catCtx, stdin, oids)
 	resp := bufio.NewReader(stdout)
-	if writeErr == nil {
-		for _, oid := range oids {
-			line, err := resp.ReadString('\n')
-			if err != nil {
-				writeErr = err
-				break
-			}
-			fields := strings.Fields(strings.TrimSpace(line))
-			if len(fields) != 3 || fields[0] != oid || fields[1] != "blob" {
-				writeErr = fmt.Errorf("unexpected cat-file header %q", strings.TrimSpace(line))
-				break
-			}
-			size, err := strconv.ParseInt(fields[2], 10, 64)
-			if err != nil || size < 0 {
-				writeErr = fmt.Errorf("unexpected cat-file header %q", strings.TrimSpace(line))
-				break
-			}
-			out[oid] = size
+	var writeErr error
+	for _, oid := range oids {
+		line, err := resp.ReadString('\n')
+		if err != nil {
+			writeErr = err
+			break
 		}
+		fields := strings.Fields(strings.TrimSpace(line))
+		if len(fields) != 3 || fields[0] != oid || fields[1] != "blob" {
+			writeErr = fmt.Errorf("unexpected cat-file header %q", strings.TrimSpace(line))
+			break
+		}
+		size, err := strconv.ParseInt(fields[2], 10, 64)
+		if err != nil || size < 0 {
+			writeErr = fmt.Errorf("unexpected cat-file header %q", strings.TrimSpace(line))
+			break
+		}
+		out[oid] = size
 	}
 	if writeErr != nil {
 		cancel()
+	}
+	if werr := <-writeDone; writeErr == nil {
+		writeErr = werr
 	}
 	waitErr := cat.Wait()
 	if writeErr != nil {
@@ -606,8 +657,13 @@ func isDriveLetter(s string) bool {
 
 // clone makes a shallow, bare, single-branch clone of url in gitDir. A
 // bare clone has no work tree, so nothing is checked out: no smudge
-// filter, no post-checkout hook, and no submodule. gitrun.Run applies
-// the hardened environment and -c overrides shared with pr-context.
+// filter, no post-checkout hook, and no submodule. --filter=blob:limit=1m
+// omits blobs larger than the configuration cap; GIT_NO_LAZY_FETCH=1
+// (set by gitrun) keeps a filtered blob from being fetched later. A
+// server that does not honor the filter, such as a file:// source
+// without uploadpack.allowFilter, ignores it and the clone falls back
+// to fetching every blob. gitrun.Run applies the hardened environment
+// and -c overrides shared with pr-context.
 func clone(ctx context.Context, url, gitDir string) error {
 	if _, err := gitrun.Run(ctx, "", "clone",
 		"--bare",
@@ -615,6 +671,7 @@ func clone(ctx context.Context, url, gitDir string) error {
 		"--single-branch",
 		"--no-tags",
 		"--template=",
+		"--filter="+blobFilterSpec,
 		"--quiet",
 		"--", url, gitDir); err != nil {
 		if ctx.Err() != nil {
@@ -637,23 +694,149 @@ type treeEntry struct {
 // cat-file --batch, which returns raw object content and never applies
 // a filter or textconv. Submodules become empty directories, as an
 // uninitialized submodule is in a normal checkout.
-func materialize(ctx context.Context, gitDir, tree string) error {
+func materialize(ctx context.Context, gitDir, tree string, progress io.Writer) (int, error) {
 	if _, err := gitrun.Run(ctx, "", "--git-dir", gitDir, "rev-parse", "--verify", "--quiet", "HEAD^{tree}"); err != nil {
 		var exitErr *gitrun.ExitError
 		if errors.As(err, &exitErr) {
-			return nil // empty repository: an empty tree
+			return 0, nil // empty repository: an empty tree
 		}
-		return err
+		return 0, err
 	}
 	raw, err := gitrun.Run(ctx, "", "--git-dir", gitDir, "ls-tree", "-r", "-z", "--full-tree", "HEAD")
 	if err != nil {
-		return err
+		return 0, err
 	}
 	entries, err := parseLsTree(raw)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	return materializeEntries(ctx, gitDir, tree, entries)
+	placeholders, err := classifyEntries(ctx, gitDir, entries)
+	if err != nil {
+		return 0, err
+	}
+	if placeholders > 0 {
+		logProgress(progress, "writing %d files (%d oversized blobs as placeholders) ...", len(entries), placeholders)
+	} else {
+		logProgress(progress, "writing %d files ...", len(entries))
+	}
+	if err := materializeEntries(ctx, gitDir, tree, entries); err != nil {
+		return 0, err
+	}
+	return placeholders, nil
+}
+
+type blobInfo struct {
+	size    int64
+	missing bool
+}
+
+// classifyEntries marks filtered or over-cap blobs as placeholders of
+// blobFilterLimit+1 bytes and fails immediately if the bytes that would
+// actually be written exceed the budget.
+func classifyEntries(ctx context.Context, gitDir string, entries []treeEntry) (int, error) {
+	var oids []string
+	seen := make(map[string]bool)
+	for _, e := range entries {
+		if e.kind == "blob" && e.sparse == 0 && !seen[e.oid] {
+			seen[e.oid] = true
+			oids = append(oids, e.oid)
+		}
+	}
+	info, err := inspectBlobs(ctx, gitDir, oids)
+	if err != nil {
+		return 0, err
+	}
+	var total int64
+	var placeholders int
+	for i, e := range entries {
+		if e.kind != "blob" || e.sparse > 0 {
+			continue
+		}
+		b, ok := info[e.oid]
+		if !ok {
+			return 0, fmt.Errorf("tree entry %q: missing cat-file result for %s", e.path, e.oid)
+		}
+		var n int64
+		if b.missing || b.size > blobFilterLimit {
+			entries[i].sparse = blobFilterLimit + 1
+			placeholders++
+			n = blobFilterLimit + 1
+		} else {
+			n = b.size
+		}
+		if total+n > maxTotalBytes {
+			return 0, fmt.Errorf("tree is larger than the %d bytes preopen writes", maxTotalBytes)
+		}
+		total += n
+	}
+	return placeholders, nil
+}
+
+// inspectBlobs reports each oid's size, or that it is missing (a
+// filtered blob under GIT_NO_LAZY_FETCH=1).
+func inspectBlobs(ctx context.Context, gitDir string, oids []string) (map[string]blobInfo, error) {
+	out := map[string]blobInfo{}
+	if len(oids) == 0 {
+		return out, nil
+	}
+	catCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	cat, err := gitrun.Command(catCtx, "", "--git-dir", gitDir, "cat-file", "--batch-check")
+	if err != nil {
+		return nil, err
+	}
+	stdin, err := cat.StdinPipe()
+	if err != nil {
+		return nil, err
+	}
+	stdout, err := cat.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+	var stderr bytes.Buffer
+	cat.Stderr = &stderr
+	if err := cat.Start(); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrGitMissing, err)
+	}
+	writeDone := startCatFileWrites(catCtx, stdin, oids)
+	resp := bufio.NewReader(stdout)
+	var writeErr error
+	for _, oid := range oids {
+		line, err := resp.ReadString('\n')
+		if err != nil {
+			writeErr = err
+			break
+		}
+		fields := strings.Fields(strings.TrimSpace(line))
+		if len(fields) == 2 && fields[0] == oid && fields[1] == "missing" {
+			out[oid] = blobInfo{missing: true}
+			continue
+		}
+		if len(fields) != 3 || fields[0] != oid || fields[1] != "blob" {
+			writeErr = fmt.Errorf("unexpected cat-file header %q", strings.TrimSpace(line))
+			break
+		}
+		size, err := strconv.ParseInt(fields[2], 10, 64)
+		if err != nil || size < 0 {
+			writeErr = fmt.Errorf("unexpected cat-file header %q", strings.TrimSpace(line))
+			break
+		}
+		out[oid] = blobInfo{size: size}
+	}
+	if writeErr != nil {
+		cancel()
+	}
+	if werr := <-writeDone; writeErr == nil {
+		writeErr = werr
+	}
+	waitErr := cat.Wait()
+	if writeErr != nil {
+		return nil, preferCancel(ctx, writeErr)
+	}
+	if waitErr != nil {
+		return nil, &gitrun.ExitError{Args: []string{"cat-file"}, Stderr: gitrun.Sanitize(stderr.String()), Err: waitErr}
+	}
+	return out, nil
 }
 
 func materializeEntries(ctx context.Context, gitDir, tree string, entries []treeEntry) error {
@@ -744,9 +927,13 @@ func writeEntries(ctx context.Context, entries []treeEntry, tree string, req io.
 			continue
 		}
 		if e.sparse > 0 {
+			if e.sparse > maxTotalBytes-total {
+				return fmt.Errorf("tree is larger than the %d bytes preopen writes", maxTotalBytes)
+			}
 			if err := sparseFile(dest, e.sparse); err != nil {
 				return fmt.Errorf("tree entry %q: %w", e.path, err)
 			}
+			total += e.sparse
 			continue
 		}
 		if e.kind != "blob" {

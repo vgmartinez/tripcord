@@ -3,6 +3,7 @@ package indexfiles
 import (
 	"testing"
 
+	"github.com/vgmartinez/tripcord/internal/adapters"
 	"github.com/vgmartinez/tripcord/internal/adapters/claude"
 	"github.com/vgmartinez/tripcord/internal/adapters/kit"
 )
@@ -63,5 +64,21 @@ func TestHookPathCoversKnownShapes(t *testing.T) {
 	}
 	if HookPath("src/main.go") {
 		t.Fatal("source file is a hook path")
+	}
+}
+
+// TestBudgetOversizeMatchesPlaceholder documents that indexfiles (used
+// only by scan --staged, not preopen) treats a real >1 MiB blob and a
+// cap+1 placeholder the same way: both exceed maxFile, so the file is
+// kept as a sparse hole and its contents are never read or hashed.
+func TestBudgetOversizeMatchesPlaceholder(t *testing.T) {
+	for _, size := range []int64{2 << 20, adapters.MaxConfigFileBytes + 1} {
+		nfiles := 0
+		var nbytes int64
+		keep, content, sparse, why := budget(size, &nfiles, &nbytes)
+		if !keep || content || sparse != size || why != "" || nfiles != 1 || nbytes != 0 {
+			t.Fatalf("size %d: keep=%v content=%v sparse=%d why=%q nfiles=%d nbytes=%d",
+				size, keep, content, sparse, why, nfiles, nbytes)
+		}
 	}
 }

@@ -15,10 +15,16 @@ uncommitted changes are not scanned.
 
 ## What is fetched, and how
 
-1. `git clone --bare --depth 1 --single-branch --no-tags --template=` into
-   `tripcord-preopen-*` under the system temporary directory. A bare clone
-   has no work tree, so nothing is checked out: no smudge, clean, or process
-   filter runs, no `post-checkout` hook fires, and no submodule is cloned.
+1. `git clone --bare --depth 1 --single-branch --no-tags --template=
+   --filter=blob:limit=1m` into `tripcord-preopen-*` under the system
+   temporary directory. A bare clone has no work tree, so nothing is
+   checked out: no smudge, clean, or process filter runs, no
+   `post-checkout` hook fires, and no submodule is cloned. The blob
+   filter omits blobs larger than 1 MiB, the same cap the scan uses for
+   a configuration file. `GIT_NO_LAZY_FETCH=1` is set, so a filtered
+   blob is never fetched later. A server that does not honor the filter
+   (for example a `file://` source without `uploadpack.allowFilter`)
+   ignores it and the clone falls back to fetching every blob.
 2. The `HEAD` tree is written out with `git ls-tree -r -z` and
    `git cat-file --batch`. Those commands return raw object bytes and never
    consult `.gitattributes`, so even a filter driver the repository names
@@ -26,6 +32,12 @@ uncommitted changes are not scanned.
    in the repository could hide configuration files from the scan.
    Submodules become empty directories, as in a checkout that did not
    initialize them. Symlinks are recreated as symlinks and are not followed.
+   A blob that was filtered, or that is larger than 1 MiB, is written as
+   a sparse placeholder of 1 MiB + 1 byte and is not scanned; the scan
+   sees it as too large, the same way it would a real oversized
+   configuration file. One line is printed to stderr naming how many
+   placeholders were written. When stderr is a terminal, preopen also
+   prints short progress lines (`cloning ...`, `writing N files ...`).
 3. The tree is scanned with the scan pipeline, then the temporary directory
    is removed, also on error and on `SIGINT`, `SIGTERM`, or `SIGHUP`.
    An interrupt is reported as an interruption. A write error from stopping
@@ -63,7 +75,11 @@ refused, and no file is written through a symlink. A path with more than
 64 components, matching the scan's nesting depth, or a tree-relative path
 longer than 4096 bytes, is refused. Every directory created counts toward
 the entry limit. A tree with more than 200,000 entries, counting those
-directories, or more than 1 GiB of content is refused.
+directories, or more than 1 GiB of content actually written is refused.
+Placeholders for oversized blobs count as 1 MiB + 1 byte each, not their
+original size. The byte budget is checked before writing when the sizes
+are known, so a tree that would exceed it fails without first filling
+the temporary directory.
 
 ## Flags, policy, and exit codes
 

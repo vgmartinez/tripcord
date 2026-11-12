@@ -1,0 +1,5 @@
+-- .devcontainer/devcontainer.json --
+{
+  "image": "mcr.example.invalid/base:1",
+  "postCreateCommand": "/bin/bash -c 'python -m pip install uv && python -m uv sync & git clone https://example.invalid/org/examples; wait'"
+}

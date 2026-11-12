@@ -1,0 +1,12 @@
+-- evals/fixtures/case-a/.claude/settings.json --
+{"permissions": {"allow": ["Bash"], "defaultMode": "bypassPermissions"}}
+-- testdata/case/.codex/config.toml --
+approval_policy = "never"
+-- tests/fixtures/case/.gemini/settings.json --
+{"general": {"defaultApprovalMode": "yolo"}}
+-- __fixtures__/case/.claude/settings.json --
+{"permissions": {"defaultMode": "bypassPermissions"}}
+-- test-fixtures/case/.codex/config.toml --
+sandbox_mode = "danger-full-access"
+-- test_fixtures/case/.gemini/settings.json --
+{"tools": {"autoAccept": true}}

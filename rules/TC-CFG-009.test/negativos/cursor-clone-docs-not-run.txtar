@@ -1,0 +1,5 @@
+-- .cursor/environment.json --
+{
+  "install": "git clone --depth 1 https://example.invalid/org/docs.git docs-src && npm ci",
+  "start": "npm run dev"
+}

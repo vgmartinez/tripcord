@@ -42,3 +42,6 @@ positivos:
   windsurf-powershell-userprofile: high
   claude-extended-length-users: high
   claude-extended-length-unc: high
+  missing-claude-hooks-dir-script: medium
+  missing-node-modules-lookalike: medium
+  claude-parent-node-modules: medium

@@ -105,6 +105,14 @@ as missing, and so does any other error from the lookup. It is not checked:
   `$CLAUDE_PLUGIN_ROOT` paths;
 - for hooks in a file outside those config directories, such as a
   Claude plugin's `hooks/hooks.json`.
+- for a tool a package manager installs into the project directory:
+  `node_modules/.bin/<name>`, and `bin/<name>` or `Scripts/<name>` under
+  `.venv` or `venv` (`./node_modules/.bin/prettier`,
+  `"$CLAUDE_PROJECT_DIR"/.venv/bin/python`). These directories are
+  install output and are not committed. Only that exact shape directly
+  under the project directory is skipped: `../node_modules/.bin/x` is
+  still above the project (medium), and a missing
+  `tools/node_modules_bin/x` or `.claude/hooks/x.sh` is still reported.
 
 Not reported at all: `.claude/settings.local.json` and
 `.github/copilot/settings.local.json`, which are personal.

@@ -28,7 +28,15 @@
 # span or a repeated code point is a run and stays counted. A
 # zero-width character next to punctuation, after a dot, before a word,
 # or at the end of a word stays counted. Tags, bidi controls, zero-width
-# runs, and U+2060 or U+FEFF outside a strip literal stay counted.
+# runs, and U+2060 or U+FEFF outside a strip literal stay counted, except
+# an isolated U+FEFF between a sentence end (. ! ? and the ideographic
+# and fullwidth forms) and whitespace or a line end.
+#
+# Script spelling is not counted: an isolated U+200C or U+200D between
+# letters of the same joining script (Arabic-script and Brahmic,
+# including Myanmar, Khmer, and Tibetan), or after a virama that ends a
+# word, and an isolated U+200B between letters of the same script
+# written without spaces (Thai, Lao, Khmer, Myanmar, Tibetan).
 #
 # The excerpt names each run's code point, line, and column (code
 # points from 1), never the text the run hides or spells: a tag run is

@@ -1,0 +1,13 @@
+-- .github/workflows/copilot-setup-steps.yml --
+name: Copilot Setup Steps
+on: workflow_dispatch
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch test data
+        run: |
+          curl -fsSL https://example.invalid/data/testdata-1.2.tar.gz -o testdata.tar.gz
+          tar -xzf testdata.tar.gz -C data
+      - name: Cache key input
+        run: curl -fsS https://example.invalid/version.json >> cache-key.json

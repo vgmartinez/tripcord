@@ -1,0 +1,24 @@
+-- .github/workflows/copilot-setup-steps.yml --
+name: Copilot Setup Steps
+on: workflow_dispatch
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch fixtures
+        run: |
+          set -euo pipefail
+          mkdir -p data
+          curl -fsSL --retry 3 \
+            -o fixtures-2.0.zip https://example.invalid/data/fixtures-2.0.zip
+          unzip -q fixtures-2.0.zip -d data
+          sha256sum fixtures-2.0.zip
+      - name: Version for cache
+        run: curl -fsS https://example.invalid/version.json > tool-version.json
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/tool
+          key: tool-${{ hashFiles('tool-version.json') }}
+      - name: Install
+        run: npm ci

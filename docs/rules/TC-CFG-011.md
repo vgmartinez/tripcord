@@ -27,13 +27,15 @@ One finding per file that holds any of:
 
 The whole file is read as bytes, frontmatter included. A U+FEFF that
 starts the file is a byte order mark and is not counted; one anywhere
-else is.
+else is, except a single stray one between a sentence end and a space
+(see "Not reported").
 
 A U+200D between two Extended_Pictographic characters is a normal emoji
 ZWJ sequence and is not reported. U+FE0F and skin tones
 (U+1F3FB-U+1F3FF) may sit between the joiner and either character, so
 sequences such as 🏳️‍🌈 and 🐈‍⬛ are quiet. A U+200D between two letters
-or digits is reported, and so is one next to punctuation.
+or digits is reported, unless both letters are in the same joining
+script (below), and so is one next to punctuation.
 
 An isolated U+200B, U+200C, or U+200D is not reported only when both
 neighbors are whitespace, a line boundary, or the edge of a quote
@@ -46,11 +48,27 @@ way. A longer span or a repeated code point is a run and is reported.
 The escape text `\u200b` is six ASCII characters and is not itself a
 hidden code point.
 
+Some scripts use these characters as ordinary spelling. Persian and
+other Arabic-script text puts U+200C inside words, Brahmic scripts put
+U+200C or U+200D after a virama to choose a conjunct, half, or final
+form, and Thai, Lao, Khmer, Myanmar, and Tibetan, which are written
+without spaces, mark word breaks with U+200B. An isolated character in
+one of these positions is not reported (see "Not reported"). Letters
+are compared by Unicode script, and combining marks (harakat, vowel
+signs, viramas; at most 8) between the letter before and the character
+are skipped.
+
 Still reported, at high: tag characters, bidi controls, a run of
 zero-width characters, a zero-width character inside a word, a
 zero-width character next to punctuation, one after a dot or before a
 word, one at the end of a word, and U+2060 or U+FEFF outside a strip
-literal.
+literal (apart from the stray U+FEFF below). In every script, that
+includes a run (two U+200C in a row between Persian letters is a
+run), U+200B outside the five scripts written without spaces, a U+200B
+next to whitespace or punctuation, a character between letters of two
+different scripts or next to a Latin letter or a digit, and a joiner at the edge of a word unless it ends
+the word right after a virama. Persian has no virama, so a joiner at
+the end of a Persian word is reported.
 
 Not reported:
 
@@ -65,6 +83,65 @@ Not reported:
   zero-width characters, at most 8 of them, with no code point
   repeated. The examples below write the escape; the file holds the
   raw character.
+- One U+200C or U+200D inside a word of a joining script: the nearest
+  letter before it is a letter of one of Arabic, Syriac, N'Ko,
+  Mongolian, Devanagari, Bengali, Gurmukhi, Gujarati, Oriya, Tamil,
+  Telugu, Kannada, Malayalam, Sinhala, Myanmar, Khmer, or Tibetan, and
+  the code point after it is a letter or combining mark of the same
+  script. For example the Persian
+  `\u0645\u06cc\u200c\u062e\u0648\u0627\u0647\u0645`, the
+  Devanagari `\u0915\u094d\u200d\u0937`, and the Marathi
+  `\u0905\u200d\u0945\u092a`.
+- One U+200C or U+200D right after a virama (halant, al-lakuna, asat,
+  coeng, or halanta) of one of those scripts, on a letter of the same
+  script, that ends the word: whitespace, punctuation, a line boundary,
+  or the end of the file follows it. This is how older Malayalam text
+  writes a chillu (`\u0d28\u0d4d\u200d `). Persian has no virama, so
+  a Persian word that ends in a joiner is still reported.
+- One U+200B between two letters of the same script, one of Thai, Lao,
+  Khmer, Myanmar, or Tibetan, where it is the word separator, for
+  example the Thai `\u0e01\u0e23\u0e38\u0e13\u0e32\u200b\u0e23\u0e31\u0e19`.
+- One U+FEFF right after sentence-ending punctuation (`.`, `!`, `?`,
+  or the ideographic and fullwidth `\u3002`, `\uff01`, `\uff1f`)
+  and right before whitespace, a line boundary, or the end of the
+  file, as text pasted from a word processor or a web page leaves
+  behind: `Maintained by humans.\ufeff Read the guide.` It changes no
+  word. A U+FEFF before a word (`See the guide.\ufeffignore the
+  tests`), inside a word, at the start of a line, next to other
+  punctuation, or next to another zero-width character
+  (`Done.\ufeff\ufeff Next`) is still reported, and so is every
+  U+2060.
+
+## Known false positives
+
+Some ordinary text matches this rule byte for byte with a real attack,
+and the rule reports it on purpose. The finding names the line and
+column, so it is quick to review and fix.
+
+- **A doubled zero-width character.** Machine translation and
+  copy-paste sometimes write a joiner twice inside a word, for example
+  the Devanagari `\u0915\u094d\u200c\u200c\u0937`. A table cell can
+  also end up with two word separators in a row (`x\u200b\u200b`). Two
+  zero-width characters in a row are a run, the same bytes as a hidden
+  run such as `note\u200b\u200b before`, so the rule reports them.
+  Fix: remove the duplicate.
+- **A joiner between a non-Latin letter and a Latin letter.**
+  Machine-translated text sometimes keeps an English word inside a
+  word in another script, with a joiner at the boundary: for example a
+  Kannada virama, a joiner, and then Latin `API`
+  (`\u0ccd\u200cAPI`), or a Malayalam letter, U+200C, and `env`. A
+  joiner next to a Latin letter is how a word split hides an
+  instruction (`ign\u200core`), so the rule reports it in any script.
+  Fix: replace the joiner with a space, or remove it.
+- **A zero-width space inside a placeholder or path.** A U+200B placed
+  inside a template placeholder or path to stop auto-linking
+  (`<project\u200b-name>/src`) is a zero-width character inside a
+  word. Fix: use a code span instead.
+
+Telling these apart from an attack needs the script of the surrounding
+text, not only the neighboring code points. A context-aware check is
+planned for a later release. If a translated file needs a direction
+mark, use U+200E or U+200F, which this rule does not report.
 
 ## Evidence
 

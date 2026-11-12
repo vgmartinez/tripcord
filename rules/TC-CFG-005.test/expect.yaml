@@ -6,8 +6,13 @@ positivos:
   claude-bypass-permissions: high
   claude-bypass-with-deny: high
   claude-nested-package: high
+  claude-root-settings-beside-fixtures: [high, low]
+  claude-settings-under-test-fixtures: low
   claude-skip-prompt-only: medium
   codex-approval-never: high
+  codex-config-fixture-word-in-name: high
+  codex-config-in-fixtures-wrong-case: high
+  codex-config-in-myfixtures: high
   codex-danger-full-access: high
   codex-nested-service: high
   codex-profile-approval-never: high

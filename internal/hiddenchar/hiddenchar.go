@@ -110,7 +110,16 @@ func Scan(b []byte) (model.HiddenChars, bool) {
 // stays counted, including inside quotes or brackets. A character next
 // to punctuation, after a dot, before a word, or at the end of a word
 // stays counted, as do tags, bidi controls, and U+2060 or U+FEFF
-// outside a strip literal.
+// outside a strip literal, except an isolated U+FEFF between a sentence
+// end and whitespace or a line end (see strayBOM).
+//
+// Some scripts use these characters as ordinary spelling, so an
+// isolated one is also not counted inside a word of such a script (see
+// scriptJoiner and scriptWordBreak): a U+200C or U+200D between two
+// letters of the same joining script, or after a virama that ends a
+// word, and a U+200B between two letters of the same script written
+// without spaces. A character next to a letter of another script, at a
+// word edge in a script with no virama, or in any run stays counted.
 func countedAt(b []byte, i int) bool {
 	r, size := utf8.DecodeRune(b[i:])
 	if Class(r) == "" {
@@ -125,13 +134,164 @@ func countedAt(b []byte, i int) bool {
 	if stripLiteral(b, i) {
 		return false
 	}
-	if r != 0x200B && r != 0x200C && r != 0x200D {
-		return true
-	}
 	if zeroWidthRun(b, i, size) {
 		return true
 	}
-	return !quietSide(b, i, false) || !quietSide(b, i+size, true)
+	if r == 0xFEFF {
+		return !strayBOM(b, i, size)
+	}
+	if r != 0x200B && r != 0x200C && r != 0x200D {
+		return true
+	}
+	if quietSide(b, i, false) && quietSide(b, i+size, true) {
+		return false
+	}
+	if r == 0x200B {
+		return !scriptWordBreak(b, i, size)
+	}
+	return !scriptJoiner(b, i, size)
+}
+
+// sentenceEnds are the punctuation marks that end a sentence, including
+// the ideographic full stop and the fullwidth exclamation and question
+// marks.
+var sentenceEnds = map[rune]bool{
+	'.': true, '!': true, '?': true, 0x3002: true, 0xFF01: true, 0xFF1F: true,
+}
+
+// strayBOM reports a U+FEFF at i that text pasted from a word processor
+// or a web page leaves behind: the code point before it ends a sentence
+// and the code point after it is whitespace or the end of the file. It
+// changes no word. A U+FEFF before a word, inside a word, at the start
+// of a line, or next to another zero-width character stays counted.
+func strayBOM(b []byte, i, size int) bool {
+	prev, psize := utf8.DecodeLastRune(b[:i])
+	if psize == 0 || !sentenceEnds[prev] {
+		return false
+	}
+	next, nsize := utf8.DecodeRune(b[i+size:])
+	if nsize == 0 {
+		return true
+	}
+	if next == utf8.RuneError && nsize == 1 {
+		return false
+	}
+	return unicode.IsSpace(next)
+}
+
+// maxMarks caps the combining marks lastLetter skips.
+const maxMarks = 8
+
+// joiningScripts write U+200C and U+200D inside words as ordinary
+// spelling: Arabic-script text (Persian in particular) and Brahmic
+// scripts, where the joiner after a virama selects a conjunct, half, or
+// final form.
+var joiningScripts = []*unicode.RangeTable{
+	unicode.Arabic, unicode.Syriac, unicode.Nko, unicode.Mongolian,
+	unicode.Devanagari, unicode.Bengali, unicode.Gurmukhi, unicode.Gujarati,
+	unicode.Oriya, unicode.Tamil, unicode.Telugu, unicode.Kannada,
+	unicode.Malayalam, unicode.Sinhala, unicode.Myanmar, unicode.Khmer,
+	unicode.Tibetan,
+}
+
+// noSpaceScripts are written without spaces between words; U+200B is
+// the standard word separator there.
+var noSpaceScripts = []*unicode.RangeTable{
+	unicode.Thai, unicode.Lao, unicode.Khmer, unicode.Myanmar, unicode.Tibetan,
+}
+
+// viramas are the vowel-killing signs of the joining scripts (virama,
+// halant, al-lakuna, asat, coeng, halanta).
+var viramas = map[rune]bool{
+	0x094D: true, 0x09CD: true, 0x0A4D: true, 0x0ACD: true, 0x0B4D: true,
+	0x0BCD: true, 0x0C4D: true, 0x0CCD: true, 0x0D4D: true, 0x0DCA: true,
+	0x1039: true, 0x103A: true, 0x17D2: true, 0x0F84: true,
+}
+
+// scriptJoiner reports a U+200C or U+200D at i that is spelling, not
+// hidden content: the nearest letter before it (skipping at most
+// maxMarks combining marks) is a letter of a joining script and the
+// code point after it is a letter or combining mark of the same script
+// (Marathi writes U+0905 U+200D U+0945, Bengali U+09B0 U+200D U+09CD),
+// or the code point before it is a virama of a joining script on a
+// letter of that script and the code point after it ends the word
+// (whitespace, punctuation, or the end of the file).
+func scriptJoiner(b []byte, i, size int) bool {
+	if sameScriptLetters(b, i, size, joiningScripts, true) {
+		return true
+	}
+	v, vsize := utf8.DecodeLastRune(b[:i])
+	if !viramas[v] {
+		return false
+	}
+	script := scriptOf(v, joiningScripts)
+	base, ok := lastLetter(b[:i-vsize])
+	if script == nil || !ok || !unicode.Is(script, base) {
+		return false
+	}
+	next, nsize := utf8.DecodeRune(b[i+size:])
+	if nsize == 0 {
+		return true
+	}
+	return unicode.IsSpace(next) || unicode.IsPunct(next)
+}
+
+// scriptWordBreak reports a U+200B at i between two letters of the same
+// script written without spaces. Next to whitespace or punctuation, or
+// next to a letter of another script, it stays counted.
+func scriptWordBreak(b []byte, i, size int) bool {
+	return sameScriptLetters(b, i, size, noSpaceScripts, false)
+}
+
+// sameScriptLetters reports that the nearest letter before i (skipping
+// combining marks) and the code point right after the character at i
+// are letters of one script in set. With mark, the code point after may
+// also be a combining mark of that script; an Inherited mark is not.
+func sameScriptLetters(b []byte, i, size int, set []*unicode.RangeTable, mark bool) bool {
+	before, ok := lastLetter(b[:i])
+	if !ok {
+		return false
+	}
+	script := scriptOf(before, set)
+	if script == nil {
+		return false
+	}
+	after, asize := utf8.DecodeRune(b[i+size:])
+	if asize == 0 || after == utf8.RuneError && asize == 1 {
+		return false
+	}
+	if !unicode.Is(script, after) {
+		return false
+	}
+	return unicode.IsLetter(after) || mark && unicode.In(after, unicode.Mn, unicode.Mc)
+}
+
+// lastLetter returns the last letter of b, skipping at most maxMarks
+// combining marks (Mn, Mc) such as harakat, vowel signs, and viramas.
+// Any other code point, or more marks, means there is no letter.
+func lastLetter(b []byte) (rune, bool) {
+	for n := 0; n <= maxMarks && len(b) > 0; n++ {
+		r, size := utf8.DecodeLastRune(b)
+		b = b[:len(b)-size]
+		switch {
+		case r == utf8.RuneError && size == 1:
+			return 0, false
+		case unicode.IsLetter(r):
+			return r, true
+		case !unicode.In(r, unicode.Mn, unicode.Mc):
+			return 0, false
+		}
+	}
+	return 0, false
+}
+
+func scriptOf(r rune, set []*unicode.RangeTable) *unicode.RangeTable {
+	for _, t := range set {
+		if unicode.Is(t, r) {
+			return t
+		}
+	}
+	return nil
 }
 
 func emojiJoiner(b []byte, i, size int) bool {

@@ -246,11 +246,7 @@ async function ensureBinary(opts = {}) {
   const dir = path.join(opts.cacheDir || cacheRoot(), 'npm', version, `${t.goos}_${t.goarch}`);
   const bin = path.join(dir, t.binary);
   const stamp = path.join(dir, 'archive.sha256');
-  try {
-    if (fs.readFileSync(stamp, 'utf8') === `${want}\n` && fs.statSync(bin).isFile()) return bin;
-  } catch {
-    // Not cached yet.
-  }
+  if (cachedBinary(stamp, bin, want)) return bin;
   const log = opts.log || ((msg) => process.stderr.write(`${msg}\n`));
   log(`tripcord: downloading ${name} (first run of ${version})`);
   const archive = await (opts.fetch || download)(archiveURL(version, name));
@@ -264,8 +260,32 @@ async function ensureBinary(opts = {}) {
   } finally {
     fs.rmSync(tmp, { force: true });
   }
-  fs.writeFileSync(stamp, `${want}\n`);
+  // The stamp records the archive digest and the sha256 of the extracted
+  // binary. An old stamp that only has the archive digest is treated as
+  // a miss, so the next run re-downloads and writes this format.
+  fs.writeFileSync(stamp, `${want}\n${sha256(fs.readFileSync(bin))}\n`);
   return bin;
+}
+
+// cachedBinary is true when the stamp is the new two-digest format, the
+// archive digest matches want, and a fresh sha256 of the cached binary
+// matches the stored binary digest. A missing file, an old-format stamp,
+// or any mismatch is a cache miss: the caller re-downloads.
+function cachedBinary(stamp, bin, want) {
+  try {
+    if (!fs.statSync(bin).isFile()) return false;
+    const text = fs.readFileSync(stamp, 'utf8');
+    const first = text.indexOf('\n');
+    if (first < 0 || text.slice(0, first) !== want) return false;
+    const rest = text.slice(first + 1);
+    const second = rest.indexOf('\n');
+    if (second < 0 || rest.slice(second + 1) !== '') return false;
+    const wantBin = rest.slice(0, second);
+    if (!/^[0-9a-f]{64}$/.test(wantBin)) return false;
+    return sha256(fs.readFileSync(bin)) === wantBin;
+  } catch {
+    return false;
+  }
 }
 
 module.exports = {

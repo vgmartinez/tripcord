@@ -1,0 +1,4 @@
+-- .claude/settings.json --
+{"permissions": {"defaultMode": "bypassPermissions"}}
+-- fixtures/sample-project/.claude/settings.json --
+{"permissions": {"defaultMode": "bypassPermissions"}}

@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/vgmartinez/tripcord/internal/exitcode"
@@ -285,6 +286,8 @@ func compactFindingLine(finding model.Finding, root string) string {
 
 // fitFinding shortens the title, then the path, so the visible line
 // fits in textWidth. The rule id is counted without its hyperlink.
+// Titles break at a word boundary; paths keep a hard cut so a
+// component is not dropped whole.
 func fitFinding(sev, rule, title, loc string) (string, string) {
 	overhead := utf8.RuneCountInString(sev) + utf8.RuneCountInString(rule) + utf8.RuneCountInString(loc) + 3
 	room := textWidth - overhead
@@ -296,10 +299,15 @@ func fitFinding(sev, rule, title, loc string) (string, string) {
 	if locRoom < 1 {
 		locRoom = 1
 	}
-	return "", shortenVisible(loc, locRoom)
+	return "", shortenHard(loc, locRoom)
 }
 
-// shortenVisible caps s to room runes without splitting an escape token.
+// shortenVisible caps s to room runes without splitting an escape
+// token. When the cut falls inside a word, it backs up to the last
+// whitespace so the ellipsis does not sit mid-word or after a space,
+// unless that would leave fewer than half of room columns, or fewer
+// than 8, in which case the hard cut is kept so a single long word
+// still shows something.
 func shortenVisible(s string, room int) string {
 	if room <= 0 {
 		return ""
@@ -310,22 +318,98 @@ func shortenVisible(s string, room int) string {
 	if room == 1 {
 		return "…"
 	}
-	budget := room - 1
-	var b strings.Builder
+	kept, rest := takeVisible(s, room-1)
+	if rest != "" && kept != "" {
+		next, _ := utf8.DecodeRuneInString(rest)
+		last, _ := utf8.DecodeLastRuneInString(kept)
+		if next != utf8.RuneError && last != utf8.RuneError && !unicode.IsSpace(next) && !unicode.IsSpace(last) {
+			if cut := lastSpaceOffset(kept); cut >= 0 {
+				w := utf8.RuneCountInString(kept[:cut])
+				minKeep := 8
+				if half := room / 2; half > minKeep {
+					minKeep = half
+				}
+				if w >= minKeep {
+					kept = kept[:cut]
+				}
+			}
+		}
+	}
+	return trimTitleTail(kept) + "…"
+}
+
+// shortenHard caps s to room runes without splitting an escape token
+// and without looking for a word boundary. Paths use this so a cut
+// stays at the same column as before.
+func shortenHard(s string, room int) string {
+	if room <= 0 {
+		return ""
+	}
+	if utf8.RuneCountInString(s) <= room {
+		return s
+	}
+	if room == 1 {
+		return "…"
+	}
+	kept, _ := takeVisible(s, room-1)
+	return kept + "…"
+}
+
+// takeVisible returns the longest prefix of s whose tokens fit in
+// budget runes, and the rest. The cut is always on a token boundary.
+func takeVisible(s string, budget int) (string, string) {
 	width := 0
-	for i := 0; i < len(s); {
+	i := 0
+	for i < len(s) {
 		n := nextToken(s, i)
-		tok := s[i : i+n]
-		w := utf8.RuneCountInString(tok)
+		w := utf8.RuneCountInString(s[i : i+n])
 		if width+w > budget {
 			break
 		}
-		b.WriteString(tok)
 		width += w
 		i += n
 	}
-	b.WriteString("…")
-	return b.String()
+	return s[:i], s[i:]
+}
+
+func lastSpaceOffset(s string) int {
+	cut := -1
+	for i := 0; i < len(s); {
+		n := nextToken(s, i)
+		if isSpaceToken(s[i : i+n]) {
+			cut = i
+		}
+		i += n
+	}
+	return cut
+}
+
+func trimTitleTail(s string) string {
+	for s != "" {
+		last := 0
+		for i := 0; i < len(s); {
+			last = i
+			i += nextToken(s, i)
+		}
+		if !isTitleTrimToken(s[last:]) {
+			break
+		}
+		s = s[:last]
+	}
+	return s
+}
+
+func isSpaceToken(tok string) bool {
+	r, n := utf8.DecodeRuneInString(tok)
+	return n == len(tok) && r != utf8.RuneError && unicode.IsSpace(r)
+}
+
+func isTitleTrimToken(tok string) bool {
+	r, n := utf8.DecodeRuneInString(tok)
+	if n != len(tok) || r == utf8.RuneError {
+		return false
+	}
+	return unicode.IsSpace(r) || r == ',' || r == ':'
 }
 
 // linkRuleID wraps a catalog rule id in an OSC 8 hyperlink to its doc.

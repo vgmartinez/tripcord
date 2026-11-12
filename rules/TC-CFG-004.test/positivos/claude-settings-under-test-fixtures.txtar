@@ -1,0 +1,20 @@
+-- tests/fixtures/sample-project/.claude/settings.json --
+{"permissions": {"allow": ["Bash(*)"]}}
+-- evals/fixtures/case-a/.claude/settings.json --
+{"permissions": {"allow": ["Bash"], "defaultMode": "bypassPermissions"}}
+-- testdata/case/.claude/settings.json --
+{"permissions": {"allow": ["Bash(*)"]}}
+-- __fixtures__/case/.claude/settings.json --
+{"permissions": {"allow": ["Bash(*)"]}}
+-- test-fixtures/case/.claude/settings.json --
+{"permissions": {"allow": ["Bash(*)"]}}
+-- test_fixtures/case/.claude/settings.json --
+{"permissions": {"allow": ["Bash(*)"]}}
+-- test/fixtures/case/.claude/settings.json --
+{"permissions": {"allow": ["Bash(*)"]}}
+-- tests/fixtures/read-case/.claude/settings.json --
+{"permissions": {"allow": ["Read(*)"]}}
+-- spec/fixtures/case/.claude/settings.json --
+{"permissions": {"allow": ["Bash(*)"]}}
+-- fixtures/case/.claude/settings.json --
+{"permissions": {"allow": ["Bash(*)"]}}

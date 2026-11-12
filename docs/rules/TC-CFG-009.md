@@ -177,6 +177,71 @@ checkout of a 40-hex sha), inline `python -c` or `node -e` network
 code, a downloader whose target is a variable, and encoded or
 too-deeply nested payloads.
 
+## Not reported: fetched data that nothing runs
+
+A setup command whose fetches only write data that nothing in the same
+configuration file runs is not reported: a data archive extracted into
+a data directory, a version file used as a cache key, or a companion
+repository cloned next to the project. The analysis is an allowlist,
+and anything it cannot follow keeps the finding.
+
+- The command has no risk but the fetch: no pipe into a shell, nothing
+  encoded or nested too deep. One `sh -c`, `bash -c`, or `dash -c`
+  wrapper is read through.
+- The whole command is simple commands joined by `;`, a newline, `&&`,
+  `||`, or `&`. A `$`, backquote, glob, subshell, function, pipe, `<`,
+  here-document, or shell keyword (`if`, `for`, `case`, ...) anywhere
+  gives no credit, as do `cd`, `pushd`, `popd`, `source`, `.`, `eval`,
+  `exec`, `trap`, `alias`, `xargs`, and `find`.
+- Each fetch is a `curl` or `wget` of one `http(s)` URL that writes to
+  standard output or to one literal file (`-o`, `-O`, `> file`,
+  `>> file`, or wget's default name). The file is a relative path of
+  plain segments (no leading `.` or `-`) with an archive (`.tar.gz`,
+  `.tgz`, `.zip`, ...) or data (`.json`, `.csv`, `.tsv`) name, and not
+  a manifest a tool reads without being told (`package.json`,
+  `composer.json`, `deno.json`, `tsconfig.json`, `settings.json`,
+  `mcp.json`, ...). Or it is a `git clone` of one `http(s)` or `git://`
+  URL with only `--depth`, `-b`/`--branch`, `--single-branch`,
+  `--no-tags`, `--filter`, and `-q`, into a literal directory or the
+  one the URL names. A downloader or clone of any other form, including
+  one behind `sudo` or `git -C`, keeps the finding.
+- `tar -x` or `unzip` may extract an archive into a literal directory
+  given with `-C` or `-d`; the directory of a fetched archive counts as
+  fetched. Extracting without a directory, or cloning or extracting
+  into `bin`, `sbin`, `libexec`, `node_modules`, `vendor`,
+  `site-packages`, or `hooks`, keeps the finding.
+- `cat`, `grep`, `jq`, `head`, `tail`, `wc`, `ls`, `sha256sum`,
+  `shasum`, `md5sum`, `cmp`, `diff`, `test`, `mkdir`, `rm`, `echo`, and
+  `printf` without a redirection may name what was fetched.
+- No other command in the script, and no other string in the same
+  configuration file (other steps, lifecycle commands, `uses:`, `with:`,
+  `env`, `working-directory`, ...), contains a fetched file or
+  directory name, as written or as its last path segment, compared
+  case-insensitively as a substring. Step and command names are labels
+  and are not read, and a GitHub Actions `hashFiles('...')` expression
+  only hashes its files. A glob in another command of the file keeps
+  the finding.
+
+Not reported:
+
+```yaml
+      - run: |
+          curl -fsSL https://example.invalid/data/testdata-1.2.tar.gz -o testdata.tar.gz
+          tar -xzf testdata.tar.gz -C data
+      - run: curl -fsS https://example.invalid/version.json >> cache-key.json
+```
+
+```json
+{"postCreateCommand": "/bin/bash -c 'python -m pip install uv && python -m uv sync & git clone https://example.invalid/org/examples; wait'"}
+```
+
+Still reported: `tar -xzf tool.tar.gz && ./tool/install.sh`,
+`git clone <url> /tmp/helper` then `bash /tmp/helper/setup.sh`,
+`git clone <url> helper && cd helper && make`,
+`curl -o tool <url> && chmod +x tool`, a later step that runs
+`./tool/install.sh` after an earlier one extracted into `tool`, and
+`curl -o package.json <url> && npm install`.
+
 ## Limits
 
 - `RUN` lines of a Dockerfile and OCI Feature references
@@ -190,6 +255,15 @@ too-deeply nested payloads.
   outside the checksum grammar gets no checksum credit.
 - Variables are not expanded, and the script a setup command fetches
   is not read.
+- For fetched data that nothing runs (see above), a committed script,
+  build file, or manifest that a setup command runs is not read: one
+  that runs a fetched file or directory by name is not seen. A
+  committed `package.json` that names a fetched directory with
+  `file:./<cloned dir>`, followed by `npm install`, is not inspected,
+  so that fetch may be suppressed.
+- A `git clone` is not treated as a fetch when it is the last command
+  in the script. The fetch risk is only raised when another command
+  follows the clone.
 - The checksum itself is not compared with anything: the rule checks
   that a check runs against a hash committed to the repository, not
   that the hash is right.

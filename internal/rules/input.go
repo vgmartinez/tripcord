@@ -135,6 +135,7 @@ func emptyConfig() map[string]any {
 	m["script_locations"] = []string{}
 	m["checksum_files"] = map[string][]string{}
 	m["checksum_symlinks"] = []string{}
+	m["fetch_not_run"] = false
 	m["repo_script"] = false
 	m["hidden_chars"] = 0
 	return m
@@ -175,6 +176,7 @@ func configVars(id string, item model.ConfigItem) map[string]any {
 		"script_locations":  locations,
 		"checksum_files":    sums,
 		"checksum_symlinks": symlinks,
+		"fetch_not_run":     item.FetchNotRun,
 		"repo_script":       item.RepoScript,
 		"hidden_chars":      item.Hidden.Total,
 	}

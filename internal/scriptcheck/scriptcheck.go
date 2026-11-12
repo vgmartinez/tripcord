@@ -73,8 +73,10 @@ func Annotate(root string, items []model.ConfigItem) error {
 		}
 		item.MissingScripts = 0
 		item.ScriptLocations = nil
+		base, _ := projectDir(item.Path)
 		for _, rel := range Scripts(*item) {
 			switch class, missing := lookupScript(resolvedRoot, rel); {
+			case missing && dependencyBinary(base, rel):
 			case missing:
 				item.MissingScripts++
 			case class != "":
@@ -84,6 +86,7 @@ func Annotate(root string, items []model.ConfigItem) error {
 			}
 		}
 	}
+	annotateFetchNotRun(items)
 	return annotateChecksums(resolvedRoot, items)
 }
 
@@ -107,6 +110,34 @@ func lookupScript(root, rel string) (class string, missing bool) {
 		return "", false
 	}
 	return outsideClass(resolved), false
+}
+
+// dependencyBinary reports whether rel, a cleaned repository-relative
+// script path, is a tool a package manager installs into the project
+// directory base: node_modules/.bin/<name>, or <name> under bin or
+// Scripts of a .venv or venv. Those directories are build output and are
+// not committed, so a missing one is not a missing script. Only the
+// direct child of the project directory counts; a path that leaves the
+// repository is never cleaned to this shape.
+func dependencyBinary(base, rel string) bool {
+	rel = strings.ReplaceAll(rel, `\`, "/")
+	if base != "" {
+		var ok bool
+		if rel, ok = strings.CutPrefix(rel, base+"/"); !ok {
+			return false
+		}
+	}
+	segments := strings.Split(rel, "/")
+	if len(segments) != 3 || segments[2] == "" || segments[2] == "." || segments[2] == ".." {
+		return false
+	}
+	switch segments[0] {
+	case "node_modules":
+		return segments[1] == ".bin"
+	case ".venv", "venv":
+		return segments[1] == "bin" || segments[1] == "Scripts"
+	}
+	return false
 }
 
 func insideRoot(root, target string) bool {

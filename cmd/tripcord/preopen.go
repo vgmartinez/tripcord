@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/signal"
@@ -42,7 +43,11 @@ func runPreopen(args []string, stdout, stderr io.Writer) int {
 
 	ctx, stop := signal.NotifyContext(context.Background(), preopenStopSignals...)
 	defer stop()
-	ws, err := preopen.Fetch(ctx, opts.path)
+	var progress io.Writer
+	if isTerminal(stderr) {
+		progress = stderr
+	}
+	ws, err := preopen.FetchWithProgress(ctx, opts.path, progress)
 	var targetErr *preopen.TargetError
 	switch {
 	case errors.As(err, &targetErr):
@@ -60,6 +65,13 @@ func runPreopen(args []string, stdout, stderr io.Writer) int {
 	// The clone's own .tripcord policy must not grant it exceptions or
 	// relax the mode, so repository policy is read from a directory that
 	// does not exist. --policy and --org-policy still apply.
+	if n := ws.Placeholders(); n > 0 {
+		noun := "files"
+		if n == 1 {
+			noun = "file"
+		}
+		writeString(stderr, fmt.Sprintf("%s: %d %s larger than 1 MiB were written as placeholders and were not scanned\n", target.prog, n, noun))
+	}
 	target.root = ws.Tree()
 	target.policyRoot = filepath.Join(ws.Dir(), "no-repository-policy")
 	code := scanTree(context.Background(), target, opts, stdout, stderr)
@@ -67,4 +79,13 @@ func runPreopen(args []string, stdout, stderr io.Writer) int {
 		return target.internalError(stderr, errors.New("interrupted; the temporary clone was removed"))
 	}
 	return code
+}
+
+func isTerminal(w io.Writer) bool {
+	f, ok := w.(*os.File)
+	if !ok {
+		return false
+	}
+	info, err := f.Stat()
+	return err == nil && info.Mode()&os.ModeCharDevice != 0
 }

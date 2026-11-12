@@ -58,6 +58,33 @@
 # Package runners (npx -y, uvx, pnpm dlx, ...), git clone (including a
 # later sha checkout), tags, and a variable target are never pinned.
 #
+# Not reported: a command whose fetches only write data that nothing
+# in the same configuration file runs (config.fetch_not_run, set by
+# internal/scriptcheck with shellcmd.FetchNotRun). The whole command,
+# after one sh/bash/dash -c wrapper, is simple commands joined by ;, a
+# newline, &&, ||, or &, with no $, backquote, glob, subshell, function,
+# pipe, or < anywhere. Every fetch is a curl or wget of one URL to
+# standard output or to a literal data file (an archive, .json, .csv,
+# or .tsv name of plain relative segments that is not a manifest such
+# as package.json), or a git clone of one URL into a literal directory
+# with only depth, branch, filter, tag, and quiet options. tar -x or
+# unzip may extract a fetched archive into a literal directory with -C
+# or -d, which then counts as fetched; cat, grep, jq, head, tail, wc,
+# ls, sha256sum, shasum, md5sum, cmp, diff, test, mkdir, rm, echo, and
+# printf may read fetched names. Any other command that contains a
+# fetched name (case-insensitive substring, as written or as its last
+# segment), any other string of the same file that does (labels and
+# hashFiles() expressions left out), a glob in another command of the
+# file, cd, pushd, popd, source, ., eval, exec, trap, alias, xargs,
+# find, a shell keyword, or a second downloader or clone that is not of
+# that form keeps the finding. Extracting or cloning into bin, sbin,
+# libexec, node_modules, vendor, site-packages, or hooks keeps it too.
+# What a committed script, build file, or manifest does with a fetched
+# name is not read. A committed package.json that names a fetched
+# directory with file:./<cloned dir>, followed by npm install, is not
+# inspected, so that fetch may be suppressed. A git clone as the last
+# command is not treated as a fetch.
+#
 # Not read: RUN lines of a Dockerfile, OCI Feature references
 # (ghcr.io/...:1), a blueprint uses: action, and what a fetched script
 # does. OCI Feature tags are not flagged.
@@ -68,7 +95,7 @@ severity: high
 harness: [copilot, cursor, devcontainer, devin]
 files: ["**"]
 when: |
-  config.kind == "env-setup" && config.scope == "repo" && has(payload.setting) && (
+  config.kind == "env-setup" && config.scope == "repo" && !config.fetch_not_run && has(payload.setting) && (
     (config.harness == "copilot" && payload.setting == "step" &&
       has(payload.run) && type(payload.run) == string &&
       shell.unpinned(payload.run, config.checksum_files, config.checksum_symlinks).size() > 0) ||

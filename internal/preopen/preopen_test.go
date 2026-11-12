@@ -2,6 +2,7 @@ package preopen
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/vgmartinez/tripcord/internal/adapters"
 	"github.com/vgmartinez/tripcord/internal/gitrun"
 	"github.com/vgmartinez/tripcord/internal/preopen/preopentest"
 )
@@ -178,6 +180,89 @@ func TestFetchOversizeBlobDoesNotHang(t *testing.T) {
 	if !errors.As(err, &targetErr) || !strings.Contains(err.Error(), "larger than") {
 		t.Fatalf("Fetch = %v, want a TargetError refusing the blob", err)
 	}
+}
+
+func TestBlobFilterLimitMatchesConfigCap(t *testing.T) {
+	if blobFilterLimit != adapters.MaxConfigFileBytes {
+		t.Fatalf("blobFilterLimit = %d, want adapters.MaxConfigFileBytes %d", blobFilterLimit, adapters.MaxConfigFileBytes)
+	}
+}
+
+// TestFetchFilteredOversizedBlobsArePlaceholders is the case a repository
+// of large binaries used to fail: several 2 MiB blobs against a 4 MiB
+// budget. With the blob filter and placeholders, Fetch succeeds, the
+// config file is written in full, and the large blobs are holes that
+// were never downloaded.
+func TestFetchFilteredOversizedBlobsArePlaceholders(t *testing.T) {
+	prev := maxTotalBytes
+	maxTotalBytes = 4 << 20
+	t.Cleanup(func() { maxTotalBytes = prev })
+
+	git := preopentest.RequireTools(t)
+	repo := filepath.Join(t.TempDir(), "repo")
+	preopentest.Git(t, git, filepath.Dir(repo), "init", "-q", "repo")
+	preopentest.Git(t, git, repo, "config", "uploadpack.allowFilter", "true")
+	preopentest.WriteFile(t, filepath.Join(repo, ".claude", "settings.json"), preopentest.ClaudeSettings, 0o644)
+	blobs := []string{"a.bin", "b.bin", "c.bin"}
+	oids := map[string]string{}
+	for _, name := range blobs {
+		data := make([]byte, 2<<20)
+		if _, err := rand.Read(data); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(repo, name), data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	preopentest.Git(t, git, repo, "add", "-A")
+	preopentest.Git(t, git, repo, "commit", "-q", "-m", "fixture")
+	for _, name := range blobs {
+		oids[name] = gitOutput(t, git, repo, "", "rev-parse", "HEAD:"+name)
+	}
+
+	ws, err := Fetch(context.Background(), repo)
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	defer func() { _ = ws.Close() }()
+
+	got, err := os.ReadFile(filepath.Join(ws.Tree(), ".claude", "settings.json"))
+	if err != nil || string(got) != preopentest.ClaudeSettings {
+		t.Fatalf(".claude/settings.json = %q, %v; want the committed bytes", got, err)
+	}
+	for _, name := range blobs {
+		info, err := os.Stat(filepath.Join(ws.Tree(), name))
+		wantSize := adapters.MaxConfigFileBytes + 1
+		if err != nil || info.Size() != wantSize {
+			t.Fatalf("%s size = %v, %v; want %d", name, sizeOf(info), err, wantSize)
+		}
+		if objectExists(t, git, filepath.Join(ws.Dir(), "git"), oids[name]) {
+			t.Fatalf("%s oid %s is present in the clone; the blob was downloaded", name, oids[name])
+		}
+	}
+}
+
+func sizeOf(info os.FileInfo) int64 {
+	if info == nil {
+		return -1
+	}
+	return info.Size()
+}
+
+func objectExists(t *testing.T, git, gitDir, oid string) bool {
+	t.Helper()
+	cmd := exec.Command(git, "--git-dir", gitDir, "cat-file", "-e", oid)
+	env := make([]string, 0, len(os.Environ()))
+	for _, entry := range os.Environ() {
+		if !strings.HasPrefix(strings.ToUpper(entry), "GIT_") {
+			env = append(env, entry)
+		}
+	}
+	cmd.Env = append(env,
+		"GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL="+os.DevNull,
+		"GIT_NO_LAZY_FETCH=1",
+	)
+	return cmd.Run() == nil
 }
 
 // gitOutput runs git and returns its stdout. stdin may be empty.

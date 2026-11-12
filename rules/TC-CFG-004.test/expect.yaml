@@ -9,6 +9,11 @@ positivos:
   bare-write: medium
   bash-colon-star: high
   bash-star: high
+  claude-root-settings-beside-fixtures: [high, low]
+  claude-settings-in-examples-app: high
+  claude-settings-in-fixtures-wrong-case: high
+  claude-settings-in-myfixtures: high
+  claude-settings-under-test-fixtures: low
   edit-abs-root: high
   edit-triple-slash-root: high
   mcp-star: high

@@ -1,0 +1,5 @@
+-- .cursor/environment.json --
+{
+  "install": "git clone https://example.invalid/org/plugins-1.2.git plugins && npm ci",
+  "start": "for f in plug*/init.sh; do sh $f; done"
+}

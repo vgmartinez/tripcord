@@ -22,6 +22,14 @@
 #   reference says yolo can only be enabled from the command line, not a
 #   settings file.
 #
+# A finding whose path has a whole segment fixtures, __fixtures__,
+# testdata, test-fixtures, or test_fixtures above the config directory
+# is reported at low. The match is case-sensitive and on whole segments
+# only (myfixtures/ and fixtures-api/ stay high). A repository-root
+# agent config (.claude/settings.json, .codex/config.toml,
+# .gemini/settings.json) is never demoted, even when a fixtures/
+# directory exists elsewhere in the tree.
+#
 # Case: each value is compared the way its harness compares it. Claude
 # Code's defaultMode is an exact enum (only "manual" is an alias, for
 # "default"); Codex's sandbox_mode and approval_policy are serde enums
@@ -34,6 +42,31 @@ pack: tripcord/core
 title: "Shared config turns off approvals"
 severity: high
 severity_when:
+  - severity: low
+    when: |
+      config.path.matches(r'''(^|/)(fixtures|__fixtures__|testdata|test-fixtures|test_fixtures)/''') &&
+      !config.path.matches(r'''^\.(claude/settings\.json|codex/config\.toml|gemini/settings\.json)$''') && (
+        (config.harness == "claude" && has(payload.setting) && payload.setting == "permissions" &&
+          has(payload.value) && type(payload.value) == map &&
+          has(payload.value.defaultMode) && payload.value.defaultMode == "bypassPermissions") ||
+        (config.harness == "claude" && has(payload.setting) && payload.setting == "skipDangerousModePermissionPrompt" &&
+          has(payload.value) && payload.value == true &&
+          !(has(payload.bypass_permissions) && payload.bypass_permissions == true)) ||
+        (config.harness == "codex" && has(payload.setting) && has(payload.value) && (
+          (payload.setting == "sandbox_mode" && payload.value == "danger-full-access") ||
+          (payload.setting == "approval_policy" && payload.value == "never") ||
+          (payload.setting == "profiles" && type(payload.value) == map && (
+            (has(payload.value.sandbox_mode) && payload.value.sandbox_mode == "danger-full-access") ||
+            (has(payload.value.approval_policy) && payload.value.approval_policy == "never"))))) ||
+        (config.harness == "gemini" && has(payload.setting) && has(payload.value) && (
+          (payload.setting == "autoAccept" &&
+            (payload.value == true || (type(payload.value) == string && payload.value.lowerAscii() == "true"))) ||
+          (payload.setting == "general" && type(payload.value) == map &&
+            has(payload.value.defaultApprovalMode) && payload.value.defaultApprovalMode == "yolo") ||
+          (payload.setting == "tools" && type(payload.value) == map && has(payload.value.autoAccept) &&
+            (payload.value.autoAccept == true ||
+              (type(payload.value.autoAccept) == string && payload.value.autoAccept.lowerAscii() == "true")))))
+      )
   - severity: high
     title: "Shared config turns off approvals (bypassPermissions)"
     when: |

@@ -26,9 +26,16 @@ case-insensitive.
 | Bare `Read`, `Edit`, `Write`, `WebFetch` | medium |
 | `Read(*)`, `Read(/**)`, `Read(//**)`, `Read(~/**)`, the same for `Write`, and `Edit(*)`, `Edit(/**)`, `Edit(~/**)` | medium |
 | `WebFetch(*)`, `WebFetch(domain:*)` | medium |
+| Any of the above under a test-fixture directory (see below) | low |
 
 One permissions object is one finding, at the first matching severity,
-so high wins when both are present.
+so high wins when both are present. A matching file whose path has a
+whole segment `fixtures`, `__fixtures__`, `testdata`, `test-fixtures`,
+or `test_fixtures` above the config directory is reported at low. The
+match is case-sensitive and does not apply to a substring
+(`myfixtures/`, `fixtures-api/`). A repository-root
+`.claude/settings.json` is never demoted, even when a `fixtures/`
+directory exists elsewhere in the tree.
 
 Not reported:
 
@@ -60,6 +67,17 @@ Not reported:
 ```json
 {"permissions": {"allow": ["Bash(go test ./...)", "Read(./docs/**)"]}}
 ```
+
+Reported, low, because the file sits under a test-fixture directory:
+
+```json
+# tests/fixtures/sample-project/.claude/settings.json
+{"permissions": {"allow": ["Bash(*)"]}}
+```
+
+Still reported high: `examples/app/.claude/settings.json`,
+`myfixtures/app/.claude/settings.json`, and a repository-root
+`.claude/settings.json` next to a `fixtures/` directory.
 
 User-scope settings are not reported. `negativos/malformed-and-out-of-scope.json`
 includes `~/.claude/settings.json` allowing `Bash(*)`, and that negative

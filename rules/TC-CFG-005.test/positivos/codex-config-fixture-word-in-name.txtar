@@ -1,0 +1,2 @@
+-- services/fixtures-api/.codex/config.toml --
+approval_policy = "never"

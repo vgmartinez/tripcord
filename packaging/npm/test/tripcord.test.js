@@ -5,6 +5,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { execFileSync } = require('node:child_process');
 const { test } = require('node:test');
 const zlib = require('node:zlib');
 
@@ -195,6 +196,64 @@ test('ensureBinary verifies the download, caches it, and fails closed on a misma
   // bad download then fails without touching the cached binary.
   await assert.rejects(lib.ensureBinary({ ...good, sums: new Map([[name, 'c'.repeat(64)]]) }), /Refusing/);
   assert.deepEqual(fs.readFileSync(p), bin);
+});
+
+test('ensureBinary re-hashes the cached binary and re-downloads on a mismatch or old stamp', async (t) => {
+  const dir = fixture(t);
+  const bin = Buffer.from('#!/bin/sh\necho "v9.8.7 (commit fake)"\n');
+  const tgz = zlib.gzipSync(ustar([['tripcord', bin]]));
+  const name = 'tripcord_9.8.7_linux_amd64.tar.gz';
+  const fetched = [];
+  const fetch = async (url) => {
+    fetched.push(url);
+    return tgz;
+  };
+  const opts = {
+    version: '9.8.7',
+    platform: 'linux',
+    arch: 'x64',
+    fetch,
+    log: () => {},
+    cacheDir: path.join(dir, 'cache'),
+    sums: new Map([[name, sha(tgz)]]),
+  };
+
+  const p = await lib.ensureBinary(opts);
+  assert.deepEqual(fs.readFileSync(p), bin);
+  assert.equal(fetched.length, 1);
+  if (process.platform !== 'win32') {
+    assert.equal(execFileSync(p, { encoding: 'utf8' }), 'v9.8.7 (commit fake)\n');
+  }
+
+  // Unchanged binary: a cache hit, no download, and the binary still runs.
+  assert.equal(await lib.ensureBinary(opts), p);
+  assert.equal(fetched.length, 1);
+  if (process.platform !== 'win32') {
+    assert.equal(execFileSync(p, { encoding: 'utf8' }), 'v9.8.7 (commit fake)\n');
+  }
+
+  // Flipping one byte of the cached binary is a miss: re-download,
+  // re-verify, and run the fresh binary.
+  const corrupted = Buffer.from(fs.readFileSync(p));
+  corrupted[0] ^= 0xff;
+  fs.writeFileSync(p, corrupted, { mode: 0o755 });
+  const p2 = await lib.ensureBinary(opts);
+  assert.equal(p2, p);
+  assert.deepEqual(fs.readFileSync(p), bin);
+  assert.equal(fetched.length, 2);
+  if (process.platform !== 'win32') {
+    assert.equal(execFileSync(p, { encoding: 'utf8' }), 'v9.8.7 (commit fake)\n');
+  }
+
+  // An old-format stamp (archive digest only) is a miss.
+  const stamp = path.join(path.dirname(p), 'archive.sha256');
+  fs.writeFileSync(stamp, `${sha(tgz)}\n`);
+  assert.equal(await lib.ensureBinary(opts), p);
+  assert.equal(fetched.length, 3);
+  assert.deepEqual(fs.readFileSync(p), bin);
+  // The stamp is rewritten in the two-digest format, so the next call hits.
+  assert.equal(await lib.ensureBinary(opts), p);
+  assert.equal(fetched.length, 3);
 });
 
 test('the unstaged development package refuses to run', async (t) => {

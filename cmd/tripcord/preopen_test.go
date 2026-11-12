@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"os"
@@ -79,6 +80,45 @@ func TestPreopenCleanRepositoryExitsZero(t *testing.T) {
 		t.Fatalf("preopen = %d\nstdout: %s\nstderr: %s", code, stdout.String(), stderr.String())
 	}
 	assertNoEntries(t, tmp)
+}
+
+// TestPreopenOversizedBlobsAreNotScanned builds a fixture with a hook
+// and several 2 MiB binaries, with partial clone enabled. preopen must
+// report the hook and must not exit 3, and it must say that the
+// oversized files were written as placeholders and not scanned.
+func TestPreopenOversizedBlobsAreNotScanned(t *testing.T) {
+	git := preopentest.RequireTools(t)
+	repo := filepath.Join(t.TempDir(), "repo")
+	preopentest.Git(t, git, filepath.Dir(repo), "init", "-q", "repo")
+	preopentest.Git(t, git, repo, "config", "uploadpack.allowFilter", "true")
+	preopentest.WriteFile(t, filepath.Join(repo, ".claude", "settings.json"), preopentest.ClaudeSettings, 0o644)
+	for _, name := range []string{"a.bin", "b.bin", "c.bin"} {
+		data := make([]byte, 2<<20)
+		if _, err := rand.Read(data); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(repo, name), data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	preopentest.Git(t, git, repo, "add", "-A")
+	preopentest.Git(t, git, repo, "commit", "-q", "-m", "fixture")
+
+	preopenTemp(t)
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"preopen", "--format", "json", repo}, &stdout, &stderr)
+	if code == int(exitcode.Config) {
+		t.Fatalf("preopen exited 3 (incomplete or refused tree)\nstdout: %s\nstderr: %s", stdout.String(), stderr.String())
+	}
+	if code != int(exitcode.Findings) {
+		t.Fatalf("preopen = %d, want %d\nstdout: %s\nstderr: %s", code, exitcode.Findings, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"TC-CFG-001"`) || !strings.Contains(stdout.String(), ".claude/settings.json") {
+		t.Fatalf("preopen did not report the hook:\n%s", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "placeholders") || !strings.Contains(stderr.String(), "not scanned") {
+		t.Fatalf("stderr = %q, want a note that oversized blobs were not scanned", stderr.String())
+	}
 }
 
 // A cloned repository must not relax its own result: its .tripcord

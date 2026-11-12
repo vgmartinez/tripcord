@@ -22,6 +22,15 @@ contributor's agent loads.
 | Codex: either of the above in a `[profiles.<name>]` table | high |
 | Gemini CLI: `general.defaultApprovalMode` `"yolo"` | medium |
 | Gemini CLI: `tools.autoAccept: true`, or the older flat `autoAccept: true` | medium |
+| Any of the above under a test-fixture directory (see below) | low |
+
+A matching file whose path has a whole segment `fixtures`,
+`__fixtures__`, `testdata`, `test-fixtures`, or `test_fixtures` above
+the config directory is reported at low. The match is case-sensitive
+and does not apply to a substring (`myfixtures/`, `fixtures-api/`). A
+repository-root `.claude/settings.json`, `.codex/config.toml`, or
+`.gemini/settings.json` is never demoted, even when a `fixtures/`
+directory exists elsewhere in the tree.
 
 With bypassPermissions, Claude Code runs every tool call without a
 prompt. `skipDangerousModePermissionPrompt` is not read from a Claude Code
@@ -105,6 +114,18 @@ Reported, medium:
 ```json
 {"general": {"defaultApprovalMode": "yolo"}}
 ```
+
+Reported, low, because the file sits under a test-fixture directory:
+
+```json
+# evals/fixtures/case-a/.claude/settings.json
+{"permissions": {"defaultMode": "bypassPermissions"}}
+```
+
+Still reported high: `services/fixtures-api/.codex/config.toml` and
+`myfixtures/app/.codex/config.toml` (the segment only contains the
+word), and a repository-root `.claude/settings.json` next to a
+`fixtures/` directory.
 
 Not reported:
 

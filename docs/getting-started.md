@@ -46,7 +46,7 @@ shown here):
 ```text
 2 finding(s): 0 critical, 2 high, 0 medium, 0 low; 0 warning(s); exit 1
 HIGH TC-CFG-002 VS Code task that runs when the folder opens… .vscode/tasks.json
-HIGH TC-CFG-009 Environment setup run… .github/workflows/copilot-setup-steps.yml
+HIGH TC-CFG-009 Environment setup… .github/workflows/copilot-setup-steps.yml
 re-run with -v for details
 ```
 

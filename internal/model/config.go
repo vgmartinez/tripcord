@@ -86,6 +86,11 @@ type ConfigItem struct {
 	// repository env-setup checksum script that exist as symlinks in the
 	// repository. It is set after discovery, for rule evaluation only.
 	ChecksumSymlinks []string `json:"-"`
+	// FetchNotRun is true when every fetch of a repository env-setup
+	// command only writes data that nothing in the same configuration
+	// file runs (see shellcmd.FetchNotRun). It is set after discovery,
+	// for rule evaluation only.
+	FetchNotRun bool `json:"-"`
 	// RepoScript is true when a repository MCP server is a shell wrapper
 	// whose programs resolve inside the scanned tree, or a `set -a`
 	// dotenv loader around a launcher (see scriptcheck). It is set after

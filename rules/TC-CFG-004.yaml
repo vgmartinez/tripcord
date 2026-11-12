@@ -18,11 +18,28 @@
 # One permissions object is one finding, at the first matching
 # severity, so high wins when both are present. settings.local.json is
 # personal and is not part of this rule's files.
+#
+# A finding whose path has a whole segment fixtures, __fixtures__,
+# testdata, test-fixtures, or test_fixtures above the config directory
+# is reported at low. The match is case-sensitive and on whole segments
+# only (myfixtures/ and fixtures-api/ stay high). A repository-root
+# .claude/settings.json is never demoted, even when a fixtures/
+# directory exists elsewhere in the tree.
 id: TC-CFG-004
 pack: tripcord/core
 title: "permissions.allow with a broad rule in shared config"
 severity: high
 severity_when:
+  - severity: low
+    when: |
+      config.path.matches(r'''(^|/)(fixtures|__fixtures__|testdata|test-fixtures|test_fixtures)/''') &&
+      !config.path.matches(r'''^\.(claude/settings\.json|codex/config\.toml|gemini/settings\.json)$''') &&
+      has(payload.value) && type(payload.value) == map &&
+        has(payload.value.allow) && type(payload.value.allow) == list &&
+        payload.value.allow.exists(e, type(e) == string && (
+          e.matches(r'''(?i)^\s*(\*+|mcp__\*+|(bash|powershell|pwsh|shell|cmd|terminal|run_shell_command)(\(\s*:?\s*\*+\s*\))?|edit\(\s*//+\*+\s*\))\s*$''') ||
+          e.matches(r'''(?i)^\s*(read|edit|write|webfetch)(\(\s*(/*\*+|~/\*+|domain:\*)\s*\))?\s*$''')
+        ))
   - severity: high
     when: |
       has(payload.value) && type(payload.value) == map &&

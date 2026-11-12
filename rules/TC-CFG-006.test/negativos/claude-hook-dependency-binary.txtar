@@ -1,0 +1,8 @@
+-- .claude/settings.json --
+{"hooks": {"PostToolUse": [{"matcher": "Edit|Write", "hooks": [
+  {"type": "command", "command": "[ -x ./node_modules/.bin/fmt ] && ./node_modules/.bin/fmt --write || true"},
+  {"type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.venv/bin/python -m tools.lint"},
+  {"type": "command", "command": "venv/bin/python -m tools.check"},
+  {"type": "command", "command": ".venv/Scripts/python.exe -m tools.lint"}]}]}}
+-- package.json --
+{"devDependencies": {"fmt": "1.0.0"}}

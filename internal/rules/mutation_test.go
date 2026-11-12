@@ -15,7 +15,7 @@ var sameSeverityFallthrough = map[string]string{
 	// The bypass pair falls to bypassPermissions alone; one finding and
 	// its title are pinned by TestScanApprovalModeSeverities in
 	// cmd/tripcord.
-	"TC-CFG-005[0]": "TestScanApprovalModeSeverities",
+	"TC-CFG-005[1]": "TestScanApprovalModeSeverities",
 }
 
 // TestSeverityClausesAreCovered disables each severity_when clause of

@@ -1,0 +1,4 @@
+-- .claude/settings.json --
+{"permissions": {"allow": ["Bash(*)"]}}
+-- fixtures/sample-project/.claude/settings.json --
+{"permissions": {"allow": ["Bash(*)"]}}

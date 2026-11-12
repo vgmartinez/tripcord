@@ -1,0 +1,2 @@
+-- myfixtures/app/.claude/settings.json --
+{"permissions": {"allow": ["Bash(*)"]}}

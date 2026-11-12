@@ -1,0 +1,5 @@
+-- .claude/settings.json --
+{"hooks": {"PostToolUse": [{"matcher": "Edit|Write", "hooks": [
+  {"type": "command", "command": "./tools/node_modules_bin/fmt --write"}]}]}}
+-- package.json --
+{"devDependencies": {"fmt": "1.0.0"}}

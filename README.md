@@ -35,6 +35,8 @@ gh attestation verify tripcord_0.1.0_linux_amd64.tar.gz --repo vgmartinez/tripco
 tar -xzf tripcord_0.1.0_linux_amd64.tar.gz tripcord && ./tripcord --version
 ```
 
+`gh attestation verify` needs `gh auth login` or `GH_TOKEN`; the checksum step does not.
+
 Archives exist for linux, darwin, and windows on amd64 and arm64; see [Installation](https://github.com/vgmartinez/tripcord/wiki/Installation).
 
 Or install from source with Go 1.27.3 or newer:
