@@ -134,7 +134,7 @@ type sarifRuleInfo struct {
 	severity model.Severity
 }
 
-func renderSARIF(writer io.Writer, findings []model.Finding, diags []Diagnostic, options Options) error {
+func renderSARIF(writer io.Writer, findings []model.Finding, diags []Diagnostic, autorun []AutorunHook, options Options) error {
 	mode, err := sarifNonRepoMode(options)
 	if err != nil {
 		return err
@@ -214,8 +214,8 @@ func renderSARIF(writer io.Writer, findings []model.Finding, diags []Diagnostic,
 		OriginalURIBaseIDs: bases,
 		Results:            results,
 	}
-	if len(diags) > 0 {
-		notes := make([]sarifNotification, len(diags))
+	if len(diags) > 0 || len(autorun) > 0 {
+		notes := make([]sarifNotification, len(diags), len(diags)+len(autorun))
 		success := true
 		for i, d := range diags {
 			level := "note"
@@ -224,6 +224,11 @@ func renderSARIF(writer io.Writer, findings []model.Finding, diags []Diagnostic,
 				success = false
 			}
 			notes[i] = sarifNotification{Message: sarifMessage{Text: sarifText(d.Text())}, Level: level}
+		}
+		// The auto-run hook inventory is a note, never a result: it is
+		// not a finding and must not show up as a code scanning alert.
+		for _, a := range autorun {
+			notes = append(notes, sarifNotification{Message: sarifMessage{Text: sarifText(autorunNotice + a.Text())}, Level: "note"})
 		}
 		run.Invocations = []sarifInvocation{{
 			ExecutionSuccessful:        success,

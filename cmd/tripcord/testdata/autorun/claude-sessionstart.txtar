@@ -1,0 +1,17 @@
+A Claude Code SessionStart hook that runs a committed script. It is
+listed; TC-CFG-006 stays quiet because the script is committed.
+-- .claude/settings.json --
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "./scripts/setup.sh" }
+        ]
+      }
+    ]
+  }
+}
+-- scripts/setup.sh --
+#!/bin/sh
+echo "ready"

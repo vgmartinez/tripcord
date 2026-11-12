@@ -1,0 +1,7 @@
+A module path that leaves the plugin directory is malformed: exit 3.
+-- plugins/p/.claude-plugin/plugin.json --
+{ "name": "example", "hooks": "./hooks/hooks.json" }
+-- plugins/p/hooks/hooks.json --
+{ "modules": ["../../register.tsx"] }
+-- plugins/register.tsx --
+export default 1

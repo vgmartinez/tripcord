@@ -1,0 +1,17 @@
+A Claude Code Setup hook that runs a committed script through an
+interpreter. It is listed.
+-- .claude/settings.json --
+{
+  "hooks": {
+    "Setup": [
+      {
+        "hooks": [
+          { "type": "command", "command": "bash scripts/init.sh" }
+        ]
+      }
+    ]
+  }
+}
+-- scripts/init.sh --
+#!/bin/sh
+echo "init"

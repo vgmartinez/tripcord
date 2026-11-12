@@ -114,3 +114,19 @@ func TestParseScan(t *testing.T) {
 		}
 	}
 }
+
+// TestParseScanSkipsAutorunInventory checks that an auto-run hook
+// inventory document is neither a finding nor a diagnostic.
+func TestParseScanSkipsAutorunInventory(t *testing.T) {
+	out := strings.Join([]string{
+		`{"schema":"tripcord.autorun_hook/v1","informational":true,"harness":"claude","path":".claude/settings.json","line":4,"event":"SessionStart","command":"./scripts/setup.sh","target":"scripts/setup.sh"}`,
+		``,
+	}, "\n")
+	findings, diags, err := ParseScan(strings.NewReader(out))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if diags != 0 || len(findings) != 0 {
+		t.Fatalf("findings %v diagnostics %d", findings, diags)
+	}
+}

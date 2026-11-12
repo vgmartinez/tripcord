@@ -1,0 +1,9 @@
+A modules value with more than one path is malformed: exit 3.
+-- .claude-plugin/plugin.json --
+{ "name": "example", "hooks": "./hooks/hooks.json" }
+-- hooks/hooks.json --
+{ "modules": ["./a.ts", "./b.ts"] }
+-- hooks/a.ts --
+export default 1
+-- hooks/b.ts --
+export default 2

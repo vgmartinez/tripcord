@@ -1,0 +1,20 @@
+Auto-run hooks that run no repository file: a shell builtin and a
+system binary. Nothing is listed.
+-- .claude/settings.json --
+{
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [ { "type": "command", "command": "echo hi" } ] }
+    ],
+    "Setup": [
+      { "hooks": [ { "type": "command", "command": "git status --short" } ] }
+    ]
+  }
+}
+-- .cursor/hooks.json --
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [ { "command": "echo hi" } ]
+  }
+}

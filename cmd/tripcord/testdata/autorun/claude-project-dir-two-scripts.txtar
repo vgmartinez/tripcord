@@ -1,0 +1,23 @@
+One SessionStart hook that runs two committed scripts, one through
+$CLAUDE_PROJECT_DIR. Each script is one entry, on the hook's line.
+-- .claude/settings.json --
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/a.sh && ./scripts/b.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+-- .claude/hooks/a.sh --
+#!/bin/sh
+echo a
+-- scripts/b.sh --
+#!/bin/sh
+echo b

@@ -1,0 +1,12 @@
+A Cursor sessionStart hook that runs a committed script. It is listed.
+-- .cursor/hooks.json --
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      { "command": "node .cursor/hooks/start.mjs" }
+    ]
+  }
+}
+-- .cursor/hooks/start.mjs --
+console.log("start");

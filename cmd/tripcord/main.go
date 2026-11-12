@@ -38,6 +38,7 @@ import (
 	"github.com/vgmartinez/tripcord/internal/adapters/generic"
 	"github.com/vgmartinez/tripcord/internal/adapters/opencode"
 	"github.com/vgmartinez/tripcord/internal/adapters/windsurf"
+	"github.com/vgmartinez/tripcord/internal/autorun"
 	"github.com/vgmartinez/tripcord/internal/embedded"
 	"github.com/vgmartinez/tripcord/internal/exitcode"
 	"github.com/vgmartinez/tripcord/internal/fpkey"
@@ -375,6 +376,37 @@ type scanTarget struct {
 	// empty for every other scan, and gitrun.RunIndexed(ctx, gitRoot,
 	// "", ...) then reads gitRoot's ordinary index, same as Run.
 	indexFile string
+	// showAutorun lists the auto-run hook inventory in the default text
+	// view. preopen sets it; scan lists it only with -v.
+	showAutorun bool
+}
+
+// autorunInventory is the informational list of repository hooks that
+// run committed code when a session starts (see internal/autorun). For
+// a --staged scan it keeps the entries of items the staged paths touch,
+// the same filter findings get. It never affects the exit code.
+func autorunInventory(root string, items []model.ConfigItem, staged map[string]bool) ([]output.AutorunHook, error) {
+	if staged != nil {
+		items = slices.DeleteFunc(slices.Clone(items), func(item model.ConfigItem) bool {
+			return !stagedSourceMatches(item, staged)
+		})
+	}
+	entries, err := autorun.Inventory(root, items)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]output.AutorunHook, len(entries))
+	for i, e := range entries {
+		out[i] = output.AutorunHook{
+			Harness: string(e.Harness),
+			Path:    e.Path,
+			Line:    e.Line,
+			Event:   e.Event,
+			Command: e.Command,
+			Target:  e.Target,
+		}
+	}
+	return out, nil
 }
 
 func (t scanTarget) configError(stderr io.Writer, err error) int {
@@ -628,6 +660,12 @@ func scanTree(ctx context.Context, t scanTarget, opts scanOptions, stdout, stder
 			return d.Scope == model.ScopeRepo && d.Path != "" && !changed[d.Path]
 		})
 	}
+	var autorunHooks []output.AutorunHook
+	if repoScope {
+		if autorunHooks, err = autorunInventory(root, items, opts.stagedFiles); err != nil {
+			return t.internalError(stderr, fmt.Errorf("auto-run hooks: %w", err))
+		}
+	}
 	items = append(items, weakened...)
 	engine := rules.NewEngine(env, catalog.Rules(), rules.WithFilter(effective.RuleFilter()))
 	if ctx.Err() != nil {
@@ -680,6 +718,7 @@ func scanTree(ctx context.Context, t scanTarget, opts scanOptions, stdout, stder
 		Rules:       sarifRuleText(catalog),
 		Verbose:     opts.verbose,
 		TextExit:    &textExit,
+		ShowAutorun: t.showAutorun,
 	})
 	if err != nil {
 		var pathErr *output.PathError
@@ -689,6 +728,10 @@ func scanTree(ctx context.Context, t scanTarget, opts scanOptions, stdout, stder
 		return t.internalError(stderr, err)
 	}
 	if err := handle.SetDiagnostics(outputDiagnostics(append(append([]adapters.Diagnostic{}, blocking...), notes...))); err != nil {
+		_ = handle.Close()
+		return t.internalError(stderr, err)
+	}
+	if err := handle.SetAutorunHooks(autorunHooks); err != nil {
 		_ = handle.Close()
 		return t.internalError(stderr, err)
 	}

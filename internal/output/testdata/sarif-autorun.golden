@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "tripcord",
+          "version": "1.2.3",
+          "semanticVersion": "1.2.3",
+          "rules": [
+            {
+              "id": "TC-CFG-002",
+              "shortDescription": {
+                "text": "Task runs on folder open"
+              },
+              "fullDescription": {
+                "text": "Task runs on folder open"
+              },
+              "help": {
+                "text": "Remove runOn: folderOpen."
+              },
+              "helpUri": "https://example.invalid/rules/TC-CFG-002",
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "tags": [
+                  "security"
+                ],
+                "security-severity": "5.5"
+              }
+            },
+            {
+              "id": "TC-CFG-010",
+              "shortDescription": {
+                "text": "Plugin executes arbitrary code"
+              },
+              "fullDescription": {
+                "text": "Plugin executes arbitrary code"
+              },
+              "help": {
+                "text": "Remove the plugin or review and pin it."
+              },
+              "helpUri": "https://example.invalid/rules/TC-CFG-010",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "tags": [
+                  "security"
+                ],
+                "security-severity": "8.0"
+              }
+            }
+          ]
+        }
+      },
+      "invocations": [
+        {
+          "executionSuccessful": true,
+          "toolExecutionNotifications": [
+            {
+              "message": {
+                "text": "auto-run hook (informational, not a finding): claude .claude/settings.json:6 SessionStart: scripts/setup.sh"
+              },
+              "level": "note"
+            },
+            {
+              "message": {
+                "text": "auto-run hook (informational, not a finding): claude plugins/p/hooks/hooks.json:1 modules: plugins/p/hooks/register.tsx"
+              },
+              "level": "note"
+            },
+            {
+              "message": {
+                "text": "auto-run hook (informational, not a finding): cursor .cursor/hooks.json sessionStart: .cursor/hooks/start.mjs"
+              },
+              "level": "note"
+            }
+          ]
+        }
+      ],
+      "results": [
+        {
+          "ruleId": "TC-CFG-002",
+          "level": "warning",
+          "message": {
+            "text": "Task runs on folder open: Remove runOn: folderOpen. (configs/tasks.json)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "configs/tasks.json"
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "tripcord/fingerprint": "tcf_7a4367039eb41858"
+          },
+          "properties": {
+            "tripcord": {
+              "scope": "repo",
+              "path": "configs/tasks.json"
+            }
+          }
+        },
+        {
+          "ruleId": "TC-CFG-010",
+          "level": "error",
+          "message": {
+            "text": "Plugin executes arbitrary code: Remove the plugin or review and pin it. (configs/hook.json:7)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "configs/hook.json"
+                },
+                "region": {
+                  "startLine": 7
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "tripcord/fingerprint": "tcf_47cbba354adad9a1"
+          },
+          "properties": {
+            "tripcord": {
+              "scope": "repo",
+              "path": "configs/hook.json"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

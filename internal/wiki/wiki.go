@@ -46,6 +46,7 @@ var docPages = map[string]string{
 	"pr-context.md":                     "PR-Context",
 	"fingerprint.md":                    "Fingerprints",
 	"output.md":                         "Output-and-Sinks",
+	"autorun-hooks.md":                  "Auto-Run-Hook-Inventory",
 	"privacy.md":                        "Privacy-and-Redaction",
 	"github-action.md":                  "GitHub-Action",
 	"badge.md":                          "Badge",

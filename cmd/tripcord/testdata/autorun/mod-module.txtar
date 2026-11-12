@@ -1,0 +1,9 @@
+A Claude Code mod: hooks/hooks.json holds modules, one path relative
+to the file, and no hooks object. The scan is complete, the module is
+listed, and the plugin is still reported by TC-CFG-010.
+-- .claude-plugin/plugin.json --
+{ "name": "example", "hooks": "./hooks/hooks.json" }
+-- hooks/hooks.json --
+{ "modules": ["./register.tsx"] }
+-- hooks/register.tsx --
+export default function register() {}

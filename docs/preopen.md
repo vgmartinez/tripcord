@@ -88,7 +88,10 @@ formats. The default text view fits a typical 80 by 24 terminal: one summary
 line with counts by severity and the exit verdict, then one line per finding
 (severity, rule id, short title, path and line). The rule id is a link to
 `docs/rules/<id>.md` on this repository. A last line says to re-run with
-`-v` for evidence, the fix, and the fingerprint. `-v` does not change JSON,
+`-v` for evidence, the fix, and the fingerprint. Before that line, preopen
+lists the [auto-run hook inventory](autorun-hooks.md): hooks that run
+committed code when a session starts, which are informational and not
+findings. `-v` does not change JSON,
 SARIF, Markdown, or GitHub Actions output, and it does not change the exit
 code. `--since` and `--staged` are refused, because only the latest commit
 is fetched and the scan reads that tree, not a Git index. `--scope` must be

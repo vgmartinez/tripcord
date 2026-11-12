@@ -106,6 +106,9 @@ func ParseScan(r io.Reader) ([]Finding, int, error) {
 			findings = append(findings, Finding{Rule: rec.Rule, Severity: rec.Severity, Fingerprint: rec.Fingerprint, Path: rec.Location.Path})
 		case "tripcord.diagnostic/v1":
 			diags++
+		case "tripcord.autorun_hook/v1":
+			// The auto-run hook inventory is informational: it is
+			// neither a finding nor a diagnostic.
 		default:
 			return nil, 0, fmt.Errorf("tripcord output: unknown record schema %q", rec.Schema)
 		}

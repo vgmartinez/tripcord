@@ -1,0 +1,10 @@
+A SessionStart hook whose script is not committed. TC-CFG-006 reports
+it, unchanged; the inventory lists only committed code.
+-- .claude/settings.json --
+{
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [ { "type": "command", "command": "./scripts/missing.sh" } ] }
+    ]
+  }
+}

@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/vgmartinez/tripcord/internal/model"
@@ -83,6 +84,11 @@ type Options struct {
 	// diagnostic, exit 1 for a finding at or above high, otherwise
 	// exit 0. Other formats ignore it.
 	TextExit *int
+	// ShowAutorun lists the auto-run hook inventory in the compact text
+	// view too. preopen sets it; scan shows the inventory only with -v.
+	// JSON, JSONL, and SARIF always include it; Markdown and GitHub
+	// Actions output do not.
+	ShowAutorun bool
 }
 
 // RuleText is catalog metadata for one rule. Empty fields fall back to
@@ -116,6 +122,41 @@ func (d Diagnostic) Text() string {
 	}
 	b.WriteString(": ")
 	b.WriteString(d.Message)
+	return b.String()
+}
+
+// AutorunHook is one entry of the auto-run hook inventory: a repository
+// hook that runs committed code on an event the harness fires when a
+// session starts, or the module a Claude Code mod loads (see
+// internal/autorun). It is informational. It is not a finding, it is
+// not a SARIF result, and it never changes the exit code. The sink
+// redacts every string field the way it redacts finding strings, and
+// each format sanitizes the text again.
+type AutorunHook struct {
+	Harness string
+	Path    string
+	// Line is 1-based; zero means unknown.
+	Line    int
+	Event   string
+	Command string
+	Target  string
+}
+
+// Text is the single display line for an inventory entry, without the
+// command.
+func (a AutorunHook) Text() string {
+	var b strings.Builder
+	b.WriteString(a.Harness)
+	b.WriteString(" ")
+	b.WriteString(a.Path)
+	if a.Line > 0 {
+		b.WriteString(":")
+		b.WriteString(strconv.Itoa(a.Line))
+	}
+	b.WriteString(" ")
+	b.WriteString(a.Event)
+	b.WriteString(": ")
+	b.WriteString(a.Target)
 	return b.String()
 }
 
@@ -193,6 +234,10 @@ func (p *publishSink) Write(finding model.Finding) error { return p.inner.Write(
 
 func (p *publishSink) SetDiagnostics(diags []Diagnostic) error {
 	return SetDiagnostics(p.inner, diags)
+}
+
+func (p *publishSink) SetAutorunHooks(hooks []AutorunHook) error {
+	return SetAutorunHooks(p.inner, hooks)
 }
 
 func (p *publishSink) Flush() error {
@@ -310,6 +355,30 @@ func SetDiagnostics(sink Sink, diags []Diagnostic) error {
 	return target.SetDiagnostics(diags)
 }
 
+// SetAutorunHooks records the auto-run hook inventory to include in the
+// report. Call it before Flush. An empty slice leaves the report
+// unchanged.
+func (h *Handle) SetAutorunHooks(hooks []AutorunHook) error {
+	if h == nil {
+		return errors.New("output handle is nil")
+	}
+	return SetAutorunHooks(h.Sink, hooks)
+}
+
+// SetAutorunHooks records the inventory on a sink created by NewSink,
+// NewStdoutSink, or NewFileSink, including the file sink SelectSink
+// wraps.
+func SetAutorunHooks(sink Sink, hooks []AutorunHook) error {
+	type setter interface {
+		SetAutorunHooks([]AutorunHook) error
+	}
+	target, ok := sink.(setter)
+	if !ok || target == nil {
+		return errors.New("output sink does not accept the auto-run hook inventory")
+	}
+	return target.SetAutorunHooks(hooks)
+}
+
 // Close closes a file opened by SelectSink. It is safe on stdout.
 func (h *Handle) Close() error {
 	if h == nil || h.close == nil {
@@ -365,7 +434,26 @@ type sink struct {
 	options  Options
 	findings []model.Finding
 	diags    []Diagnostic
+	autorun  []AutorunHook
 	flushed  bool
+}
+
+func (s *sink) SetAutorunHooks(hooks []AutorunHook) error {
+	if s.flushed {
+		return errors.New("output sink is already flushed")
+	}
+	s.autorun = make([]AutorunHook, len(hooks))
+	for i, a := range hooks {
+		s.autorun[i] = AutorunHook{
+			Harness: s.options.Redactor(a.Harness),
+			Path:    s.options.Redactor(a.Path),
+			Line:    a.Line,
+			Event:   s.options.Redactor(a.Event),
+			Command: s.options.Redactor(a.Command),
+			Target:  s.options.Redactor(a.Target),
+		}
+	}
+	return nil
 }
 
 func (s *sink) SetDiagnostics(diags []Diagnostic) error {
@@ -408,11 +496,11 @@ func (s *sink) Flush() error {
 	var err error
 	switch s.format {
 	case FormatJSON, FormatJSONL:
-		err = renderJSONL(s.writer, findings, s.diags, s.options)
+		err = renderJSONL(s.writer, findings, s.diags, s.autorun, s.options)
 	case FormatSARIF:
-		err = renderSARIF(s.writer, findings, s.diags, s.options)
+		err = renderSARIF(s.writer, findings, s.diags, s.autorun, s.options)
 	case FormatText:
-		err = renderText(s.writer, findings, s.diags, s.options)
+		err = renderText(s.writer, findings, s.diags, s.autorun, s.options)
 	case FormatGHA:
 		err = renderGHA(s.writer, findings, s.diags, s.options)
 	case FormatMD:
