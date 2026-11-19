@@ -42,9 +42,18 @@
 # one after an Indic or Sinhala virama is spelling before a letter of a
 # script that is neither joining nor Latin-looking (Hangul, Han, ...).
 #
-# Severity is low when every counted code point in the file is one of
-# these artifacts (config.hidden_chars_low, see hiddenchar.Scan). They
-# hide no text, but they are still counted and reported:
+# Severity is high only for a strong hiding signal
+# (config.hidden_chars_strong, see hiddenchar.Scan): a tag character, a
+# bidi control, or a zero-width code point in a run of two or more
+# counted code points. Every other counted code point is reported at
+# low: an isolated or sparse zero-width space, joiner, word joiner, or
+# U+FEFF hides or splits at most one position and, across real
+# repositories, is overwhelmingly a typesetting, editor, or translation
+# artifact. A file whose counted code points are all low is still
+# reported, so a reviewer sees and can remove them.
+#
+# A zero-width code point that is one of these artifacts is not strong
+# even inside a run (config.hidden_chars_low counts them):
 # - a single U+2060 right after a single backtick that opens an inline
 #   code span, before an ASCII letter or digit, on a line with no other
 #   hidden code point (config.hidden_chars_code_span), as some editors
@@ -62,12 +71,9 @@
 # - a code point of an inline code span that holds only zero-width code
 #   points and U+2061-U+2064, at most 8 with none repeated, as a page
 #   quotes the characters it describes.
-# Any other hidden code point in the file, a U+2060 run (also at the
-# start of a line), a tag character or bidi control at the start of a
-# line, a U+2060 inside
-# or at the end of a span with visible text, a joiner after a one-letter
-# Latin word or before a one-letter suffix, and a bidi control or tag
-# character keep it high.
+# A zero-width run (also a U+2060 run at the start of a line), a
+# repeated code-span sample, a tag character, and a bidi control keep
+# the file high.
 #
 # The excerpt names each run's code point, line, and column (code
 # points from 1), never the text the run hides or spells: a tag run is
@@ -78,9 +84,9 @@ title: "Hidden Unicode in an agent instructions file"
 severity: high
 severity_when:
   - severity: low
-    when: config.hidden_chars_low == config.hidden_chars
+    when: config.hidden_chars_strong == 0
   - severity: high
-    when: config.hidden_chars_low < config.hidden_chars
+    when: config.hidden_chars_strong > 0
 evidence: hidden_chars
 harness: [claude, copilot, cursor, gemini, windsurf, generic, devin]
 files: ["**"]

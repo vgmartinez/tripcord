@@ -489,3 +489,38 @@ func TestLineStartJoiner(t *testing.T) {
 		}
 	}
 }
+
+func TestStrong(t *testing.T) {
+	cases := []struct {
+		name            string
+		in              string
+		counted, strong int
+	}{
+		{"isolated ZWSP in a word", "ign\u200Bore", 1, 0},
+		{"sparse ZWSPs", "a/\u200Bb and c/\u200Bd", 2, 0},
+		{"BOM-only line", "a\n\uFEFF\nb", 1, 0},
+		{"isolated joiner", "ign\u200core", 1, 0},
+		{"word joiner", "ign\u2060ore", 1, 0},
+		{"one tag character", "Keep\U000E0041", 1, 1},
+		{"tag run", "Keep\U000E0041\U000E0042", 2, 2},
+		{"one bidi control", "Run\u2067 tests", 1, 1},
+		{"bidi pair", "\u202Eab\u202C", 2, 2},
+		{"zero-width pair", "ign\u200B\u200Core", 2, 2},
+		{"repeated zero-width pair", "note\u200B\u200B", 2, 2},
+		{"zero-width run of three", "a\u200B\u200C\u200Db", 3, 3},
+		{"runs split by a letter", "a\u200Bb\u200Bc", 2, 0},
+		{"runs split by a line", "a\u200B\n\u200Bb", 2, 0},
+		{"zero-width next to a bidi control", "a\u200B\u202Eb", 2, 2},
+		{"line-start joiner run", "\u2060\u2060Keep", 2, 2},
+		{"code span sample", "Strip `\u2060\uFEFF\u2063` first.", 2, 0},
+		{"code span sample with a repeat", "`\u2063\u2060\u2060`", 2, 2},
+		{"strip literal", "s.replace(\"\u200B\u200C\", \"\")", 0, 0},
+		{"emoji joiner", "\U0001F469\u200D\U0001F4BB", 0, 0},
+	}
+	for _, tc := range cases {
+		got, _ := Scan([]byte(tc.in))
+		if got.Total != tc.counted || got.Strong != tc.strong {
+			t.Errorf("%s: Scan(%+q) = Total %d, Strong %d, want %d, %d", tc.name, tc.in, got.Total, got.Strong, tc.counted, tc.strong)
+		}
+	}
+}

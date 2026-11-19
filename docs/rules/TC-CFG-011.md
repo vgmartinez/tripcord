@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Severity | high; low when every hidden code point is an editor or localisation artifact, such as a word joiner opening an inline code span (see "Severity") |
+| Severity | high for a tag character, a bidi control, or a run of two or more zero-width code points; low for isolated or sparse zero-width code points (see "Severity") |
 | Harnesses | generic (`AGENTS.md`), Claude Code, Gemini CLI, Windsurf, GitHub Copilot, Cursor, Devin |
 | Files | `AGENTS.md`, `CLAUDE.md`, `CLAUDE.local.md`, `GEMINI.md` (any depth), nested `.claude/rules/**/*.md`, `.cursor/rules/**/*.md(c)`, and `.windsurfrules`, plus root `.cursorrules`, `.github/copilot-instructions.md`, `.github/instructions/**/*.md`, `.github/agents/**/*.agent.md`, the maintenance commands and knowledge entries of `.devin/blueprint.yaml`, and repository skills at `.claude/skills/<name>/SKILL.md`, `.agents/skills/<name>/SKILL.md`, and `.github/skills/<name>/SKILL.md` (repository scope) |
 | Rule | [`rules/TC-CFG-011.yaml`](../../rules/TC-CFG-011.yaml) |
@@ -58,7 +58,7 @@ are compared by Unicode script, and combining marks (harakat, vowel
 signs, viramas; at most 8) between the letter before and the character
 are skipped.
 
-Still reported, at high: tag characters, bidi controls, a run of
+Still reported (see "Severity" for which are high): tag characters, bidi controls, a run of
 zero-width characters, a zero-width character inside a word, a
 zero-width character next to punctuation, one after a dot or before a
 word, one at the end of a word, and U+2060 or U+FEFF outside a strip
@@ -130,9 +130,26 @@ Not reported:
 
 ## Severity
 
-A finding is high, except when every hidden code point in the file is
-one of the shapes below. Then the finding is low. It is still
-reported: these characters hide no text, but they are still invisible.
+A finding is high when the file holds a strong hiding signal:
+
+- a tag character (U+E0000-U+E007F), even a single one;
+- a bidi control, even a single one;
+- a run of two or more counted zero-width code points in a row
+  (`ign\u200b\u200core`, `note\u200b\u200b`), including a U+2060 run at
+  the start of a line (`\u2060\u2060When`) and a code span that repeats
+  a code point (`` `\u2063\u2060\u2060` ``).
+
+Otherwise the finding is low. An isolated or sparse zero-width space,
+joiner, word joiner, or U+FEFF can split one word, but it cannot carry
+hidden text, and in real repositories it is almost always a typesetting,
+editor, or machine-translation artifact: a line-break opportunity after
+a `/` in a long code token, a stray U+FEFF left on its own line when
+files were concatenated, or a zero-width space a translation tool put
+inside a word. It is still reported, with its line and column, so a
+reviewer sees it and can remove it.
+
+These shapes are low even inside a run, and the finding stays low when
+every hidden code point in the file is one of them:
 
 - **A word joiner opening a code span.** Some editors put a single
   U+2060 (word joiner) right after the backtick that opens an inline
@@ -158,31 +175,20 @@ reported: these characters hide no text, but they are still invisible.
   joiner between them: `Server\u200c\u0647\u0627`,
   `API\u200c\u0c97\u0cb3`. The shape is one isolated U+200C or U+200D
   between a Latin word of at least two letters and at least two letters
-  or marks of an Indic, Arabic, Syriac, Mongolian, or Sinhala script. It
-  splits no ASCII word.
+  or marks of an Indic, Arabic, Syriac, Mongolian, or Sinhala script.
 - **Invisible characters quoted in a code span.** A page that
   describes invisible characters may quote them in a code span that
   holds nothing else: `` `\u2062\u200b` ``. The shape is an inline code
   span of a single backtick on each side that holds only zero-width
   code points and U+2061-U+2064, at most 8, with none repeated.
 
-Any other hidden code point anywhere in the file keeps the finding
-high, and so do a U+2060 run (`` `\u2060\u2060x` ``), a U+2060
-inside a span with visible text (`` `jobs.\u2060define()` ``) or
-closing it, one after a double backtick, one before a space or a
-non-ASCII letter, one in prose (`small\u2060 commits`), one inside a
-list item's text, a run at the start of a line
-(`\u2060\u2060When`), a tag character or bidi control at the start of
-a line, a joiner after a one-letter Latin word
-(`a\u200c\u0628`) or inside a Latin word, a code span that repeats a
-code point or holds a bidi control or a tag character, and a tag or
-bidi run anywhere.
-
 ## Known false positives
 
 Some ordinary text matches this rule byte for byte with a real attack,
 and the rule reports it on purpose. The finding names the line and
-column, so it is quick to review and fix.
+column, so it is quick to review and fix. The doubled shapes below are
+runs and are reported at high; the single-character shapes are
+reported at low.
 
 - **A doubled zero-width character.** Machine translation and
   copy-paste sometimes write a joiner twice inside a word, for example

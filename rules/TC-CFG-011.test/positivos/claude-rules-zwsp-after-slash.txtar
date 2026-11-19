@@ -1,0 +1,6 @@
+-- .claude/rules/dates.md --
+# Dates
+
+| Avoid | Use |
+| --- | --- |
+| `t.setHours/​setMinutes/​setSeconds(...)` | the date helpers |

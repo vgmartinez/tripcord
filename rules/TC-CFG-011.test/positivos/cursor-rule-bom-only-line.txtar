@@ -1,0 +1,12 @@
+-- .cursor/rules/base.mdc --
+---
+description: base conventions
+alwaysApply: true
+---
+# Base
+
+Use tabs.
+﻿
+Keep functions short.
+﻿
+Write tests first.

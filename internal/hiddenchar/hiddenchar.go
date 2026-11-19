@@ -70,6 +70,13 @@ var bom = []byte{0xEF, 0xBB, 0xBF}
 // the start of a line (see lineStartJoiner); a joiner between a Latin word and a joining-script
 // suffix (see latinSuffixJoiner); and a code point of an inline code
 // span that holds only invisible characters (see codeSpanSample).
+//
+// Strong counts the counted code points that are a strong hiding signal:
+// every tag character and bidi control, and every zero-width code point
+// in a run of two or more counted code points, apart from a code point
+// of an inline code span that holds only invisible characters. An
+// isolated zero-width code point, a joiner, and a U+FEFF that are not in
+// such a run are not strong, however many of them the file holds.
 func Scan(b []byte) (model.HiddenChars, bool) {
 	var out model.HiddenChars
 	valid := true
@@ -77,6 +84,13 @@ func Scan(b []byte) (model.HiddenChars, bool) {
 	line, col := 1, 1
 	inRun, stored := false, false
 	lineHidden, lineSpan, lineList, lineStarts := 0, false, false, 0
+	runLen, runZW := 0, 0
+	endRun := func() {
+		if runLen >= 2 {
+			out.Strong += runZW
+		}
+		runLen, runZW = 0, 0
+	}
 	endLine := func() {
 		if lineHidden == 1 && lineSpan {
 			out.CodeSpanJoiners++
@@ -95,13 +109,16 @@ func Scan(b []byte) (model.HiddenChars, bool) {
 		case r == utf8.RuneError && size == 1:
 			valid = false
 			inRun = false
+			endRun()
 		case r == '\n':
 			endLine()
+			endRun()
 			line, col = line+1, 1
 			inRun = false
 			i += size
 			continue
 		case countedAt(b, i):
+			low := false
 			switch {
 			case codeSpanJoiner(b, i, size):
 				lineSpan = true
@@ -112,6 +129,17 @@ func Scan(b []byte) (model.HiddenChars, bool) {
 				lineList = true
 			case latinSuffixJoiner(b, i, size), codeSpanSample(b, i):
 				out.LowShapes++
+				low = true
+			}
+			if !inRun {
+				endRun()
+			}
+			runLen++
+			switch {
+			case Class(r) != ZeroWidth:
+				out.Strong++
+			case !low:
+				runZW++
 			}
 			out.Total++
 			out.Sequence = append(out.Sequence, r)
@@ -128,11 +156,13 @@ func Scan(b []byte) (model.HiddenChars, bool) {
 			inRun = true
 		default:
 			inRun = false
+			endRun()
 		}
 		col++
 		i += size
 	}
 	endLine()
+	endRun()
 	return out, valid
 }
 

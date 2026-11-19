@@ -2,57 +2,64 @@
 # internal/rules/fixtures.go, ExpectFile).
 positivos:
   agents-bidi-override: high
-  agents-bom-then-hidden: high
+  agents-bom-then-hidden: low
   agents-nested-tags: high
   agents-tag-smuggle: high
-  agents-word-split: high
+  agents-word-split: low
   agents-zero-width-run: high
   agents-zw-repeated-pair: high
   agents-zw-stego-brackets: high
   agents-zw-stego-quoted: high
-  agents-zwsp-after-dot: high
-  agents-zwsp-end-of-word: high
-  agents-zwsp-punctuation: high
-  agents-zwj-nonemoji: high
-  claude-local-file: high
+  agents-zwsp-after-dot: low
+  agents-zwsp-end-of-word: low
+  agents-zwsp-punctuation: low
+  agents-zwj-nonemoji: low
+  claude-local-file: low
   claude-rules-dir: high
   claude-skill-bidi: high
-  claude-dotclaude-word-joiner: high
-  claude-zero-width-space: high
-  copilot-instructions-inner-bom: high
-  copilot-agent-file: high
-  copilot-path-instructions: high
-  cursor-nested-rule: high
-  cursor-legacy-cursorrules: high
-  cursor-rules-md: high
+  claude-dotclaude-word-joiner: low
+  claude-zero-width-space: low
+  copilot-instructions-inner-bom: low
+  copilot-agent-file: low
+  copilot-path-instructions: low
+  cursor-nested-rule: low
+  cursor-legacy-cursorrules: low
+  cursor-rules-md: low
   cursor-rule-frontmatter-isolate: high
-  devin-maintenance-zero-width: high
+  devin-maintenance-zero-width: low
   gemini-embedding: high
   windsurfrules-tags: high
-  agents-latin-zwnj-in-script-file: high
-  agents-mixed-script-joiner: high
-  agents-virama-joiner-latin: high
-  agents-zwj-persian-ascii-neighbor: high
-  agents-zwnj-latin-word: high
-  agents-zwnj-mixed-script: high
+  agents-latin-zwnj-in-script-file: low
+  agents-mixed-script-joiner: low
+  agents-virama-joiner-latin: low
+  agents-zwj-persian-ascii-neighbor: low
+  agents-zwnj-latin-word: low
+  agents-zwnj-mixed-script: low
   agents-zwnj-persian-run: high
-  agents-zwnj-persian-word-edge: high
-  agents-zwsp-latin-in-thai-file: high
-  agents-zwsp-persian: high
-  agents-zwsp-thai-word-edge: high
-  agents-bom-after-dot-before-word: high
+  agents-zwnj-persian-word-edge: low
+  agents-zwsp-latin-in-thai-file: low
+  agents-zwsp-persian: low
+  agents-zwsp-thai-word-edge: low
+  agents-bom-after-dot-before-word: low
   agents-bom-pair-after-sentence: high
   cursor-rule-word-joiner-code-span-start: low
   cursor-rule-word-joiner-code-span-run: high
-  cursor-rule-word-joiner-mid-code-span: high
-  cursor-rule-word-joiner-code-span-and-hidden: high
+  cursor-rule-word-joiner-mid-code-span: low
+  cursor-rule-word-joiner-code-span-and-hidden: low
   agents-list-item-word-joiner: low
   agents-latin-word-persian-suffix: low
   agents-latin-word-kannada-suffix: low
   skill-code-span-invisible-sample: low
-  agents-list-item-word-joiner-and-hidden: high
+  agents-list-item-word-joiner-and-hidden: low
   agents-latin-word-suffix-joiner-run: high
   skill-code-span-sample-repeat: high
   agents-line-start-joiner-before-marker: low
   agents-line-start-joiner-before-text: low
   agents-line-start-joiner-run: high
+  agents-single-tag-character: high
+  agents-single-bidi-control: high
+  agents-zero-width-distinct-pair: high
+  claude-rules-zwsp-after-slash: low
+  cursor-rule-bom-only-line: low
+  agents-mt-thai-khmer-zwsp: low
+  agents-mt-malayalam-zwsp: low

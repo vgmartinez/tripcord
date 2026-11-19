@@ -132,6 +132,11 @@ type ConfigItem struct {
 // LowShapes counts the code points in Total that hiddenchar.Scan reads
 // as an editor or localisation artifact (CodeSpanJoiners among them); a
 // rule may lower its severity when every counted code point is one.
+// Strong counts the code points in Total that are a strong hiding
+// signal: a tag character, a bidi control, or a zero-width code point in
+// a run of two or more counted code points that is not one of the
+// LowShapes (see hiddenchar.Scan). A rule may report a file with no
+// strong code point at a lower severity.
 type HiddenChars struct {
 	Runs            []HiddenRun
 	Sequence        []rune
@@ -139,6 +144,7 @@ type HiddenChars struct {
 	Total           int
 	CodeSpanJoiners int
 	LowShapes       int
+	Strong          int
 }
 
 // String counts the hidden code points, so a formatted ConfigItem stays
